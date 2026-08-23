@@ -1,77 +1,72 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-US">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Join Kobe's Betting Hub." />
-    <title>Join | Kobe's Betting Hub</title>
+    <meta name="description" content="Explore Kobe's Betting Hub membership: an organized Discord for plays, game notes, odds context, and recaps." />
+    <meta name="robots" content="index,follow" />
+    <meta name="theme-color" content="#faf9f7" />
+    <link rel="canonical" href="https://zda1-hub.github.io/kobes-betting-hub/membership.html" />
+    <title>Membership | Kobe's Betting Hub</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400&family=Manrope:wght@400;500&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="membership-theme.css?v=2" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="home.css?v=20260822" />
+    <link rel="stylesheet" href="membership.css?v=20260822" />
   </head>
   <body>
-    <main class="site-shell">
-      <header class="site-header">
-        <h1 class="brand-wordmark"><a href="https://zda1-hub.github.io/editorial-portfolio/"><img src="assets/brand/kobes-betting-hub-wordmark.png" alt="Kobe's Betting Hub" /></a></h1>
-        <nav aria-label="Kobe's Betting Hub">
-          <a href="https://zda1-hub.github.io/editorial-portfolio/">proof</a>
-          <a class="is-active" href="membership.html">join</a>
-          <a href="https://zda1-hub.github.io/editorial-portfolio/#wins">recent picks</a>
-          <a href="https://zda1-hub.github.io/editorial-portfolio/#kobes-wins">Kobe's wins</a>
-        </nav>
-      </header>
+    <header class="site-header" data-header>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-menu" data-menu-toggle>Explore <span aria-hidden="true">+</span></button>
+      <a class="brand" href="index.html" aria-label="Kobe's Betting Hub home"><img src="betting-hub-logo-final.png" alt="Kobe's Betting Hub" /></a>
+      <a class="header-join" href="#offer">Join the Hub</a>
+      <nav class="site-menu" id="site-menu" aria-label="Primary navigation" data-menu>
+        <a href="index.html#proof">Proof</a>
+        <a href="index.html#recent-picks">Recent picks</a>
+        <a href="index.html#kobes-wins">Kobe's wins</a>
+        <a href="index.html#community">Community</a>
+      </nav>
+    </header>
 
-      <section class="membership-view">
-        <div class="membership-intro">
-          <p class="eyebrow">MEMBERSHIP</p>
-          <h2>Know what you're getting.</h2>
-          <p>Kobe's Betting Hub is built around sports plays, parlays, game-day breakdowns, and a Discord community that stays active around the board.</p>
-          <p>Members get the plays, the reasoning behind them, odds context, and the recaps that show what the community is working with.</p>
-          <p class="fine-print">Must be 21+ where required. Sports betting involves risk and no outcome is guaranteed.</p>
-        </div>
-
-        <article class="membership-card">
-          <p class="card-label">MONTHLY ACCESS</p>
-          <div class="first-month-offer"><strong>40% OFF FIRST MONTH</strong><span>$19.79 for your first month</span></div>
-          <p class="price"><strong>$32.99</strong><span>per month after your first month</span></p>
-          <ul>
-            <li>Discord community access</li>
-            <li>Sports plays, parlays, and breakdowns</li>
-            <li>Game notes, odds context, and recaps</li>
-          </ul>
-          <a class="back-to-wins" href="https://zda1-hub.github.io/editorial-portfolio/#kobes-wins">View Kobe's wins</a>
-          <p class="terms">First-month offer applies at signup. Membership then renews monthly until canceled.</p>
-        </article>
-      </section>
-
-      <section class="checkout-section" aria-labelledby="checkout-title">
+    <main>
+      <section class="membership-hero" aria-labelledby="membership-title">
         <div>
-          <p class="eyebrow">MEMBERSHIP DETAILS</p>
-          <h2 id="checkout-title">Your place in the Hub.</h2>
-          <p>Checkout will be available here once the final payment and access setup is approved.</p>
+          <p class="eyebrow">MONTHLY MEMBERSHIP</p>
+          <h1 id="membership-title">A clearer way to follow the board.</h1>
+          <p>Get the plays, key game notes, odds context, and recaps in one organized Discord. No forced volume—just a cleaner routine for the days you choose to follow.</p>
+          <a class="button" href="#offer">Explore the offer <span aria-hidden="true">→</span></a>
+          <p class="responsible">For adults 21+ where permitted. Sports betting involves risk and no outcome is guaranteed.</p>
         </div>
-        <form class="checkout-card" id="checkout-preview">
-          <div class="order-row"><span>40% off your first month</span><strong>Then $32.99/month</strong></div>
-          <label for="checkout-email">Membership email</label>
-          <input id="checkout-email" name="email" type="email" autocomplete="email" placeholder="you@email.com" required />
-          <label class="consent"><input id="terms-consent" type="checkbox" required /><span>I understand the first-month offer applies at signup, then membership renews at $32.99 per month until canceled.</span></label>
-          <button type="submit">Checkout coming soon</button>
-          <p class="preview-message" id="preview-message" role="status">No payment information is collected on this page.</p>
-        </form>
+        <aside class="offer-card" id="offer" aria-label="Kobe's Betting Hub membership price">
+          <p class="card-kicker">MONTHLY ACCESS <span>MEMBERSHIP</span></p>
+          <div class="offer-badge"><strong>40% OFF FIRST MONTH</strong><span>$19.79 to start</span></div>
+          <p class="membership-price"><strong>$32.99</strong><span>per month after your first month</span></p>
+          <ul>
+            <li>Organized plays and parlays</li>
+            <li>Game notes and odds context</li>
+            <li>Recent picks and day-to-day recaps</li>
+            <li>Member Discord access</li>
+          </ul>
+          <a class="button offer-button" href="index.html#join">Join the winning team <span aria-hidden="true">→</span></a>
+          <p class="offer-terms">First-month offer applies at signup. Membership then renews monthly until canceled. Checkout will be connected here once the secure payment link is live.</p>
+        </aside>
       </section>
 
-      <section class="after-section">
-        <p class="eyebrow">WHAT HAPPENS NEXT</p>
-        <div class="after-grid">
-          <article><span>01</span><h3>Join</h3><p>Complete membership when checkout opens.</p></article>
-          <article><span>02</span><h3>Get access</h3><p>Receive the approved Discord access instructions.</p></article>
-          <article><span>03</span><h3>Follow the board</h3><p>Keep up with plays, notes, and recaps in the Hub.</p></article>
+      <section class="membership-details" aria-labelledby="details-title">
+        <div><p class="eyebrow">WHAT'S INSIDE</p><h2 id="details-title">Everything in one focused place.</h2></div>
+        <div class="detail-list">
+          <article><span>01</span><h3>Follow the release</h3><p>Posts are organized around the important details: market, line, odds, timing, and units.</p></article>
+          <article><span>02</span><h3>Understand the context</h3><p>Game notes and concise breakdowns make it easier to follow what is on the board.</p></article>
+          <article><span>03</span><h3>Look back clearly</h3><p>Recent picks and completed-day recaps keep the action easy to revisit.</p></article>
         </div>
       </section>
 
-      <footer class="site-footer"><a href="https://zda1-hub.github.io/editorial-portfolio/" aria-label="Return to Kobe's Wins">kh</a><span>21+ · WAGER RESPONSIBLY</span></footer>
+      <section class="membership-proof">
+        <p class="eyebrow">THE HUB</p>
+        <h2>See the board. Read the context. Follow the action.</h2>
+        <a class="text-link" href="index.html#proof">Browse proof and recent picks →</a>
+      </section>
     </main>
-    <script src="app.js?v=8"></script>
+    <footer><span>© <span id="year"></span> KOBE'S BETTING HUB</span><span class="footer-nav"><a href="index.html">Home</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></span><span>21+ • WAGER RESPONSIBLY</span></footer>
+    <script src="membership.js?v=20260822"></script>
   </body>
 </html>

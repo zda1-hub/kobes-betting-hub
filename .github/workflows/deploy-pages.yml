@@ -28,7 +28,7 @@ jobs:
       - name: Prepare public site
         run: |
           mkdir _site
-          cp index.html membership.html recaps.html recaps.js recaps-data.json faq.html support.html terms.html privacy.html responsible-gambling.html 404.html styles.css brand.css home.css home.js robots.txt sitemap.xml betting-hub-logo.png betting-hub-logo-v2.png betting-hub-logo-final.png app.js _site/
+          cp index.html membership.html recaps.html recaps.js recaps-data.json faq.html support.html terms.html privacy.html responsible-gambling.html 404.html styles.css brand.css home.css home.js membership.css membership.js membership-theme.css robots.txt sitemap.xml betting-hub-logo.png betting-hub-logo-v2.png betting-hub-logo-final.png app.js _site/
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
