@@ -23,7 +23,10 @@ const dialogImage = document.querySelector('[data-dialog-image]');
 const dialogTitle = document.querySelector('[data-dialog-title]');
 const dialogCaption = document.querySelector('[data-dialog-caption]');
 const dialogKicker = document.querySelector('[data-dialog-kicker]');
+let pausedRail = null;
 const openImage = (card) => {
+  pausedRail = card.closest('[data-rail]');
+  if (pausedRail) pausedRail.classList.add('is-paused');
   dialogImage.src = card.dataset.image;
   dialogImage.alt = card.querySelector('img').alt;
   dialogTitle.textContent = card.dataset.title;
@@ -31,9 +34,15 @@ const openImage = (card) => {
   dialogKicker.textContent = card.closest('#community') ? 'Community' : card.closest('.recent-section') ? 'Recent picks' : 'Kobe’s Betting Hub';
   dialog.showModal();
 };
-document.querySelectorAll('.media-card').forEach((card) => card.addEventListener('click', () => openImage(card)));
 document.querySelector('[data-dialog-close]').addEventListener('click', () => dialog.close());
 dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+dialog.addEventListener('close', () => {
+  if (pausedRail) pausedRail.classList.remove('is-paused');
+  pausedRail = null;
+});
+document.querySelectorAll('.media-card').forEach((card) => {
+  if (!card.closest('[data-rail]')) card.addEventListener('click', () => openImage(card));
+});
 
 document.querySelectorAll('[data-rail]').forEach((rail) => {
   const track = rail.querySelector('.rail-track');
@@ -45,7 +54,6 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
     const copy = item.cloneNode(true);
     copy.setAttribute('aria-hidden', 'true');
     copy.tabIndex = -1;
-    copy.addEventListener('click', () => openImage(copy));
     track.append(copy);
   });
   let dragging = false;
@@ -77,10 +85,15 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
   rail.addEventListener('pointerup', endDrag);
   rail.addEventListener('pointercancel', endDrag);
   rail.addEventListener('click', (event) => {
-    if (!suppressClick) return;
-    event.stopImmediatePropagation();
-    suppressClick = false;
-  }, true);
+    const card = event.target.closest('.media-card');
+    if (!card) return;
+    if (suppressClick) {
+      event.preventDefault();
+      suppressClick = false;
+      return;
+    }
+    openImage(card);
+  });
   rail.addEventListener('mouseenter', () => { hovered = true; });
   rail.addEventListener('mouseleave', () => { hovered = false; });
   rail.addEventListener('wheel', (event) => {
@@ -92,7 +105,7 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
   window.addEventListener('resize', () => { loopWidth = track.children[originals.length].offsetLeft; });
   window.requestAnimationFrame(() => { loopWidth = track.children[originals.length].offsetLeft; });
   const animate = (time) => {
-    if (lastFrame && !dragging && loopWidth) {
+    if (lastFrame && !dragging && !rail.classList.contains('is-paused') && loopWidth) {
       const elapsed = Math.min((time - lastFrame) / 1000, .1);
       rail.scrollLeft += elapsed * (hovered ? 20 : 38);
       if (rail.scrollLeft >= loopWidth) rail.scrollLeft -= loopWidth;
