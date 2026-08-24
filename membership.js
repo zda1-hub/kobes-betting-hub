@@ -16,3 +16,29 @@ document.addEventListener('click', (event) => {
     menuToggle.setAttribute('aria-expanded', 'false');
   }
 });
+
+const checkoutEndpoint = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev/create-checkout';
+const checkoutMessage = document.querySelector('[data-checkout-message]');
+const setCheckoutMessage = (message) => { if (checkoutMessage) checkoutMessage.textContent = message; };
+const checkoutState = new URLSearchParams(window.location.search).get('checkout');
+
+if (checkoutState === 'success') setCheckoutMessage('You’re all set. Check your email for the Stripe receipt and membership access details.');
+if (checkoutState === 'cancel') setCheckoutMessage('Checkout was canceled. Your membership has not been started.');
+
+document.querySelectorAll('[data-checkout]').forEach((button) => button.addEventListener('click', async () => {
+  const buttons = [...document.querySelectorAll('[data-checkout]')];
+  const originalText = button.innerHTML;
+  buttons.forEach((item) => { item.disabled = true; });
+  button.textContent = 'Opening secure checkout…';
+  setCheckoutMessage('Opening Stripe’s secure checkout…');
+  try {
+    const response = await fetch(checkoutEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ offer: button.dataset.checkout }) });
+    const result = await response.json();
+    if (!response.ok || !result.url) throw new Error(result.error || 'Unable to open checkout right now.');
+    window.location.assign(result.url);
+  } catch (error) {
+    buttons.forEach((item) => { item.disabled = false; });
+    button.innerHTML = originalText;
+    setCheckoutMessage(error.message || 'Unable to open checkout right now. Please try again.');
+  }
+}));
