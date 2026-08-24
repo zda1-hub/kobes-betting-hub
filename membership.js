@@ -19,10 +19,19 @@ document.addEventListener('click', (event) => {
 
 const checkoutEndpoint = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev/create-checkout';
 const checkoutMessage = document.querySelector('[data-checkout-message]');
+const discordConnect = document.querySelector('[data-discord-connect]');
 const setCheckoutMessage = (message) => { if (checkoutMessage) checkoutMessage.textContent = message; };
 const checkoutState = new URLSearchParams(window.location.search).get('checkout');
+const checkoutSession = new URLSearchParams(window.location.search).get('session_id');
 
-if (checkoutState === 'success') setCheckoutMessage('You’re all set. Check your email for the Stripe receipt and membership access details.');
+if (checkoutState === 'success') {
+  setCheckoutMessage('Your membership is confirmed. Connect Discord now to receive member access.');
+  if (discordConnect && checkoutSession) {
+    discordConnect.hidden = false;
+    discordConnect.href = `${checkoutEndpoint.replace('/create-checkout', '')}/discord/connect?session_id=${encodeURIComponent(checkoutSession)}`;
+  }
+}
+if (checkoutState === 'connected') setCheckoutMessage('Discord is connected. Your member access is ready.');
 if (checkoutState === 'cancel') setCheckoutMessage('Checkout was canceled. Your membership has not been started.');
 
 document.querySelectorAll('[data-checkout]').forEach((button) => button.addEventListener('click', async () => {
