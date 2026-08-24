@@ -74,6 +74,7 @@ async function createCheckout(request, env, origin) {
     success_url: `${membershipPage}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${membershipPage}?checkout=cancel`,
     payment_method_collection: 'always',
+    'payment_method_types[0]': 'card',
     billing_address_collection: 'auto',
     'line_items[0][price]': isTrial ? env.STRIPE_MONTHLY_PRICE_ID : env.STRIPE_STARTER_PRICE_ID,
     'line_items[0][quantity]': 1,
