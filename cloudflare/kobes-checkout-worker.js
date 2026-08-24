@@ -141,7 +141,7 @@ async function startDiscordConnection(request, env) {
     scope: 'identify guilds.join',
     state,
     prompt: 'consent',
-  });
+  }).toString();
   return redirect(authorization.toString());
 }
 
