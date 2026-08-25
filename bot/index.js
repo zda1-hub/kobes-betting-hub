@@ -121,23 +121,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.commandName === 'post-welcome-invite') {
+    await interaction.deferReply({ ephemeral: true });
     if (!isAdministrator(interaction)) {
-      await interaction.reply({ ephemeral: true, content: 'Only a server administrator can post the member welcome invite.' });
+      await interaction.editReply('Only a server administrator can post the member welcome invite.');
       return;
     }
     if (!welcomeChannelId) {
-      await interaction.reply({ ephemeral: true, content: 'Set WELCOME_CHANNEL_ID in .env before posting the member welcome invite.' });
+      await interaction.editReply('Set WELCOME_CHANNEL_ID in .env before posting the member welcome invite.');
       return;
     }
     try {
       const channel = await client.channels.fetch(welcomeChannelId);
       if (!channel?.isTextBased()) throw new Error('WELCOME_CHANNEL_ID is not a text channel.');
       await channel.send(buildWelcomeInvite(welcomeRoleId));
-      await interaction.reply({ ephemeral: true, content: `Welcome invite posted to ${channel}.` });
+      await interaction.editReply(`Welcome invite posted to ${channel}.`);
     } catch (error) {
       console.error(error);
       const message = error instanceof Error ? error.message : 'Unable to post the member welcome invite.';
-      await interaction.reply({ ephemeral: true, content: message });
+      await interaction.editReply(message);
     }
     return;
   }
