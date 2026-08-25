@@ -64,29 +64,38 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
     track.append(copy);
   });
   let dragging = false;
+  let trackingPointer = false;
   let moved = false;
   let suppressClick = false;
   let startX = 0;
   let startScroll = 0;
   rail.addEventListener('pointerdown', (event) => {
-    dragging = true;
+    trackingPointer = true;
+    dragging = false;
     startX = event.clientX;
     startScroll = rail.scrollLeft;
     moved = false;
-    rail.setPointerCapture(event.pointerId);
-    rail.classList.add('is-dragging');
   });
   rail.addEventListener('pointermove', (event) => {
-    if (!dragging) return;
+    if (!trackingPointer) return;
     const distance = event.clientX - startX;
-    if (Math.abs(distance) > 5) moved = true;
+    if (!dragging && Math.abs(distance) < 8) return;
+    if (!dragging) {
+      dragging = true;
+      moved = true;
+      rail.setPointerCapture(event.pointerId);
+      rail.classList.add('is-dragging');
+    }
+    event.preventDefault();
     rail.scrollLeft = startScroll - distance;
   });
   const endDrag = (event) => {
-    if (!dragging) return;
+    if (!trackingPointer) return;
+    trackingPointer = false;
+    const didDrag = dragging;
     dragging = false;
-    suppressClick = moved;
-    if (moved) window.setTimeout(() => { suppressClick = false; }, 0);
+    suppressClick = didDrag;
+    if (didDrag) window.setTimeout(() => { suppressClick = false; }, 0);
     rail.classList.remove('is-dragging');
     if (rail.hasPointerCapture(event.pointerId)) rail.releasePointerCapture(event.pointerId);
   };
