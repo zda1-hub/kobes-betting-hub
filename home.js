@@ -55,6 +55,8 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
   const track = rail.querySelector('.rail-track');
   const originals = [...track.children];
   let loopWidth = 0;
+  let autoScrollLeft = rail.scrollLeft;
+  let writingAutoScroll = false;
   let hovered = false;
   let lastFrame = 0;
   originals.forEach((item) => {
@@ -69,6 +71,17 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
   let suppressClick = false;
   let startX = 0;
   let startScroll = 0;
+  const measureLoop = () => {
+    const firstCopy = track.children[originals.length];
+    loopWidth = firstCopy ? firstCopy.offsetLeft : 0;
+    if (loopWidth) autoScrollLeft = rail.scrollLeft % loopWidth;
+  };
+  const normalizeLoop = () => {
+    if (!loopWidth) return;
+    if (rail.scrollLeft >= loopWidth) rail.scrollLeft -= loopWidth;
+    if (rail.scrollLeft < 0) rail.scrollLeft += loopWidth;
+  };
+
   rail.addEventListener('pointerdown', (event) => {
     trackingPointer = true;
     dragging = false;
@@ -88,6 +101,8 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
     }
     event.preventDefault();
     rail.scrollLeft = startScroll - distance;
+    normalizeLoop();
+    autoScrollLeft = rail.scrollLeft;
   });
   const endDrag = (event) => {
     if (!trackingPointer) return;
@@ -119,13 +134,23 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
       rail.scrollLeft += event.deltaY;
     }
   }, { passive:false });
-  window.addEventListener('resize', () => { loopWidth = track.children[originals.length].offsetLeft; });
-  window.requestAnimationFrame(() => { loopWidth = track.children[originals.length].offsetLeft; });
+  rail.addEventListener('scroll', () => {
+    if (writingAutoScroll) return;
+    normalizeLoop();
+    autoScrollLeft = rail.scrollLeft;
+  }, { passive:true });
+  window.addEventListener('resize', measureLoop);
+  window.addEventListener('load', measureLoop, { once:true });
+  new ResizeObserver(measureLoop).observe(track);
+  window.requestAnimationFrame(measureLoop);
   const animate = (time) => {
     if (lastFrame && !dragging && !rail.classList.contains('is-paused') && loopWidth) {
       const elapsed = Math.min((time - lastFrame) / 1000, .1);
-      rail.scrollLeft += elapsed * (hovered ? 20 : 38);
-      if (rail.scrollLeft >= loopWidth) rail.scrollLeft -= loopWidth;
+      autoScrollLeft += elapsed * (hovered ? 20 : 38);
+      if (autoScrollLeft >= loopWidth) autoScrollLeft -= loopWidth;
+      writingAutoScroll = true;
+      rail.scrollLeft = autoScrollLeft;
+      writingAutoScroll = false;
     }
     lastFrame = time;
     window.requestAnimationFrame(animate);
