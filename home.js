@@ -24,6 +24,13 @@ const dialogTitle = document.querySelector('[data-dialog-title]');
 const dialogCaption = document.querySelector('[data-dialog-caption]');
 const dialogKicker = document.querySelector('[data-dialog-kicker]');
 let pausedRail = null;
+const closeImage = () => {
+  dialog.hidden = true;
+  dialog.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('dialog-open');
+  if (pausedRail) pausedRail.classList.remove('is-paused');
+  pausedRail = null;
+};
 const openImage = (card) => {
   pausedRail = card.closest('[data-rail]');
   if (pausedRail) pausedRail.classList.add('is-paused');
@@ -32,14 +39,14 @@ const openImage = (card) => {
   dialogTitle.textContent = card.dataset.title;
   dialogCaption.textContent = card.dataset.caption;
   dialogKicker.textContent = card.closest('#community') ? 'Community' : card.closest('.recent-section') ? 'Recent picks' : 'Kobe’s Betting Hub';
-  dialog.showModal();
+  dialog.hidden = false;
+  dialog.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('dialog-open');
+  dialog.querySelector('[data-dialog-close]').focus();
 };
-document.querySelector('[data-dialog-close]').addEventListener('click', () => dialog.close());
-dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
-dialog.addEventListener('close', () => {
-  if (pausedRail) pausedRail.classList.remove('is-paused');
-  pausedRail = null;
-});
+document.querySelector('[data-dialog-close]').addEventListener('click', closeImage);
+dialog.addEventListener('click', (event) => { if (event.target === dialog) closeImage(); });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !dialog.hidden) closeImage(); });
 document.querySelectorAll('.media-card').forEach((card) => {
   if (!card.closest('[data-rail]')) card.addEventListener('click', () => openImage(card));
 });
