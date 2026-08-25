@@ -79,6 +79,7 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
     if (!dragging) return;
     dragging = false;
     suppressClick = moved;
+    if (moved) window.setTimeout(() => { suppressClick = false; }, 0);
     rail.classList.remove('is-dragging');
     if (rail.hasPointerCapture(event.pointerId)) rail.releasePointerCapture(event.pointerId);
   };
