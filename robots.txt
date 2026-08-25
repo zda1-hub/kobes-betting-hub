@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://zda1-hub.github.io/kobes-betting-hub/sitemap.xml
+Sitemap: https://kobesbettinghub.com/sitemap.xml
