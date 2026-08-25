@@ -1,12 +1,13 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
 const WELCOME_BUTTON_ID = 'hub:request-welcome';
+const JOIN_URL = 'https://kobesbettinghub.com/join';
 
 function buildWelcomeInvite(welcomeRoleId) {
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
     .setTitle('Welcome to Kobe’s Betting Hub')
-    .setDescription('Already a member? Tap the button below to get your welcome and getting-started guide. If your Discord settings allow it, the bot sends it as a DM; otherwise it appears privately here.')
+    .setDescription('Already a member? Tap the button below to get your welcome and getting-started guide. If your Discord settings allow it, the bot sends it as a DM; otherwise it appears privately here. Need VIP access? Use the Join / rejoin VIP button.')
     .addFields({
       name: 'Important',
       value: 'The team will never DM first for payment, passwords, login codes, full card details, crypto, or device access.'
@@ -17,7 +18,11 @@ function buildWelcomeInvite(welcomeRoleId) {
       .setCustomId(WELCOME_BUTTON_ID)
       .setLabel('Send me the welcome')
       .setStyle(ButtonStyle.Primary)
-      .setEmoji('👋')
+      .setEmoji('👋'),
+    new ButtonBuilder()
+      .setLabel('Join / rejoin VIP')
+      .setStyle(ButtonStyle.Link)
+      .setURL(JOIN_URL)
   );
 
   return {
@@ -46,4 +51,4 @@ function buildWelcomeDm() {
     .setFooter({ text: 'Kobe’s Betting Hub • Official welcome' });
 }
 
-module.exports = { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm };
+module.exports = { WELCOME_BUTTON_ID, JOIN_URL, buildWelcomeInvite, buildWelcomeDm };
