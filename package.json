@@ -1,0 +1,22 @@
+{
+  "name": "kobes-betting-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Approval-first Discord publisher for Kobe's Betting Hub",
+  "scripts": {
+    "bot": "node bot/index.js",
+    "register:commands": "node bot/register-commands.js",
+    "collect:x": "node pipeline/collect-x.js",
+    "enrich:pick": "node pipeline/enrich-pick.js",
+    "test:real-x-pick": "node pipeline/test-real-x-pick.js",
+    "prepare:approval": "node pipeline/prepare-approval.js",
+    "test": "node --test bot/**/*.test.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.22.1",
+    "dotenv": "^16.6.1"
+  }
+}

@@ -1,0 +1,30 @@
+services:
+  - type: worker
+    name: kobes-betting-hub-bot
+    runtime: node
+    buildCommand: npm install
+    startCommand: node bot/index.js
+    autoDeploy: true
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_APPLICATION_ID
+        sync: false
+      - key: DISCORD_GUILD_ID
+        sync: false
+      - key: WELCOME_CHANNEL_ID
+        sync: false
+      - key: WELCOME_ROLE_ID
+        sync: false
+      - key: PUBLISH_CHANNEL_ID
+        sync: false
+      - key: RECAP_CHANNEL_ID
+        sync: false
+      - key: ALLOWED_CHANNEL_IDS
+        sync: false
+      - key: SPORT_CHANNEL_MAP
+        sync: false
+      - key: PUBLISHER_ROLE_IDS
+        sync: false
+      - key: AUTO_REGISTER_COMMANDS
+        value: "true"
