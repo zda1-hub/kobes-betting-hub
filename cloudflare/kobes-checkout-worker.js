@@ -18,12 +18,17 @@
  *   DISCORD_REDIRECT_URI       Worker callback URL registered in Discord
  */
 
-const SITE_ORIGIN = 'https://zda1-hub.github.io';
-const SITE_PATH = '/kobes-betting-hub';
+const SITE_ORIGIN = 'https://kobesbettinghub.com';
+const SITE_PATH = '';
+const ALLOWED_SITE_ORIGINS = new Set([
+  SITE_ORIGIN,
+  'https://www.kobesbettinghub.com',
+  'https://zda1-hub.github.io',
+]);
 const STRIPE_API = 'https://api.stripe.com/v1';
 
 const headers = (origin) => ({
-  'Access-Control-Allow-Origin': origin === SITE_ORIGIN ? origin : SITE_ORIGIN,
+  'Access-Control-Allow-Origin': ALLOWED_SITE_ORIGINS.has(origin) ? origin : SITE_ORIGIN,
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   Vary: 'Origin',
