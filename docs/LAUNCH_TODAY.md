@@ -24,6 +24,8 @@ Use this page as the live checklist. Do every unchecked item in order. Do not po
 
 Mark complete only after all seven checks pass.
 
+- [x] Free-trial checkout verified on 2026-08-25: $0 due today; $19.79 at the first renewal with the 40% coupon; $32.99/month after the promotion.
+- [ ] Starter checkout needs one more check: Stripe currently labels it `$10.00 per week`; verify its renewal amount and interval before promoting it as `$10 for 7 days, then $32.99/month`.
 - [ ] Join page and both checkout paths verified.
 
 ## 2. Verify paid-member access — 15 minutes
