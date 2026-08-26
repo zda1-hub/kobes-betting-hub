@@ -37,6 +37,13 @@ function isAdministrator(interaction) {
   return interaction.inGuild() && interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
 }
 
+function canPostSupportInfo(interaction) {
+  return interaction.inGuild() && (
+    interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+    interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels)
+  );
+}
+
 function optionsFrom(interaction) {
   const attachment = interaction.options.getAttachment('image');
   return {
@@ -145,8 +152,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (interaction.commandName === 'post-support-info') {
     await interaction.deferReply({ ephemeral: true });
-    if (!isAdministrator(interaction)) {
-      await interaction.editReply('Only a server administrator can post the support message.');
+    if (!canPostSupportInfo(interaction)) {
+      await interaction.editReply('You need the Manage Channels permission to post the support message.');
       return;
     }
     try {

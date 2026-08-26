@@ -126,7 +126,7 @@ module.exports = [
       .setDescription('The support channel')
       .addChannelTypes(ChannelType.GuildText)
       .setRequired(true))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
   new SlashCommandBuilder()
     .setName('hub-help')
     .setDescription('Show the safe publishing workflow for this bot')
