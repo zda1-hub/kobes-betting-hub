@@ -30,11 +30,6 @@ const pickOptions = (command) => command
     .setDescription('Exact matchup/event as published, for example Mets at Dodgers')
     .setRequired(true)
     .setMaxLength(160))
-  .addStringOption((option) => option
-    .setName('league')
-    .setDescription('League, for example MLB or NFL')
-    .setRequired(false)
-    .setMaxLength(40))
   .addNumberOption((option) => option
     .setName('units_risked')
     .setDescription('Exact risk in units, for example 1 or 0.5')
@@ -63,6 +58,11 @@ const pickOptions = (command) => command
     .setRequired(true)
     .setMinValue(0)
     .setMaxValue(10))
+  .addStringOption((option) => option
+    .setName('league')
+    .setDescription('League, for example MLB or NFL')
+    .setRequired(false)
+    .setMaxLength(40))
   .addStringOption((option) => option
     .setName('image_url')
     .setDescription('Approved relevant image or GIF URL; use this or image')
