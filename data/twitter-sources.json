@@ -1,0 +1,343 @@
+[
+  {
+    "handle": "ThePropAnt",
+    "display_name": "Prop Ant 🐜",
+    "enabled": false,
+    "approved_by": "Kobe",
+    "approved_on": "2026-08-17",
+    "credit_line": "Source: @ThePropAnt",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Monitor public posts only. Do not publish copied copy or media until reuse/credit terms are confirmed."
+  },
+  {
+    "handle": "QuentinLocks",
+    "display_name": "Quentin",
+    "enabled": false,
+    "approved_by": "Kobe",
+    "approved_on": "2026-08-18",
+    "credit_line": "Source: @QuentinLocks",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Monitor public posts only. Do not publish copied copy or media until reuse/credit terms are confirmed."
+  },
+  {
+    "handle": "__LordPenguin",
+    "display_name": "Penguin",
+    "enabled": false,
+    "approved_by": "Kobe",
+    "approved_on": "2026-08-18",
+    "credit_line": "Source: @__LordPenguin",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Monitor public posts only. Do not publish copied copy or media until reuse/credit terms are confirmed."
+  },
+  {
+    "handle": "austinsprops",
+    "display_name": "Austin",
+    "enabled": false,
+    "approved_by": "Kobe",
+    "approved_on": "2026-08-18",
+    "credit_line": "Source: @austinsprops",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Monitor public posts only. Do not publish copied copy or media until reuse/credit terms are confirmed."
+  },
+  {
+    "handle": "PeakyProps",
+    "display_name": "Peaky Props",
+    "enabled": false,
+    "approved_by": "Kobe",
+    "approved_on": "2026-08-18",
+    "credit_line": "Source: @PeakyProps",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Monitor public posts only. Do not publish copied copy or media until reuse/credit terms are confirmed."
+  },
+  {
+    "handle": "proplockss",
+    "display_name": "Locksmith",
+    "enabled": false,
+    "approved_by": "Kobe",
+    "approved_on": "2026-08-18",
+    "credit_line": "Source: @proplockss",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Monitor public posts only. Do not publish copied copy or media until reuse/credit terms are confirmed."
+  },
+  {
+    "handle": "PropFarmHQ",
+    "display_name": "PropFarmHQ",
+    "enabled": false,
+    "approved_by": "Kobe",
+    "approved_on": "2026-08-18",
+    "credit_line": "Source: @PropFarmHQ",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Monitor public posts only. Do not publish copied copy or media until reuse/credit terms are confirmed."
+  },
+  {
+    "handle": "betfirmsjack",
+    "display_name": "Jack Jones",
+    "enabled": false,
+    "approved_by": "Kobe",
+    "approved_on": "2026-08-18",
+    "credit_line": "Source: @betfirmsjack",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Monitor public posts only. Do not publish copied copy or media until reuse/credit terms are confirmed."
+  },
+  {
+    "handle": "EZMSports",
+    "display_name": "EZMSportsBetting",
+    "enabled": false,
+    "monitoring_mode": "photo_review",
+    "credit_line": "Source: @EZMSports",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "CappersUSA",
+    "display_name": "CAPPERS LEAKED ORIGINAL",
+    "enabled": false,
+    "monitoring_mode": "photo_review",
+    "credit_line": "Source: @CappersUSA",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "Capperleaked",
+    "display_name": "Capper Leaked",
+    "enabled": false,
+    "monitoring_mode": "photo_review",
+    "credit_line": "Source: @Capperleaked",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "otlsports",
+    "display_name": "OTL Sports",
+    "enabled": false,
+    "monitoring_mode": "photo_review",
+    "credit_line": "Source: @otlsports",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "CappersCash_",
+    "display_name": "Cappers Cash",
+    "enabled": false,
+    "monitoring_mode": "photo_review",
+    "credit_line": "Source: @CappersCash_",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "Allinonecappers",
+    "display_name": "CAPPERS LEAKED FREE PICKS",
+    "enabled": false,
+    "monitoring_mode": "photo_review",
+    "credit_line": "Source: @Allinonecappers",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "cappers_daily",
+    "display_name": "HANDICAPPERS LEAKED",
+    "enabled": false,
+    "monitoring_mode": "photo_review",
+    "credit_line": "Source: @cappers_daily",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "_Locksmiths__",
+    "display_name": "Locksmiths Picks",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @_Locksmiths__",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "DanGambleAI",
+    "display_name": "Dan's AI Sports Picks",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @DanGambleAI",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "sacstim",
+    "display_name": "tim",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @sacstim",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "CallingOurShot",
+    "display_name": "Calling Our Shot",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @CallingOurShot",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "doctorprofit",
+    "display_name": "Doctor Profit",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @doctorprofit",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "MySpariEdge",
+    "display_name": "MySpariEdge",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @MySpariEdge",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "FieldsFocus",
+    "display_name": "Fields Focus",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @FieldsFocus",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "franklincovers",
+    "display_name": "franklin",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @franklincovers",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "trendscenterapp",
+    "display_name": "TrendsCenter",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @trendscenterapp",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "JFRAZBETS",
+    "display_name": "JFRAZ",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @JFRAZBETS",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "PicksChronic",
+    "display_name": "Picks Chronic",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @PicksChronic",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "WizBetz",
+    "display_name": "WizBetz",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @WizBetz",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "NateDFS15",
+    "display_name": "NateDFS15",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @NateDFS15",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "QuicksProps",
+    "display_name": "Quicks Props",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @QuicksProps",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "csybcz",
+    "display_name": "csybcz",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @csybcz",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "ParlayHawk",
+    "display_name": "Parlay Hawk",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @ParlayHawk",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "xamSportsHQ",
+    "display_name": "xamSportsHQ",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @xamSportsHQ",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "AlexCaruso",
+    "display_name": "Alex Caruso",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @AlexCaruso",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "Parlay4L",
+    "display_name": "Parlay 4Lifers",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @Parlay4L",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "PropKitchen",
+    "display_name": "Prop Kitchen",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @PropKitchen",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "CodyBrownBets",
+    "display_name": "Cody Brown Bets",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @CodyBrownBets",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  },
+  {
+    "handle": "waltpicks",
+    "display_name": "Walt Picks",
+    "enabled": false,
+    "monitoring_mode": "writeup_or_trend",
+    "credit_line": "Source: @waltpicks",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+  }
+]
