@@ -119,6 +119,15 @@ module.exports = [
     .setDescription('Post the opt-in welcome button for current members')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   new SlashCommandBuilder()
+    .setName('post-support-info')
+    .setDescription('Post the official support message in a selected channel')
+    .addChannelOption((option) => option
+      .setName('channel')
+      .setDescription('The support channel')
+      .addChannelTypes(ChannelType.GuildText)
+      .setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  new SlashCommandBuilder()
     .setName('hub-help')
     .setDescription('Show the safe publishing workflow for this bot')
 ].map((command) => command.toJSON());

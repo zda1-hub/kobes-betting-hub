@@ -1,10 +1,13 @@
 require('dotenv').config();
 
+const fs = require('node:fs/promises');
+const path = require('node:path');
 const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes } = require('discord.js');
 const commands = require('./commands');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildRecapEmbed } = require('./lib/recap');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
+const { assertPublishableExtraction, buildSourcePickEmbed } = require('./lib/source-review');
 
 const required = ['DISCORD_TOKEN'];
 for (const name of required) {
@@ -17,6 +20,9 @@ const defaultChannelId = process.env.PUBLISH_CHANNEL_ID;
 const recapChannelId = process.env.RECAP_CHANNEL_ID || defaultChannelId;
 const welcomeChannelId = process.env.WELCOME_CHANNEL_ID;
 const welcomeRoleId = process.env.WELCOME_ROLE_ID;
+const freePickChannelId = process.env.FREE_PICK_CHANNEL_ID;
+const pickApproverUserIds = listFromEnv(process.env.PICK_APPROVER_USER_IDS);
+const reviewQueueRoot = path.join(__dirname, '..', 'data', 'monitoring', 'x', 'review-queue');
 const sportChannelMap = new Map(
   (process.env.SPORT_CHANNEL_MAP || '').split(',')
     .map((entry) => entry.trim().split(':'))
@@ -35,6 +41,112 @@ function isPublisher(interaction) {
 
 function isAdministrator(interaction) {
   return interaction.inGuild() && interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+}
+
+function isPickApprover(interaction) {
+  if (!interaction.inGuild()) return false;
+  return interaction.guild.ownerId === interaction.user.id || pickApproverUserIds.has(interaction.user.id);
+}
+
+async function approvedTextChannel(channelId) {
+  if (!channelId) throw new Error('No destination is configured for this approval action.');
+  if (!allowedChannelIds.has(channelId)) throw new Error('That destination is not allowlisted.');
+  const channel = await client.channels.fetch(channelId);
+  if (!channel?.isTextBased()) throw new Error('Configured destination is not a text channel.');
+  return channel;
+}
+
+function normalizedSport(packet) {
+  const sourceSport = `${packet.analysis?.extraction?.sport || ''} ${packet.analysis?.extraction?.league || ''}`.toLowerCase();
+  if (/baseball|mlb/.test(sourceSport)) return 'baseball';
+  if (/football|nfl|ncaaf/.test(sourceSport)) return 'football';
+  if (/basketball|nba|wnba|ncaab/.test(sourceSport)) return 'basketball';
+  if (/hockey|nhl/.test(sourceSport)) return 'hockey';
+  if (/soccer|fifa|mls/.test(sourceSport)) return 'soccer';
+  return null;
+}
+
+async function findReviewPacket(pickId) {
+  if (!/^[A-Za-z0-9_-]+$/.test(pickId)) return null;
+  let dates;
+  try {
+    dates = await fs.readdir(reviewQueueRoot, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  for (const date of dates.filter((item) => item.isDirectory()).sort((a, b) => b.name.localeCompare(a.name))) {
+    const directory = path.join(reviewQueueRoot, date.name);
+    const files = await fs.readdir(directory);
+    for (const file of files.filter((name) => name.endsWith('.json'))) {
+      const packetPath = path.join(directory, file);
+      const packet = JSON.parse(await fs.readFile(packetPath, 'utf8'));
+      if (packet.pick_id === pickId) return { packet, packetPath };
+    }
+  }
+  return null;
+}
+
+async function handleSourceReviewButton(interaction) {
+  const [, pickId, action] = interaction.customId.split(':');
+  await interaction.deferReply({ ephemeral: true });
+  if (!isPickApprover(interaction)) {
+    await interaction.editReply('Only Kobe can approve, route, or reject this source draft.');
+    return;
+  }
+  if (!['free', 'paid', 'reject'].includes(action)) {
+    await interaction.editReply('This review action is not recognized.');
+    return;
+  }
+  const found = await findReviewPacket(pickId);
+  if (!found) {
+    await interaction.editReply('The review packet is no longer available. Do not publish it; create a fresh draft.');
+    return;
+  }
+  const { packet, packetPath } = found;
+  if (packet.approval?.decision) {
+    await interaction.editReply(`This draft was already marked ${packet.approval.decision.toLowerCase()}.`);
+    return;
+  }
+
+  if (packet.test_only && action !== 'reject') {
+    await interaction.editReply('This is a safety test card. Only Reject is enabled; no member-facing post can be made from it.');
+    return;
+  }
+
+  const approval = packet.approval || {};
+  approval.approver = interaction.user.id;
+  approval.decided_at = new Date().toISOString();
+
+  if (action === 'reject') {
+    approval.decision = 'REJECTED';
+    packet.status = 'REJECTED';
+    packet.approval = approval;
+    await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+    await interaction.message.edit({ components: [] });
+    await interaction.editReply('Rejected. No member-facing post was made.');
+    return;
+  }
+
+  try {
+    assertPublishableExtraction(packet);
+    const sport = normalizedSport(packet);
+    const channel = action === 'free'
+      ? await approvedTextChannel(freePickChannelId)
+      : await approvedTextChannel(sport ? sportChannelMap.get(sport) : undefined);
+    const label = action === 'free' ? 'FREE PICK' : 'PAID PICK';
+    await channel.send({ embeds: [buildSourcePickEmbed(packet, label)] });
+    approval.decision = action === 'free' ? 'FREE_PUBLISHED' : 'PAID_PUBLISHED';
+    approval.destination_sport = action === 'free' ? 'free' : sport;
+    packet.status = 'PUBLISHED';
+    packet.approval = approval;
+    await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+    await interaction.message.edit({ components: [] });
+    await interaction.editReply(`Published to ${channel}.`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to complete this approval action.';
+    await interaction.editReply(message);
+  }
 }
 
 function optionsFrom(interaction) {
@@ -81,6 +193,20 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isButton() && interaction.customId.startsWith('source-review:')) {
+    try {
+      await handleSourceReviewButton(interaction);
+    } catch (error) {
+      console.error(error);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply('Unable to complete this review action. No member-facing post was made.');
+      } else {
+        await interaction.reply({ ephemeral: true, content: 'Unable to complete this review action. No member-facing post was made.' });
+      }
+    }
+    return;
+  }
+
   if (interaction.isButton() && interaction.customId === WELCOME_BUTTON_ID) {
     try {
       await interaction.deferReply({ ephemeral: true });
@@ -138,6 +264,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } catch (error) {
       console.error(error);
       const message = error instanceof Error ? error.message : 'Unable to post the member welcome invite.';
+      await interaction.editReply(message);
+    }
+    return;
+  }
+
+  if (interaction.commandName === 'post-support-info') {
+    await interaction.deferReply({ ephemeral: true });
+    if (!isAdministrator(interaction)) {
+      await interaction.editReply('Only a server administrator can post the support message.');
+      return;
+    }
+    try {
+      const channel = interaction.options.getChannel('channel', true);
+      if (!channel.isTextBased()) throw new Error('Choose a text channel for support.');
+      await channel.send({
+        content: 'Need help with payment or Discord access? Send your issue here and we’ll help.\n\nNever send card details, passwords, login codes, or crypto information.'
+      });
+      await interaction.editReply(`Support message posted to ${channel}. Pin it from Discord to keep it at the top.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to post the support message.';
       await interaction.editReply(message);
     }
     return;
