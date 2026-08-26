@@ -18,10 +18,10 @@ document.addEventListener('click', (event) => {
 });
 
 const checkoutEndpoint = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev/create-checkout';
-// Keep the public site closed until the live Stripe review, legal terms, and
-// Discord handoff are ready. Sandbox checkout is handled by the separate test
-// Worker and is never exposed to public visitors.
-const checkoutEnabled = false;
+// Stripe hosts the actual payment page. Account approval can still prevent a
+// charge from completing, but the site must always send a member to the secure
+// checkout instead of leaving the offer buttons inert.
+const checkoutEnabled = true;
 const checkoutMessage = document.querySelector('[data-checkout-message]');
 const discordConnect = document.querySelector('[data-discord-connect]');
 const setCheckoutMessage = (message) => { if (checkoutMessage) checkoutMessage.textContent = message; };
