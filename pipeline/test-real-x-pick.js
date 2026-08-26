@@ -3,7 +3,7 @@ require('dotenv').config();
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
-const { reviewButtons } = require('../bot/lib/source-review');
+const { assertPublishableExtraction, reviewButtons } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
@@ -31,7 +31,7 @@ function hasPhotoCandidate(source, post, mediaUrls) {
   return mediaUrls.length > 0;
 }
 
-async function findRealPick(sources, requestedHandle) {
+async function findRecentCandidates(sources, requestedHandle) {
   const normalizedHandle = requestedHandle?.replace(/^@/, '').toLowerCase();
   const selectedSources = normalizedHandle
     ? sources.filter((item) => item.handle.toLowerCase() === normalizedHandle)
@@ -40,6 +40,9 @@ async function findRealPick(sources, requestedHandle) {
   if (normalizedHandle && selectedSources.length === 0) {
     throw new Error(`No configured X source matches @${requestedHandle}.`);
   }
+
+  const found = [];
+  const limit = Math.max(1, Math.min(Number(process.env.X_TEST_CANDIDATE_LIMIT || 5), 10));
 
   for (const source of selectedSources) {
     const user = await xFetch(`https://api.x.com/2/users/by/username/${encodeURIComponent(source.handle)}`);
@@ -55,15 +58,34 @@ async function findRealPick(sources, requestedHandle) {
       post: item,
       mediaUrls: (item.attachments?.media_keys || []).map((key) => mediaByKey[key]).filter(Boolean)
     }));
-    const candidate = candidates.find(({ post, mediaUrls }) => hasPhotoCandidate(source, post, mediaUrls));
-    if (!candidate) continue;
-    return {
-      source,
-      post: candidate.post,
-      mediaUrls: candidate.mediaUrls
-    };
+    for (const candidate of candidates) {
+      if (!hasPhotoCandidate(source, candidate.post, candidate.mediaUrls)) continue;
+      found.push({ source, post: candidate.post, mediaUrls: candidate.mediaUrls });
+      if (found.length >= limit) return found;
+    }
   }
-  return null;
+  return found;
+}
+
+function buildTestPacket(candidate) {
+  return {
+    pick_id: `BUTTON-TEST-${candidate.post.id}`,
+    test_only: true,
+    status: 'TEST_ONLY',
+    approval: { approver: 'Kobe', decision: null, destination_sport: null, decided_at: null },
+    source: {
+      platform: 'Twitter/X',
+      handle: candidate.source.handle,
+      display_name: candidate.source.display_name,
+      post_id: candidate.post.id,
+      post_url: `https://x.com/${candidate.source.handle}/status/${candidate.post.id}`,
+      posted_at: candidate.post.created_at,
+      credit_line: candidate.source.credit_line,
+      reuse_permission: candidate.source.reuse_permission,
+      text: candidate.post.text,
+      media_urls: candidate.mediaUrls
+    }
+  };
 }
 
 function quote(text, maximum = 850) {
@@ -137,34 +159,29 @@ async function main() {
   }
   const sources = JSON.parse(await fs.readFile(SOURCES_PATH, 'utf8'));
   const requestedHandle = process.argv[2];
-  const candidate = await findRealPick(sources, requestedHandle);
-  if (!candidate) {
+  const candidates = await findRecentCandidates(sources, requestedHandle);
+  if (candidates.length === 0) {
     throw new Error(requestedHandle
       ? `No suitable recent public post was found for @${requestedHandle}.`
       : 'No recognizable recent pick was found among the enabled sources.');
   }
-  const packet = {
-    pick_id: `BUTTON-TEST-${candidate.post.id}`,
-    test_only: true,
-    status: 'TEST_ONLY',
-    approval: { approver: 'Kobe', decision: null, destination_sport: null, decided_at: null },
-    source: {
-      platform: 'Twitter/X',
-      handle: candidate.source.handle,
-      display_name: candidate.source.display_name,
-      post_id: candidate.post.id,
-      post_url: `https://x.com/${candidate.source.handle}/status/${candidate.post.id}`,
-      posted_at: candidate.post.created_at,
-      credit_line: candidate.source.credit_line,
-      reuse_permission: candidate.source.reuse_permission,
-      text: candidate.post.text,
-      media_urls: candidate.mediaUrls
+
+  for (const candidate of candidates) {
+    const packet = buildTestPacket(candidate);
+    packet.analysis = await enrichPacket(packet);
+    try {
+      assertPublishableExtraction(packet);
+    } catch {
+      console.log(`Skipped @${packet.source.handle} post ${packet.source.post_id}: ${packet.analysis.status}.`);
+      continue;
     }
-  };
-  packet.analysis = await enrichPacket(packet);
-  await saveButtonTestPacket(packet);
-  await sendTestCard(packet);
-  console.log(`Private test sent for @${packet.source.handle}: ${packet.analysis.status}`);
+    await saveButtonTestPacket(packet);
+    await sendTestCard(packet);
+    console.log(`Private test sent for @${packet.source.handle}: ${packet.analysis.status}`);
+    return;
+  }
+
+  throw new Error(`No clear, publishable pick was found in the ${candidates.length} recent candidate post(s). Nothing was sent to members.`);
 }
 
 main().catch((error) => {
