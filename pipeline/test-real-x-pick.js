@@ -35,7 +35,10 @@ async function findRecentCandidates(sources, requestedHandle) {
   const normalizedHandle = requestedHandle?.replace(/^@/, '').toLowerCase();
   const selectedSources = normalizedHandle
     ? sources.filter((item) => item.handle.toLowerCase() === normalizedHandle)
-    : sources.filter((item) => item.enabled);
+    // This command is a staff-only, on-demand test. When no source is named,
+    // inspect the approved image-review group even though routine monitoring
+    // remains disabled for every source until launch.
+    : sources.filter((item) => item.monitoring_mode === 'photo_review');
 
   if (normalizedHandle && selectedSources.length === 0) {
     throw new Error(`No configured X source matches @${requestedHandle}.`);
