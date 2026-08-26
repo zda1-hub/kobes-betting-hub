@@ -18,6 +18,10 @@ document.addEventListener('click', (event) => {
 });
 
 const checkoutEndpoint = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev/create-checkout';
+// Keep the public site closed until the live Stripe review, legal terms, and
+// Discord handoff are ready. Sandbox checkout is handled by the separate test
+// Worker and is never exposed to public visitors.
+const checkoutEnabled = false;
 const checkoutMessage = document.querySelector('[data-checkout-message]');
 const discordConnect = document.querySelector('[data-discord-connect]');
 const setCheckoutMessage = (message) => { if (checkoutMessage) checkoutMessage.textContent = message; };
@@ -35,6 +39,10 @@ if (checkoutState === 'connected') setCheckoutMessage('Discord is connected. You
 if (checkoutState === 'cancel') setCheckoutMessage('Checkout was canceled. Your membership has not been started.');
 
 document.querySelectorAll('[data-checkout]').forEach((button) => button.addEventListener('click', async () => {
+  if (!checkoutEnabled) {
+    setCheckoutMessage('Checkout is being finalized. No payments are being accepted yet.');
+    return;
+  }
   const buttons = [...document.querySelectorAll('[data-checkout]')];
   const originalText = button.innerHTML;
   buttons.forEach((item) => { item.disabled = true; });
