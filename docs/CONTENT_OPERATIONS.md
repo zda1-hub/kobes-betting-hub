@@ -81,7 +81,8 @@ The reviewer checks the proposed member-facing post:
 5. Confirm reuse permission and attribution. No partner Discord access is part of
    this check.
 6. Check copy for accuracy, responsible tone, and required credit.
-7. Record reviewer, timestamp, and notes, then route to the approver.
+7. Confirm a relevant player/team GIF or image is attached after the confidence score, its source and reuse permission are recorded, and it shows current/relevant context.
+8. Record reviewer, timestamp, and notes, then route to the approver.
 
 The approver records their name, timestamp, decision, and exact approved post copy.
 Verbal or chat approval must be transcribed into the queue before publishing.
@@ -92,10 +93,19 @@ Immediately before posting, compare the final post to the approved fields. If th
 market moved, pause and return it for re-approval. After a successful post:
 
 1. Record destination, actual publish time, and post URL/reference in intake.
-2. Set intake status to `PUBLISHED`.
-3. Append one row to `pick-log.csv`, copying the published terms exactly.
-4. Add the Pick ID to the day's release summary. The summary never introduces an
+2. Confirm the approved GIF/image rendered after the confidence score.
+3. Set intake status to `PUBLISHED`.
+4. The publishing bot appends one row to `pick-log.csv`, copying the published
+   terms exactly, including Pick ID, destination, actual Discord post link, line,
+   odds, and units risked. A post is not considered official unless it has this
+   row.
+5. Add the Pick ID to the day's release summary. The summary never introduces an
    unapproved pick.
+
+Official-pick rule: a release in any approved free or paid Discord sport channel
+must go through Kobe Bot's publish path. A direct/manual channel post is not an
+official record until it is backfilled into `pick-log.csv` with its exact Discord
+link, terms, and approval history; do this before any recap is generated.
 
 For a posting error, do not overwrite history. Set `CORRECTION_REQUIRED`, record the
 original post, correction details/time, and corrected post reference. Notify the
@@ -111,7 +121,9 @@ person checks ID count, lines, odds, and units before release.
 ## 5. Grade and recap
 
 Grade the exact published line, not the closing line. Use `W`, `L`, `P`, or `V`;
-leave unfinished events `PENDING`. Record the verification source and time.
+leave unfinished events `PENDING`. Record the verification source and time using
+`/grade-pick`. Never grade from a social post alone when an official game/result
+source is available.
 
 For American odds with units risked:
 
@@ -122,10 +134,25 @@ For American odds with units risked:
 If the team's convention is units-to-win, document it and replace these formulas
 before launch. Do not mix conventions.
 
-At closeout, compare the release summary to `pick-log.csv`, account for every Pick
-ID, verify results and calculations, then publish the recap. Pending results remain
-visible and roll forward. Late corrections receive a timestamped note in the next
-recap and in the log.
+`/preview-recap` and `/publish-recap` read only `pick-log.csv` for the specified
+Pacific operating date. They include every logged official pick across all approved
+Discord sport channels and the free-pick channel, with exact published line/odds,
+units risked, W/L/P/V/PENDING, per-pick net units, Discord post link, and result
+verification source. They calculate the record and overall net units from those
+same rows; no manual result list may be substituted.
+
+At closeout, compare every approved destination channel to `pick-log.csv`, account
+for every Pick ID, verify results and calculations, then publish the recap. Pending
+results remain visible and roll forward. Late corrections receive a timestamped
+note in the next recap and in the log.
+
+### Canonical-log hosting requirement
+
+For production, `PICK_LOG_PATH` must point to durable storage (for example a
+Render persistent disk mounted at `/var/data/pick-log.csv`). The repository copy
+at `trackers/pick-log.csv` is the local-development canonical file and has the
+same schema. Do not rely on a worker's temporary filesystem for the production
+log; a redeploy can erase it.
 
 ## Daily cadence
 

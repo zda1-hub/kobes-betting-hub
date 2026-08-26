@@ -26,6 +26,33 @@ const pickOptions = (command) => command
     .setRequired(true)
     .setMaxLength(256))
   .addStringOption((option) => option
+    .setName('event')
+    .setDescription('Exact matchup/event as published, for example Mets at Dodgers')
+    .setRequired(true)
+    .setMaxLength(160))
+  .addStringOption((option) => option
+    .setName('league')
+    .setDescription('League, for example MLB or NFL')
+    .setRequired(false)
+    .setMaxLength(40))
+  .addNumberOption((option) => option
+    .setName('units_risked')
+    .setDescription('Exact risk in units, for example 1 or 0.5')
+    .setRequired(true)
+    .setMinValue(0.01)
+    .setMaxValue(100))
+  .addStringOption((option) => option
+    .setName('published_line')
+    .setDescription('Exact published line, for example OVER 6.5 strikeouts')
+    .setRequired(true)
+    .setMaxLength(100))
+  .addIntegerOption((option) => option
+    .setName('published_odds')
+    .setDescription('Exact American odds, for example -115 or +120')
+    .setRequired(true)
+    .setMinValue(-10000)
+    .setMaxValue(10000))
+  .addStringOption((option) => option
     .setName('evidence')
     .setDescription('4–8 verified points; separate each with a semicolon')
     .setRequired(true)
@@ -64,19 +91,9 @@ const recapOptions = (command) => command
     .setMinLength(10)
     .setMaxLength(10))
   .addStringOption((option) => option
-    .setName('record')
-    .setDescription('Example: 2-1-0 (+0.85u)')
-    .setRequired(true)
-    .setMaxLength(80))
-  .addStringOption((option) => option
-    .setName('results')
-    .setDescription('One verified result per line, e.g. W — #1 — Player OVER 6.5 Ks')
-    .setRequired(true)
-    .setMaxLength(3500))
-  .addStringOption((option) => option
     .setName('summary')
-    .setDescription('Short, accurate Kobe-style recap')
-    .setRequired(true)
+    .setDescription('Optional short closing note; record and details come from pick-log.csv')
+    .setRequired(false)
     .setMaxLength(1000))
   .addStringOption((option) => option
     .setName('image_url')
@@ -92,6 +109,36 @@ const recapOptions = (command) => command
     .setDescription('Approved recap channel; otherwise the configured default')
     .addChannelTypes(ChannelType.GuildText)
     .setRequired(false));
+
+const gradePickOptions = new SlashCommandBuilder()
+  .setName('grade-pick')
+  .setDescription('Record a verified W/L/P/V/PENDING result for an official Pick ID')
+  .addStringOption((option) => option
+    .setName('pick_id')
+    .setDescription('Exact Pick ID from the official Discord post')
+    .setRequired(true)
+    .setMaxLength(80))
+  .addStringOption((option) => option
+    .setName('result')
+    .setDescription('Verified result for the exact published terms')
+    .setRequired(true)
+    .addChoices(
+      { name: 'Win', value: 'W' },
+      { name: 'Loss', value: 'L' },
+      { name: 'Push', value: 'P' },
+      { name: 'Void', value: 'V' },
+      { name: 'Pending', value: 'PENDING' }
+    ))
+  .addStringOption((option) => option
+    .setName('result_source')
+    .setDescription('Official game/result URL or clear source reference')
+    .setRequired(true)
+    .setMaxLength(1000))
+  .addStringOption((option) => option
+    .setName('outcome')
+    .setDescription('Optional final score/stat result')
+    .setRequired(false)
+    .setMaxLength(300));
 
 module.exports = [
   pickOptions(
@@ -112,8 +159,9 @@ module.exports = [
   recapOptions(
     new SlashCommandBuilder()
       .setName('publish-recap')
-      .setDescription('Publish a verified daily recap to an allowed channel')
+      .setDescription('Publish the full daily recap built from pick-log.csv')
   ),
+  gradePickOptions,
   new SlashCommandBuilder()
     .setName('post-welcome-invite')
     .setDescription('Post the opt-in welcome button for current members')

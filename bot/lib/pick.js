@@ -45,7 +45,7 @@ function validatePick({ pick, evidence, confidence, imageUrl, imageAttachmentUrl
   return makeEvidence(evidence);
 }
 
-function buildPickEmbed({ pickNumber, sport, pick, evidence, confidence, imageUrl, imageAttachmentUrl, sourceUrl }) {
+function buildPickEmbed({ pickNumber, pickId, sport, pick, evidence, confidence, imageUrl, imageAttachmentUrl, sourceUrl }) {
   const formattedEvidence = validatePick({ pick, evidence, confidence, imageUrl, imageAttachmentUrl, sourceUrl });
   const mediaUrl = imageAttachmentUrl || imageUrl;
   const numberedTitle = pickNumber ? `#${pickNumber} • ${(sport || 'pick').toUpperCase()}\n${pick}` : pick;
@@ -54,7 +54,7 @@ function buildPickEmbed({ pickNumber, sport, pick, evidence, confidence, imageUr
     title: numberedTitle,
     description: `${formattedEvidence}\n\n⭐ **Confidence: ${confidence.toFixed(1)}/10**`,
     image: { url: mediaUrl },
-    footer: { text: '21+ | Gambling involves risk. No guaranteed results.' },
+    footer: { text: `${pickId ? `Pick ID: ${pickId} | ` : ''}21+ | Gambling involves risk. No guaranteed results.` },
     timestamp: new Date().toISOString()
   };
 

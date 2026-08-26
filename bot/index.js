@@ -5,7 +5,8 @@ const path = require('node:path');
 const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes } = require('discord.js');
 const commands = require('./commands');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
-const { buildRecapEmbed } = require('./lib/recap');
+const { buildLogRecapEmbeds } = require('./lib/recap');
+const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, readPickLog, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
 const { assertPublishableExtraction, buildSourcePickEmbed } = require('./lib/source-review');
 const { runCollector } = require('../pipeline/collect-x');
@@ -104,6 +105,35 @@ function normalizedSport(packet) {
   return null;
 }
 
+function discordPostReference(channel, message) {
+  const guildId = message.guildId || channel.guildId;
+  return guildId ? `https://discord.com/channels/${guildId}/${channel.id}/${message.id}` : '';
+}
+
+function firstExtractedUnits(packet) {
+  const extraction = packet.analysis?.extraction || {};
+  const firstPlay = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;
+  return firstPlay?.units || extraction.units || '';
+}
+
+async function postAndLogOfficialPick({ channel, payload, entry }) {
+  await appendOfficialPick(entry);
+  try {
+    const message = await channel.send(payload);
+    await updateOfficialPick(entry.pick_id, {
+      post_reference: discordPostReference(channel, message),
+      status: 'PUBLISHED'
+    });
+    return message;
+  } catch (error) {
+    await updateOfficialPick(entry.pick_id, {
+      status: 'POST_FAILED',
+      notes: `Discord post failed: ${error instanceof Error ? error.message : String(error)}`
+    });
+    throw error;
+  }
+}
+
 async function findReviewPacket(pickId) {
   if (!/^[A-Za-z0-9_-]+$/.test(pickId)) return null;
   let dates;
@@ -171,7 +201,34 @@ async function handleSourceReviewButton(interaction) {
       ? await approvedTextChannel(freePickChannelId)
       : await approvedTextChannel(sport ? sportChannelMap.get(sport) : undefined);
     const label = action === 'free' ? 'FREE PICK' : 'PAID PICK';
-    await channel.send({ embeds: [buildSourcePickEmbed(packet, label)] });
+    const extraction = packet.analysis.extraction;
+    const firstPlay = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;
+    await postAndLogOfficialPick({
+      channel,
+      payload: { embeds: [buildSourcePickEmbed(packet, label)] },
+      entry: {
+        pick_id: packet.pick_id,
+        operating_date: pacificOperatingDate(),
+        event: extraction.event || '',
+        sport: extraction.sport || sport || '',
+        league: extraction.league || '',
+        market: firstPlay.market || extraction.market || '',
+        selection: firstPlay.selection || extraction.selection || '',
+        published_line: firstPlay.line || extraction.line || '',
+        published_odds_american: firstPlay.odds_american || extraction.odds_american || '',
+        units_risked: firstExtractedUnits(packet),
+        source_name: extraction.source_capper_name || packet.source.handle || '',
+        credit_text: packet.source.credit_line || '',
+        approver: interaction.user.id,
+        approved_at: approval.decided_at,
+        published_by: client.user?.id || '',
+        published_at: new Date().toISOString(),
+        destination: `#${channel.name || channel.id}`,
+        status: 'PUBLISHED',
+        result: 'PENDING',
+        notes: `Approved from public X source: ${packet.source.post_url || ''}`
+      }
+    });
     approval.decision = action === 'free' ? 'FREE_PUBLISHED' : 'PAID_PUBLISHED';
     approval.destination_sport = action === 'free' ? 'free' : sport;
     packet.status = 'PUBLISHED';
@@ -198,6 +255,11 @@ function optionsFrom(interaction) {
     pickNumber: interaction.options.getInteger('pick_number', true),
     sport: interaction.options.getString('sport', true),
     pick: interaction.options.getString('pick', true),
+    event: interaction.options.getString('event', true),
+    league: interaction.options.getString('league') || '',
+    unitsRisked: interaction.options.getNumber('units_risked', true),
+    publishedLine: interaction.options.getString('published_line', true),
+    publishedOdds: interaction.options.getInteger('published_odds', true),
     evidence: interaction.options.getString('evidence', true),
     confidence: interaction.options.getNumber('confidence', true),
     imageUrl: interaction.options.getString('image_url') || undefined,
@@ -339,26 +401,80 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   try {
+    if (interaction.commandName === 'grade-pick') {
+      const result = interaction.options.getString('result', true);
+      const source = interaction.options.getString('result_source', true);
+      const outcome = interaction.options.getString('outcome') || '';
+      const pickId = interaction.options.getString('pick_id', true);
+      const updated = await updateOfficialPick(pickId, {
+        result,
+        status: result === 'PENDING' ? 'PENDING' : 'GRADED',
+        score_or_outcome: outcome,
+        result_verified_source: source,
+        result_verified_at: new Date().toISOString(),
+        graded_by: interaction.user.id
+      });
+      const net = netUnitsFor(updated);
+      if (net !== null) await updateOfficialPick(pickId, { net_units: net });
+      await interaction.reply({
+        ephemeral: true,
+        content: `${updated.pick_id} recorded as ${result}. Its recap net units will be calculated from the exact published odds and units risked.`
+      });
+      return;
+    }
+
     const isRecap = interaction.commandName === 'preview-recap' || interaction.commandName === 'publish-recap';
     const attachment = interaction.options.getAttachment('image');
-    const embed = isRecap
-      ? buildRecapEmbed({
+    if (isRecap) {
+      const embeds = buildLogRecapEmbeds({
         date: interaction.options.getString('date', true),
-        record: interaction.options.getString('record', true),
-        results: interaction.options.getString('results', true),
-        summary: interaction.options.getString('summary', true),
+        rows: await readPickLog(),
+        summary: interaction.options.getString('summary') || '',
         imageUrl: interaction.options.getString('image_url') || undefined,
         imageAttachmentUrl: attachment?.url
-      })
-      : buildPickEmbed(optionsFrom(interaction));
-    if (interaction.commandName === 'preview-pick' || interaction.commandName === 'preview-recap') {
+      });
+      if (interaction.commandName === 'preview-recap') {
+        await interaction.reply({ ephemeral: true, embeds });
+        return;
+      }
+      const channel = await destinationFor(interaction, recapChannelId);
+      for (const embed of embeds) await channel.send({ embeds: [embed] });
+      await interaction.reply({ ephemeral: true, content: `Published the full ${interaction.options.getString('date', true)} recap to ${channel}.` });
+      return;
+    }
+
+    const pickOptions = optionsFrom(interaction);
+    const pickId = makePickId({ sport: pickOptions.sport, pickNumber: pickOptions.pickNumber });
+    const embed = buildPickEmbed({ ...pickOptions, pickId });
+    if (interaction.commandName === 'preview-pick') {
       await interaction.reply({ ephemeral: true, embeds: [embed] });
       return;
     }
 
-    const sport = isRecap ? null : interaction.options.getString('sport', true).toLowerCase();
-    const channel = await destinationFor(interaction, isRecap ? recapChannelId : defaultChannelId, sport);
-    await channel.send({ embeds: [embed] });
+    const channel = await destinationFor(interaction, defaultChannelId, pickOptions.sport.toLowerCase());
+    await postAndLogOfficialPick({
+      channel,
+      payload: { embeds: [embed] },
+      entry: {
+        pick_id: pickId,
+        operating_date: pacificOperatingDate(),
+        event: pickOptions.event,
+        sport: pickOptions.sport,
+        league: pickOptions.league,
+        market: pickOptions.publishedLine,
+        selection: pickOptions.pick,
+        published_line: pickOptions.publishedLine,
+        published_odds_american: pickOptions.publishedOdds,
+        units_risked: pickOptions.unitsRisked,
+        source_name: pickOptions.sourceUrl || '',
+        published_by: interaction.user.id,
+        published_at: new Date().toISOString(),
+        destination: `#${channel.name || channel.id}`,
+        status: 'PUBLISHED',
+        result: 'PENDING',
+        notes: 'Published with /publish-pick.'
+      }
+    });
     await interaction.reply({ ephemeral: true, content: `Published to ${channel}.` });
   } catch (error) {
     console.error(error);

@@ -26,5 +26,7 @@ services:
         sync: false
       - key: PUBLISHER_ROLE_IDS
         sync: false
+      - key: PICK_LOG_PATH
+        sync: false
       - key: AUTO_REGISTER_COMMANDS
         value: "true"

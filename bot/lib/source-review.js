@@ -47,6 +47,7 @@ function buildSourcePickEmbed(packet, destinationLabel) {
   const embed = {
     color: destinationLabel === 'FREE PICK' ? 0x2B90D9 : 0xD4AF37,
     description: [visible(extraction.source_capper_name), ...sourceTerms(packet)].join('\n'),
+    footer: { text: `Pick ID: ${packet.pick_id} | 21+ | Gambling involves risk.` },
     timestamp: new Date().toISOString()
   };
   const imageUrl = packet.source?.media_urls?.[0];

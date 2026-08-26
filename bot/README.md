@@ -7,15 +7,20 @@ automate a user account, place bets, or create picks from unverified claims.
 ## What it does
 
 - `/preview-pick` — sends the numbered complete post only to the publisher who runs it.
-- `/publish-pick` — sends the same post to an approved channel.
-- `/preview-recap` — sends the day’s verified recap only to the publisher who runs it.
-- `/publish-recap` — publishes that recap to the configured or selected allowed recap channel.
+- `/publish-pick` — publishes an approved pick and immediately writes its exact
+  terms, units, destination, and Discord link to the canonical pick log.
+- `/grade-pick` — records the verified W/L/P/V/PENDING result and source for an
+  existing Pick ID.
+- `/preview-recap` — privately generates the complete day from `pick-log.csv`.
+- `/publish-recap` — publishes that complete log-based overview to the configured
+  recap channel.
 - `/post-welcome-invite` — administrator-only; posts a button in the configured welcome channel. A member receives the welcome DM only after clicking it.
 - `/hub-help` — shows the short publishing workflow.
 
-The command requires Kobe's approval number, sport, pick headline, 4–8 evidence
-points, confidence score, and an approved image/GIF (direct upload or URL). In the
-Discord command, separate evidence points with semicolons. It rejects
+The pick command requires Kobe's approval number, sport, event, exact published
+line and American odds, units risked, pick headline, 4–8 evidence points,
+confidence score, and an approved image/GIF (direct upload or URL). In the Discord
+command, separate evidence points with semicolons. It rejects
 guarantee-style language. All facts, odds, source rights, and approval still need
 to be checked before publishing.
 
@@ -44,7 +49,7 @@ This project includes `../render.yaml` for a Render Background Worker. It keeps 
 1. Push this project to a private GitHub repository. `.env` is excluded by `.gitignore`; never upload it or paste its token into GitHub.
 2. Create a Render account and choose **New → Blueprint**. Connect the GitHub repository and select it.
 3. Render detects `render.yaml` and creates the `kobes-betting-hub-bot` Background Worker.
-4. In Render’s Environment page, enter the values marked as secrets: `DISCORD_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID`, `WELCOME_CHANNEL_ID`, optionally `WELCOME_ROLE_ID`, plus the pick-publishing IDs you use.
+4. In Render’s Environment page, enter the values marked as secrets: `DISCORD_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID`, `WELCOME_CHANNEL_ID`, optionally `WELCOME_ROLE_ID`, plus the pick-publishing IDs you use. Before publishing any official pick, attach durable storage and set `PICK_LOG_PATH` to it (for example `/var/data/pick-log.csv`).
 5. Deploy. In the worker logs, look for `Registered guild commands on startup.` followed by `Logged in as ...`.
 6. In your Hub server, run `/post-welcome-invite` once as an administrator and pin the resulting button in `#start-here`.
 
@@ -61,10 +66,14 @@ so the bot cannot be aimed at an unintended channel.
 2. Run `/preview-pick` and review how it renders.
 3. Have the designated approver confirm the exact text and media.
 4. Run `/publish-pick` in the staff channel, choosing the sport and optionally an
-   allowed destination. Record the resulting Discord message link in the pick log.
-5. After all published events conclude, verify each exact published result, use
-   `/preview-recap`, then `/publish-recap`. Cross-post to Instagram Story and X
-   only after those official account connections are configured and the recap is reviewed.
+   allowed destination. The bot records the resulting Discord message link in the
+   pick log automatically.
+5. After events settle, use `/grade-pick` for each Pick ID with the official
+   result source. Use `PENDING` where a result is not final.
+6. Run `/preview-recap` for the Pacific operating date. It includes every official
+   pick in the log across free and approved paid sport channels; review it, then
+   use `/publish-recap`. Cross-post to Instagram Story and X only after those
+   official account connections are configured and the recap is reviewed.
 
 The `source_url` is shown publicly, so use it only for a public source that is
 appropriate for members to see. Keep internal approval notes in the project’s
