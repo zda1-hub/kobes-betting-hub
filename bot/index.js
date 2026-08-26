@@ -8,6 +8,7 @@ const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildRecapEmbed } = require('./lib/recap');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
 const { assertPublishableExtraction, buildSourcePickEmbed } = require('./lib/source-review');
+const { runCollector } = require('../pipeline/collect-x');
 
 const required = ['DISCORD_TOKEN'];
 for (const name of required) {
@@ -31,6 +32,43 @@ const sportChannelMap = new Map(
 );
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const welcomedMemberIds = new Set();
+let xCollectionInProgress = false;
+
+function xMonitorIntervalMs() {
+  const configured = Number(process.env.X_MONITOR_INTERVAL_MS || 300000);
+  // Guard against an accidental rapid polling setting that could create an
+  // unnecessary X API bill. Five minutes is the default; one minute is the floor.
+  if (!Number.isFinite(configured) || configured < 60000) return 300000;
+  return configured;
+}
+
+async function collectXSafely() {
+  if (xCollectionInProgress) {
+    console.log('X collection is already running; skipped overlapping interval.');
+    return;
+  }
+
+  xCollectionInProgress = true;
+  try {
+    await runCollector();
+  } catch (error) {
+    console.error(`X collection failed: ${error instanceof Error ? error.message : error}`);
+  } finally {
+    xCollectionInProgress = false;
+  }
+}
+
+function startXMonitor() {
+  if (process.env.X_MONITOR_ENABLED !== 'true') {
+    console.log('X monitoring is disabled. Set X_MONITOR_ENABLED=true only when Kobe authorizes the launch.');
+    return;
+  }
+
+  const interval = xMonitorIntervalMs();
+  console.log(`X monitoring enabled: checking approved sources every ${Math.round(interval / 60000)} minute(s).`);
+  void collectXSafely();
+  setInterval(() => void collectXSafely(), interval);
+}
 
 function isPublisher(interaction) {
   if (!interaction.inGuild()) return false;
@@ -182,6 +220,7 @@ async function destinationFor(interaction, fallbackChannelId, sport = null) {
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  startXMonitor();
 });
 
 async function registerCommandsOnStart() {

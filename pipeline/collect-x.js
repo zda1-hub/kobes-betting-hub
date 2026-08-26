@@ -250,7 +250,7 @@ async function notifyApprovalChannel(packet) {
   return (await response.json()).id;
 }
 
-async function main() {
+async function runCollector() {
   const sources = (await readJson(SOURCES_PATH, [])).filter((source) => source.enabled);
   if (sources.length === 0) {
     console.log('No X sources are enabled. Nothing to collect.');
@@ -314,7 +314,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  runCollector().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { runCollector };
