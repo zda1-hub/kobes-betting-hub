@@ -9,6 +9,7 @@ const { buildLogRecapEmbeds } = require('./lib/recap');
 const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, readPickLog, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
 const { assertPublishableExtraction, buildSourcePickEmbed } = require('./lib/source-review');
+const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { runCollector } = require('../pipeline/collect-x');
 
 const required = ['DISCORD_TOKEN'];
@@ -388,7 +389,17 @@ async function handleSourceReviewButton(interaction) {
     packet.approval = approval;
     await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
     await interaction.message.edit({ components: [] });
-    await interaction.editReply(`Published to ${channel}.`);
+    let xNote = '';
+    if (action === 'free') {
+      try {
+        const xSync = await syncApprovedFreePickToX(packet);
+        xNote = xSync.status === 'disabled' ? ' X sync is disabled.' : ` X sync: ${xSync.status}.`;
+      } catch (xError) {
+        console.error('Approved Discord free pick was not synced to X', { pickId: packet.pick_id, message: String(xError) });
+        xNote = ' Discord post is live; X sync needs attention.';
+      }
+    }
+    await interaction.editReply(`Published to ${channel}.${xNote}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to complete this approval action.';
     await interaction.editReply(message);

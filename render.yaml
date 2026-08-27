@@ -28,6 +28,12 @@ services:
         sync: false
       - key: PICK_LOG_PATH
         sync: false
+      - key: FREE_PICK_X_SYNC_ENABLED
+        value: "false"
+      - key: FREE_PICK_X_PUBLISH_URL
+        sync: false
+      - key: FREE_PICK_X_QUEUE_SECRET
+        sync: false
       - key: X_MONITOR_ENABLED
         sync: false
       - key: X_MONITOR_START_AT
