@@ -2,7 +2,7 @@
   {
     "handle": "ThePropAnt",
     "display_name": "Prop Ant 🐜",
-    "enabled": true,
+    "enabled": false,
     "approved_by": "Kobe",
     "approved_on": "2026-08-17",
     "credit_line": "Source: @ThePropAnt",
@@ -12,7 +12,7 @@
   {
     "handle": "QuentinLocks",
     "display_name": "Quentin",
-    "enabled": true,
+    "enabled": false,
     "approved_by": "Kobe",
     "approved_on": "2026-08-18",
     "credit_line": "Source: @QuentinLocks",
@@ -22,7 +22,7 @@
   {
     "handle": "__LordPenguin",
     "display_name": "Penguin",
-    "enabled": true,
+    "enabled": false,
     "approved_by": "Kobe",
     "approved_on": "2026-08-18",
     "credit_line": "Source: @__LordPenguin",
@@ -32,7 +32,7 @@
   {
     "handle": "austinsprops",
     "display_name": "Austin",
-    "enabled": true,
+    "enabled": false,
     "approved_by": "Kobe",
     "approved_on": "2026-08-18",
     "credit_line": "Source: @austinsprops",
