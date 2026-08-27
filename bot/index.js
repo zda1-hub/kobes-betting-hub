@@ -34,6 +34,8 @@ const sportChannelMap = new Map(
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const welcomedMemberIds = new Set();
 let xCollectionInProgress = false;
+let xMonitorCreated = 0;
+let xMonitorIntervalTimer = null;
 
 function xMonitorIntervalMs() {
   const configured = Number(process.env.X_MONITOR_INTERVAL_MS || 300000);
@@ -56,6 +58,25 @@ function xMonitorStartAtMs() {
   return timestamp;
 }
 
+function xMonitorCandidateLimit() {
+  const raw = process.env.X_MONITOR_MAX_CANDIDATES?.trim();
+  if (!raw) return null;
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1) {
+    console.warn('Ignoring invalid X_MONITOR_MAX_CANDIDATES. Use a whole number of at least 1.');
+    return null;
+  }
+  return limit;
+}
+
+function stopXMonitor(reason) {
+  if (xMonitorIntervalTimer) {
+    clearInterval(xMonitorIntervalTimer);
+    xMonitorIntervalTimer = null;
+  }
+  console.log(`X monitoring stopped: ${reason}`);
+}
+
 async function collectXSafely() {
   if (xCollectionInProgress) {
     console.log('X collection is already running; skipped overlapping interval.');
@@ -64,7 +85,17 @@ async function collectXSafely() {
 
   xCollectionInProgress = true;
   try {
-    await runCollector();
+    const limit = xMonitorCandidateLimit();
+    const remaining = limit === null ? undefined : limit - xMonitorCreated;
+    if (remaining !== undefined && remaining <= 0) {
+      stopXMonitor(`candidate limit of ${limit} already reached`);
+      return;
+    }
+    const result = await runCollector({ maxCandidates: remaining });
+    xMonitorCreated += result.created;
+    if (limit !== null && xMonitorCreated >= limit) {
+      stopXMonitor(`created ${xMonitorCreated} private approval card(s); limit was ${limit}`);
+    }
   } catch (error) {
     console.error(`X collection failed: ${error instanceof Error ? error.message : error}`);
   } finally {
@@ -80,9 +111,11 @@ function startXMonitor() {
 
   const beginMonitoring = () => {
     const interval = xMonitorIntervalMs();
-    console.log(`X monitoring enabled: checking approved sources every ${Math.round(interval / 60000)} minute(s).`);
+    const limit = xMonitorCandidateLimit();
+    xMonitorCreated = 0;
+    console.log(`X monitoring enabled: checking approved sources every ${Math.round(interval / 60000)} minute(s)${limit === null ? '' : ` until ${limit} private approval card(s) are created`}.`);
     void collectXSafely();
-    setInterval(() => void collectXSafely(), interval);
+    xMonitorIntervalTimer = setInterval(() => void collectXSafely(), interval);
   };
 
   const startAtMs = xMonitorStartAtMs();

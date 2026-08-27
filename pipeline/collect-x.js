@@ -250,12 +250,16 @@ async function notifyApprovalChannel(packet) {
   return (await response.json()).id;
 }
 
-async function runCollector() {
+async function runCollector({ maxCandidates } = {}) {
   const sources = (await readJson(SOURCES_PATH, [])).filter((source) => source.enabled);
   if (sources.length === 0) {
     console.log('No X sources are enabled. Nothing to collect.');
-    return;
+    return { created: 0, skipped: 0, sourceCount: 0 };
   }
+
+  const candidateLimit = Number.isFinite(maxCandidates) && maxCandidates > 0
+    ? Math.floor(maxCandidates)
+    : Number.POSITIVE_INFINITY;
 
   if (!process.env.X_BEARER_TOKEN) {
     throw new Error('Missing X_BEARER_TOKEN. Add it to a local .env file; do not commit or send it in chat.');
@@ -269,6 +273,7 @@ async function runCollector() {
   let skipped = 0;
 
   for (const source of sources) {
+    if (created >= candidateLimit) break;
     const sourceState = state.sources[source.handle] || {};
     const userId = await resolveUser(source, state);
     const response = await postsFor(source, userId, sourceState.since_id);
@@ -283,6 +288,7 @@ async function runCollector() {
     }
 
     for (const post of posts) {
+      if (created >= candidateLimit) break;
       const postMediaUrls = (post.attachments?.media_keys || []).map((key) => media[key]).filter(Boolean);
       if (!shouldQueueForReview(source, post, postMediaUrls)) {
         console.log(`Skipped @${source.handle} post ${post.id}; no recognizable pick signal.`);
@@ -312,6 +318,11 @@ async function runCollector() {
   } else {
     console.log('No new X posts found.');
   }
+
+  if (created >= candidateLimit && Number.isFinite(candidateLimit)) {
+    console.log(`Candidate limit reached: ${candidateLimit} review packet(s).`);
+  }
+  return { created, skipped, sourceCount: sources.length };
 }
 
 if (require.main === module) {
