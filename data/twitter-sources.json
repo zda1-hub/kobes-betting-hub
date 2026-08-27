@@ -2,7 +2,7 @@
   {
     "handle": "ThePropAnt",
     "display_name": "Prop Ant 🐜",
-    "enabled": false,
+    "enabled": true,
     "approved_by": "Kobe",
     "approved_on": "2026-08-17",
     "credit_line": "Source: @ThePropAnt",
@@ -12,7 +12,7 @@
   {
     "handle": "QuentinLocks",
     "display_name": "Quentin",
-    "enabled": false,
+    "enabled": true,
     "approved_by": "Kobe",
     "approved_on": "2026-08-18",
     "credit_line": "Source: @QuentinLocks",
@@ -22,7 +22,7 @@
   {
     "handle": "__LordPenguin",
     "display_name": "Penguin",
-    "enabled": false,
+    "enabled": true,
     "approved_by": "Kobe",
     "approved_on": "2026-08-18",
     "credit_line": "Source: @__LordPenguin",
@@ -32,7 +32,7 @@
   {
     "handle": "austinsprops",
     "display_name": "Austin",
-    "enabled": false,
+    "enabled": true,
     "approved_by": "Kobe",
     "approved_on": "2026-08-18",
     "credit_line": "Source: @austinsprops",
@@ -42,7 +42,7 @@
   {
     "handle": "PeakyProps",
     "display_name": "Peaky Props",
-    "enabled": false,
+    "enabled": true,
     "approved_by": "Kobe",
     "approved_on": "2026-08-18",
     "credit_line": "Source: @PeakyProps",
@@ -52,7 +52,7 @@
   {
     "handle": "proplockss",
     "display_name": "Locksmith",
-    "enabled": false,
+    "enabled": true,
     "approved_by": "Kobe",
     "approved_on": "2026-08-18",
     "credit_line": "Source: @proplockss",
@@ -62,7 +62,7 @@
   {
     "handle": "PropFarmHQ",
     "display_name": "PropFarmHQ",
-    "enabled": false,
+    "enabled": true,
     "approved_by": "Kobe",
     "approved_on": "2026-08-18",
     "credit_line": "Source: @PropFarmHQ",
@@ -72,7 +72,7 @@
   {
     "handle": "betfirmsjack",
     "display_name": "Jack Jones",
-    "enabled": false,
+    "enabled": true,
     "approved_by": "Kobe",
     "approved_on": "2026-08-18",
     "credit_line": "Source: @betfirmsjack",

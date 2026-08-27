@@ -36,6 +36,7 @@ const welcomedMemberIds = new Set();
 let xCollectionInProgress = false;
 let xMonitorCreated = 0;
 let xMonitorIntervalTimer = null;
+let xMonitorStopTimer = null;
 
 function xMonitorIntervalMs() {
   const configured = Number(process.env.X_MONITOR_INTERVAL_MS || 300000);
@@ -58,6 +59,19 @@ function xMonitorStartAtMs() {
   return timestamp;
 }
 
+function xMonitorStopAtMs() {
+  const raw = process.env.X_MONITOR_STOP_AT?.trim();
+  if (!raw) return null;
+
+  const timestamp = Date.parse(raw);
+  if (Number.isNaN(timestamp)) {
+    console.warn('Ignoring invalid X_MONITOR_STOP_AT. Use an ISO time with timezone, for example 2026-08-27T18:00:00-07:00.');
+    return null;
+  }
+
+  return timestamp;
+}
+
 function xMonitorCandidateLimit() {
   const raw = process.env.X_MONITOR_MAX_CANDIDATES?.trim();
   if (!raw) return null;
@@ -73,6 +87,10 @@ function stopXMonitor(reason) {
   if (xMonitorIntervalTimer) {
     clearInterval(xMonitorIntervalTimer);
     xMonitorIntervalTimer = null;
+  }
+  if (xMonitorStopTimer) {
+    clearTimeout(xMonitorStopTimer);
+    xMonitorStopTimer = null;
   }
   console.log(`X monitoring stopped: ${reason}`);
 }
@@ -110,12 +128,23 @@ function startXMonitor() {
   }
 
   const beginMonitoring = () => {
+    const stopAtMs = xMonitorStopAtMs();
+    if (stopAtMs !== null && stopAtMs <= Date.now()) {
+      stopXMonitor(`scheduled stop time ${new Date(stopAtMs).toISOString()} has already passed`);
+      return;
+    }
     const interval = xMonitorIntervalMs();
     const limit = xMonitorCandidateLimit();
     xMonitorCreated = 0;
     console.log(`X monitoring enabled: checking approved sources every ${Math.round(interval / 60000)} minute(s)${limit === null ? '' : ` until ${limit} private approval card(s) are created`}.`);
     void collectXSafely();
     xMonitorIntervalTimer = setInterval(() => void collectXSafely(), interval);
+    if (stopAtMs !== null) {
+      console.log(`X monitoring is scheduled to stop at ${new Date(stopAtMs).toISOString()}.`);
+      xMonitorStopTimer = setTimeout(() => {
+        stopXMonitor(`scheduled stop time ${new Date(stopAtMs).toISOString()} reached`);
+      }, stopAtMs - Date.now());
+    }
   };
 
   const startAtMs = xMonitorStartAtMs();

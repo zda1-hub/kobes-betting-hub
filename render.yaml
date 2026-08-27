@@ -32,6 +32,8 @@ services:
         sync: false
       - key: X_MONITOR_START_AT
         sync: false
+      - key: X_MONITOR_STOP_AT
+        sync: false
       - key: X_MONITOR_MAX_CANDIDATES
         sync: false
       - key: AUTO_REGISTER_COMMANDS
