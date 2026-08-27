@@ -195,6 +195,9 @@ async function handleSourceReviewButton(interaction) {
   }
 
   try {
+    if (packet.source?.reuse_permission !== 'CONFIRMED') {
+      throw new Error('This source is approved for monitoring only. Use Kobe’s original wording and approved media with /publish-pick until source reuse permission is confirmed.');
+    }
     assertPublishableExtraction(packet);
     const sport = normalizedSport(packet);
     const channel = action === 'free'
