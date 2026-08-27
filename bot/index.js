@@ -43,6 +43,19 @@ function xMonitorIntervalMs() {
   return configured;
 }
 
+function xMonitorStartAtMs() {
+  const raw = process.env.X_MONITOR_START_AT?.trim();
+  if (!raw) return null;
+
+  const timestamp = Date.parse(raw);
+  if (Number.isNaN(timestamp)) {
+    console.warn('Ignoring invalid X_MONITOR_START_AT. Use an ISO time with timezone, for example 2026-08-27T07:00:00-07:00.');
+    return null;
+  }
+
+  return timestamp;
+}
+
 async function collectXSafely() {
   if (xCollectionInProgress) {
     console.log('X collection is already running; skipped overlapping interval.');
@@ -65,10 +78,22 @@ function startXMonitor() {
     return;
   }
 
-  const interval = xMonitorIntervalMs();
-  console.log(`X monitoring enabled: checking approved sources every ${Math.round(interval / 60000)} minute(s).`);
-  void collectXSafely();
-  setInterval(() => void collectXSafely(), interval);
+  const beginMonitoring = () => {
+    const interval = xMonitorIntervalMs();
+    console.log(`X monitoring enabled: checking approved sources every ${Math.round(interval / 60000)} minute(s).`);
+    void collectXSafely();
+    setInterval(() => void collectXSafely(), interval);
+  };
+
+  const startAtMs = xMonitorStartAtMs();
+  const delayMs = startAtMs === null ? 0 : startAtMs - Date.now();
+  if (delayMs <= 0) {
+    beginMonitoring();
+    return;
+  }
+
+  console.log(`X monitoring is scheduled to begin at ${new Date(startAtMs).toISOString()}.`);
+  setTimeout(beginMonitoring, delayMs);
 }
 
 function isPublisher(interaction) {

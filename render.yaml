@@ -28,5 +28,9 @@ services:
         sync: false
       - key: PICK_LOG_PATH
         sync: false
+      - key: X_MONITOR_ENABLED
+        sync: false
+      - key: X_MONITOR_START_AT
+        sync: false
       - key: AUTO_REGISTER_COMMANDS
         value: "true"
