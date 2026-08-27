@@ -76,6 +76,7 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
   let suppressClick = false;
   let startX = 0;
   let startScroll = 0;
+  let dragMultiplier = 1;
   const measureLoop = () => {
     const firstCopy = track.children[originals.length];
     loopWidth = firstCopy ? firstCopy.offsetLeft : 0;
@@ -93,12 +94,14 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
     dragging = false;
     startX = event.clientX;
     startScroll = rail.scrollLeft;
+    dragMultiplier = event.pointerType === 'touch' ? 1.85 : 1.25;
     moved = false;
   });
   rail.addEventListener('pointermove', (event) => {
     if (!trackingPointer) return;
     const distance = event.clientX - startX;
-    if (!dragging && Math.abs(distance) < 8) return;
+    const threshold = event.pointerType === 'touch' ? 3 : 5;
+    if (!dragging && Math.abs(distance) < threshold) return;
     if (!dragging) {
       dragging = true;
       moved = true;
@@ -107,10 +110,10 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
     }
     event.preventDefault();
     pauseAutoFor(1100);
-    rail.scrollLeft = startScroll - distance;
+    rail.scrollLeft = startScroll - (distance * dragMultiplier);
     normalizeLoop();
     autoScrollLeft = rail.scrollLeft;
-  });
+  }, { passive:false });
   const endDrag = (event) => {
     if (!trackingPointer) return;
     trackingPointer = false;
@@ -156,7 +159,7 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
   const animate = (time) => {
     if (lastFrame && !dragging && performance.now() >= resumeAutoAt && !rail.classList.contains('is-paused') && loopWidth) {
       const elapsed = Math.min((time - lastFrame) / 1000, .1);
-      autoScrollLeft += elapsed * (hovered ? 20 : 38);
+      autoScrollLeft += elapsed * (hovered ? 34 : 72);
       if (autoScrollLeft >= loopWidth) autoScrollLeft -= loopWidth;
       writingAutoScroll = true;
       autoWriteUntil = performance.now() + 80;
