@@ -36,5 +36,7 @@ services:
         sync: false
       - key: X_MONITOR_MAX_CANDIDATES
         sync: false
+      - key: X_MONITOR_MAX_APPROVED_FREE_PICKS
+        sync: false
       - key: AUTO_REGISTER_COMMANDS
         value: "true"

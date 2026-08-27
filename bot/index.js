@@ -83,6 +83,44 @@ function xMonitorCandidateLimit() {
   return limit;
 }
 
+function xMonitorApprovedFreePickLimit() {
+  const raw = process.env.X_MONITOR_MAX_APPROVED_FREE_PICKS?.trim();
+  if (!raw) return null;
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1) {
+    console.warn('Ignoring invalid X_MONITOR_MAX_APPROVED_FREE_PICKS. Use a whole number of at least 1.');
+    return null;
+  }
+  return limit;
+}
+
+async function publishedFreePickCount() {
+  if (!freePickChannelId) return 0;
+  const rows = await readPickLog();
+  return rows.filter((row) => (
+    row.operating_date === pacificOperatingDate()
+    && row.status === 'PUBLISHED'
+    && row.destination === '#daily-free-play'
+  )).length;
+}
+
+async function pendingSourceReviewCount() {
+  const today = pacificOperatingDate();
+  const directory = path.join(reviewQueueRoot, today);
+  try {
+    const files = await fs.readdir(directory);
+    let pending = 0;
+    for (const file of files.filter((name) => name.endsWith('.json'))) {
+      const packet = JSON.parse(await fs.readFile(path.join(directory, file), 'utf8'));
+      if (!packet.approval?.decision) pending += 1;
+    }
+    return pending;
+  } catch (error) {
+    if (error.code === 'ENOENT') return 0;
+    throw error;
+  }
+}
+
 function stopXMonitor(reason) {
   if (xMonitorIntervalTimer) {
     clearInterval(xMonitorIntervalTimer);
@@ -103,6 +141,27 @@ async function collectXSafely() {
 
   xCollectionInProgress = true;
   try {
+    const approvedFreePickLimit = xMonitorApprovedFreePickLimit();
+    if (approvedFreePickLimit !== null) {
+      const published = await publishedFreePickCount();
+      if (published >= approvedFreePickLimit) {
+        stopXMonitor(`published ${published} approved free pick(s); limit was ${approvedFreePickLimit}`);
+        return;
+      }
+
+      const pending = await pendingSourceReviewCount();
+      if (pending > 0) {
+        console.log(`X monitoring is waiting for Kobe's decision on ${pending} private approval card(s).`);
+        return;
+      }
+
+      // Keep only one undecided draft in front of Kobe at a time. A rejection
+      // does not count toward the free-pick target, so the next check can find
+      // a replacement without flooding #pick-approvals.
+      await runCollector({ maxCandidates: 1 });
+      return;
+    }
+
     const limit = xMonitorCandidateLimit();
     const remaining = limit === null ? undefined : limit - xMonitorCreated;
     if (remaining !== undefined && remaining <= 0) {
@@ -134,9 +193,13 @@ function startXMonitor() {
       return;
     }
     const interval = xMonitorIntervalMs();
+    const approvedFreePickLimit = xMonitorApprovedFreePickLimit();
     const limit = xMonitorCandidateLimit();
     xMonitorCreated = 0;
-    console.log(`X monitoring enabled: checking approved sources every ${Math.round(interval / 60000)} minute(s)${limit === null ? '' : ` until ${limit} private approval card(s) are created`}.`);
+    const stoppingRule = approvedFreePickLimit !== null
+      ? ` until ${approvedFreePickLimit} Kobe-approved free pick(s) are published`
+      : (limit === null ? '' : ` until ${limit} private approval card(s) are created`);
+    console.log(`X monitoring enabled: checking approved sources every ${Math.round(interval / 60000)} minute(s)${stoppingRule}.`);
     void collectXSafely();
     xMonitorIntervalTimer = setInterval(() => void collectXSafely(), interval);
     if (stopAtMs !== null) {
