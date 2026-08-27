@@ -57,8 +57,13 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
   let loopWidth = 0;
   let autoScrollLeft = rail.scrollLeft;
   let writingAutoScroll = false;
+  let autoWriteUntil = 0;
+  let resumeAutoAt = 0;
   let hovered = false;
   let lastFrame = 0;
+  const pauseAutoFor = (milliseconds = 900) => {
+    resumeAutoAt = Math.max(resumeAutoAt, performance.now() + milliseconds);
+  };
   originals.forEach((item) => {
     const copy = item.cloneNode(true);
     copy.setAttribute('aria-hidden', 'true');
@@ -83,6 +88,7 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
   };
 
   rail.addEventListener('pointerdown', (event) => {
+    pauseAutoFor(1100);
     trackingPointer = true;
     dragging = false;
     startX = event.clientX;
@@ -100,6 +106,7 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
       rail.classList.add('is-dragging');
     }
     event.preventDefault();
+    pauseAutoFor(1100);
     rail.scrollLeft = startScroll - distance;
     normalizeLoop();
     autoScrollLeft = rail.scrollLeft;
@@ -110,6 +117,7 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
     const didDrag = dragging;
     dragging = false;
     suppressClick = didDrag;
+    pauseAutoFor(didDrag ? 900 : 500);
     if (didDrag) window.setTimeout(() => { suppressClick = false; }, 0);
     rail.classList.remove('is-dragging');
     if (rail.hasPointerCapture(event.pointerId)) rail.releasePointerCapture(event.pointerId);
@@ -131,24 +139,27 @@ document.querySelectorAll('[data-rail]').forEach((rail) => {
   rail.addEventListener('wheel', (event) => {
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
       event.preventDefault();
+      pauseAutoFor(1200);
       rail.scrollLeft += event.deltaY;
     }
   }, { passive:false });
   rail.addEventListener('scroll', () => {
-    if (writingAutoScroll) return;
+    if (!writingAutoScroll && performance.now() > autoWriteUntil) pauseAutoFor(1100);
     normalizeLoop();
     autoScrollLeft = rail.scrollLeft;
   }, { passive:true });
+  document.addEventListener('visibilitychange', () => { lastFrame = 0; });
   window.addEventListener('resize', measureLoop);
   window.addEventListener('load', measureLoop, { once:true });
   new ResizeObserver(measureLoop).observe(track);
   window.requestAnimationFrame(measureLoop);
   const animate = (time) => {
-    if (lastFrame && !dragging && !rail.classList.contains('is-paused') && loopWidth) {
+    if (lastFrame && !dragging && performance.now() >= resumeAutoAt && !rail.classList.contains('is-paused') && loopWidth) {
       const elapsed = Math.min((time - lastFrame) / 1000, .1);
       autoScrollLeft += elapsed * (hovered ? 20 : 38);
       if (autoScrollLeft >= loopWidth) autoScrollLeft -= loopWidth;
       writingAutoScroll = true;
+      autoWriteUntil = performance.now() + 80;
       rail.scrollLeft = autoScrollLeft;
       writingAutoScroll = false;
     }
