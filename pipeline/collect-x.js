@@ -140,6 +140,7 @@ async function writePacket({ date, sequence, source, post, media }) {
       posted_at: post.created_at,
       credit_line: source.credit_line,
       reuse_permission: source.reuse_permission,
+      publish_mode: source.publish_mode || 'writeup_review',
       text: post.text,
       media_urls: (post.attachments?.media_keys || []).map((key) => media[key]).filter(Boolean)
     },

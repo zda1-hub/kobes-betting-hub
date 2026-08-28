@@ -50,8 +50,12 @@ function buildSourcePickEmbed(packet, destinationLabel) {
     footer: { text: `Pick ID: ${packet.pick_id} | 21+ | Gambling involves risk.` },
     timestamp: new Date().toISOString()
   };
-  const imageUrl = packet.source?.media_urls?.[0];
-  if (imageUrl) embed.image = { url: imageUrl };
+  // Leaked-capper posts keep the exact compact format Kobe requested: capper,
+  // then the visible play terms and stake. No source graphic or write-up.
+  if (packet.source?.publish_mode !== 'terms_only') {
+    const imageUrl = packet.source?.media_urls?.[0];
+    if (imageUrl) embed.image = { url: imageUrl };
+  }
   return embed;
 }
 

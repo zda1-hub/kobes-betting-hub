@@ -84,6 +84,7 @@
     "display_name": "EZMSportsBetting",
     "enabled": false,
     "monitoring_mode": "photo_review",
+    "publish_mode": "terms_only",
     "credit_line": "Source: @EZMSports",
     "reuse_permission": "PENDING_SOURCE_TERMS",
     "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
@@ -93,6 +94,7 @@
     "display_name": "CAPPERS LEAKED ORIGINAL",
     "enabled": false,
     "monitoring_mode": "photo_review",
+    "publish_mode": "terms_only",
     "credit_line": "Source: @CappersUSA",
     "reuse_permission": "PENDING_SOURCE_TERMS",
     "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
@@ -102,6 +104,7 @@
     "display_name": "Capper Leaked",
     "enabled": false,
     "monitoring_mode": "photo_review",
+    "publish_mode": "terms_only",
     "credit_line": "Source: @Capperleaked",
     "reuse_permission": "PENDING_SOURCE_TERMS",
     "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
@@ -111,6 +114,7 @@
     "display_name": "OTL Sports",
     "enabled": false,
     "monitoring_mode": "photo_review",
+    "publish_mode": "terms_only",
     "credit_line": "Source: @otlsports",
     "reuse_permission": "PENDING_SOURCE_TERMS",
     "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
@@ -120,6 +124,7 @@
     "display_name": "Cappers Cash",
     "enabled": false,
     "monitoring_mode": "photo_review",
+    "publish_mode": "terms_only",
     "credit_line": "Source: @CappersCash_",
     "reuse_permission": "PENDING_SOURCE_TERMS",
     "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
@@ -129,6 +134,7 @@
     "display_name": "CAPPERS LEAKED FREE PICKS",
     "enabled": false,
     "monitoring_mode": "photo_review",
+    "publish_mode": "terms_only",
     "credit_line": "Source: @Allinonecappers",
     "reuse_permission": "PENDING_SOURCE_TERMS",
     "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
@@ -138,6 +144,7 @@
     "display_name": "HANDICAPPERS LEAKED",
     "enabled": false,
     "monitoring_mode": "photo_review",
+    "publish_mode": "terms_only",
     "credit_line": "Source: @cappers_daily",
     "reuse_permission": "PENDING_SOURCE_TERMS",
     "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."

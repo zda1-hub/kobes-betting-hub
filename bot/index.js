@@ -347,7 +347,8 @@ async function handleSourceReviewButton(interaction) {
   }
 
   try {
-    if (packet.source?.reuse_permission !== 'CONFIRMED') {
+    const termsOnly = packet.source?.publish_mode === 'terms_only';
+    if (packet.source?.reuse_permission !== 'CONFIRMED' && !termsOnly) {
       throw new Error('This source is approved for monitoring only. Use Kobe’s original wording and approved media with /publish-pick until source reuse permission is confirmed.');
     }
     assertPublishableExtraction(packet);
