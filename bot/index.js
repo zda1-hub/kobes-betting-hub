@@ -10,6 +10,7 @@ const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, readP
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
 const { assertPublishableExtraction, buildSourcePickEmbed } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
+const { reviewQueuePath } = require('./lib/review-queue-path');
 const { runCollector } = require('../pipeline/collect-x');
 
 const required = ['DISCORD_TOKEN'];
@@ -25,7 +26,7 @@ const welcomeChannelId = process.env.WELCOME_CHANNEL_ID;
 const welcomeRoleId = process.env.WELCOME_ROLE_ID;
 const freePickChannelId = process.env.FREE_PICK_CHANNEL_ID;
 const pickApproverUserIds = listFromEnv(process.env.PICK_APPROVER_USER_IDS);
-const reviewQueueRoot = path.join(__dirname, '..', 'data', 'monitoring', 'x', 'review-queue');
+const reviewQueueRoot = reviewQueuePath();
 const sportChannelMap = new Map(
   (process.env.SPORT_CHANNEL_MAP || '').split(',')
     .map((entry) => entry.trim().split(':'))

@@ -3,6 +3,7 @@ require('dotenv').config();
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
+const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
@@ -10,7 +11,9 @@ const MONITORING_ROOT = path.join(ROOT, 'data', 'monitoring');
 const X_MONITORING_ROOT = path.join(MONITORING_ROOT, 'x');
 const CLEANUP_STATE_PATH = path.join(MONITORING_ROOT, '.x-cleanup.json');
 const STATE_PATH = path.join(X_MONITORING_ROOT, 'state.json');
-const QUEUE_ROOT = path.join(X_MONITORING_ROOT, 'review-queue');
+// Monitoring state may be cleaned up, but an approval draft must stay present
+// for the Discord card that refers to it, including across a Render deploy.
+const QUEUE_ROOT = reviewQueuePath();
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
 const PACIFIC_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Los_Angeles',
