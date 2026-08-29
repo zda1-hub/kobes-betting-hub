@@ -85,12 +85,12 @@ function xMonitorCandidateLimit() {
   return limit;
 }
 
-function xMonitorApprovedFreePickLimit() {
-  const raw = process.env.X_MONITOR_MAX_APPROVED_FREE_PICKS?.trim();
+function dailyFreePickLimit() {
+  const raw = (process.env.MAX_DAILY_FREE_PICKS || process.env.X_MONITOR_MAX_APPROVED_FREE_PICKS || '').trim();
   if (!raw) return null;
   const limit = Number(raw);
   if (!Number.isInteger(limit) || limit < 1) {
-    console.warn('Ignoring invalid X_MONITOR_MAX_APPROVED_FREE_PICKS. Use a whole number of at least 1.');
+    console.warn('Ignoring the daily free-pick limit. Use a whole number of at least 1.');
     return null;
   }
   return limit;
@@ -104,6 +104,15 @@ async function publishedFreePickCount() {
     && row.status === 'PUBLISHED'
     && row.destination === '#daily-free-play'
   )).length;
+}
+
+async function enforceDailyFreePickLimit() {
+  const limit = dailyFreePickLimit();
+  if (limit === null) return;
+  const published = await publishedFreePickCount();
+  if (published >= limit) {
+    throw new Error(`The daily free-pick limit of ${limit} has already been reached. No additional free pick was published.`);
+  }
 }
 
 async function pendingSourceReviewCount() {
@@ -143,7 +152,7 @@ async function collectXSafely() {
 
   xCollectionInProgress = true;
   try {
-    const approvedFreePickLimit = xMonitorApprovedFreePickLimit();
+    const approvedFreePickLimit = dailyFreePickLimit();
     if (approvedFreePickLimit !== null) {
       const published = await publishedFreePickCount();
       if (published >= approvedFreePickLimit) {
@@ -195,7 +204,7 @@ function startXMonitor() {
       return;
     }
     const interval = xMonitorIntervalMs();
-    const approvedFreePickLimit = xMonitorApprovedFreePickLimit();
+    const approvedFreePickLimit = dailyFreePickLimit();
     const limit = xMonitorCandidateLimit();
     xMonitorCreated = 0;
     const stoppingRule = approvedFreePickLimit !== null
@@ -353,6 +362,7 @@ async function handleSourceReviewButton(interaction) {
     }
     assertPublishableExtraction(packet);
     const sport = normalizedSport(packet);
+    if (action === 'free') await enforceDailyFreePickLimit();
     const channel = action === 'free'
       ? await approvedTextChannel(freePickChannelId)
       : await approvedTextChannel(sport ? sportChannelMap.get(sport) : undefined);
@@ -566,6 +576,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (interaction.commandName === 'publish-pick' && !isPickApprover(interaction)) {
+    await interaction.reply({ ephemeral: true, content: 'Only Kobe can make the final approved pick post.' });
+    return;
+  }
+
   try {
     if (interaction.commandName === 'grade-pick') {
       const result = interaction.options.getString('result', true);
@@ -618,6 +633,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const channel = await destinationFor(interaction, defaultChannelId, pickOptions.sport.toLowerCase());
+    if (channel.id === freePickChannelId) await enforceDailyFreePickLimit();
     await postAndLogOfficialPick({
       channel,
       payload: { embeds: [embed] },
