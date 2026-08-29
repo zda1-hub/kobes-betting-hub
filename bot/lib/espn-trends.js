@@ -120,6 +120,21 @@ function formatStart(iso) {
   }).format(value);
 }
 
+function playerLeaders(competitor) {
+  return (competitor?.leaders || [])
+    .map((category) => {
+      const leader = category.leaders?.[0];
+      if (!leader?.athlete?.displayName || !leader.displayValue) return null;
+      return {
+        label: category.shortDisplayName || category.abbreviation || category.displayName || 'Stat',
+        player: leader.athlete.displayName,
+        value: leader.displayValue
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
 function matchupRows(scoreboard, teams) {
   return (scoreboard.events || []).map((event) => {
     const competition = event.competitions?.[0];
@@ -135,7 +150,9 @@ function matchupRows(scoreboard, teams) {
       status: event.status?.type?.description || event.status?.type?.name || 'status unavailable',
       link: event.links?.find((link) => link.href)?.href || '',
       away: awayTeam,
-      home: homeTeam
+      home: homeTeam,
+      awayPlayerLeaders: playerLeaders(away),
+      homePlayerLeaders: playerLeaders(home)
     };
   });
 }
@@ -198,6 +215,11 @@ function compactTeam(team, site) {
   return `#${team.rank} ${team.name}: ${team.overall} · ${site} ${split} · L10 ${team.lastTen} · ${team.streak}`;
 }
 
+function compactPlayerLeaders(leaders) {
+  if (!leaders?.length) return 'Player leaders: not available from ESPN';
+  return `Player leaders: ${leaders.map((leader) => `${leader.player} ${leader.label} ${leader.value}`).join(' · ')}`;
+}
+
 function reportEmbeds(report) {
   const top = report.leagueTable.slice(0, 5).map((team) => `#${team.rank} ${team.name} (${team.overall})`).join('\n') || 'No standings returned.';
   const bottom = report.leagueTable.slice(-5).reverse().map((team) => `#${team.rank} ${team.name} (${team.overall})`).join('\n') || 'No standings returned.';
@@ -215,7 +237,7 @@ function reportEmbeds(report) {
 
   const matchupLines = report.matchups.map((matchup) => {
     const eventLink = matchup.link ? `[${matchup.name}](${matchup.link})` : matchup.name;
-    return `**${eventLink}** — ${matchup.start} (${matchup.status})\n${compactTeam(matchup.away, 'road')}\n${compactTeam(matchup.home, 'home')}`;
+    return `**${eventLink}** — ${matchup.start} (${matchup.status})\n${compactTeam(matchup.away, 'road')}\n${compactPlayerLeaders(matchup.awayPlayerLeaders)}\n${compactTeam(matchup.home, 'home')}\n${compactPlayerLeaders(matchup.homePlayerLeaders)}`;
   });
   const embeds = [summary];
   let chunk = '';
@@ -238,6 +260,7 @@ module.exports = {
   espnUrls,
   generateTrendReport,
   normalizeStandings,
+  playerLeaders,
   markTrendPublished,
   reportEmbeds,
   reportPath,
