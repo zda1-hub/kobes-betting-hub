@@ -12,6 +12,7 @@ const { assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName } = 
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
+const { enrichPacket } = require('../pipeline/enrich-pick');
 const { runCollector } = require('../pipeline/collect-x');
 
 const required = ['DISCORD_TOKEN'];
@@ -26,6 +27,8 @@ const recapChannelId = process.env.RECAP_CHANNEL_ID || defaultChannelId;
 const welcomeChannelId = process.env.WELCOME_CHANNEL_ID;
 const welcomeRoleId = process.env.WELCOME_ROLE_ID;
 const freePickChannelId = process.env.FREE_PICK_CHANNEL_ID;
+const pickApprovalChannelId = process.env.PICK_APPROVAL_CHANNEL_ID;
+const sourcesPath = path.join(__dirname, '..', 'data', 'twitter-sources.json');
 const trendsChannelMap = new Map(
   (process.env.TRENDS_CHANNEL_MAP || '').split(',')
     .map((entry) => entry.trim().split(':'))
@@ -368,7 +371,82 @@ async function postAndLogOfficialPick({ channel, payload, entry }) {
   }
 }
 
-async function findReviewPacket(pickId) {
+function sourceCardIdentity(message) {
+  const embed = message?.embeds?.[0];
+  const description = embed?.description || '';
+  const handle = description.match(/\*\*Source:\*\*\s*@([A-Za-z0-9_]+)/i)?.[1] || '';
+  const postUrl = description.match(/https:\/\/(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)\/status\/(\d+)/i);
+  if (!handle || !postUrl) return null;
+  return { handle, postId: postUrl[2], postUrl: postUrl[0] };
+}
+
+async function hydrateLegacyReviewPacket({ interaction, pickId }) {
+  // Old bot cards can remain visible after an earlier non-persistent run. Only
+  // recover a card authored by this bot in the configured private review room.
+  if (!pickApprovalChannelId || interaction.channelId !== pickApprovalChannelId) return null;
+  if (interaction.message?.author?.id !== client.user?.id) return null;
+  const identity = sourceCardIdentity(interaction.message);
+  if (!identity || !process.env.X_BEARER_TOKEN) return null;
+
+  let sources;
+  try {
+    sources = JSON.parse(await fs.readFile(sourcesPath, 'utf8'));
+  } catch (error) {
+    console.error('Unable to read configured X sources while recovering an approval card:', error);
+    return null;
+  }
+  const sourceConfig = sources.find((source) => source.handle?.toLowerCase() === identity.handle.toLowerCase());
+  if (!sourceConfig) return null;
+
+  const response = await fetch(`https://api.x.com/2/tweets/${identity.postId}?tweet.fields=created_at,attachments,entities&expansions=attachments.media_keys&media.fields=url,preview_image_url,type`, {
+    headers: { Authorization: `Bearer ${process.env.X_BEARER_TOKEN}` }
+  });
+  if (!response.ok) {
+    console.error(`Could not recover X approval card ${pickId}: X returned ${response.status}.`);
+    return null;
+  }
+  const result = await response.json();
+  const post = result.data;
+  if (!post?.id) return null;
+  const mediaByKey = Object.fromEntries((result.includes?.media || []).map((media) => [media.media_key, media.url || media.preview_image_url]));
+  const date = /^\d{8}/.test(pickId)
+    ? `${pickId.slice(0, 4)}-${pickId.slice(4, 6)}-${pickId.slice(6, 8)}`
+    : pacificOperatingDate();
+  const approvalNumber = Number(pickId.match(/^\d{8}-(\d+)-X$/)?.[1]) || 0;
+  const packet = {
+    pick_id: pickId,
+    approval_number: approvalNumber,
+    status: 'NEEDS_INFO',
+    approval_ready: false,
+    source: {
+      platform: 'Twitter/X',
+      handle: sourceConfig.handle,
+      display_name: sourceConfig.display_name,
+      monitoring_mode: sourceConfig.monitoring_mode || 'standard',
+      post_id: post.id,
+      post_url: identity.postUrl,
+      posted_at: post.created_at,
+      credit_line: sourceConfig.credit_line,
+      reuse_permission: sourceConfig.reuse_permission,
+      publish_mode: sourceConfig.publish_mode || 'writeup_review',
+      text: post.text || '',
+      media_urls: (post.attachments?.media_keys || []).map((key) => mediaByKey[key]).filter(Boolean)
+    },
+    approval: { approver: 'Kobe', decision: null, destination_sport: null, image_url: null, exact_final_copy: null, decided_at: null },
+    analysis: { status: 'NOT_STARTED', detail: 'Recovering the source post for this older approval card.', extracted_at: null, model: null, source_only: true, extraction: null, draft_status: 'WAITING_FOR_INDEPENDENT_VERIFICATION' },
+    created_at: new Date().toISOString(),
+    recovered_from_discord_message_id: interaction.message.id
+  };
+  packet.analysis = await enrichPacket(packet);
+  const directory = path.join(reviewQueueRoot, date);
+  const packetPath = path.join(directory, `${pickId.replace(/-X$/, '')}.json`);
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+  console.log(`Recovered legacy approval card ${pickId} from its original X post.`);
+  return { packet, packetPath };
+}
+
+async function findReviewPacket(pickId, interaction) {
   if (!/^[A-Za-z0-9_-]+$/.test(pickId)) return null;
   let dates;
   try {
@@ -386,7 +464,7 @@ async function findReviewPacket(pickId) {
       if (packet.pick_id === pickId) return { packet, packetPath };
     }
   }
-  return null;
+  return hydrateLegacyReviewPacket({ interaction, pickId });
 }
 
 async function handleSourceReviewButton(interaction) {
@@ -400,7 +478,7 @@ async function handleSourceReviewButton(interaction) {
     await interaction.editReply('This review action is not recognized.');
     return;
   }
-  const found = await findReviewPacket(pickId);
+  const found = await findReviewPacket(pickId, interaction);
   if (!found) {
     await interaction.editReply('The review packet is no longer available. Do not publish it; create a fresh draft.');
     return;
