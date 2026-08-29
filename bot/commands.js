@@ -140,6 +140,19 @@ const gradePickOptions = new SlashCommandBuilder()
     .setRequired(false)
     .setMaxLength(300));
 
+const trendOptions = (command) => command
+  .addStringOption((option) => option
+    .setName('league')
+    .setDescription('League to scan from ESPN')
+    .setRequired(true)
+    .addChoices({ name: 'MLB', value: 'mlb' }, { name: 'NFL', value: 'nfl' }))
+  .addStringOption((option) => option
+    .setName('date')
+    .setDescription('California operating date, YYYY-MM-DD')
+    .setRequired(true)
+    .setMinLength(10)
+    .setMaxLength(10));
+
 module.exports = [
   pickOptions(
     new SlashCommandBuilder()
@@ -162,6 +175,16 @@ module.exports = [
       .setDescription('Publish the full daily recap built from pick-log.csv')
   ),
   gradePickOptions,
+  trendOptions(
+    new SlashCommandBuilder()
+      .setName('preview-trends')
+      .setDescription('Privately preview an ESPN research trends sheet')
+  ),
+  trendOptions(
+    new SlashCommandBuilder()
+      .setName('publish-trends')
+      .setDescription('Post an ESPN research trends sheet to private pick approvals')
+  ),
   new SlashCommandBuilder()
     .setName('post-welcome-invite')
     .setDescription('Post the opt-in welcome button for current members')

@@ -11,6 +11,7 @@ const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib
 const { assertPublishableExtraction, buildSourcePickEmbed } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { reviewQueuePath } = require('./lib/review-queue-path');
+const { generateTrendReport, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { runCollector } = require('../pipeline/collect-x');
 
 const required = ['DISCORD_TOKEN'];
@@ -25,6 +26,7 @@ const recapChannelId = process.env.RECAP_CHANNEL_ID || defaultChannelId;
 const welcomeChannelId = process.env.WELCOME_CHANNEL_ID;
 const welcomeRoleId = process.env.WELCOME_ROLE_ID;
 const freePickChannelId = process.env.FREE_PICK_CHANNEL_ID;
+const trendsApprovalChannelId = process.env.TRENDS_APPROVAL_CHANNEL_ID || process.env.PICK_APPROVAL_CHANNEL_ID;
 const pickApproverUserIds = listFromEnv(process.env.PICK_APPROVER_USER_IDS);
 const reviewQueueRoot = reviewQueuePath();
 const sportChannelMap = new Map(
@@ -576,12 +578,35 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (interaction.commandName === 'publish-trends' && !isPickApprover(interaction)) {
+    await interaction.reply({ ephemeral: true, content: 'Only Kobe can post a trends sheet to the private approval channel.' });
+    return;
+  }
+
   if (interaction.commandName === 'publish-pick' && !isPickApprover(interaction)) {
     await interaction.reply({ ephemeral: true, content: 'Only Kobe can make the final approved pick post.' });
     return;
   }
 
   try {
+    if (interaction.commandName === 'preview-trends' || interaction.commandName === 'publish-trends') {
+      await interaction.deferReply({ ephemeral: true });
+      const report = await generateTrendReport({
+        league: interaction.options.getString('league', true),
+        date: interaction.options.getString('date', true)
+      });
+      const output = await saveTrendReport(report);
+      const embeds = reportEmbeds(report);
+      if (interaction.commandName === 'preview-trends') {
+        await interaction.editReply({ content: `Private research preview saved to ${output}.`, embeds });
+        return;
+      }
+      const channel = await approvedTextChannel(trendsApprovalChannelId);
+      for (const embed of embeds) await channel.send({ embeds: [embed] });
+      await interaction.editReply(`Private ${report.league} trends sheet posted to ${channel} and saved to durable storage.`);
+      return;
+    }
+
     if (interaction.commandName === 'grade-pick') {
       const result = interaction.options.getString('result', true);
       const source = interaction.options.getString('result_source', true);

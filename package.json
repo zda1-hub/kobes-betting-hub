@@ -8,6 +8,7 @@
     "register:commands": "node bot/register-commands.js",
     "collect:x": "node pipeline/collect-x.js",
     "enrich:pick": "node pipeline/enrich-pick.js",
+    "trends:espn": "node pipeline/generate-espn-trends.js",
     "test:real-x-pick": "node pipeline/test-real-x-pick.js",
     "prepare:approval": "node pipeline/prepare-approval.js",
     "test": "node --test bot/**/*.test.js"
