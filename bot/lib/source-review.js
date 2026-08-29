@@ -28,6 +28,15 @@ function sourceTerms(packet) {
   return visiblePlays(packet).map(({ terms, units }) => `${terms}${units ? ` (${units})` : ''}`);
 }
 
+function sourceEvidence(packet) {
+  const claims = packet.analysis?.extraction?.source_claims;
+  if (!Array.isArray(claims)) return [];
+  return claims
+    .filter((claim) => typeof claim === 'string' && claim.trim())
+    .map((claim) => claim.trim().replace(/^(?:[-•]\s*)?✅\s*/, '').replace(/[.\s]+$/, ''))
+    .slice(0, 8);
+}
+
 function sourceCapperName(packet) {
   const extractedName = packet.analysis?.extraction?.source_capper_name;
   if (visible(extractedName, '')) return extractedName.trim();
@@ -56,16 +65,28 @@ function assertPublishableExtraction(packet) {
 
 function buildSourcePickEmbed(packet, destinationLabel) {
   assertPublishableExtraction(packet);
-  const extraction = packet.analysis.extraction;
+  const terms = sourceTerms(packet);
+  const termsOnly = packet.source?.publish_mode === 'terms_only';
   const embed = {
     color: destinationLabel === 'FREE PICK' ? 0x2B90D9 : 0xD4AF37,
-    description: [sourceCapperName(packet), ...sourceTerms(packet)].join('\n'),
     footer: { text: `Pick ID: ${packet.pick_id} | 21+ | Gambling involves risk.` },
     timestamp: new Date().toISOString()
   };
+
   // Leaked-capper posts keep the exact compact format Kobe requested: capper,
   // then the visible play terms and stake. No source graphic or write-up.
-  if (packet.source?.publish_mode !== 'terms_only') {
+  if (termsOnly) {
+    embed.description = [sourceCapperName(packet), ...terms].join('\n');
+  } else {
+    // This mirrors Kobe's member-facing breakdown layout without pretending the
+    // bot independently researched a stat. The bullets are only claims that
+    // were visibly present in the approved source post.
+    const evidence = sourceEvidence(packet);
+    embed.author = { name: sourceCapperName(packet) };
+    embed.description = [
+      ...terms.map((term) => `**${term}**`),
+      ...(evidence.length ? ['', ...evidence.map((claim) => `✅ ${claim}`)] : [])
+    ].join('\n');
     const imageUrl = packet.source?.media_urls?.[0];
     if (imageUrl) embed.image = { url: imageUrl };
   }
@@ -83,4 +104,4 @@ function reviewButtons(pickId, { testOnly = false } = {}) {
   }];
 }
 
-module.exports = { assertPublishableExtraction, buildSourcePickEmbed, reviewButtons, sourceCapperName, sourceTerms, visiblePlays };
+module.exports = { assertPublishableExtraction, buildSourcePickEmbed, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
