@@ -183,7 +183,7 @@ module.exports = [
   trendOptions(
     new SlashCommandBuilder()
       .setName('publish-trends')
-      .setDescription('Post an ESPN research trends sheet to private pick approvals')
+      .setDescription('Post an ESPN research trends sheet to its approved trends channel')
   ),
   new SlashCommandBuilder()
     .setName('post-welcome-invite')

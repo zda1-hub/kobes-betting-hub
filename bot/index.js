@@ -26,7 +26,12 @@ const recapChannelId = process.env.RECAP_CHANNEL_ID || defaultChannelId;
 const welcomeChannelId = process.env.WELCOME_CHANNEL_ID;
 const welcomeRoleId = process.env.WELCOME_ROLE_ID;
 const freePickChannelId = process.env.FREE_PICK_CHANNEL_ID;
-const trendsApprovalChannelId = process.env.TRENDS_APPROVAL_CHANNEL_ID || process.env.PICK_APPROVAL_CHANNEL_ID;
+const trendsChannelMap = new Map(
+  (process.env.TRENDS_CHANNEL_MAP || '').split(',')
+    .map((entry) => entry.trim().split(':'))
+    .filter(([league, channelId]) => league && channelId)
+    .map(([league, channelId]) => [league.toLowerCase(), channelId])
+);
 const pickApproverUserIds = listFromEnv(process.env.PICK_APPROVER_USER_IDS);
 const reviewQueueRoot = reviewQueuePath();
 const sportChannelMap = new Map(
@@ -601,7 +606,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.editReply({ content: `Private research preview saved to ${output}.`, embeds });
         return;
       }
-      const channel = await approvedTextChannel(trendsApprovalChannelId);
+      const channelId = trendsChannelMap.get(report.leagueId);
+      if (!channelId) {
+        throw new Error(`No approved trends channel is configured for ${report.league}. Set TRENDS_CHANNEL_MAP.`);
+      }
+      const channel = await approvedTextChannel(channelId);
       for (const embed of embeds) await channel.send({ embeds: [embed] });
       await interaction.editReply(`Private ${report.league} trends sheet posted to ${channel} and saved to durable storage.`);
       return;

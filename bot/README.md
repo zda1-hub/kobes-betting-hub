@@ -17,6 +17,14 @@ automate a user account, place bets, or create picks from unverified claims.
 - `/post-welcome-invite` — administrator-only; posts a button in the configured welcome channel. A member receives the welcome DM only after clicking it.
 - `/hub-help` — shows the short publishing workflow.
 
+## ESPN research trends
+
+- `/preview-trends` privately renders an MLB or NFL ESPN research sheet.
+- `/publish-trends` sends it only to the matching configured trends channel. Set
+  `TRENDS_CHANNEL_MAP`, for example `football:CHANNEL_ID,baseball:CHANNEL_ID`.
+- The trends sheet is research-only; it is not a pick and does not bypass Kobe's
+  approval requirement for an actual pick.
+
 The pick command requires Kobe's approval number, sport, event, exact published
 line and American odds, units risked, pick headline, 4–8 evidence points,
 confidence score, and an approved image/GIF (direct upload or URL). In the Discord
