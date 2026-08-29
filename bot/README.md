@@ -24,6 +24,9 @@ automate a user account, place bets, or create picks from unverified claims.
   `TRENDS_CHANNEL_MAP`, for example `football:CHANNEL_ID,baseball:CHANNEL_ID`.
 - The trends sheet is research-only; it is not a pick and does not bypass Kobe's
   approval requirement for an actual pick.
+- To schedule it, set `TRENDS_AUTO_PUBLISH_ENABLED=true` and
+  `TRENDS_DAILY_AT=11:00`. The clock is California time; a league with no ESPN
+  games listed that day is skipped.
 
 The pick command requires Kobe's approval number, sport, event, exact published
 line and American odds, units risked, pick headline, 4–8 evidence points,

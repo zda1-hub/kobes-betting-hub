@@ -11,7 +11,7 @@ const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib
 const { assertPublishableExtraction, buildSourcePickEmbed } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { reviewQueuePath } = require('./lib/review-queue-path');
-const { generateTrendReport, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
+const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { runCollector } = require('../pipeline/collect-x');
 
 const required = ['DISCORD_TOKEN'];
@@ -46,6 +46,8 @@ let xCollectionInProgress = false;
 let xMonitorCreated = 0;
 let xMonitorIntervalTimer = null;
 let xMonitorStopTimer = null;
+let trendsTimer = null;
+let trendsPublicationInProgress = false;
 
 function xMonitorIntervalMs() {
   const configured = Number(process.env.X_MONITOR_INTERVAL_MS || 300000);
@@ -53,6 +55,70 @@ function xMonitorIntervalMs() {
   // unnecessary X API bill. Five minutes is the default; one minute is the floor.
   if (!Number.isFinite(configured) || configured < 60000) return 300000;
   return configured;
+}
+
+function pacificClock(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return { date: `${values.year}-${values.month}-${values.day}`, time: `${values.hour}:${values.minute}` };
+}
+
+function trendsDailyTime() {
+  const value = (process.env.TRENDS_DAILY_AT || '11:00').trim();
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    console.warn('Ignoring invalid TRENDS_DAILY_AT. Use HH:MM in California time, for example 11:00.');
+    return null;
+  }
+  return value;
+}
+
+async function publishScheduledTrends() {
+  if (trendsPublicationInProgress || process.env.TRENDS_AUTO_PUBLISH_ENABLED !== 'true') return;
+  const scheduledTime = trendsDailyTime();
+  const now = pacificClock();
+  if (!scheduledTime || now.time !== scheduledTime) return;
+
+  trendsPublicationInProgress = true;
+  try {
+    for (const league of ['mlb', 'nfl']) {
+      if (!trendsChannelMap.has(league)) {
+        console.warn(`Skipping ${league.toUpperCase()} trends: no approved destination in TRENDS_CHANNEL_MAP.`);
+        continue;
+      }
+      if (await alreadyPublishedTrend({ league, date: now.date })) continue;
+      const report = await generateTrendReport({ league, date: now.date });
+      if (report.matchups.length === 0) {
+        console.log(`Skipping ${report.league} trends for ${now.date}: ESPN has no listed games.`);
+        continue;
+      }
+      await saveTrendReport(report);
+      const channel = await approvedTextChannel(trendsChannelMap.get(league));
+      const messages = [];
+      for (const embed of reportEmbeds(report)) messages.push(await channel.send({ embeds: [embed] }));
+      await markTrendPublished({ league, date: now.date, channelId: channel.id, messageIds: messages.map((message) => message.id) });
+      console.log(`Published scheduled ${report.league} trends for ${now.date} to #${channel.name || channel.id}.`);
+    }
+  } catch (error) {
+    console.error('Scheduled trends publication failed:', error);
+  } finally {
+    trendsPublicationInProgress = false;
+  }
+}
+
+function startTrendsSchedule() {
+  if (process.env.TRENDS_AUTO_PUBLISH_ENABLED !== 'true') {
+    console.log('Automatic trends publication is disabled. Set TRENDS_AUTO_PUBLISH_ENABLED=true to enable it.');
+    return;
+  }
+  if (!trendsDailyTime()) return;
+  // Check on the minute. The schedule intentionally does not backfill after a
+  // restart, so it cannot post a stale in-progress-game sheet later in the day.
+  trendsTimer = setInterval(() => void publishScheduledTrends(), 30000);
+  void publishScheduledTrends();
+  console.log(`Automatic ESPN trends are scheduled for ${trendsDailyTime()} California time.`);
 }
 
 function xMonitorStartAtMs() {
@@ -466,6 +532,7 @@ async function destinationFor(interaction, fallbackChannelId, sport = null) {
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
   startXMonitor();
+  startTrendsSchedule();
 });
 
 async function registerCommandsOnStart() {

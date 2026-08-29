@@ -145,6 +145,11 @@ function reportPath({ league, date }) {
   return path.join(directory, `${String(league).toLowerCase()}-${date}.json`);
 }
 
+function trendPublicationPath({ league, date }) {
+  const directory = process.env.TRENDS_OUTPUT_PATH?.trim() || path.join(path.dirname(pickLogPath()), 'trends');
+  return path.join(directory, `${String(league).toLowerCase()}-${date}.published.json`);
+}
+
 async function generateTrendReport({ league, date, fetchImpl = fetch }) {
   const config = leagueConfig(league);
   const sources = espnUrls({ league: config.id, date });
@@ -168,6 +173,23 @@ async function generateTrendReport({ league, date, fetchImpl = fetch }) {
 async function saveTrendReport(report, output = reportPath({ league: report.leagueId, date: report.operatingDate })) {
   await fs.mkdir(path.dirname(output), { recursive: true });
   await fs.writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
+  return output;
+}
+
+async function alreadyPublishedTrend({ league, date }) {
+  try {
+    await fs.access(trendPublicationPath({ league, date }));
+    return true;
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+async function markTrendPublished({ league, date, channelId, messageIds }) {
+  const output = trendPublicationPath({ league, date });
+  await fs.mkdir(path.dirname(output), { recursive: true });
+  await fs.writeFile(output, `${JSON.stringify({ league, date, channelId, messageIds, publishedAt: new Date().toISOString() }, null, 2)}\n`);
   return output;
 }
 
@@ -212,9 +234,11 @@ function reportEmbeds(report) {
 
 module.exports = {
   LEAGUES,
+  alreadyPublishedTrend,
   espnUrls,
   generateTrendReport,
   normalizeStandings,
+  markTrendPublished,
   reportEmbeds,
   reportPath,
   saveTrendReport
