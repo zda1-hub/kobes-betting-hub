@@ -73,16 +73,15 @@ function buildSourcePickEmbed(packet, destinationLabel) {
     timestamp: new Date().toISOString()
   };
 
-  // Leaked-capper posts keep the exact compact format Kobe requested: capper,
-  // then the visible play terms and stake. No source graphic or write-up.
+  // Leaked-capper posts keep the exact compact format Kobe requested: the
+  // visible play terms and stake only. No source graphic or write-up.
   if (termsOnly) {
-    embed.description = [sourceCapperName(packet), ...terms].join('\n');
+    embed.description = terms.join('\n');
   } else {
     // This mirrors Kobe's member-facing breakdown layout without pretending the
     // bot independently researched a stat. The bullets are only claims that
     // were visibly present in the approved source post.
     const evidence = sourceEvidence(packet);
-    embed.author = { name: sourceCapperName(packet) };
     embed.description = [
       ...terms.map((term) => `**${term}**`),
       ...(evidence.length ? ['', ...evidence.map((claim) => `✅ ${claim}`)] : [])
