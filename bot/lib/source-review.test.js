@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { assertPublishableExtraction, buildSourcePickEmbed, sourceTerms } = require('./source-review');
+const { assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName, sourceTerms } = require('./source-review');
 
 const packet = {
   source: { handle: 'ExampleSource', media_urls: ['https://example.com/pick.png'] },
@@ -44,7 +44,18 @@ test('formats leaked-capper picks as terms only, without the source image', () =
 });
 
 test('does not allow unclear capper or non-pick extraction to publish', () => {
-  assert.throws(() => assertPublishableExtraction({ ...packet, analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, source_capper_name: '' } } }), /original capper/);
+  const noCapper = { ...packet, source: {}, analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, source_capper_name: '' } } };
+  assert.throws(() => assertPublishableExtraction(noCapper), /original capper/);
   assert.throws(() => assertPublishableExtraction({ ...packet, analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, is_pick_candidate: false } } }), /not a verified pick candidate/);
   assert.deepEqual(sourceTerms(packet), ['Player OVER 6.5 strikeouts -115 (1u)', 'Team ML +120']);
+});
+
+test('uses the configured source account when the graphic does not name a capper', () => {
+  const sourceFallback = {
+    ...packet,
+    source: { handle: 'ExampleSource', display_name: 'Example Source' },
+    analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, source_capper_name: '' } }
+  };
+  assert.equal(sourceCapperName(sourceFallback), 'Example Source');
+  assert.equal(buildSourcePickEmbed(sourceFallback, 'FREE PICK').description.split('\n')[0], 'Example Source');
 });

@@ -28,12 +28,25 @@ function sourceTerms(packet) {
   return visiblePlays(packet).map(({ terms, units }) => `${terms}${units ? ` (${units})` : ''}`);
 }
 
+function sourceCapperName(packet) {
+  const extractedName = packet.analysis?.extraction?.source_capper_name;
+  if (visible(extractedName, '')) return extractedName.trim();
+
+  // Many public pick posts identify the author in the post header rather than
+  // inside the image. The configured source account is a factual fallback; it
+  // does not invent a separate capper name.
+  const displayName = packet.source?.display_name;
+  if (visible(displayName, '')) return displayName.trim();
+  const handle = packet.source?.handle;
+  return visible(handle, '') ? `@${handle.trim()}` : '';
+}
+
 function assertPublishableExtraction(packet) {
   const extraction = packet.analysis?.extraction;
   if (packet.analysis?.status !== 'SOURCE_EXTRACTED' || !extraction?.is_pick_candidate) {
     throw new Error('This source card is not a verified pick candidate. Reject it or finish manual review first.');
   }
-  if (!visible(extraction.source_capper_name, '')) {
+  if (!sourceCapperName(packet)) {
     throw new Error('The original capper is not clearly visible, so this card cannot be published automatically.');
   }
   if (sourceTerms(packet).length === 0) {
@@ -46,7 +59,7 @@ function buildSourcePickEmbed(packet, destinationLabel) {
   const extraction = packet.analysis.extraction;
   const embed = {
     color: destinationLabel === 'FREE PICK' ? 0x2B90D9 : 0xD4AF37,
-    description: [visible(extraction.source_capper_name), ...sourceTerms(packet)].join('\n'),
+    description: [sourceCapperName(packet), ...sourceTerms(packet)].join('\n'),
     footer: { text: `Pick ID: ${packet.pick_id} | 21+ | Gambling involves risk.` },
     timestamp: new Date().toISOString()
   };
@@ -70,4 +83,4 @@ function reviewButtons(pickId, { testOnly = false } = {}) {
   }];
 }
 
-module.exports = { assertPublishableExtraction, buildSourcePickEmbed, reviewButtons, sourceTerms, visiblePlays };
+module.exports = { assertPublishableExtraction, buildSourcePickEmbed, reviewButtons, sourceCapperName, sourceTerms, visiblePlays };

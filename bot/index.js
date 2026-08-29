@@ -8,7 +8,7 @@ const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds } = require('./lib/recap');
 const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, readPickLog, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
-const { assertPublishableExtraction, buildSourcePickEmbed } = require('./lib/source-review');
+const { assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -430,7 +430,8 @@ async function handleSourceReviewButton(interaction) {
 
   try {
     const termsOnly = packet.source?.publish_mode === 'terms_only';
-    if (packet.source?.reuse_permission !== 'CONFIRMED' && !termsOnly) {
+    const sourcePostingEnabled = process.env.X_SOURCE_PUBLISHING_ENABLED === 'true';
+    if (packet.source?.reuse_permission !== 'CONFIRMED' && !termsOnly && !sourcePostingEnabled) {
       throw new Error('This source is approved for monitoring only. Use Kobe’s original wording and approved media with /publish-pick until source reuse permission is confirmed.');
     }
     assertPublishableExtraction(packet);
@@ -456,7 +457,7 @@ async function handleSourceReviewButton(interaction) {
         published_line: firstPlay.line || extraction.line || '',
         published_odds_american: firstPlay.odds_american || extraction.odds_american || '',
         units_risked: firstExtractedUnits(packet),
-        source_name: extraction.source_capper_name || packet.source.handle || '',
+        source_name: sourceCapperName(packet),
         credit_text: packet.source.credit_line || '',
         approver: interaction.user.id,
         approved_at: approval.decided_at,
