@@ -373,9 +373,17 @@ async function postAndLogOfficialPick({ channel, payload, entry }) {
 
 function sourceCardIdentity(message) {
   const embed = message?.embeds?.[0];
-  const description = embed?.description || '';
-  const handle = description.match(/\*\*Source:\*\*\s*@([A-Za-z0-9_]+)/i)?.[1] || '';
-  const postUrl = description.match(/https:\/\/(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)\/status\/(\d+)/i);
+  const cardText = [
+    embed?.title,
+    embed?.description,
+    ...(embed?.fields || []).flatMap((field) => [field.name, field.value])
+  ].filter(Boolean).join('\n');
+  const postUrl = cardText.match(/https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)\/status\/(\d+)/i);
+  const handle = cardText.match(/\*\*Source:\*\*\s*@([A-Za-z0-9_]+)/i)?.[1]
+    || cardText.match(/\*\*Posted by:\*\*[^\n]*\(@?([A-Za-z0-9_]+)\)/i)?.[1]
+    || cardText.match(/@([A-Za-z0-9_]+)/)?.[1]
+    || postUrl?.[1]
+    || '';
   if (!handle || !postUrl) return null;
   return { handle, postId: postUrl[2], postUrl: postUrl[0] };
 }
@@ -452,7 +460,7 @@ async function findReviewPacket(pickId, interaction) {
   try {
     dates = await fs.readdir(reviewQueueRoot, { withFileTypes: true });
   } catch (error) {
-    if (error.code === 'ENOENT') return null;
+    if (error.code === 'ENOENT') return hydrateLegacyReviewPacket({ interaction, pickId });
     throw error;
   }
   for (const date of dates.filter((item) => item.isDirectory()).sort((a, b) => b.name.localeCompare(a.name))) {
