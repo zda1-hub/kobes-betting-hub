@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
+const { isRecentSourcePost, upcomingEventStatus } = require('../bot/lib/event-timing');
 
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
@@ -303,6 +304,21 @@ async function runCollector({ maxCandidates } = {}) {
       sequence += 1;
       const { packet, outputPath } = await writePacket({ date, sequence, source, post, media });
       packet.analysis = await enrichPacket(packet);
+
+      // Never fill Kobe's approval room with an identified game that has
+      // already started. For posts where the graphic does not state a matchup,
+      // retain only genuinely recent posts for human review; the final publish
+      // step performs this same live check again.
+      const timing = await upcomingEventStatus(packet);
+      packet.verification.event_start = timing.eventStart || null;
+      packet.verification.event_timezone = timing.source || null;
+      if (timing.status === 'STARTED_OR_FINISHED' || (timing.status === 'UNKNOWN' && !isRecentSourcePost(packet))) {
+        await fs.rm(outputPath, { force: true });
+        console.log(`Skipped @${source.handle} post ${post.id}; ${timing.status === 'STARTED_OR_FINISHED' ? 'the event has already started' : 'the post is too old to verify as upcoming'}.`);
+        skipped += 1;
+        continue;
+      }
+
       packet.discord_review_message_id = await notifyApprovalChannel(packet);
       await fs.writeFile(outputPath, `${JSON.stringify(packet, null, 2)}\n`);
       console.log(`Queued #${packet.approval_number} ${packet.pick_id} from @${source.handle}.`);
