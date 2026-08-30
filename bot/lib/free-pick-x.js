@@ -14,7 +14,10 @@ function buildFreePickXPost(packet) {
   const terms = sourceTerms(packet);
   if (!terms.length) throw new Error('The free pick has no publishable terms for X.');
 
-  const body = ['FREE PLAY', ...terms, '', 'Live now in the Hub.'].join('\n');
+  // Keep the X copy to the approved pick terms only. The Discord post carries
+  // the full writeup; omitting promotional filler prevents valid picks from
+  // failing X's 280-character cap.
+  const body = ['FREE PLAY', ...terms].join('\n');
   if (body.length > MAX_X_POST_LENGTH) {
     throw new Error(`The approved free-pick post is ${body.length} characters; X allows ${MAX_X_POST_LENGTH}.`);
   }

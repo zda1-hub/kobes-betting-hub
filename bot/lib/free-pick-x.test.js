@@ -13,7 +13,7 @@ const packet = {
 };
 
 test('formats the approved free pick as a compact X post', () => {
-  assert.equal(buildFreePickXPost(packet), 'FREE PLAY\nArizona Diamondbacks ML - -115\n\nLive now in the Hub.');
+  assert.equal(buildFreePickXPost(packet), 'FREE PLAY\nArizona Diamondbacks ML - -115');
   assert.match(freePickXPostId(packet.pick_id), /^free-x-[a-f0-9]{40}$/);
 });
 
