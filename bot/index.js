@@ -242,15 +242,15 @@ async function collectXSafely() {
       }
 
       const pending = await pendingSourceReviewCount();
-      if (pending > 0) {
+      const pendingCapacity = Math.max(0, approvedFreePickLimit - published - pending);
+      if (pendingCapacity === 0) {
         console.log(`X monitoring is waiting for Kobe's decision on ${pending} private approval card(s).`);
         return;
       }
 
-      // Keep only one undecided draft in front of Kobe at a time. A rejection
-      // does not count toward the free-pick target, so the next check can find
-      // a replacement without flooding #pick-approvals.
-      await runCollector({ maxCandidates: 1 });
+      // Keep enough undecided drafts in front of Kobe to fill the remaining
+      // free-pick capacity, while never exceeding the daily published limit.
+      await runCollector({ maxCandidates: pendingCapacity });
       return;
     }
 
