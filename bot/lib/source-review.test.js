@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { assertPublishableExtraction, buildSourcePickEmbed, sourceTerms } = require('./source-review');
+const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceTerms } = require('./source-review');
 
 const packet = {
   source: { handle: 'ExampleSource', media_urls: ['https://example.com/pick.png'] },
@@ -32,7 +32,7 @@ const packet = {
 test('formats a writeup source in Kobe’s pick-first layout', () => {
   const embed = buildSourcePickEmbed(packet, 'FREE PICK');
   assert.equal(embed.description, '**Player OVER 6.5 strikeouts -115 (1u)**\n**Team ML +120**\n\n✅ Cleared 6+ strikeouts in 4 of the last 5 starts\n✅ Opponent ranks bottom 10 in strikeout avoidance');
-  assert.equal(embed.image.url, 'https://example.com/pick.png');
+  assert.equal(embed.image, undefined);
 });
 
 test('formats leaked-capper picks as terms only, without the source image', () => {
@@ -40,7 +40,7 @@ test('formats leaked-capper picks as terms only, without the source image', () =
     ...packet,
     source: { ...packet.source, publish_mode: 'terms_only' }
   }, 'PAID PICK');
-  assert.equal(embed.description, 'Player OVER 6.5 strikeouts -115 (1u)\nTeam ML +120');
+  assert.equal(embed.description, 'Example Capper\nPlayer OVER 6.5 strikeouts -115 (1u)\nTeam ML +120');
   assert.equal(embed.image, undefined);
 });
 
@@ -49,4 +49,16 @@ test('does not allow unclear capper or non-pick extraction to publish', () => {
   assert.throws(() => assertPublishableExtraction(noCapper), /original capper/);
   assert.throws(() => assertPublishableExtraction({ ...packet, analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, is_pick_candidate: false } } }), /not a verified pick candidate/);
   assert.deepEqual(sourceTerms(packet), ['Player OVER 6.5 strikeouts -115 (1u)', 'Team ML +120']);
+});
+
+test('limits free posts to writeup player props', () => {
+  assert.throws(() => assertFreePickEligible(packet), /side, total, moneyline, spread/);
+  assert.throws(() => assertFreePickEligible({ ...packet, source: { ...packet.source, publish_mode: 'terms_only' } }), /writeup player props/);
+  assert.doesNotThrow(() => assertFreePickEligible({
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: { ...packet.analysis.extraction, plays: [packet.analysis.extraction.plays[0]] }
+    }
+  }));
 });

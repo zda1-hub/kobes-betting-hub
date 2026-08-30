@@ -8,7 +8,7 @@ const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds } = require('./lib/recap');
 const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, readPickLog, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
-const { assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName } = require('./lib/source-review');
+const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -27,6 +27,10 @@ const recapChannelId = process.env.RECAP_CHANNEL_ID || defaultChannelId;
 const welcomeChannelId = process.env.WELCOME_CHANNEL_ID;
 const welcomeRoleId = process.env.WELCOME_ROLE_ID;
 const freePickChannelId = process.env.FREE_PICK_CHANNEL_ID;
+// The approved #exclusives destination is kept configurable for future moves.
+// The fallback preserves the currently approved server destination when an
+// older Render environment has not yet added the variable.
+const exclusivesChannelId = process.env.EXCLUSIVES_CHANNEL_ID || '1539055850075852911';
 const pickApprovalChannelId = process.env.PICK_APPROVAL_CHANNEL_ID;
 const sourcesPath = path.join(__dirname, '..', 'data', 'twitter-sources.json');
 const trendsChannelMap = new Map(
@@ -522,10 +526,13 @@ async function handleSourceReviewButton(interaction) {
     }
     assertPublishableExtraction(packet);
     const sport = normalizedSport(packet);
-    if (action === 'free') await enforceDailyFreePickLimit();
+    if (action === 'free') {
+      assertFreePickEligible(packet);
+      await enforceDailyFreePickLimit();
+    }
     const channel = action === 'free'
       ? await approvedTextChannel(freePickChannelId)
-      : await approvedTextChannel(sport ? sportChannelMap.get(sport) : undefined);
+      : await approvedTextChannel(termsOnly ? exclusivesChannelId : (sport ? sportChannelMap.get(sport) : undefined));
     const label = action === 'free' ? 'FREE PICK' : 'PAID PICK';
     const extraction = packet.analysis.extraction;
     const firstPlay = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;

@@ -28,6 +28,13 @@ function sourceTerms(packet) {
   return visiblePlays(packet).map(({ terms, units }) => `${terms}${units ? ` (${units})` : ''}`);
 }
 
+function isPlayerProp(play) {
+  // This deliberately looks at the published play itself rather than at a
+  // source caption such as "MLB Play of the Day". A free post must be a
+  // player-specific stat market, never a side, moneyline, spread, or total.
+  return /\b(?:strikeouts?|walks?(?: allowed)?|hits?|total bases?|rbi|runs?|stolen bases?|outs?|earned runs?|points?|rebounds?|assists?|three[- ]pointers?|threes?|blocks?|steals?|passing yards?|rushing yards?|receiving yards?|receptions?|sacks?|shots?(?: on goal)?|goals?|saves?)\b/i.test(play?.terms || '');
+}
+
 function sourceEvidence(packet) {
   const claims = packet.analysis?.extraction?.source_claims;
   if (!Array.isArray(claims)) return [];
@@ -63,6 +70,16 @@ function assertPublishableExtraction(packet) {
   }
 }
 
+function assertFreePickEligible(packet) {
+  if (packet.source?.publish_mode === 'terms_only') {
+    throw new Error('Free picks are limited to writeup player props. Send leaked capper cards to #exclusives instead.');
+  }
+  const plays = visiblePlays(packet);
+  if (plays.length === 0 || !plays.every(isPlayerProp)) {
+    throw new Error('Free picks are limited to player props. This card includes a side, total, moneyline, spread, or unclear market.');
+  }
+}
+
 function buildSourcePickEmbed(packet, destinationLabel) {
   assertPublishableExtraction(packet);
   const terms = sourceTerms(packet);
@@ -73,10 +90,10 @@ function buildSourcePickEmbed(packet, destinationLabel) {
     timestamp: new Date().toISOString()
   };
 
-  // Leaked-capper posts keep the exact compact format Kobe requested: the
-  // visible play terms and stake only. No source graphic or write-up.
+  // Exclusives stay exactly as Kobe requested: capper name, visible bets and
+  // units, with no image or added analysis.
   if (termsOnly) {
-    embed.description = terms.join('\n');
+    embed.description = [sourceCapperName(packet), ...terms].join('\n');
   } else {
     // This mirrors Kobe's member-facing breakdown layout without pretending the
     // bot independently researched a stat. The bullets are only claims that
@@ -86,8 +103,12 @@ function buildSourcePickEmbed(packet, destinationLabel) {
       ...terms.map((term) => `**${term}**`),
       ...(evidence.length ? ['', ...evidence.map((claim) => `✅ ${claim}`)] : [])
     ].join('\n');
-    const imageUrl = packet.source?.media_urls?.[0];
-    if (imageUrl) embed.image = { url: imageUrl };
+    // Free-pick posts are clean text-only cards. They must not reuse the
+    // original X graphic; Kobe reviews the source privately before posting.
+    if (destinationLabel !== 'FREE PICK') {
+      const imageUrl = packet.source?.media_urls?.[0];
+      if (imageUrl) embed.image = { url: imageUrl };
+    }
   }
   return embed;
 }
@@ -103,4 +124,4 @@ function reviewButtons(pickId, { testOnly = false } = {}) {
   }];
 }
 
-module.exports = { assertPublishableExtraction, buildSourcePickEmbed, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
+module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, isPlayerProp, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
