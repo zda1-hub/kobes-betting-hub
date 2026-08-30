@@ -11,7 +11,7 @@ const basePick = {
 };
 
 test('formats four verified evidence items', () => {
-  assert.match(makeEvidence(basePick.evidence), /^✅ Cleared in 4 of 5 starts/m);
+  assert.match(makeEvidence(basePick.evidence), /^• Cleared in 4 of 5 starts/m);
   assert.match(buildPickEmbed({ ...basePick, pickNumber: 1, sport: 'baseball' }).title, /^#1 • BASEBALL/m);
 });
 
@@ -20,8 +20,8 @@ test('rejects unsupported evidence counts', () => {
 });
 
 test('accepts semicolon-separated evidence from Discord command fields', () => {
-  assert.match(makeEvidence('one; two; three; four'), /^✅ one/m);
-  assert.match(makeEvidence('one; two; three; four'), /✅ four$/m);
+  assert.match(makeEvidence('one; two; three; four'), /^• one/m);
+  assert.match(makeEvidence('one; two; three; four'), /• four$/m);
 });
 
 test('rejects guarantee language and invalid media URLs', () => {

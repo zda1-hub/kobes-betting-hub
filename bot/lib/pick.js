@@ -23,7 +23,7 @@ function makeEvidence(rawEvidence) {
     throw new Error('Provide 4–8 evidence points, one per line.');
   }
 
-  return items.map((item) => `✅ ${item}`).join('\n');
+  return items.map((item) => `• ${item}`).join('\n');
 }
 
 function validatePick({ pick, evidence, confidence, imageUrl, imageAttachmentUrl, sourceUrl }) {
@@ -52,7 +52,7 @@ function buildPickEmbed({ pickNumber, pickId, sport, pick, evidence, confidence,
   const embed = {
     color: 0xD4AF37,
     title: numberedTitle,
-    description: `${formattedEvidence}\n\n⭐ **Confidence: ${confidence.toFixed(1)}/10**`,
+    description: formattedEvidence,
     image: { url: mediaUrl },
     footer: { text: `${pickId ? `Pick ID: ${pickId} | ` : ''}21+ | Gambling involves risk. No guaranteed results.` },
     timestamp: new Date().toISOString()
