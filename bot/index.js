@@ -166,13 +166,27 @@ function xMonitorDailyAt() {
   return raw;
 }
 
-function nextArizonaDailyStartMs(time, now = new Date()) {
+function xMonitorDailyStopAt() {
+  const raw = process.env.X_MONITOR_DAILY_STOP_AT?.trim();
+  if (!raw) return null;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
+    console.warn('Ignoring invalid X_MONITOR_DAILY_STOP_AT. Use HH:MM in Arizona time, for example 15:00.');
+    return null;
+  }
+  return raw;
+}
+
+function arizonaDailyTimestampMs(time, now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Phoenix',
     year: 'numeric', month: '2-digit', day: '2-digit'
   }).formatToParts(now);
   const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-  const today = new Date(`${values.year}-${values.month}-${values.day}T${time}:00-07:00`);
+  return new Date(`${values.year}-${values.month}-${values.day}T${time}:00-07:00`).getTime();
+}
+
+function nextArizonaDailyStartMs(time, now = new Date()) {
+  const today = new Date(arizonaDailyTimestampMs(time, now));
   return now < today ? today.getTime() : today.getTime() + 24 * 60 * 60 * 1000;
 }
 
@@ -281,6 +295,11 @@ async function beginDailyXMonitor() {
     return;
   }
   const limit = dailyFreePickLimit();
+  const dailyStopAt = xMonitorDailyStopAt();
+  if (dailyStopAt && currentTime >= dailyStopAt) {
+    stopXMonitor(`today's daily cutoff of ${dailyStopAt} Arizona time has passed`);
+    return;
+  }
   if (limit !== null && await publishedFreePickCount() >= limit) {
     stopXMonitor(`today's ${limit}-pick limit is already reached`);
     return;
@@ -289,6 +308,11 @@ async function beginDailyXMonitor() {
   console.log(`X monitoring enabled at ${currentTime} Arizona time: checking every ${Math.round(interval / 60000)} minute(s) until ${limit ?? 'the configured'} daily free-pick limit is reached.`);
   void collectXSafely();
   xMonitorIntervalTimer = setInterval(() => void collectXSafely(), interval);
+  if (dailyStopAt) {
+    const stopAtMs = arizonaDailyTimestampMs(dailyStopAt);
+    xMonitorStopTimer = setTimeout(() => stopXMonitor(`daily cutoff of ${dailyStopAt} Arizona time reached`), Math.max(0, stopAtMs - Date.now()));
+    console.log(`X monitoring is scheduled to stop at ${new Date(stopAtMs).toISOString()} each day if two picks have not been published.`);
+  }
 }
 
 async function collectXSafely() {
