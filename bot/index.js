@@ -54,6 +54,7 @@ let xCollectionInProgress = false;
 let xMonitorCreated = 0;
 let xMonitorIntervalTimer = null;
 let xMonitorStopTimer = null;
+let xMonitorDailyTimer = null;
 let trendsTimer = null;
 let trendsPublicationInProgress = false;
 
@@ -155,6 +156,26 @@ function xMonitorStopAtMs() {
   return timestamp;
 }
 
+function xMonitorDailyAt() {
+  const raw = process.env.X_MONITOR_DAILY_AT?.trim();
+  if (!raw) return null;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
+    console.warn('Ignoring invalid X_MONITOR_DAILY_AT. Use HH:MM in Arizona time, for example 11:00.');
+    return null;
+  }
+  return raw;
+}
+
+function nextArizonaDailyStartMs(time, now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Phoenix',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  const today = new Date(`${values.year}-${values.month}-${values.day}T${time}:00-07:00`);
+  return now < today ? today.getTime() : today.getTime() + 24 * 60 * 60 * 1000;
+}
+
 function xMonitorCandidateLimit() {
   const raw = process.env.X_MONITOR_MAX_CANDIDATES?.trim();
   if (!raw) return null;
@@ -223,6 +244,42 @@ function stopXMonitor(reason) {
     xMonitorStopTimer = null;
   }
   console.log(`X monitoring stopped: ${reason}`);
+  const dailyAt = xMonitorDailyAt();
+  if (dailyAt && process.env.X_MONITOR_ENABLED === 'true' && !xMonitorDailyTimer) {
+    const nextStart = nextArizonaDailyStartMs(dailyAt);
+    xMonitorDailyTimer = setTimeout(() => {
+      xMonitorDailyTimer = null;
+      void beginDailyXMonitor();
+    }, Math.max(0, nextStart - Date.now()));
+    console.log(`X monitoring will resume at ${new Date(nextStart).toISOString()} for the next daily window.`);
+  }
+}
+
+async function beginDailyXMonitor() {
+  const dailyAt = xMonitorDailyAt();
+  if (!dailyAt || process.env.X_MONITOR_ENABLED !== 'true') return;
+  const startAt = nextArizonaDailyStartMs(dailyAt);
+  const now = new Date();
+  const todayParts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+  const currentTime = `${todayParts.find((part) => part.type === 'hour').value}:${todayParts.find((part) => part.type === 'minute').value}`;
+  const startToday = startAt - 24 * 60 * 60 * 1000;
+  if (currentTime < dailyAt) {
+    xMonitorDailyTimer = setTimeout(() => {
+      xMonitorDailyTimer = null;
+      void beginDailyXMonitor();
+    }, startToday - now.getTime());
+    console.log(`X monitoring is scheduled to begin at ${new Date(startToday).toISOString()} (11:00 AM Arizona time).`);
+    return;
+  }
+  const limit = dailyFreePickLimit();
+  if (limit !== null && await publishedFreePickCount() >= limit) {
+    stopXMonitor(`today's ${limit}-pick limit is already reached`);
+    return;
+  }
+  const interval = xMonitorIntervalMs();
+  console.log(`X monitoring enabled at ${currentTime} Arizona time: checking every ${Math.round(interval / 60000)} minute(s) until ${limit ?? 'the configured'} daily free-pick limit is reached.`);
+  void collectXSafely();
+  xMonitorIntervalTimer = setInterval(() => void collectXSafely(), interval);
 }
 
 async function collectXSafely() {
@@ -275,6 +332,11 @@ async function collectXSafely() {
 function startXMonitor() {
   if (process.env.X_MONITOR_ENABLED !== 'true') {
     console.log('X monitoring is disabled. Set X_MONITOR_ENABLED=true only when Kobe authorizes the launch.');
+    return;
+  }
+
+  if (xMonitorDailyAt()) {
+    void beginDailyXMonitor();
     return;
   }
 
