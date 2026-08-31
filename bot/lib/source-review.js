@@ -44,18 +44,6 @@ function sourceEvidence(packet) {
     .slice(0, 8);
 }
 
-// This is a presentation score, not a promise or win probability. Prefer an
-// explicit source score; otherwise base it on the amount of concrete support
-// in the approved write-up.
-function presentationConfidence(packet) {
-  const extracted = Number(packet.analysis?.extraction?.confidence);
-  if (Number.isFinite(extracted) && extracted >= 1 && extracted <= 10) return Math.round(extracted);
-  const evidenceCount = sourceEvidence(packet).length;
-  if (evidenceCount >= 6) return 9;
-  if (evidenceCount >= 4) return 8;
-  return 7;
-}
-
 function sourceCapperName(packet) {
   const extractedName = packet.analysis?.extraction?.source_capper_name;
   if (visible(extractedName, '')) return extractedName.trim();
@@ -97,9 +85,7 @@ function buildSourcePickEmbed(packet, destinationLabel) {
   const terms = sourceTerms(packet);
   const termsOnly = packet.source?.publish_mode === 'terms_only';
   const embed = {
-    color: destinationLabel === 'FREE PICK' ? 0x2B90D9 : 0xD4AF37,
-    footer: { text: `Pick ID: ${packet.pick_id} | 21+ | Gambling involves risk.` },
-    timestamp: new Date().toISOString()
+    color: destinationLabel === 'FREE PICK' ? 0x2B90D9 : 0xD4AF37
   };
 
   // Exclusives stay exactly as Kobe requested: capper name, visible bets and
@@ -107,22 +93,13 @@ function buildSourcePickEmbed(packet, destinationLabel) {
   if (termsOnly) {
     embed.description = [sourceCapperName(packet), ...terms].join('\n');
   } else {
-    // This mirrors Kobe's member-facing breakdown layout without pretending the
-    // bot independently researched a stat. The bullets are only claims that
-    // were visibly present in the approved source post.
+    // Kobe's member-facing format is deliberately spare: the prop, followed
+    // only by the source's visible supporting points.
     const evidence = sourceEvidence(packet);
     embed.description = [
       ...terms.map((term) => `**${term}**`),
-      ...(evidence.length ? ['', ...evidence.map((claim) => `✅ ${claim}`)] : []),
-      '',
-      `⭐ **Confidence: ${presentationConfidence(packet)}/10**`
+      ...(evidence.length ? ['', ...evidence.map((claim) => `• ${claim}`)] : [])
     ].join('\n');
-    // Free-pick posts are clean text-only cards. They must not reuse the
-    // original X graphic; Kobe reviews the source privately before posting.
-    if (destinationLabel !== 'FREE PICK') {
-      const imageUrl = packet.source?.media_urls?.[0];
-      if (imageUrl) embed.image = { url: imageUrl };
-    }
   }
   return embed;
 }
@@ -138,4 +115,4 @@ function reviewButtons(pickId, { testOnly = false } = {}) {
   }];
 }
 
-module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, isPlayerProp, presentationConfidence, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
+module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, isPlayerProp, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
