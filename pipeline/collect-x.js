@@ -292,12 +292,14 @@ async function runCollector({ maxCandidates } = {}) {
       continue;
     }
 
+    let lastProcessedId = sourceState.since_id || '';
     for (const post of posts) {
       if (created >= candidateLimit) break;
       const postMediaUrls = (post.attachments?.media_keys || []).map((key) => media[key]).filter(Boolean);
       if (!shouldQueueForReview(source, post, postMediaUrls)) {
         console.log(`Skipped @${source.handle} post ${post.id}; no recognizable pick signal.`);
         skipped += 1;
+        lastProcessedId = post.id;
         continue;
       }
 
@@ -323,10 +325,13 @@ async function runCollector({ maxCandidates } = {}) {
       await fs.writeFile(outputPath, `${JSON.stringify(packet, null, 2)}\n`);
       console.log(`Queued #${packet.approval_number} ${packet.pick_id} from @${source.handle}.`);
       created += 1;
+      lastProcessedId = post.id;
     }
 
-    const newest = response.meta?.newest_id || sourceState.since_id || '';
-    state.sources[source.handle] = { user_id: userId, since_id: newest };
+    // Advance only through posts we actually examined. If the candidate limit
+    // stops the loop, leave later posts for the next collection cycle instead
+    // of silently discarding them behind a newer since_id.
+    state.sources[source.handle] = { user_id: userId, since_id: lastProcessedId };
   }
 
   await fs.mkdir(X_MONITORING_ROOT, { recursive: true });
