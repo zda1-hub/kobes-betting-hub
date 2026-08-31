@@ -44,6 +44,18 @@ function sourceEvidence(packet) {
     .slice(0, 8);
 }
 
+// This is a presentation score, not a promise or win probability. Prefer an
+// explicit source score; otherwise base it on the amount of concrete support
+// in the approved write-up.
+function presentationConfidence(packet) {
+  const extracted = Number(packet.analysis?.extraction?.confidence);
+  if (Number.isFinite(extracted) && extracted >= 1 && extracted <= 10) return Math.round(extracted);
+  const evidenceCount = sourceEvidence(packet).length;
+  if (evidenceCount >= 6) return 9;
+  if (evidenceCount >= 4) return 8;
+  return 7;
+}
+
 function sourceCapperName(packet) {
   const extractedName = packet.analysis?.extraction?.source_capper_name;
   if (visible(extractedName, '')) return extractedName.trim();
@@ -101,7 +113,9 @@ function buildSourcePickEmbed(packet, destinationLabel) {
     const evidence = sourceEvidence(packet);
     embed.description = [
       ...terms.map((term) => `**${term}**`),
-      ...(evidence.length ? ['', ...evidence.map((claim) => `✅ ${claim}`)] : [])
+      ...(evidence.length ? ['', ...evidence.map((claim) => `✅ ${claim}`)] : []),
+      '',
+      `⭐ **Confidence: ${presentationConfidence(packet)}/10**`
     ].join('\n');
     // Free-pick posts are clean text-only cards. They must not reuse the
     // original X graphic; Kobe reviews the source privately before posting.
@@ -124,4 +138,4 @@ function reviewButtons(pickId, { testOnly = false } = {}) {
   }];
 }
 
-module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, isPlayerProp, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
+module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, isPlayerProp, presentationConfidence, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
