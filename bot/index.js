@@ -258,6 +258,15 @@ function stopXMonitor(reason) {
 async function beginDailyXMonitor() {
   const dailyAt = xMonitorDailyAt();
   if (!dailyAt || process.env.X_MONITOR_ENABLED !== 'true') return;
+  const firstStartAt = xMonitorStartAtMs();
+  if (firstStartAt !== null && Date.now() < firstStartAt) {
+    xMonitorDailyTimer = setTimeout(() => {
+      xMonitorDailyTimer = null;
+      void beginDailyXMonitor();
+    }, firstStartAt - Date.now());
+    console.log(`X monitoring is scheduled to begin at ${new Date(firstStartAt).toISOString()} before entering the daily 11:00 AM Arizona schedule.`);
+    return;
+  }
   const startAt = nextArizonaDailyStartMs(dailyAt);
   const now = new Date();
   const todayParts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
