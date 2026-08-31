@@ -167,8 +167,7 @@ function xMonitorDailyAt() {
 }
 
 function xMonitorDailyStopAt() {
-  const raw = process.env.X_MONITOR_DAILY_STOP_AT?.trim();
-  if (!raw) return null;
+  const raw = (process.env.X_MONITOR_DAILY_STOP_AT || '15:00').trim();
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
     console.warn('Ignoring invalid X_MONITOR_DAILY_STOP_AT. Use HH:MM in Arizona time, for example 15:00.');
     return null;
