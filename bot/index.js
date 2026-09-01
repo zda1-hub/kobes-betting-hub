@@ -230,23 +230,6 @@ async function enforceDailyFreePickLimit() {
   }
 }
 
-async function pendingSourceReviewCount() {
-  const today = pacificOperatingDate();
-  const directory = path.join(reviewQueueRoot, today);
-  try {
-    const files = await fs.readdir(directory);
-    let pending = 0;
-    for (const file of files.filter((name) => name.endsWith('.json'))) {
-      const packet = JSON.parse(await fs.readFile(path.join(directory, file), 'utf8'));
-      if (!packet.approval?.decision) pending += 1;
-    }
-    return pending;
-  } catch (error) {
-    if (error.code === 'ENOENT') return 0;
-    throw error;
-  }
-}
-
 function stopXMonitor(reason) {
   if (xMonitorIntervalTimer) {
     clearInterval(xMonitorIntervalTimer);
@@ -329,20 +312,10 @@ async function collectXSafely() {
         stopXMonitor(`published ${published} approved free pick(s); limit was ${approvedFreePickLimit}`);
         return;
       }
-
-      const pending = await pendingSourceReviewCount();
-      const pendingCapacity = Math.max(0, approvedFreePickLimit - published - pending);
-      if (pendingCapacity === 0) {
-        console.log(`X monitoring is waiting for Kobe's decision on ${pending} private approval card(s).`);
-        return;
-      }
-
-      // Keep enough undecided drafts in front of Kobe to fill the remaining
-      // free-pick capacity, while never exceeding the daily published limit.
-      await runCollector({ maxCandidates: pendingCapacity });
-      return;
     }
 
+    // Collection is independent of review. New qualifying posts keep flowing
+    // for the configured time window; Kobe's buttons control publication only.
     const limit = xMonitorCandidateLimit();
     const remaining = limit === null ? undefined : limit - xMonitorCreated;
     if (remaining !== undefined && remaining <= 0) {
@@ -382,9 +355,10 @@ function startXMonitor() {
     const approvedFreePickLimit = dailyFreePickLimit();
     const limit = xMonitorCandidateLimit();
     xMonitorCreated = 0;
-    const stoppingRule = approvedFreePickLimit !== null
-      ? ` until ${approvedFreePickLimit} Kobe-approved free pick(s) are published`
-      : (limit === null ? '' : ` until ${limit} private approval card(s) are created`);
+    const stoppingRule = [
+      approvedFreePickLimit !== null ? ` until ${approvedFreePickLimit} Kobe-approved free pick(s) are published` : '',
+      limit === null ? '' : ` (safety cap: ${limit} approval cards)`
+    ].join('');
     console.log(`X monitoring enabled: checking approved sources every ${Math.round(interval / 60000)} minute(s)${stoppingRule}.`);
     void collectXSafely();
     xMonitorIntervalTimer = setInterval(() => void collectXSafely(), interval);
