@@ -281,25 +281,32 @@ async function runCollector({ maxCandidates } = {}) {
     if (created >= candidateLimit) break;
     const sourceState = state.sources[source.handle] || {};
     const userId = await resolveUser(source, state);
-    const response = await postsFor(source, userId, sourceState.since_id);
+    // On the first collection window each day, fetch the source's recent posts
+    // without its saved cursor. A capper may have posted a valid play before
+    // the 11 AM monitor begins; it should still reach Kobe if the event has not
+    // started. Later passes return to the normal since_id-only polling.
+    const dailyCatchup = sourceState.catchup_date !== date;
+    const response = await postsFor(source, userId, dailyCatchup ? undefined : sourceState.since_id);
     const media = mediaUrls(response);
     const posts = [...(response.data || [])].sort((a, b) => a.id.localeCompare(b.id));
-
-    if (!sourceState.since_id) {
-      const newest = response.meta?.newest_id || '';
-      state.sources[source.handle] = { user_id: userId, since_id: newest };
-      console.log(`Baseline set for @${source.handle}; future posts will enter review.`);
-      continue;
-    }
-
+    const handledPostIds = new Set(Array.isArray(sourceState.handled_post_ids) ? sourceState.handled_post_ids : []);
     let lastProcessedId = sourceState.since_id || '';
+    let completedSourcePass = true;
     for (const post of posts) {
-      if (created >= candidateLimit) break;
+      if (created >= candidateLimit) {
+        completedSourcePass = false;
+        break;
+      }
+      if (handledPostIds.has(post.id)) {
+        lastProcessedId = post.id;
+        continue;
+      }
       const postMediaUrls = (post.attachments?.media_keys || []).map((key) => media[key]).filter(Boolean);
       if (!shouldQueueForReview(source, post, postMediaUrls)) {
         console.log(`Skipped @${source.handle} post ${post.id}; no recognizable pick signal.`);
         skipped += 1;
         lastProcessedId = post.id;
+        handledPostIds.add(post.id);
         continue;
       }
 
@@ -318,6 +325,8 @@ async function runCollector({ maxCandidates } = {}) {
         await fs.rm(outputPath, { force: true });
         console.log(`Skipped @${source.handle} post ${post.id}; ${timing.status === 'STARTED_OR_FINISHED' ? 'the event has already started' : 'the post is too old to verify as upcoming'}.`);
         skipped += 1;
+        lastProcessedId = post.id;
+        handledPostIds.add(post.id);
         continue;
       }
 
@@ -326,12 +335,18 @@ async function runCollector({ maxCandidates } = {}) {
       console.log(`Queued #${packet.approval_number} ${packet.pick_id} from @${source.handle}.`);
       created += 1;
       lastProcessedId = post.id;
+      handledPostIds.add(post.id);
     }
 
     // Advance only through posts we actually examined. If the candidate limit
     // stops the loop, leave later posts for the next collection cycle instead
     // of silently discarding them behind a newer since_id.
-    state.sources[source.handle] = { user_id: userId, since_id: lastProcessedId };
+    state.sources[source.handle] = {
+      user_id: userId,
+      since_id: lastProcessedId || response.meta?.newest_id || '',
+      handled_post_ids: [...handledPostIds].slice(-250),
+      ...(completedSourcePass ? { catchup_date: date } : {})
+    };
   }
 
   await fs.mkdir(X_MONITORING_ROOT, { recursive: true });
