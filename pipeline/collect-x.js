@@ -5,6 +5,7 @@ const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { isRecentSourcePost, upcomingEventStatus } = require('../bot/lib/event-timing');
+const { buildSourcePickEmbed } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
@@ -216,7 +217,30 @@ async function notifyApprovalChannel(packet) {
     return null;
   }
 
-  const source = packet.source;
+  let embeds;
+  try {
+    // A clear card is shown exactly as members will see it after approval.
+    // Publishing does not add a second layer of wording or formatting.
+    embeds = [buildSourcePickEmbed(packet, 'FREE PICK')];
+  } catch {
+    // Keep unclear cards private and diagnostic rather than showing Kobe a
+    // misleading member-facing preview.
+    const source = packet.source;
+    embeds = [{
+      color: 0xD4AF37,
+      title: `New X candidate — #${packet.approval_number}`,
+      description: `**Source:** @${source.handle}\n**Posted:** ${source.posted_at}\n**Status:** ${packet.status}\n\n> ${quote(source.text)}\n\n[Open original X post](${source.post_url})`,
+      fields: [{
+        name: 'Source extraction',
+        value: extractionSummary(packet)
+      }, {
+        name: 'Next step',
+        value: 'Reject this card or finish its missing details manually. It is not ready to preview as a member-facing pick.'
+      }],
+      footer: { text: `Pick ID: ${packet.pick_id} | Kobe Bot` },
+      timestamp: new Date().toISOString()
+    }];
+  }
   const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: {
@@ -224,20 +248,7 @@ async function notifyApprovalChannel(packet) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      embeds: [{
-        color: 0xD4AF37,
-        title: `New X candidate — #${packet.approval_number}`,
-        description: `**Source:** @${source.handle}\n**Posted:** ${source.posted_at}\n**Status:** ${packet.status}\n\n> ${quote(source.text)}\n\n[Open original X post](${source.post_url})`,
-        fields: [{
-          name: 'Source extraction',
-          value: extractionSummary(packet)
-        }, {
-          name: 'Next step',
-          value: 'Kobe: use the buttons only after checking the source graphic and destination. An unclear extraction must be rejected or finished manually.'
-        }],
-        footer: { text: `Pick ID: ${packet.pick_id} | Kobe Bot` },
-        timestamp: new Date().toISOString()
-      }],
+      embeds,
       components: [{
         type: 1,
         components: [
