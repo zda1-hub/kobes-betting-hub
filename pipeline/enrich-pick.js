@@ -49,6 +49,27 @@ const EXTRACTION_SCHEMA = {
   }
 };
 
+const RESEARCH_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['notes'],
+  properties: {
+    notes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['text', 'source_name', 'source_url'],
+        properties: {
+          text: { type: 'string' },
+          source_name: { type: 'string' },
+          source_url: { type: 'string' }
+        }
+      }
+    }
+  }
+};
+
 function outputText(response) {
   if (typeof response.output_text === 'string') return response.output_text;
   const parts = [];
@@ -80,6 +101,7 @@ function sourceContent(packet) {
     'Do not infer a team, player, event, odds, date, statistic, or outcome that is not clearly visible.',
     'source_capper_name is the original capper explicitly shown on the graphic, not the X reposting account. Use an empty string if no capper name is visible.',
     'plays must contain every clearly visible play, in display order. Include the unit size or dollar stake only on the play where it is visibly shown. Do not invent a unit size for other plays.',
+    'source_claims must contain only short, concrete claims that directly support an extracted player prop: player performance in that stat, role/workload, opponent matchup, lineup, or venue context. Omit promotional language, records without a connection to the prop, “best bet” language, confidence claims, and unrelated team facts.',
     'Use an empty string for an unknown single field. Put uncertainty in missing_or_ambiguous.',
     'This is source extraction only, not research, advice, or verification.',
     '',
@@ -95,6 +117,85 @@ function sourceContent(packet) {
     content.push({ type: 'input_image', image_url: imageUrl, detail: 'high' });
   }
   return content;
+}
+
+function sourceClaims(extraction) {
+  return Array.isArray(extraction?.source_claims)
+    ? extraction.source_claims.filter((claim) => typeof claim === 'string' && claim.trim())
+    : [];
+}
+
+function researchContent(packet) {
+  const extraction = packet.analysis?.extraction || {};
+  const play = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;
+  return [{
+    type: 'input_text',
+    text: [
+      'Use web search to find current, factual support for this specific player prop.',
+      'Return 3 to 6 concise notes only when they directly support the player, exact stat market, matchup, opponent, role/workload, projected lineup, or relevant venue context.',
+      'Do not include generic team facts, promotion language, betting advice, guarantees, odds movement, confidence language, or facts unrelated to the stated prop.',
+      'Use reliable current sources, prioritizing official league/team data and ESPN. Each note must state a checkable fact and include the exact source URL used. If an exact fact cannot be verified, omit it rather than guessing.',
+      '',
+      `League: ${extraction.league || extraction.sport || 'unknown'}`,
+      `Event: ${extraction.event || 'unknown'}`,
+      `Player prop: ${[play.selection, play.line, play.odds_american].filter(Boolean).join(' ') || 'unknown'}`,
+      `Already supplied source support: ${sourceClaims(extraction).join(' | ') || 'none'}`
+    ].join('\n')
+  }];
+}
+
+async function researchSupportingNotes(packet) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return [];
+
+  const model = process.env.OPENAI_PICK_ANALYSIS_MODEL || 'gpt-5';
+  let response;
+  try {
+    response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        tools: [{ type: 'web_search' }],
+        tool_choice: 'required',
+        input: [{ role: 'user', content: researchContent(packet) }],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'player_prop_support_research',
+            strict: true,
+            schema: RESEARCH_SCHEMA
+          }
+        }
+      })
+    });
+  } catch (error) {
+    console.warn(`Supporting research was unavailable: ${error instanceof Error ? error.message : error}`);
+    return [];
+  }
+
+  if (!response.ok) {
+    console.warn(`Supporting research was unavailable (OpenAI ${response.status}).`);
+    return [];
+  }
+
+  try {
+    const payload = JSON.parse(outputText(await response.json()));
+    return (payload.notes || [])
+      .filter((note) => typeof note?.text === 'string' && note.text.trim() && typeof note?.source_url === 'string' && note.source_url.trim())
+      .map((note) => ({
+        text: note.text.trim().replace(/^(?:[-•]\s*)?✅\s*/, '').replace(/[.\s]+$/, ''),
+        source_name: typeof note.source_name === 'string' ? note.source_name.trim() : '',
+        source_url: note.source_url.trim()
+      }))
+      .slice(0, 6);
+  } catch {
+    console.warn('Supporting research returned an unreadable response.');
+    return [];
+  }
 }
 
 async function extractSourcePick(packet) {
@@ -156,7 +257,16 @@ async function enrichPacket(packet) {
   if (process.env.ENRICHMENT_ENABLED !== 'true') {
     return analysisWaiting('ENRICHMENT_OFF', 'Set ENRICHMENT_ENABLED=true only after the OpenAI API key is saved locally.');
   }
-  return extractSourcePick(packet);
+  const analysis = await extractSourcePick(packet);
+  if (analysis.status !== 'SOURCE_EXTRACTED' || sourceClaims(analysis.extraction).length >= 3) return analysis;
+
+  const supportingNotes = await researchSupportingNotes({ ...packet, analysis });
+  if (supportingNotes.length) {
+    analysis.extraction.supporting_notes = supportingNotes;
+    analysis.source_only = false;
+    analysis.detail = 'Terms were extracted from the source. Current supporting player-prop research was added for Kobe to review.';
+  }
+  return analysis;
 }
 
 async function newestPacket() {
@@ -193,4 +303,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { enrichPacket, outputText, EXTRACTION_SCHEMA };
+module.exports = { enrichPacket, outputText, EXTRACTION_SCHEMA, RESEARCH_SCHEMA, researchSupportingNotes, sourceClaims };

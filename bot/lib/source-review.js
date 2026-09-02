@@ -36,11 +36,14 @@ function isPlayerProp(play) {
 }
 
 function sourceEvidence(packet) {
-  const claims = packet.analysis?.extraction?.source_claims;
-  if (!Array.isArray(claims)) return [];
-  return claims
+  const extraction = packet.analysis?.extraction || {};
+  const claims = [
+    ...(Array.isArray(extraction.source_claims) ? extraction.source_claims : []),
+    ...(Array.isArray(extraction.supporting_notes) ? extraction.supporting_notes.map((note) => note?.text) : [])
+  ];
+  return [...new Set(claims
     .filter((claim) => typeof claim === 'string' && claim.trim())
-    .map((claim) => claim.trim().replace(/^(?:[-•]\s*)?✅\s*/, '').replace(/[.\s]+$/, ''))
+    .map((claim) => claim.trim().replace(/^(?:[-•]\s*)?✅\s*/, '').replace(/[.\s]+$/, '')))]
     .slice(0, 8);
 }
 
