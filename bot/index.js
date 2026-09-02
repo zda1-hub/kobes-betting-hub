@@ -42,6 +42,8 @@ const trendsChannelMap = new Map(
 );
 const pickApproverUserIds = listFromEnv(process.env.PICK_APPROVER_USER_IDS);
 const reviewQueueRoot = reviewQueuePath();
+const trendsInboxQueueUrl = (process.env.TRENDS_INBOX_QUEUE_URL || '').replace(/\/$/, '');
+const trendsInboxQueueSecret = process.env.TRENDS_INBOX_QUEUE_SECRET || '';
 const sportChannelMap = new Map(
   (process.env.SPORT_CHANNEL_MAP || '').split(',')
     .map((entry) => entry.trim().split(':'))
@@ -57,6 +59,8 @@ let xMonitorStopTimer = null;
 let xMonitorDailyTimer = null;
 let trendsTimer = null;
 let trendsPublicationInProgress = false;
+let trendsInboxTimer = null;
+let trendsInboxInProgress = false;
 
 function xMonitorIntervalMs() {
   const configured = Number(process.env.X_MONITOR_INTERVAL_MS || 300000);
@@ -118,16 +122,127 @@ async function publishScheduledTrends() {
 }
 
 function startTrendsSchedule() {
-  if (process.env.TRENDS_AUTO_PUBLISH_ENABLED !== 'true') {
-    console.log('Automatic trends publication is disabled. Set TRENDS_AUTO_PUBLISH_ENABLED=true to enable it.');
+  // Trend sheets now require the same Kobe approval as every other member-
+  // facing post. This intentionally replaces the old direct auto-publish path.
+  if (process.env.TRENDS_AUTO_PUBLISH_ENABLED === 'true') {
+    console.warn('Ignoring TRENDS_AUTO_PUBLISH_ENABLED: Trends must be approved in #pick-approvals before posting.');
+  }
+}
+
+function trendsInboxPollIntervalMs() {
+  const configured = Number(process.env.TRENDS_INBOX_POLL_INTERVAL_MS || 300000);
+  return Number.isFinite(configured) && configured >= 60000 ? configured : 300000;
+}
+
+function trendReviewPath(id) {
+  const safeId = String(id || '').replace(/[^A-Za-z0-9_-]/g, '');
+  return path.join(reviewQueueRoot, 'trends', `${safeId}.json`);
+}
+
+function trendApprovalEmbed(draft, { preview = true } = {}) {
+  const embed = {
+    color: 0x2f80ed,
+    title: `${String(draft.league || '').toUpperCase()} Trends`,
+    description: String(draft.body || '').slice(0, 4000) || 'No trend details were supplied.',
+    timestamp: draft.received_at || new Date().toISOString()
+  };
+  if (preview) {
+    embed.title += ' — Approval Preview';
+    embed.fields = [
+      { name: 'From', value: 'Kobe email', inline: true },
+      { name: 'Destination after approval', value: draft.destination ? `<#${draft.destination}>` : 'Not configured', inline: true },
+      { name: 'Subject', value: String(draft.subject || 'No subject').slice(0, 1024) }
+    ];
+    embed.footer = { text: 'Private preview — nothing posts until Kobe approves.' };
+  }
+  return embed;
+}
+
+async function loadTrendReview(id) {
+  if (!/^[A-Za-z0-9_-]+$/.test(String(id || ''))) return null;
+  try {
+    const packetPath = trendReviewPath(id);
+    return { draft: JSON.parse(await fs.readFile(packetPath, 'utf8')), packetPath };
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function acknowledgeTrendDelivery(id) {
+  if (!trendsInboxQueueUrl || !trendsInboxQueueSecret) return;
+  const response = await fetch(`${trendsInboxQueueUrl}/api/queue/trends/deliver`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${trendsInboxQueueSecret}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id })
+  });
+  if (!response.ok) throw new Error(`Trend queue acknowledgement failed (${response.status}).`);
+}
+
+async function collectTrendEmails() {
+  if (trendsInboxInProgress || !trendsInboxQueueUrl || !trendsInboxQueueSecret || !pickApprovalChannelId) return;
+  trendsInboxInProgress = true;
+  try {
+    const response = await fetch(`${trendsInboxQueueUrl}/api/queue/trends?limit=10`, {
+      headers: { Authorization: `Bearer ${trendsInboxQueueSecret}` }
+    });
+    if (!response.ok) throw new Error(`Trend inbox request failed (${response.status}).`);
+    const { trends = [] } = await response.json();
+    const approvalChannel = await approvedTextChannel(pickApprovalChannelId);
+    for (const item of trends) {
+      if (!item?.id || !['mlb', 'nfl'].includes(item.league)) continue;
+      const existing = await loadTrendReview(item.id);
+      if (existing) {
+        await acknowledgeTrendDelivery(item.id);
+        continue;
+      }
+      const destination = trendsChannelMap.get(item.league);
+      if (!destination) {
+        console.warn(`Skipping ${item.league.toUpperCase()} trend email ${item.id}: no destination in TRENDS_CHANNEL_MAP.`);
+        continue;
+      }
+      const draft = {
+        id: item.id, league: item.league, subject: item.subject, body: item.body,
+        sender: item.sender, received_at: item.receivedAt, destination,
+        status: 'PENDING_APPROVAL', created_at: new Date().toISOString()
+      };
+      const packetPath = trendReviewPath(item.id);
+      await fs.mkdir(path.dirname(packetPath), { recursive: true });
+      await fs.writeFile(packetPath, `${JSON.stringify(draft, null, 2)}\n`);
+      try {
+        await approvalChannel.send({
+          embeds: [trendApprovalEmbed(draft)],
+          components: [{ type: 1, components: [
+            { type: 2, style: 1, label: `Post ${item.league.toUpperCase()} Trends`, custom_id: `trend-review:${item.id}:publish` },
+            { type: 2, style: 4, label: 'Reject', custom_id: `trend-review:${item.id}:reject` }
+          ] }]
+        });
+      } catch (error) {
+        await fs.unlink(packetPath).catch(() => {});
+        throw error;
+      }
+      await acknowledgeTrendDelivery(item.id);
+      console.log(`Created private ${item.league.toUpperCase()} Trends approval card from Kobe email ${item.id}.`);
+    }
+  } catch (error) {
+    console.error('Kobe Trends inbox check failed:', error);
+  } finally {
+    trendsInboxInProgress = false;
+  }
+}
+
+function startTrendInbox() {
+  if (process.env.TRENDS_INBOX_ENABLED !== 'true') {
+    console.log('Kobe email Trends inbox is disabled. Set TRENDS_INBOX_ENABLED=true after its one-time setup.');
     return;
   }
-  if (!trendsDailyTime()) return;
-  // Check on the minute. The schedule intentionally does not backfill after a
-  // restart, so it cannot post a stale in-progress-game sheet later in the day.
-  trendsTimer = setInterval(() => void publishScheduledTrends(), 30000);
-  void publishScheduledTrends();
-  console.log(`Automatic ESPN trends are scheduled for ${trendsDailyTime()} California time.`);
+  if (!trendsInboxQueueUrl || !trendsInboxQueueSecret) {
+    console.warn('Kobe email Trends inbox is enabled but its queue URL or secret is missing.');
+    return;
+  }
+  trendsInboxTimer = setInterval(() => void collectTrendEmails(), trendsInboxPollIntervalMs());
+  void collectTrendEmails();
+  console.log(`Kobe email Trends inbox checks every ${Math.round(trendsInboxPollIntervalMs() / 60000)} minute(s).`);
 }
 
 function xMonitorStartAtMs() {
@@ -660,6 +775,51 @@ async function handleSourceReviewButton(interaction) {
   }
 }
 
+async function handleTrendReviewButton(interaction) {
+  const [, id, action] = interaction.customId.split(':');
+  await interaction.deferReply({ ephemeral: true });
+  if (!isPickApprover(interaction)) {
+    await interaction.editReply('Only Kobe can approve or reject a Trends sheet.');
+    return;
+  }
+  if (!['publish', 'reject'].includes(action)) {
+    await interaction.editReply('This Trends action is not recognized.');
+    return;
+  }
+  const found = await loadTrendReview(id);
+  if (!found) {
+    await interaction.editReply('This Trends preview is no longer available. Send it from Kobe email again.');
+    return;
+  }
+  const { draft, packetPath } = found;
+  if (draft.status !== 'PENDING_APPROVAL') {
+    await interaction.editReply(`This Trends sheet was already ${String(draft.status || '').toLowerCase()}.`);
+    return;
+  }
+  if (action === 'reject') {
+    draft.status = 'REJECTED';
+    draft.decided_at = new Date().toISOString();
+    draft.approver = interaction.user.id;
+    await fs.writeFile(packetPath, `${JSON.stringify(draft, null, 2)}\n`);
+    await interaction.message.edit({ components: [] });
+    await interaction.editReply('Rejected. No Trends post was made.');
+    return;
+  }
+  try {
+    const channel = await approvedTextChannel(draft.destination);
+    const message = await channel.send({ embeds: [trendApprovalEmbed(draft, { preview: false })] });
+    draft.status = 'PUBLISHED';
+    draft.decided_at = new Date().toISOString();
+    draft.approver = interaction.user.id;
+    draft.post_reference = discordPostReference(channel, message);
+    await fs.writeFile(packetPath, `${JSON.stringify(draft, null, 2)}\n`);
+    await interaction.message.edit({ components: [] });
+    await interaction.editReply(`Posted ${String(draft.league).toUpperCase()} Trends to ${channel}.`);
+  } catch (error) {
+    await interaction.editReply(error instanceof Error ? error.message : 'Unable to publish the approved Trends sheet.');
+  }
+}
+
 function canPostSupportInfo(interaction) {
   return interaction.inGuild() && (
     interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
@@ -702,6 +862,7 @@ client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
   startXMonitor();
   startTrendsSchedule();
+  startTrendInbox();
 });
 
 async function registerCommandsOnStart() {
@@ -718,6 +879,19 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isButton() && interaction.customId.startsWith('trend-review:')) {
+    try {
+      await handleTrendReviewButton(interaction);
+    } catch (error) {
+      console.error(error);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply('Unable to complete this Trends action. No public post was made.');
+      } else {
+        await interaction.reply({ ephemeral: true, content: 'Unable to complete this Trends action. No public post was made.' });
+      }
+    }
+    return;
+  }
   if (interaction.isButton() && interaction.customId.startsWith('source-review:')) {
     try {
       await handleSourceReviewButton(interaction);

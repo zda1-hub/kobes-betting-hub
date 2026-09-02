@@ -8,6 +8,8 @@ const X_SCOPES = ["tweet.read", "tweet.write", "users.read", "media.write", "off
 const MAX_POST_LENGTH = 280;
 const FREE_PICK_STATE_KEY = "free-picks/current.json";
 const FREE_PICK_MAX_BYTES = 5 * 1024 * 1024;
+const TREND_EMAIL_MAX_BYTES = 12 * 1024;
+const TREND_EMAIL_LEAGUES = new Set(["mlb", "nfl"]);
 const ALLOWED_IMAGE_TYPES = new Map([
   ["image/jpeg", "jpg"],
   ["image/png", "png"],
@@ -34,10 +36,90 @@ async function handleRequest(request, env) {
   if (url.pathname === CALLBACK_PATH) return completeXAuthorization(url, env);
   if (url.pathname === "/api/queue/x" && request.method === "POST") return enqueueXPost(request, env);
   if (url.pathname === "/api/queue/x" && request.method === "GET") return listRecentPosts(request, env);
+  if (url.pathname === "/api/queue/trends" && request.method === "POST") return enqueueTrendEmail(request, env);
+  if (url.pathname === "/api/queue/trends" && request.method === "GET") return listTrendEmails(request, env);
+  if (url.pathname === "/api/queue/trends/deliver" && request.method === "POST") return markTrendEmailDelivered(request, env);
   if (url.pathname === "/api/free-pick/current" && request.method === "GET") return getCurrentFreePick(request, env);
   if (url.pathname === "/media/free-pick/current" && request.method === "GET") return getCurrentFreePickImage(request, env);
   if (url.pathname === "/api/free-pick/publish" && request.method === "POST") return publishFreePick(request, env);
   return new Response("Not found", { status: 404 });
+}
+
+// Kobe's existing Gmail automation uses this private queue.  It accepts only
+// the approved mailbox and never posts to Discord itself; the Render bot must
+// create a private approval card and Kobe must approve it before publication.
+async function ensureTrendInbox(env) {
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS trend_email_inbox (
+      id TEXT PRIMARY KEY,
+      sender TEXT NOT NULL,
+      league TEXT NOT NULL CHECK (league IN ('mlb', 'nfl')),
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      received_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'delivered', 'rejected')),
+      delivered_at TEXT
+    )`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_trend_email_inbox_pending ON trend_email_inbox (status, received_at)')
+  ]);
+}
+
+function trendQueueAuthorized(request, env) {
+  return hasBearer(request, env.TRENDS_QUEUE_SECRET);
+}
+
+function cleanTrendText(value, maximum) {
+  return typeof value === 'string' ? value.replace(/\u0000/g, '').trim().slice(0, maximum) : '';
+}
+
+async function enqueueTrendEmail(request, env) {
+  if (!await trendQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  let input;
+  try { input = await request.json(); } catch { return json({ error: 'Expected JSON' }, 400); }
+  const sender = cleanTrendText(input.sender, 254).toLowerCase();
+  const allowedSender = cleanTrendText(env.TREND_INBOX_ALLOWED_SENDER, 254).toLowerCase();
+  const league = cleanTrendText(input.league, 10).toLowerCase();
+  const subject = cleanTrendText(input.subject, 500);
+  const body = cleanTrendText(input.body, TREND_EMAIL_MAX_BYTES);
+  const receivedAt = Date.parse(input.receivedAt);
+  const id = cleanTrendText(input.id, 160);
+  if (!allowedSender || sender !== allowedSender) return json({ error: 'Sender is not authorized for the Trends inbox' }, 403);
+  if (!TREND_EMAIL_LEAGUES.has(league)) return json({ error: 'league must be mlb or nfl' }, 400);
+  if (!id || !/^[A-Za-z0-9_-]+$/.test(id)) return json({ error: 'id is invalid' }, 400);
+  if (!subject || !body) return json({ error: 'subject and body are required' }, 400);
+  if (!Number.isFinite(receivedAt)) return json({ error: 'receivedAt must be an ISO-8601 date' }, 400);
+  await ensureTrendInbox(env);
+  const result = await env.DB.prepare(
+    `INSERT INTO trend_email_inbox (id, sender, league, subject, body, received_at, status)
+     VALUES (?, ?, ?, ?, ?, ?, 'pending') ON CONFLICT(id) DO NOTHING`
+  ).bind(id, sender, league, subject, body, new Date(receivedAt).toISOString()).run();
+  if (result.meta.changes === 0) return json({ id, status: 'already_queued' }, 409);
+  return json({ id, status: 'pending' }, 201);
+}
+
+async function listTrendEmails(request, env) {
+  if (!await trendQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  await ensureTrendInbox(env);
+  const requestedLimit = Number(new URL(request.url).searchParams.get('limit') || 10);
+  const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 25) : 10;
+  const { results } = await env.DB.prepare(
+    `SELECT id, sender, league, subject, body, received_at AS receivedAt
+     FROM trend_email_inbox WHERE status = 'pending' ORDER BY received_at ASC LIMIT ?`
+  ).bind(limit).all();
+  return json({ trends: results });
+}
+
+async function markTrendEmailDelivered(request, env) {
+  if (!await trendQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  let input;
+  try { input = await request.json(); } catch { return json({ error: 'Expected JSON' }, 400); }
+  const id = cleanTrendText(input.id, 160);
+  if (!id || !/^[A-Za-z0-9_-]+$/.test(id)) return json({ error: 'id is invalid' }, 400);
+  await ensureTrendInbox(env);
+  const result = await env.DB.prepare(
+    `UPDATE trend_email_inbox SET status = 'delivered', delivered_at = ? WHERE id = ? AND status = 'pending'`
+  ).bind(new Date().toISOString(), id).run();
+  return json({ id, status: result.meta.changes ? 'delivered' : 'already_delivered' });
 }
 
 // This internal endpoint deliberately accepts approved text posts, not source URLs or downloaded media.
