@@ -4,6 +4,7 @@ const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbe
 
 const packet = {
   source: { handle: 'ExampleSource', media_urls: ['https://example.com/pick.png'] },
+  approval: { image_url: 'https://example.com/player-photo.png' },
   analysis: {
     status: 'SOURCE_EXTRACTED',
     extraction: {
@@ -38,7 +39,7 @@ const packet = {
 test('formats a writeup source in Kobe’s pick-first layout', () => {
   const embed = buildSourcePickEmbed(packet, 'FREE PICK');
   assert.equal(embed.description, 'Player OVER 6.5 strikeouts -115\nTeam ML +120\n\n• ✅ Cleared 6+ strikeouts in 4 of the last 5 starts\n• ✅ Opponent ranks bottom 10 in strikeout avoidance\n• ✅ Strong recent road form\n• ✅ Pitch count supports the over\n• ✅ Matchup favors strikeouts\n\n⭐ Confidence: 8.5/10');
-  assert.equal(embed.image.url, 'https://example.com/pick.png');
+  assert.equal(embed.image.url, 'https://example.com/player-photo.png');
 });
 
 test('formats leaked-capper picks as terms only, without the source image', () => {

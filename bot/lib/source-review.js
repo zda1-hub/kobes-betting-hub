@@ -118,7 +118,9 @@ function buildSourcePickEmbed(packet, destinationLabel) {
       '',
       `⭐ Confidence: ${presentationConfidence(packet).toFixed(1)}/10`
     ].join('\n');
-    const imageUrl = packet.approval?.image_url || packet.source?.media_urls?.[0];
+    // Never republish a source post graphic. A player image is optional and
+    // must be supplied specifically for this approved publication.
+    const imageUrl = packet.approval?.image_url;
     if (imageUrl) embed.image = { url: imageUrl };
   }
   return embed;
