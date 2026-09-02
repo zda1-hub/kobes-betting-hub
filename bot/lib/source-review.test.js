@@ -13,7 +13,13 @@ const packet = {
       line: '6.5 strikeouts',
       odds_american: '-115',
       units: '1u',
-      source_claims: ['Cleared 6+ strikeouts in 4 of the last 5 starts', 'Opponent ranks bottom 10 in strikeout avoidance'],
+      source_claims: [
+        'Cleared 6+ strikeouts in 4 of the last 5 starts',
+        'Opponent ranks bottom 10 in strikeout avoidance',
+        'Strong recent road form',
+        'Pitch count supports the over',
+        'Matchup favors strikeouts'
+      ],
       plays: [{
         selection: 'Player OVER',
         line: '6.5 strikeouts',
@@ -31,8 +37,8 @@ const packet = {
 
 test('formats a writeup source in Kobe’s pick-first layout', () => {
   const embed = buildSourcePickEmbed(packet, 'FREE PICK');
-  assert.equal(embed.description, '**Player OVER 6.5 strikeouts -115 (1u)**\n**Team ML +120**\n\n• Cleared 6+ strikeouts in 4 of the last 5 starts\n• Opponent ranks bottom 10 in strikeout avoidance');
-  assert.equal(embed.image, undefined);
+  assert.equal(embed.description, 'Player OVER 6.5 strikeouts -115\nTeam ML +120\n\n• ✅ Cleared 6+ strikeouts in 4 of the last 5 starts\n• ✅ Opponent ranks bottom 10 in strikeout avoidance\n• ✅ Strong recent road form\n• ✅ Pitch count supports the over\n• ✅ Matchup favors strikeouts\n\n⭐ Confidence: 8.5/10');
+  assert.equal(embed.image.url, 'https://example.com/pick.png');
 });
 
 test('formats leaked-capper picks as terms only, without the source image', () => {

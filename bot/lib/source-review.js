@@ -44,6 +44,22 @@ function sourceEvidence(packet) {
     .slice(0, 8);
 }
 
+function publicPickTerms(packet) {
+  return visiblePlays(packet).map(({ terms }) => terms);
+}
+
+// A consistent display rating for writeups. It is a formatting score based on
+// the amount of visible support in the approved source, not a prediction or a
+// guarantee of the result.
+function presentationConfidence(packet) {
+  const evidenceCount = sourceEvidence(packet).length;
+  if (evidenceCount >= 6) return 9;
+  if (evidenceCount >= 5) return 8.5;
+  if (evidenceCount >= 4) return 8;
+  if (evidenceCount >= 3) return 7.5;
+  return 7;
+}
+
 function sourceCapperName(packet) {
   const extractedName = packet.analysis?.extraction?.source_capper_name;
   if (visible(extractedName, '')) return extractedName.trim();
@@ -93,13 +109,17 @@ function buildSourcePickEmbed(packet, destinationLabel) {
   if (termsOnly) {
     embed.description = [sourceCapperName(packet), ...terms].join('\n');
   } else {
-    // Kobe's member-facing format is deliberately spare: the prop, followed
-    // only by the source's visible supporting points.
+    // Kobe's writeup layout: player prop, green-check bullet points, a compact
+    // confidence line, and the approved player/source image below it.
     const evidence = sourceEvidence(packet);
     embed.description = [
-      ...terms.map((term) => `**${term}**`),
-      ...(evidence.length ? ['', ...evidence.map((claim) => `• ${claim}`)] : [])
+      ...publicPickTerms(packet),
+      ...(evidence.length ? ['', ...evidence.map((claim) => `• ✅ ${claim}`)] : []),
+      '',
+      `⭐ Confidence: ${presentationConfidence(packet).toFixed(1)}/10`
     ].join('\n');
+    const imageUrl = packet.approval?.image_url || packet.source?.media_urls?.[0];
+    if (imageUrl) embed.image = { url: imageUrl };
   }
   return embed;
 }
@@ -115,4 +135,4 @@ function reviewButtons(pickId, { testOnly = false } = {}) {
   }];
 }
 
-module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, isPlayerProp, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
+module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, isPlayerProp, presentationConfidence, publicPickTerms, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
