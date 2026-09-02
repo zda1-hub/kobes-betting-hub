@@ -24,6 +24,18 @@ function visiblePlays(packet) {
     .filter((play) => play.terms);
 }
 
+function normalizedText(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9.]+/g, ' ').trim();
+}
+
+function publicPlayTerm({ terms, selection, line, oddsAmerican }) {
+  const base = selection || terms || '';
+  const includesLine = line && normalizedText(base).includes(normalizedText(line));
+  return [base, includesLine ? '' : line, oddsAmerican ? `(${oddsAmerican})` : '']
+    .filter(Boolean)
+    .join(' ');
+}
+
 function sourceTerms(packet) {
   return visiblePlays(packet).map(({ terms, units }) => `${terms}${units ? ` (${units})` : ''}`);
 }
@@ -35,8 +47,18 @@ function isPlayerProp(play) {
   return /\b(?:strikeouts?|walks?(?: allowed)?|hits?|total bases?|rbi|runs?|stolen bases?|outs?|earned runs?|points?|rebounds?|assists?|three[- ]pointers?|threes?|blocks?|steals?|passing yards?|rushing yards?|receiving yards?|receptions?|sacks?|shots?(?: on goal)?|goals?|saves?)\b/i.test(play?.terms || '');
 }
 
+function isUsefulSupport(note, pickTerms) {
+  const normalized = normalizedText(note);
+  if (!normalized) return false;
+  if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|lets catch|let s catch|lets go|let s go|winner)\b/.test(normalized)) return false;
+  if (/^\d{1,2}\s\d{2}\s*(?:am|pm)?\b/.test(normalized)) return false;
+  if (pickTerms.some((term) => normalized === normalizedText(term))) return false;
+  return true;
+}
+
 function sourceEvidence(packet) {
   const extraction = packet.analysis?.extraction || {};
+  const pickTerms = publicPickTerms(packet);
   const claims = [
     ...(Array.isArray(extraction.source_claims) ? extraction.source_claims : []),
     ...(Array.isArray(extraction.supporting_notes) ? extraction.supporting_notes.map((note) => note?.text) : [])
@@ -44,11 +66,22 @@ function sourceEvidence(packet) {
   return [...new Set(claims
     .filter((claim) => typeof claim === 'string' && claim.trim())
     .map((claim) => claim.trim().replace(/^(?:[-•]\s*)?✅\s*/, '').replace(/[.\s]+$/, '')))]
+    .filter((claim) => isUsefulSupport(claim, pickTerms))
     .slice(0, 8);
 }
 
 function publicPickTerms(packet) {
-  return visiblePlays(packet).map(({ terms }) => terms);
+  const extraction = packet.analysis?.extraction || {};
+  const plays = Array.isArray(extraction.plays) && extraction.plays.length
+    ? extraction.plays
+    : [extraction];
+  return plays
+    .map((play) => publicPlayTerm({
+      selection: typeof play.selection === 'string' ? play.selection.trim() : '',
+      line: typeof play.line === 'string' ? play.line.trim() : '',
+      oddsAmerican: typeof play.odds_american === 'string' ? play.odds_american.trim() : ''
+    }))
+    .filter(Boolean);
 }
 
 // A consistent display rating for writeups. It is a formatting score based on
