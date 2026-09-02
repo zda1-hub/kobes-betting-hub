@@ -145,14 +145,12 @@ function buildSourcePickEmbed(packet, destinationLabel) {
   if (termsOnly) {
     embed.description = [sourceCapperName(packet), ...terms].join('\n');
   } else {
-    // Kobe's writeup layout: player prop, green-check bullet points, a compact
-    // confidence line, and the approved player/source image below it.
+    // Kobe's writeup layout: player prop, plain factual bullet points, and an
+    // optional approved player image below it.
     const evidence = sourceEvidence(packet);
     embed.description = [
       ...publicPickTerms(packet),
-      ...(evidence.length ? ['', ...evidence.map((claim) => `• ✅ ${claim}`)] : []),
-      '',
-      `⭐ Confidence: ${presentationConfidence(packet).toFixed(1)}/10`
+      ...(evidence.length ? ['', ...evidence.map((claim) => `• ${claim}`)] : [])
     ].join('\n');
     // Never republish a source post graphic. A player image is optional and
     // must be supplied specifically for this approved publication.
