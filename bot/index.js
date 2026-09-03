@@ -397,6 +397,9 @@ async function beginDailyXMonitor() {
     stopXMonitor(`today's daily cutoff of ${dailyStopAt} Arizona time has passed`);
     return;
   }
+  // Each daily window is a new search session. Reset yesterday's private-card
+  // count so reaching its cap cannot stop today's monitor at startup.
+  xMonitorCreated = 0;
   if (limit !== null && await publishedFreePickCount() >= limit) {
     stopXMonitor(`today's ${limit}-pick limit is already reached`);
     return;
