@@ -100,6 +100,16 @@
     "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
   },
   {
+    "handle": "cappersforfree",
+    "display_name": "CAPPERS FREE",
+    "enabled": true,
+    "monitoring_mode": "photo_review",
+    "publish_mode": "terms_only",
+    "credit_line": "Source: @cappersforfree",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Exclusive-only source. Send visible capper name, exact bets, and visible unit or stake only after Kobe approves."
+  },
+  {
     "handle": "Capperleaked",
     "display_name": "Capper Leaked",
     "enabled": true,
