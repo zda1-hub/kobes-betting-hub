@@ -82,7 +82,7 @@
   {
     "handle": "EZMSports",
     "display_name": "EZMSportsBetting",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "photo_review",
     "publish_mode": "terms_only",
     "credit_line": "Source: @EZMSports",
@@ -92,7 +92,7 @@
   {
     "handle": "CappersUSA",
     "display_name": "CAPPERS LEAKED ORIGINAL",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "photo_review",
     "publish_mode": "terms_only",
     "credit_line": "Source: @CappersUSA",
@@ -102,7 +102,7 @@
   {
     "handle": "Capperleaked",
     "display_name": "Capper Leaked",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "photo_review",
     "publish_mode": "terms_only",
     "credit_line": "Source: @Capperleaked",
@@ -112,7 +112,7 @@
   {
     "handle": "otlsports",
     "display_name": "OTL Sports",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "photo_review",
     "publish_mode": "terms_only",
     "credit_line": "Source: @otlsports",
@@ -122,7 +122,7 @@
   {
     "handle": "CappersCash_",
     "display_name": "Cappers Cash",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "photo_review",
     "publish_mode": "terms_only",
     "credit_line": "Source: @CappersCash_",
@@ -132,7 +132,7 @@
   {
     "handle": "Allinonecappers",
     "display_name": "CAPPERS LEAKED FREE PICKS",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "photo_review",
     "publish_mode": "terms_only",
     "credit_line": "Source: @Allinonecappers",
@@ -142,7 +142,7 @@
   {
     "handle": "cappers_daily",
     "display_name": "HANDICAPPERS LEAKED",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "photo_review",
     "publish_mode": "terms_only",
     "credit_line": "Source: @cappers_daily",
@@ -152,7 +152,7 @@
   {
     "handle": "_Locksmiths__",
     "display_name": "Locksmiths Picks",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @_Locksmiths__",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -161,7 +161,7 @@
   {
     "handle": "DanGambleAI",
     "display_name": "Dan's AI Sports Picks",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @DanGambleAI",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -170,7 +170,7 @@
   {
     "handle": "sacstim",
     "display_name": "tim",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @sacstim",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -179,7 +179,7 @@
   {
     "handle": "CallingOurShot",
     "display_name": "Calling Our Shot",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @CallingOurShot",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -188,7 +188,7 @@
   {
     "handle": "doctorprofit",
     "display_name": "Doctor Profit",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @doctorprofit",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -197,7 +197,7 @@
   {
     "handle": "MySpariEdge",
     "display_name": "MySpariEdge",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @MySpariEdge",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -206,7 +206,7 @@
   {
     "handle": "FieldsFocus",
     "display_name": "Fields Focus",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @FieldsFocus",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -215,7 +215,7 @@
   {
     "handle": "franklincovers",
     "display_name": "franklin",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @franklincovers",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -224,7 +224,7 @@
   {
     "handle": "trendscenterapp",
     "display_name": "TrendsCenter",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @trendscenterapp",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -233,7 +233,7 @@
   {
     "handle": "JFRAZBETS",
     "display_name": "JFRAZ",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @JFRAZBETS",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -242,7 +242,7 @@
   {
     "handle": "PicksChronic",
     "display_name": "Picks Chronic",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @PicksChronic",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -251,7 +251,7 @@
   {
     "handle": "WizBetz",
     "display_name": "WizBetz",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @WizBetz",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -260,7 +260,7 @@
   {
     "handle": "NateDFS15",
     "display_name": "NateDFS15",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @NateDFS15",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -269,7 +269,7 @@
   {
     "handle": "QuicksProps",
     "display_name": "Quicks Props",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @QuicksProps",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -278,7 +278,7 @@
   {
     "handle": "csybcz",
     "display_name": "csybcz",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @csybcz",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -287,7 +287,7 @@
   {
     "handle": "ParlayHawk",
     "display_name": "Parlay Hawk",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @ParlayHawk",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -296,7 +296,7 @@
   {
     "handle": "xamSportsHQ",
     "display_name": "xamSportsHQ",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @xamSportsHQ",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -305,7 +305,7 @@
   {
     "handle": "AlexCaruso",
     "display_name": "Alex Caruso",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @AlexCaruso",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -314,7 +314,7 @@
   {
     "handle": "Parlay4L",
     "display_name": "Parlay 4Lifers",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @Parlay4L",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -323,7 +323,7 @@
   {
     "handle": "PropKitchen",
     "display_name": "Prop Kitchen",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @PropKitchen",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -332,7 +332,7 @@
   {
     "handle": "CodyBrownBets",
     "display_name": "Cody Brown Bets",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @CodyBrownBets",
     "reuse_permission": "PENDING_SOURCE_TERMS",
@@ -341,7 +341,7 @@
   {
     "handle": "waltpicks",
     "display_name": "Walt Picks",
-    "enabled": false,
+    "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @waltpicks",
     "reuse_permission": "PENDING_SOURCE_TERMS",
