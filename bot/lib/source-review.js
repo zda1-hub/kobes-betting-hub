@@ -16,8 +16,13 @@ function visiblePlays(packet) {
     }];
   return plays
     .map((play) => ({
-      terms: [play.selection, play.line, play.odds_american]
+      // Source graphics often include the price in both the selection text
+      // and the structured odds field. Keep the exact visible terms, but do
+      // not make Kobe review a noisy duplicated price such as "-107 -107".
+      terms: [...new Set([play.selection, play.line, play.odds_american]
         .filter((value) => typeof value === 'string' && value.trim())
+        .map((value) => value.trim())
+        .filter((value, index, values) => !values.slice(0, index).some((prior) => normalizedText(prior).includes(normalizedText(value)))))]
         .join(' '),
       units: visible(play.units, '')
     }))
@@ -143,6 +148,9 @@ function buildSourcePickEmbed(packet, destinationLabel) {
   // Exclusives stay exactly as Kobe requested: capper name, visible bets and
   // units, with no image or added analysis.
   if (termsOnly) {
+    // Private exclusive cards deliberately mirror the eventual exclusive
+    // post: capper name, then exact bets/stakes. No source image, analysis,
+    // confidence score, or extra operational wording belongs here.
     embed.description = [sourceCapperName(packet), ...terms].join('\n');
   } else {
     // Kobe's writeup layout: player prop, plain factual bullet points, and an

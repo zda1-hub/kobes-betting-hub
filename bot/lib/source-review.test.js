@@ -72,6 +72,22 @@ test('formats leaked-capper picks as terms only, without the source image', () =
   assert.equal(embed.image, undefined);
 });
 
+test('formats an exclusive approval card as capper, bet, and stated stake only', () => {
+  const embed = buildSourcePickEmbed({
+    ...packet,
+    source: { ...packet.source, publish_mode: 'terms_only' },
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        source_capper_name: '@CAPPERSCASH',
+        plays: [{ selection: 'New York Yankees ML -107', line: '-107', odds_american: '-107', units: '80k' }]
+      }
+    }
+  }, 'PAID PICK');
+  assert.equal(embed.description, '@CAPPERSCASH\nNew York Yankees ML -107 (80k)');
+});
+
 test('does not allow unclear capper or non-pick extraction to publish', () => {
   const noCapper = { ...packet, source: {}, analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, source_capper_name: '' } } };
   assert.throws(() => assertPublishableExtraction(noCapper), /original capper/);
