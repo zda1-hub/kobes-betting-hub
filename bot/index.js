@@ -34,6 +34,7 @@ const freePickChannelId = process.env.FREE_PICK_CHANNEL_ID;
 const exclusivesChannelId = process.env.EXCLUSIVES_CHANNEL_ID || '1539055850075852911';
 const pickApprovalChannelId = process.env.PICK_APPROVAL_CHANNEL_ID;
 const sourcesPath = path.join(__dirname, '..', 'data', 'twitter-sources.json');
+const pickWorkflowPath = path.join(__dirname, '..', 'data', 'pick-workflow.json');
 const trendsChannelMap = new Map(
   (process.env.TRENDS_CHANNEL_MAP || '').split(',')
     .map((entry) => entry.trim().split(':'))
@@ -61,6 +62,20 @@ let trendsTimer = null;
 let trendsPublicationInProgress = false;
 let trendsInboxTimer = null;
 let trendsInboxInProgress = false;
+
+// A shared kill switch for new public pick posts. The collector has its own
+// matching check, while this one protects existing Discord approval cards and
+// manual /publish-pick posts during a pause.
+async function pickWorkflowPaused() {
+  try {
+    const setting = JSON.parse(await fs.readFile(pickWorkflowPath, 'utf8'));
+    return setting.paused === true;
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    console.error('Unable to read pick workflow pause setting; blocking pick publication.', error);
+    return true;
+  }
+}
 
 function xMonitorIntervalMs() {
   const configured = Number(process.env.X_MONITOR_INTERVAL_MS || 300000);
@@ -705,6 +720,11 @@ async function handleSourceReviewButton(interaction) {
     return;
   }
 
+  if (await pickWorkflowPaused()) {
+    await interaction.editReply('The pick workflow is paused. No member-facing post was made.');
+    return;
+  }
+
   try {
     const termsOnly = packet.source?.publish_mode === 'terms_only';
     const sourcePostingEnabled = process.env.X_SOURCE_PUBLISHING_ENABLED === 'true';
@@ -1003,6 +1023,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (interaction.commandName === 'publish-pick' && !isPickApprover(interaction)) {
     await interaction.reply({ ephemeral: true, content: 'Only Kobe can make the final approved pick post.' });
+    return;
+  }
+
+  if (interaction.commandName === 'publish-pick' && await pickWorkflowPaused()) {
+    await interaction.reply({ ephemeral: true, content: 'The pick workflow is paused. No member-facing post was made.' });
     return;
   }
 

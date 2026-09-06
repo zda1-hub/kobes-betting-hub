@@ -9,6 +9,7 @@ const { buildSourcePickEmbed } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
+const PICK_WORKFLOW_PATH = path.join(ROOT, 'data', 'pick-workflow.json');
 const MONITORING_ROOT = path.join(ROOT, 'data', 'monitoring');
 const X_MONITORING_ROOT = path.join(MONITORING_ROOT, 'x');
 const CLEANUP_STATE_PATH = path.join(MONITORING_ROOT, '.x-cleanup.json');
@@ -67,6 +68,20 @@ async function readJson(filePath, fallback) {
   } catch (error) {
     if (error.code === 'ENOENT') return fallback;
     throw error;
+  }
+}
+
+// This is a deliberate, repository-controlled kill switch. It keeps the
+// source roster intact while immediately preventing new approval cards.
+// It also works when the collector is run outside the Discord process.
+async function pickWorkflowPaused() {
+  try {
+    return (await readJson(PICK_WORKFLOW_PATH, { paused: false })).paused === true;
+  } catch (error) {
+    // If the pause configuration cannot be read, do not create review cards.
+    // Failing closed is safer than unexpectedly notifying Kobe.
+    console.error(`Unable to read pick workflow pause setting; holding collection: ${error.message}`);
+    return true;
   }
 }
 
@@ -267,6 +282,10 @@ async function notifyApprovalChannel(packet) {
 }
 
 async function runCollector({ maxCandidates } = {}) {
+  if (await pickWorkflowPaused()) {
+    console.log('Pick workflow is paused; no X posts will be collected or sent for approval.');
+    return { created: 0, skipped: 0, sourceCount: 0, paused: true };
+  }
   const sources = (await readJson(SOURCES_PATH, [])).filter((source) => source.enabled);
   if (sources.length === 0) {
     console.log('No X sources are enabled. Nothing to collect.');
