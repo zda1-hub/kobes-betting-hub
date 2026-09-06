@@ -11,7 +11,7 @@ const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib
 const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { reviewQueuePath } = require('./lib/review-queue-path');
-const { isRecentSourcePost, upcomingEventStatus } = require('./lib/event-timing');
+const { upcomingEventStatus } = require('./lib/event-timing');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { enrichPacket } = require('../pipeline/enrich-pick');
 const { runCollector } = require('../pipeline/collect-x');
@@ -713,10 +713,10 @@ async function handleSourceReviewButton(interaction) {
     }
     assertPublishableExtraction(packet);
     const timing = await upcomingEventStatus(packet);
-    if (timing.status === 'STARTED_OR_FINISHED' || (timing.status === 'UNKNOWN' && !isRecentSourcePost(packet))) {
+    if (timing.status !== 'UPCOMING') {
       throw new Error(timing.status === 'STARTED_OR_FINISHED'
         ? 'This game has already started, so this card cannot be published.'
-        : 'This card is too old to verify as an upcoming event. Reject it and use a fresh source post.');
+        : 'This pick is not verified for an upcoming game scheduled today. Reject it and use a current card.');
     }
     const sport = normalizedSport(packet);
     if (action === 'free') {

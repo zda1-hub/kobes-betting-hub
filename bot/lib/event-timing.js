@@ -11,7 +11,13 @@ function pacificDate(date) {
 function espnLeague(packet) {
   const text = `${packet.analysis?.extraction?.league || ''} ${packet.analysis?.extraction?.sport || ''}`.toLowerCase();
   if (/\bmlb\b|baseball/.test(text)) return 'baseball/mlb';
+  if (/\bncaaf\b|college football/.test(text)) return 'football/college-football';
   if (/\bnfl\b|football/.test(text)) return 'football/nfl';
+  if (/\bwnba\b/.test(text)) return 'basketball/wnba';
+  if (/\bncaab\b|men.s college basketball/.test(text)) return 'basketball/mens-college-basketball';
+  if (/\bnba\b|basketball/.test(text)) return 'basketball/nba';
+  if (/\bnhl\b|hockey/.test(text)) return 'hockey/nhl';
+  if (/\bmls\b/.test(text)) return 'soccer/usa.1';
   return null;
 }
 
@@ -33,8 +39,8 @@ function matchesExtractedEvent(packet, event) {
 
 async function upcomingEventStatus(packet, { now = new Date(), fetchImpl = fetch } = {}) {
   const leaguePath = espnLeague(packet);
-  if (!leaguePath) return { status: 'UNKNOWN', reason: 'No supported league for automatic schedule check.' };
-  if (!packet.analysis?.extraction?.event?.trim()) return { status: 'UNKNOWN', reason: 'The source did not identify an exact event.' };
+  if (!leaguePath) return { status: 'UNVERIFIABLE', reason: 'No supported league for current-day schedule check.' };
+  if (!packet.analysis?.extraction?.event?.trim()) return { status: 'UNVERIFIABLE', reason: 'The source did not identify an exact event.' };
 
   const date = pacificDate(now).replaceAll('-', '');
   let scoreboard;
@@ -42,16 +48,16 @@ async function upcomingEventStatus(packet, { now = new Date(), fetchImpl = fetch
     const response = await fetchImpl(`${ESPN_BASE_URL}/${leaguePath}/scoreboard?dates=${date}&limit=100`, {
       headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000)
     });
-    if (!response.ok) return { status: 'UNKNOWN', reason: `ESPN returned ${response.status}.` };
+    if (!response.ok) return { status: 'UNVERIFIABLE', reason: `ESPN returned ${response.status}.` };
     scoreboard = await response.json();
   } catch {
-    return { status: 'UNKNOWN', reason: 'ESPN schedule check was unavailable.' };
+    return { status: 'UNVERIFIABLE', reason: 'ESPN schedule check was unavailable.' };
   }
 
   const event = (scoreboard.events || []).find((candidate) => matchesExtractedEvent(packet, candidate));
-  if (!event?.date) return { status: 'UNKNOWN', reason: 'No matching ESPN event was found.' };
+  if (!event?.date) return { status: 'NOT_SCHEDULED_TODAY', reason: 'No matching event is scheduled today.' };
   const start = new Date(event.date);
-  if (Number.isNaN(start.getTime())) return { status: 'UNKNOWN', reason: 'ESPN did not provide a readable start time.' };
+  if (Number.isNaN(start.getTime())) return { status: 'UNVERIFIABLE', reason: 'ESPN did not provide a readable start time.' };
   return start.getTime() > now.getTime()
     ? { status: 'UPCOMING', eventStart: start.toISOString(), source: 'ESPN schedule' }
     : { status: 'STARTED_OR_FINISHED', eventStart: start.toISOString(), source: 'ESPN schedule' };

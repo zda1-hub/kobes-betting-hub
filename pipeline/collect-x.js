@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
-const { isRecentSourcePost, upcomingEventStatus } = require('../bot/lib/event-timing');
+const { upcomingEventStatus } = require('../bot/lib/event-timing');
 const { buildSourcePickEmbed } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
@@ -325,16 +325,15 @@ async function runCollector({ maxCandidates } = {}) {
       const { packet, outputPath } = await writePacket({ date, sequence, source, post, media });
       packet.analysis = await enrichPacket(packet);
 
-      // Never fill Kobe's approval room with an identified game that has
-      // already started. For posts where the graphic does not state a matchup,
-      // retain only genuinely recent posts for human review; the final publish
-      // step performs this same live check again.
+      // A private card is useful only when its exact game is scheduled today
+      // and has not started. Reject undated/ambiguous old cards here rather
+      // than spending Kobe's approval time on them.
       const timing = await upcomingEventStatus(packet);
       packet.verification.event_start = timing.eventStart || null;
       packet.verification.event_timezone = timing.source || null;
-      if (timing.status === 'STARTED_OR_FINISHED' || (timing.status === 'UNKNOWN' && !isRecentSourcePost(packet))) {
+      if (timing.status !== 'UPCOMING') {
         await fs.rm(outputPath, { force: true });
-        console.log(`Skipped @${source.handle} post ${post.id}; ${timing.status === 'STARTED_OR_FINISHED' ? 'the event has already started' : 'the post is too old to verify as upcoming'}.`);
+        console.log(`Skipped @${source.handle} post ${post.id}; ${timing.reason || 'the event is not an upcoming game scheduled today'}.`);
         skipped += 1;
         lastProcessedId = post.id;
         handledPostIds.add(post.id);

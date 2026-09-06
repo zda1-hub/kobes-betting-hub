@@ -34,6 +34,23 @@ test('blocks a matching event after its scheduled start', async () => {
   assert.equal(result.status, 'STARTED_OR_FINISHED');
 });
 
+test('rejects a college-football pick that has no game scheduled today', async () => {
+  const result = await upcomingEventStatus({
+    analysis: { extraction: { league: 'NCAAF', sport: 'College Football', event: 'Texas Longhorns vs Ohio State Buckeyes' } }
+  }, {
+    now: new Date('2026-09-06T16:00:00.000Z'),
+    fetchImpl: async () => new Response(JSON.stringify({ events: [] }), { status: 200 })
+  });
+  assert.equal(result.status, 'NOT_SCHEDULED_TODAY');
+});
+
+test('does not allow an undated or unsupported pick through the schedule gate', async () => {
+  const result = await upcomingEventStatus({
+    analysis: { extraction: { league: 'Unknown league', event: '' } }
+  });
+  assert.equal(result.status, 'UNVERIFIABLE');
+});
+
 test('does not treat old source posts as fresh when the matchup is unavailable', () => {
   assert.equal(isRecentSourcePost(packet, { now: new Date('2026-08-31T15:00:00.000Z'), maximumAgeHours: 24 }), false);
 });
