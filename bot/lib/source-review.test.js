@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceTerms } = require('./source-review');
+const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName, sourceTerms } = require('./source-review');
 
 const packet = {
   source: { handle: 'ExampleSource', media_urls: ['https://example.com/pick.png'] },
@@ -86,6 +86,28 @@ test('formats an exclusive approval card as capper, bet, and stated stake only',
     }
   }, 'PAID PICK');
   assert.equal(embed.description, '@CAPPERSCASH\nNew York Yankees ML -107 (80k)');
+});
+
+test('does not treat a leaked-source account as the original capper', () => {
+  const leakedPacket = {
+    ...packet,
+    source: { ...packet.source, publish_mode: 'terms_only', display_name: 'Cappers Cash', handle: 'CappersCash_' },
+    analysis: {
+      ...packet.analysis,
+      extraction: { ...packet.analysis.extraction, source_capper_name: '' }
+    }
+  };
+  assert.equal(sourceCapperName(leakedPacket), '');
+  assert.throws(() => assertPublishableExtraction(leakedPacket), /original capper/);
+
+  const echoedSource = {
+    ...leakedPacket,
+    analysis: {
+      ...leakedPacket.analysis,
+      extraction: { ...leakedPacket.analysis.extraction, source_capper_name: 'Cappers Cash' }
+    }
+  };
+  assert.equal(sourceCapperName(echoedSource), '');
 });
 
 test('does not allow unclear capper or non-pick extraction to publish', () => {

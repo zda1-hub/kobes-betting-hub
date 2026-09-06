@@ -5,7 +5,7 @@ const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { upcomingEventStatus } = require('../bot/lib/event-timing');
-const { buildSourcePickEmbed } = require('../bot/lib/source-review');
+const { buildSourcePickEmbed, sourceCapperName } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
@@ -343,6 +343,18 @@ async function runCollector({ maxCandidates } = {}) {
       sequence += 1;
       const { packet, outputPath } = await writePacket({ date, sequence, source, post, media });
       packet.analysis = await enrichPacket(packet);
+
+      // Repost/leak feeds must reveal the original capper. Do not make Kobe
+      // review a card that would credit the feed itself or leave authorship
+      // ambiguous.
+      if (source.publish_mode === 'terms_only' && !sourceCapperName(packet)) {
+        await fs.rm(outputPath, { force: true });
+        console.log(`Skipped @${source.handle} post ${post.id}; original capper is not clearly identified.`);
+        skipped += 1;
+        lastProcessedId = post.id;
+        handledPostIds.add(post.id);
+        continue;
+      }
 
       // A private card is useful only when its exact game is scheduled today
       // and has not started. Reject undated/ambiguous old cards here rather

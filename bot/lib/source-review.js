@@ -103,11 +103,25 @@ function presentationConfidence(packet) {
 
 function sourceCapperName(packet) {
   const extractedName = packet.analysis?.extraction?.source_capper_name;
-  if (visible(extractedName, '')) return extractedName.trim();
+  if (visible(extractedName, '')) {
+    const name = extractedName.trim();
+    const sourceIdentities = [packet.source?.display_name, packet.source?.handle]
+      .filter((value) => visible(value, ''))
+      .map(normalizedText);
+    // A terms-only monitor/repost account is never a valid substitute for the
+    // individual capper. Treat an extraction that merely echoed that account
+    // as unidentified rather than displaying misleading attribution.
+    if (packet.source?.publish_mode === 'terms_only' && sourceIdentities.includes(normalizedText(name))) return '';
+    return name;
+  }
 
-  // Many public pick posts identify the author in the post header rather than
-  // inside the image. The configured source account is a factual fallback; it
-  // does not invent a separate capper name.
+  // A leak/repost feed is not the original capper. Its cards must hold rather
+  // than falsely crediting the account that surfaced the image.
+  if (packet.source?.publish_mode === 'terms_only') return '';
+
+  // Direct writeup sources are the original author, so their configured
+  // display name remains an accurate fallback when no separate signature is
+  // visible in the post itself.
   const displayName = packet.source?.display_name;
   if (visible(displayName, '')) return displayName.trim();
   const handle = packet.source?.handle;
