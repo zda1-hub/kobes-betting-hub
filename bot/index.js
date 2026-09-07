@@ -109,13 +109,28 @@ function freeRecapEnabled() {
   return process.env.FREE_RECAP_ENABLED !== 'false';
 }
 
-function freeRecapDailyAt() {
-  const value = (process.env.FREE_RECAP_DAILY_AT || '08:00').trim();
+function freeRecapCloseAt() {
+  // Do not finalize a day's recap while new free picks can still be approved.
+  // This defaults to the existing 11:00–15:00 Arizona X-monitoring window.
+  const value = (process.env.FREE_RECAP_CLOSE_AT || process.env.X_MONITOR_DAILY_STOP_AT || '15:00').trim();
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
-    console.warn('Ignoring invalid FREE_RECAP_DAILY_AT. Use HH:MM in Arizona time, for example 08:00.');
+    console.warn('Ignoring invalid FREE_RECAP_CLOSE_AT. Use HH:MM in Arizona time, for example 15:00.');
     return null;
   }
   return value;
+}
+
+function freeRecapIntervalMs() {
+  const configured = Number(process.env.FREE_RECAP_INTERVAL_MS || 300000);
+  return Number.isFinite(configured) && configured >= 60000 ? configured : 300000;
+}
+
+function arizonaTimeNow() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Phoenix', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return `${values.hour}:${values.minute}`;
 }
 
 function previousPacificOperatingDate(now = new Date()) {
@@ -150,12 +165,14 @@ async function queueRecapNotification({ id, subject, body }) {
 }
 
 async function autoGradePendingFreePicks(date) {
-  if (process.env.AUTO_GRADE_FREE_PICKS === 'false') return;
+  const attempts = new Map();
+  if (process.env.AUTO_GRADE_FREE_PICKS === 'false') return attempts;
   const rows = await readPickLog();
   const pending = freePickRecapRows(rows, date, freePickChannelId)
     .filter((row) => resultFor(row) === 'PENDING');
   for (const row of pending) {
     const grade = await gradePickFromEspn(row);
+    attempts.set(row.pick_id, grade);
     if (grade.status !== 'GRADED') {
       console.log(`Automatic grading kept ${row.pick_id} pending: ${grade.reason || 'not enough verified ESPN data'}.`);
       continue;
@@ -172,12 +189,12 @@ async function autoGradePendingFreePicks(date) {
     if (net !== null) await updateOfficialPick(row.pick_id, { net_units: net });
     console.log(`Automatically graded ${row.pick_id} as ${grade.result} from ESPN.`);
   }
+  return attempts;
 }
 
-async function publishDueFreeRecap() {
+async function publishDueFreeRecap(date) {
   if (freeRecapInProgress || !freeRecapChannelId) return;
   freeRecapInProgress = true;
-  const date = previousPacificOperatingDate();
   try {
     const state = await readFreeRecapState();
     const prior = state.dates?.[date];
@@ -197,18 +214,27 @@ async function publishDueFreeRecap() {
       }
       return;
     }
-    if (prior?.status === 'NO_FREE_PICKS') return;
-    await autoGradePendingFreePicks(date);
+    const gradingAttempts = await autoGradePendingFreePicks(date);
     const rows = await readPickLog();
     const picks = freePickRecapRows(rows, date, freePickChannelId);
     if (!picks.length) {
-      state.dates = { ...(state.dates || {}), [date]: { status: 'NO_FREE_PICKS', checked_at: new Date().toISOString() } };
-      await saveFreeRecapState(state);
       console.log(`No official free picks were logged for ${date}; no free-pick recap was posted.`);
       return;
     }
     if (picks.some((row) => resultFor(row) === 'PENDING')) {
       const pending = picks.filter((row) => resultFor(row) === 'PENDING');
+      const isCurrentOperatingDay = date === pacificOperatingDate();
+      const closeAt = freeRecapCloseAt();
+      if (isCurrentOperatingDay && (!closeAt || arizonaTimeNow() < closeAt)) {
+        console.log(`Free-pick recap for ${date} will become eligible after the ${closeAt || 'configured'} Arizona free-pick window closes.`);
+        return;
+      }
+      // A live game is normal, not a recap exception. Wait until ESPN marks
+      // every event final before alerting Kobe about an actually unresolved row.
+      if (pending.some((row) => gradingAttempts.get(row.pick_id)?.reason === 'The ESPN event is not final.')) {
+        console.log(`Free-pick recap for ${date} is waiting for the last game to become final on ESPN.`);
+        return;
+      }
       const pendingIds = pending.map((row) => row.pick_id).join(', ');
       const notificationId = `free-recap-pending-${date}-${pending.map((row) => row.pick_id).join('-').slice(0, 80)}`;
       const previous = state.dates?.[date] || {};
@@ -254,26 +280,17 @@ function startFreeRecapSchedule() {
     console.warn('Automatic free-pick recaps are unavailable: set FREE_RECAP_CHANNEL_ID or RECAP_CHANNEL_ID.');
     return;
   }
-  if (!freeRecapDailyAt()) return;
-  const run = () => {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Phoenix', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
-    }).formatToParts(new Date());
-    const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-    if (`${values.hour}:${values.minute}` < freeRecapDailyAt()) return;
-    void publishDueFreeRecap();
-  };
-  const interval = 15 * 60 * 1000;
+  if (!freeRecapCloseAt()) return;
+  const run = () => void (async () => {
+    // Yesterday remains eligible for a late ESPN correction; today publishes
+    // as soon as its free-pick window has closed and the final game settles.
+    await publishDueFreeRecap(previousPacificOperatingDate());
+    await publishDueFreeRecap(pacificOperatingDate());
+  })();
+  const interval = freeRecapIntervalMs();
   freeRecapTimer = setInterval(run, interval);
-  const now = new Date();
-  const currentArizonaTime = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Phoenix', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
-  }).formatToParts(now);
-  const values = Object.fromEntries(currentArizonaTime.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-  const currentTime = `${values.hour}:${values.minute}`;
-  const dailyAt = freeRecapDailyAt();
-  if (currentTime >= dailyAt) run();
-  console.log(`Automatic free-pick recaps check every 15 minutes after ${dailyAt} Arizona time and publish only after every result is graded.`);
+  run();
+  console.log(`Automatic free-pick recaps check every ${Math.round(interval / 60000)} minute(s), after the ${freeRecapCloseAt()} Arizona free-pick window closes, and publish once every result is graded.`);
 }
 
 function trendsDailyTime() {

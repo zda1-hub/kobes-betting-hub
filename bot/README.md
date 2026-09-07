@@ -91,9 +91,11 @@ so the bot cannot be aimed at an unintended channel.
    official account connections are configured and the recap is reviewed.
 
 The automatic free-pick recap uses `RECAP_CHANNEL_ID` by default; set
-`FREE_RECAP_CHANNEL_ID` to send it elsewhere. It checks after `08:00` Arizona
-time by default and waits for `PENDING` picks to be graded with `/grade-pick`
-before posting. Set `FREE_RECAP_ENABLED=false` to stop automatic free recaps.
+`FREE_RECAP_CHANNEL_ID` to send it elsewhere. It checks every five minutes and
+can finalize after the free-pick approval window closes (`FREE_RECAP_CLOSE_AT`,
+15:00 Arizona by default). It posts as soon as every official free pick has a
+verified result; a live game does not trigger a pending alert. Set
+`FREE_RECAP_ENABLED=false` to stop automatic free recaps.
 
 `AUTO_GRADE_FREE_PICKS` defaults to enabled. It checks ESPN final box scores
 for standard, exact-match MLB/NFL player props and moneylines, recording the

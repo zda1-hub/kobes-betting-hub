@@ -148,17 +148,19 @@ note in the next recap and in the log.
 
 ### Automatic free-pick recap
 
-The worker also creates a separate compact `Free Picks Recap` for the prior
+The worker also creates a separate compact `Free Picks Recap` for the current
 Pacific operating date. It reads only official posts from the configured free
 pick channel and displays a plain prop list with W/L/P/V results, that day’s
 record, and the cumulative free-pick record. It intentionally omits writeups,
 source accounts, confidence, images, X references, and member-channel picks.
 
-The recap posts to `FREE_RECAP_CHANNEL_ID` (or `RECAP_CHANNEL_ID`) after 08:00
-Arizona time by default, only after every free pick has a verified non-pending
-grade in `pick-log.csv`. While any result remains `PENDING`, the worker waits
-and checks again; it never publishes a final recap that quietly treats a
-pending result as settled.
+The recap posts to `FREE_RECAP_CHANNEL_ID` (or `RECAP_CHANNEL_ID`) as soon as
+the daily free-pick approval window has closed (15:00 Arizona by default) and
+every free pick has a verified non-pending grade in `pick-log.csv`. It checks
+every five minutes. A game still in progress does not create a pending notice;
+the worker waits for ESPN to mark it final. If a result remains unresolved
+after the games are final, it notifies Kobe and keeps retrying rather than
+inventing a grade.
 
 ### Canonical-log hosting requirement
 
