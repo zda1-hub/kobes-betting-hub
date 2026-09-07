@@ -144,7 +144,12 @@ async function ensureRecapNotifications(env) {
 }
 
 function recapNotificationAuthorized(request, env) {
-  return hasBearer(request, env.RECAP_NOTIFICATION_QUEUE_SECRET);
+  // The existing Daily Picks Email Apps Script already has the protected
+  // publisher queue secret. Accept it here as a migration-safe reader for
+  // recap-status delivery, while Render keeps using the recap-specific secret
+  // when it enqueues a notification.
+  return hasBearer(request, env.RECAP_NOTIFICATION_QUEUE_SECRET)
+    || hasBearer(request, env.QUEUE_INGEST_SECRET);
 }
 
 async function enqueueRecapNotification(request, env) {
