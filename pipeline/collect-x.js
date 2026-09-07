@@ -5,7 +5,7 @@ const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { upcomingEventStatus } = require('../bot/lib/event-timing');
-const { buildSourcePickEmbed, sourceCapperName } = require('../bot/lib/source-review');
+const { assertFreePickEligible, buildSourcePickEmbed, sourceCapperName } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
@@ -236,6 +236,10 @@ async function notifyApprovalChannel(packet) {
   try {
     // A clear card is shown exactly as members will see it after approval.
     // Publishing does not add a second layer of wording or formatting.
+    // The free-pick approval channel is for player-prop writeups only. Do
+    // not make Kobe guess who "Over 5.5 K's" refers to: unnamed player props
+    // remain a diagnostic card until a full visible name is present.
+    if (packet.source?.publish_mode !== 'terms_only') assertFreePickEligible(packet);
     embeds = [buildSourcePickEmbed(packet, 'FREE PICK')];
   } catch {
     // Keep unclear cards private and diagnostic rather than showing Kobe a

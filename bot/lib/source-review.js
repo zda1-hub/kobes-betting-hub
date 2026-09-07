@@ -10,6 +10,7 @@ function visiblePlays(packet) {
     ? extraction.plays
     : [{
       selection: extraction.selection,
+      player_name: extraction.player_name,
       line: extraction.line,
       odds_american: extraction.odds_american,
       units: extraction.units
@@ -19,6 +20,8 @@ function visiblePlays(packet) {
       // Source graphics often include the price in both the selection text
       // and the structured odds field. Keep the exact visible terms, but do
       // not make Kobe review a noisy duplicated price such as "-107 -107".
+      selection: visible(play.selection, ''),
+      playerName: visible(play.player_name, ''),
       terms: [...new Set([play.selection, play.line, play.odds_american]
         .filter((value) => typeof value === 'string' && value.trim())
         .map((value) => value.trim())
@@ -33,8 +36,24 @@ function normalizedText(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9.]+/g, ' ').trim();
 }
 
-function publicPlayTerm({ terms, selection, line, oddsAmerican }) {
-  const base = selection || terms || '';
+function playerNameFromPlay(play) {
+  const explicit = visible(play?.playerName || play?.player_name, '');
+  if (explicit && !/^player$/i.test(explicit)) return explicit;
+
+  // Older saved cards did not have player_name. Preserve cards whose
+  // selection already visibly starts with a real-looking full name, but do
+  // not guess a name from a bare "Over 5.5 K's" type of market.
+  const selection = visible(play?.selection, '');
+  const match = selection.match(/^([A-Z][a-z'’-]{1,}(?:\s+[A-Z][a-z'’-]{1,}){1,3})\b/);
+  return match ? match[1] : '';
+}
+
+function publicPlayTerm({ terms, selection, playerName, line, oddsAmerican }) {
+  const namedPlayer = playerNameFromPlay({ selection, playerName });
+  const baseSelection = selection || terms || '';
+  const base = namedPlayer && !normalizedText(baseSelection).includes(normalizedText(namedPlayer))
+    ? `${namedPlayer} ${baseSelection}`.trim()
+    : baseSelection;
   const includesLine = line && normalizedText(base).includes(normalizedText(line));
   return [base, includesLine ? '' : line, oddsAmerican ? `(${oddsAmerican})` : '']
     .filter(Boolean)
@@ -50,6 +69,10 @@ function isPlayerProp(play) {
   // source caption such as "MLB Play of the Day". A free post must be a
   // player-specific stat market, never a side, moneyline, spread, or total.
   return /\b(?:strikeouts?|walks?(?: allowed)?|hits?|total bases?|rbi|runs?|stolen bases?|outs?|earned runs?|points?|rebounds?|assists?|three[- ]pointers?|threes?|blocks?|steals?|passing yards?|rushing yards?|receiving yards?|receptions?|sacks?|shots?(?: on goal)?|goals?|saves?)\b/i.test(play?.terms || '');
+}
+
+function hasNamedPlayer(play) {
+  return Boolean(playerNameFromPlay(play));
 }
 
 function isUsefulSupport(note, pickTerms) {
@@ -98,6 +121,7 @@ function publicPickTerms(packet) {
   return plays
     .map((play) => publicPlayTerm({
       selection: typeof play.selection === 'string' ? play.selection.trim() : '',
+      playerName: typeof play.player_name === 'string' ? play.player_name.trim() : '',
       line: typeof play.line === 'string' ? play.line.trim() : '',
       oddsAmerican: typeof play.odds_american === 'string' ? play.odds_american.trim() : ''
     }))
@@ -164,6 +188,9 @@ function assertFreePickEligible(packet) {
   if (plays.length === 0 || !plays.every(isPlayerProp)) {
     throw new Error('Free picks are limited to player props. This card includes a side, total, moneyline, spread, or unclear market.');
   }
+  if (!plays.every(hasNamedPlayer)) {
+    throw new Error('A player prop must show the player’s full name before it can be approved or published.');
+  }
 }
 
 function buildSourcePickEmbed(packet, destinationLabel) {
@@ -208,4 +235,4 @@ function reviewButtons(pickId, { testOnly = false } = {}) {
   }];
 }
 
-module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, isPlayerProp, presentationConfidence, publicPickTerms, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
+module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, hasNamedPlayer, isPlayerProp, presentationConfidence, publicPickTerms, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };

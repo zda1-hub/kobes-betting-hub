@@ -14,7 +14,7 @@ const EXTRACTION_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   required: [
-    'is_pick_candidate', 'source_capper_name', 'sport', 'league', 'event', 'market', 'selection',
+    'is_pick_candidate', 'source_capper_name', 'sport', 'league', 'event', 'market', 'selection', 'player_name',
     'line', 'odds_american', 'units', 'plays', 'source_claims', 'image_summary',
     'missing_or_ambiguous'
   ],
@@ -26,6 +26,7 @@ const EXTRACTION_SCHEMA = {
     event: { type: 'string' },
     market: { type: 'string' },
     selection: { type: 'string' },
+    player_name: { type: 'string' },
     line: { type: 'string' },
     odds_american: { type: 'string' },
     units: { type: 'string' },
@@ -34,9 +35,10 @@ const EXTRACTION_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['selection', 'line', 'odds_american', 'units'],
+        required: ['selection', 'player_name', 'line', 'odds_american', 'units'],
         properties: {
           selection: { type: 'string' },
+          player_name: { type: 'string' },
           line: { type: 'string' },
           odds_american: { type: 'string' },
           units: { type: 'string' }
@@ -101,6 +103,7 @@ function sourceContent(packet) {
     'Do not infer a team, player, event, odds, date, statistic, or outcome that is not clearly visible.',
     'source_capper_name is the original capper explicitly shown in the post, quoted post, or graphic — not the X account that reposted/leaked it. For example, when Cappers Cash reposts a yourdailycapper graphic, source_capper_name is "yourdailycapper", never "Cappers Cash". Do not use the monitoring source account as a fallback. Use an empty string if the original capper is not clearly identified.',
     'plays must contain every clearly visible play, in display order. Include the unit size or dollar stake only on the play where it is visibly shown. Do not invent a unit size for other plays.',
+    'For a player prop, player_name must be the player’s full visible name, and selection must begin with that same name (for example, "Jacob Misiorowski Over 5.5 Strikeouts"). If a post says only "Over 5.5 K’s" with no player name, leave player_name empty and put the missing name in missing_or_ambiguous. Never invent a player name.',
     'source_claims must contain only short, concrete claims that directly support an extracted player prop: player performance in that stat, role/workload, opponent matchup, lineup, or venue context. Omit promotional language, records without a connection to the prop, “best bet” language, confidence claims, and unrelated team facts.',
     'Use an empty string for an unknown single field. Put uncertainty in missing_or_ambiguous.',
     'This is source extraction only, not research, advice, or verification.',

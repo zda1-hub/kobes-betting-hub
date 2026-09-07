@@ -10,7 +10,8 @@ const packet = {
     extraction: {
       is_pick_candidate: true,
       source_capper_name: 'Example Capper',
-      selection: 'Player OVER',
+      selection: 'Jacob Misiorowski OVER',
+      player_name: 'Jacob Misiorowski',
       line: '6.5 strikeouts',
       odds_american: '-115',
       units: '1u',
@@ -22,7 +23,8 @@ const packet = {
         'Matchup favors strikeouts'
       ],
       plays: [{
-        selection: 'Player OVER',
+        selection: 'Jacob Misiorowski OVER',
+        player_name: 'Jacob Misiorowski',
         line: '6.5 strikeouts',
         odds_american: '-115',
         units: '1u'
@@ -38,7 +40,7 @@ const packet = {
 
 test('formats a writeup source in Kobe’s pick-first layout', () => {
   const embed = buildSourcePickEmbed(packet, 'FREE PICK');
-  assert.equal(embed.description, 'Player OVER 6.5 strikeouts (-115)\nTeam ML (+120)\n\n• Cleared 6+ strikeouts in 4 of the last 5 starts\n• Opponent ranks bottom 10 in strikeout avoidance\n• Strong recent road form\n• Pitch count supports the over\n• Matchup favors strikeouts');
+  assert.equal(embed.description, 'Jacob Misiorowski OVER 6.5 strikeouts (-115)\nTeam ML (+120)\n\n• Cleared 6+ strikeouts in 4 of the last 5 starts\n• Opponent ranks bottom 10 in strikeout avoidance\n• Strong recent road form\n• Pitch count supports the over\n• Matchup favors strikeouts');
   assert.equal(embed.image.url, 'https://example.com/player-photo.png');
 });
 
@@ -49,7 +51,7 @@ test('removes duplicated prop text, timestamps, and promotional source claims', 
       ...packet.analysis,
       extraction: {
         ...packet.analysis.extraction,
-        plays: [{ selection: 'Jacob Misiorowski over 17.5 outs', line: '17.5', odds_american: '+100', units: '' }],
+        plays: [{ selection: 'Jacob Misiorowski over 17.5 outs', player_name: 'Jacob Misiorowski', line: '17.5', odds_american: '+100', units: '' }],
         source_claims: [
           'MLB Pick of the Day',
           '(7:40PM) Jacob Misiorowski over 17.5 outs +100',
@@ -70,7 +72,7 @@ test('keeps factual support while removing research-source labels and raw stat a
       ...packet.analysis,
       extraction: {
         ...packet.analysis.extraction,
-        plays: [{ selection: 'SMU/Florida State over 53.5 points', line: '53.5', odds_american: '-118', units: '' }],
+        plays: [{ selection: 'SMU/Florida State over 53.5 points', player_name: '', line: '53.5', odds_american: '-118', units: '' }],
         source_claims: [],
         supporting_notes: [
           { text: 'SMU averaged 32.23 points per game (Points Per Game PPG = 32.23) in the 2025 season (team cumulative statistics)' },
@@ -101,7 +103,7 @@ test('formats an exclusive approval card as capper, bet, and stated stake only',
       extraction: {
         ...packet.analysis.extraction,
         source_capper_name: '@CAPPERSCASH',
-        plays: [{ selection: 'New York Yankees ML -107', line: '-107', odds_american: '-107', units: '80k' }]
+        plays: [{ selection: 'New York Yankees ML -107', player_name: '', line: '-107', odds_american: '-107', units: '80k' }]
       }
     }
   }, 'PAID PICK');
@@ -147,4 +149,18 @@ test('limits free posts to writeup player props', () => {
       extraction: { ...packet.analysis.extraction, plays: [packet.analysis.extraction.plays[0]] }
     }
   }));
+});
+
+test('does not approve a player prop when the player name is absent', () => {
+  const unnamedPlayerProp = {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: "Over 5.5 K's", player_name: '', line: '5.5 K', odds_american: '-115', units: '' }]
+      }
+    }
+  };
+  assert.throws(() => assertFreePickEligible(unnamedPlayerProp), /player’s full name/);
 });
