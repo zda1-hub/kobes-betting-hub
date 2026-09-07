@@ -1,5 +1,5 @@
 {
-  "paused": true,
-  "reason": "Paused by Kobe until explicitly resumed.",
-  "updated_at": "2026-09-06T00:00:00.000Z"
+  "paused": false,
+  "reason": "Resumed by Kobe for the normal daily monitoring window.",
+  "updated_at": "2026-09-07T00:00:00.000Z"
 }
