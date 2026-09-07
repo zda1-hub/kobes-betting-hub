@@ -233,6 +233,7 @@ async function notifyApprovalChannel(packet) {
   }
 
   let embeds;
+  let publishDisabled = false;
   try {
     // A clear card is shown exactly as members will see it after approval.
     // Publishing does not add a second layer of wording or formatting.
@@ -242,19 +243,30 @@ async function notifyApprovalChannel(packet) {
     if (packet.source?.publish_mode !== 'terms_only') assertFreePickEligible(packet);
     embeds = [buildSourcePickEmbed(packet, 'FREE PICK')];
   } catch {
+    // An upcoming game is necessary but not enough to publish. Keep an
+    // incomplete or ineligible card useful as a private audit trail, but do
+    // not leave active publish buttons that will only fail after Kobe taps.
+    packet.status = 'UPCOMING_NEEDS_DETAILS';
+    publishDisabled = true;
     // Keep unclear cards private and diagnostic rather than showing Kobe a
     // misleading member-facing preview.
     const source = packet.source;
+    const eventTiming = packet.verification?.event_start
+      ? `The game is verified upcoming (${new Date(packet.verification.event_start).toLocaleString('en-US', { timeZone: 'America/Phoenix', timeZoneName: 'short', hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' })}).`
+      : 'The game start could not be verified.';
+    const reviewType = source.publish_mode === 'terms_only'
+      ? 'Exclusive review'
+      : 'Free-pick writeup review';
     embeds = [{
       color: 0xD4AF37,
       title: `New X candidate — #${packet.approval_number}`,
-      description: `**Source:** @${source.handle}\n**Posted:** ${source.posted_at}\n**Status:** ${packet.status}\n\n> ${quote(source.text)}\n\n[Open original X post](${source.post_url})`,
+      description: `**Type:** ${reviewType}\n**Source:** @${source.handle}\n**Posted:** ${source.posted_at}\n**Status:** ${packet.status}\n\n> ${quote(source.text)}\n\n[Open original X post](${source.post_url})`,
       fields: [{
         name: 'Source extraction',
         value: extractionSummary(packet)
       }, {
         name: 'Next step',
-        value: 'Reject this card or finish its missing details manually. It is not ready to preview as a member-facing pick.'
+        value: `${eventTiming}\n\nThis is not ready to publish. Reject it or finish its missing details manually. Only complete player-prop writeups can become free picks.`
       }],
       footer: { text: `Pick ID: ${packet.pick_id} | Kobe Bot` },
       timestamp: new Date().toISOString()
@@ -271,8 +283,8 @@ async function notifyApprovalChannel(packet) {
       components: [{
         type: 1,
         components: [
-          { type: 2, style: 3, label: 'Post as Free Pick', custom_id: `source-review:${packet.pick_id}:free` },
-          { type: 2, style: 1, label: 'Post to Paid Sport', custom_id: `source-review:${packet.pick_id}:paid` },
+          { type: 2, style: 3, label: 'Post as Free Pick', custom_id: `source-review:${packet.pick_id}:free`, disabled: publishDisabled },
+          { type: 2, style: 1, label: 'Post to Paid Sport', custom_id: `source-review:${packet.pick_id}:paid`, disabled: publishDisabled },
           { type: 2, style: 4, label: 'Reject', custom_id: `source-review:${packet.pick_id}:reject` }
         ]
       }]
