@@ -713,6 +713,33 @@ function startXMonitor() {
   setTimeout(beginMonitoring, delayMs);
 }
 
+async function hubStatusText() {
+  const paused = await pickWorkflowPaused();
+  const date = pacificOperatingDate();
+  const rows = await readPickLog();
+  const freeToday = freePickChannelId
+    ? freePickRecapRows(rows, date, freePickChannelId).filter((row) => row.status === 'PUBLISHED').length
+    : 0;
+  const limit = dailyFreePickLimit();
+  const pendingFree = freePickChannelId
+    ? freePickRecapRows(rows, date, freePickChannelId).filter((row) => resultFor(row) === 'PENDING').length
+    : 0;
+  const xEnabled = process.env.X_MONITOR_ENABLED === 'true';
+  const monitorState = !xEnabled ? 'off' : (xMonitorIntervalTimer ? 'running' : 'scheduled / stopped for the current window');
+  const durableLog = pickLogPath().startsWith('/var/data/') ? 'configured' : 'not using /var/data';
+  const emailConfigured = Boolean(recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient);
+  return [
+    `**Workflow:** ${paused ? 'paused — no posts can publish' : 'ready'}`,
+    `**X monitor:** ${monitorState}`,
+    `**Free picks today:** ${freeToday}${limit === null ? '' : ` / ${limit}`}`,
+    `**Pending free results:** ${pendingFree}`,
+    `**Pick log:** ${durableLog}`,
+    `**Automatic grading:** ${process.env.AUTO_GRADE_FREE_PICKS === 'false' ? 'off' : 'on (ESPN)'}`,
+    `**Free recap:** ${freeRecapEnabled() && freeRecapChannelId ? `on after ${freeRecapCloseAt()} Arizona time` : 'not configured'}`,
+    `**Recap email:** ${emailConfigured ? 'connected' : 'not configured'}`
+  ].join('\n');
+}
+
 function isPublisher(interaction) {
   if (!interaction.inGuild()) return false;
   if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return true;
@@ -773,6 +800,32 @@ async function postAndLogOfficialPick({ channel, payload, entry }) {
       notes: `Discord post failed: ${error instanceof Error ? error.message : String(error)}`
     });
     throw error;
+  }
+}
+
+function approvalOutcomeEmbed(message, { channel, postReference, rejected = false }) {
+  const prior = message?.embeds?.[0]?.toJSON?.() || {};
+  const outcome = rejected
+    ? '❌ **Rejected** — no member-facing post was made.'
+    : `✅ **Posted to #${channel.name || channel.id}** — [View official post](${postReference})`;
+  const description = [prior.description || '', '', outcome].join('\n').trim();
+  return {
+    ...prior,
+    description: description.slice(0, 4096),
+    footer: { text: rejected ? 'Kobe review completed — not published' : `Kobe approval completed — #${channel.name || channel.id}` }
+  };
+}
+
+async function closeApprovalCard(interaction, outcome) {
+  try {
+    await interaction.message.edit({
+      embeds: [approvalOutcomeEmbed(interaction.message, outcome)],
+      components: []
+    });
+  } catch (error) {
+    // The official post and canonical log remain authoritative. A cosmetic
+    // receipt failure must never make a successful publication look failed.
+    console.error('Could not add the approval-card receipt:', error);
   }
 }
 
@@ -914,7 +967,7 @@ async function handleSourceReviewButton(interaction) {
     packet.status = 'REJECTED';
     packet.approval = approval;
     await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
-    await interaction.message.edit({ components: [] });
+    await closeApprovalCard(interaction, { rejected: true });
     await interaction.editReply('Rejected. No member-facing post was made.');
     return;
   }
@@ -948,7 +1001,7 @@ async function handleSourceReviewButton(interaction) {
     const label = action === 'free' ? 'FREE PICK' : 'PAID PICK';
     const extraction = packet.analysis.extraction;
     const firstPlay = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;
-    await postAndLogOfficialPick({
+    const publishedMessage = await postAndLogOfficialPick({
       channel,
       payload: { embeds: [buildSourcePickEmbed(packet, label)] },
       entry: {
@@ -979,7 +1032,8 @@ async function handleSourceReviewButton(interaction) {
     packet.status = 'PUBLISHED';
     packet.approval = approval;
     await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
-    await interaction.message.edit({ components: [] });
+    const postReference = discordPostReference(channel, publishedMessage);
+    await closeApprovalCard(interaction, { channel, postReference });
     let xNote = '';
     if (action === 'free') {
       try {
@@ -990,7 +1044,7 @@ async function handleSourceReviewButton(interaction) {
         xNote = ' Discord post is live; X sync needs attention.';
       }
     }
-    await interaction.editReply(`Published to ${channel}.${xNote}`);
+    await interaction.editReply(`Published to ${channel}. [View official post](${postReference})${xNote}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to complete this approval action.';
     await interaction.editReply(message);
@@ -1165,6 +1219,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
       ephemeral: true,
       content: 'Use `/preview-pick` to review a numbered, formatted post privately. Once Kobe has approved the exact line, odds, evidence, destination sport/channel, and image rights, a configured publisher can use `/publish-pick`. Administrators can use `/post-welcome-invite` to give current members an opt-in welcome DM. This bot posts as a bot, never as Kobe’s personal account.'
     });
+    return;
+  }
+
+  if (interaction.commandName === 'hub-status') {
+    if (!isPickApprover(interaction) && !isAdministrator(interaction)) {
+      await interaction.reply({ ephemeral: true, content: 'Only Kobe or a server administrator can view bot status.' });
+      return;
+    }
+    try {
+      await interaction.reply({ ephemeral: true, content: await hubStatusText() });
+    } catch (error) {
+      console.error('Unable to build hub status:', error);
+      await interaction.reply({ ephemeral: true, content: 'Unable to read current bot status. Check the Render logs before publishing.' });
+    }
     return;
   }
 

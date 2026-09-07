@@ -2,7 +2,8 @@ const ESPN_BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports';
 
 const LEAGUES = {
   mlb: { path: 'baseball/mlb', url: 'https://www.espn.com/mlb/game/_/gameId/' },
-  nfl: { path: 'football/nfl', url: 'https://www.espn.com/nfl/game/_/gameId/' }
+  nfl: { path: 'football/nfl', url: 'https://www.espn.com/nfl/game/_/gameId/' },
+  ncaaf: { path: 'football/college-football', url: 'https://www.espn.com/college-football/game/_/gameId/' }
 };
 
 function compact(value) {
@@ -12,6 +13,7 @@ function compact(value) {
 function leagueFor(row) {
   const value = `${row.league || ''} ${row.sport || ''}`.toLowerCase();
   if (/\bmlb\b|baseball/.test(value)) return LEAGUES.mlb;
+  if (/\bncaaf\b|college football/.test(value)) return LEAGUES.ncaaf;
   if (/\bnfl\b|football/.test(value)) return LEAGUES.nfl;
   return null;
 }
@@ -76,7 +78,9 @@ function statSpec(row, entries) {
   if (/\brbis?\b|runs batted in/.test(text)) return pick('batting', 'RBIs', 'RBIs');
   if (/home runs?|\bhrs?\b/.test(text)) return pick('batting', 'homeRuns', 'home runs');
   if (/stolen bases?|\bsbs?\b/.test(text)) return pick('batting', 'stolenBases', 'stolen bases');
+  if (/total bases?/.test(text)) return pick('batting', 'totalBases', 'total bases');
   if (/\bhits?\b/.test(text)) return pick('batting', 'hits', 'hits');
+  if (/\bruns?\b/.test(text)) return pick('batting', 'runs', 'runs');
   if (/passing yards?/.test(text)) return pick('passing', 'passingYards', 'passing yards');
   if (/rushing yards?/.test(text)) return pick('rushing', 'rushingYards', 'rushing yards');
   if (/receiving yards?/.test(text)) return pick('receiving', 'receivingYards', 'receiving yards');

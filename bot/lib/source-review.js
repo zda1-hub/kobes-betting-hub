@@ -224,12 +224,17 @@ function buildSourcePickEmbed(packet, destinationLabel) {
   return embed;
 }
 
-function reviewButtons(pickId, { testOnly = false } = {}) {
+function buttonLabel(value, fallback) {
+  const label = visible(value, fallback).replace(/\s+/g, ' ').trim();
+  return label.slice(0, 80);
+}
+
+function reviewButtons(pickId, { testOnly = false, freeLabel, paidLabel } = {}) {
   return [{
     type: ComponentType.ActionRow,
     components: [
-      { type: ComponentType.Button, style: ButtonStyle.Success, label: 'Post as Free Pick', custom_id: `source-review:${pickId}:free`, disabled: testOnly },
-      { type: ComponentType.Button, style: ButtonStyle.Primary, label: 'Post to Paid Sport', custom_id: `source-review:${pickId}:paid`, disabled: testOnly },
+      { type: ComponentType.Button, style: ButtonStyle.Success, label: buttonLabel(freeLabel, 'Post to #daily-free-play'), custom_id: `source-review:${pickId}:free`, disabled: testOnly },
+      { type: ComponentType.Button, style: ButtonStyle.Primary, label: buttonLabel(paidLabel, 'Post to paid channel'), custom_id: `source-review:${pickId}:paid`, disabled: testOnly },
       { type: ComponentType.Button, style: ButtonStyle.Danger, label: 'Reject', custom_id: `source-review:${pickId}:reject` }
     ]
   }];

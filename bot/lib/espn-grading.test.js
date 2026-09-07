@@ -48,6 +48,15 @@ test('grades a final moneyline and keeps unsupported props pending', async () =>
   assert.equal(unsupported.status, 'PENDING');
 });
 
+test('uses the college-football ESPN endpoint for an NCAAF final', async () => {
+  const grade = await gradePickFromEspn({
+    operating_date: '2026-09-07', league: 'NCAAF', event: 'Chicago Cubs at Milwaukee Brewers',
+    selection: 'Milwaukee Brewers ML', published_line: 'ML', result: 'PENDING'
+  }, { fetchImpl: espnFetch });
+  assert.equal(grade.status, 'GRADED');
+  assert.equal(grade.source, 'https://www.espn.com/college-football/game/_/gameId/123');
+});
+
 test('converts baseball innings notation to outs', () => {
   assert.equal(inningsToOuts('5.2'), 17);
 });

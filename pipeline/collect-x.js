@@ -5,7 +5,7 @@ const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { upcomingEventStatus } = require('../bot/lib/event-timing');
-const { assertFreePickEligible, buildSourcePickEmbed, sourceCapperName } = require('../bot/lib/source-review');
+const { assertFreePickEligible, buildSourcePickEmbed, reviewButtons, sourceCapperName, visiblePlays } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
@@ -224,6 +224,53 @@ function extractionSummary(packet) {
   return `**Source extraction (not verified):** ${terms || 'No complete terms found.'}${missing ? `\n**Needs checking:** ${missing}` : ''}`;
 }
 
+function isSinglePlayPacket(packet) {
+  return visiblePlays(packet).length === 1;
+}
+
+function normalizedSport(packet) {
+  const sourceSport = `${packet.analysis?.extraction?.sport || ''} ${packet.analysis?.extraction?.league || ''}`.toLowerCase();
+  if (/baseball|mlb/.test(sourceSport)) return 'baseball';
+  if (/football|nfl|ncaaf/.test(sourceSport)) return 'football';
+  if (/basketball|nba|wnba|ncaab/.test(sourceSport)) return 'basketball';
+  if (/hockey|nhl/.test(sourceSport)) return 'hockey';
+  if (/soccer|fifa|mls/.test(sourceSport)) return 'soccer';
+  return '';
+}
+
+function sportChannelId(packet) {
+  const sport = normalizedSport(packet);
+  const entries = (process.env.SPORT_CHANNEL_MAP || '').split(',')
+    .map((entry) => entry.trim().split(':'))
+    .filter(([key, value]) => key && value);
+  return entries.find(([key]) => key.toLowerCase() === sport)?.[1] || '';
+}
+
+async function discordChannelLabel(channelId, fallback) {
+  const token = process.env.DISCORD_TOKEN;
+  if (!channelId || !token) return fallback;
+  try {
+    const response = await fetch(`https://discord.com/api/v10/channels/${channelId}`, {
+      headers: { Authorization: `Bot ${token}` }
+    });
+    if (!response.ok) return fallback;
+    const channel = await response.json();
+    return channel?.name ? `#${channel.name}` : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function approvalButtonLabels(packet) {
+  const free = await discordChannelLabel(process.env.FREE_PICK_CHANNEL_ID, '#daily-free-play');
+  const paidChannelId = packet.source?.publish_mode === 'terms_only'
+    ? (process.env.EXCLUSIVES_CHANNEL_ID || '1539055850075852911')
+    : sportChannelId(packet);
+  const paidFallback = packet.source?.publish_mode === 'terms_only' ? '#exclusives' : '#paid-sport';
+  const paid = await discordChannelLabel(paidChannelId, paidFallback);
+  return { freeLabel: `Post to ${free}`, paidLabel: `Post to ${paid}` };
+}
+
 async function notifyApprovalChannel(packet) {
   const channelId = process.env.PICK_APPROVAL_CHANNEL_ID;
   const token = process.env.DISCORD_TOKEN;
@@ -233,7 +280,6 @@ async function notifyApprovalChannel(packet) {
   }
 
   let embeds;
-  let publishDisabled = false;
   try {
     // A clear card is shown exactly as members will see it after approval.
     // Publishing does not add a second layer of wording or formatting.
@@ -242,36 +288,19 @@ async function notifyApprovalChannel(packet) {
     // remain a diagnostic card until a full visible name is present.
     if (packet.source?.publish_mode !== 'terms_only') assertFreePickEligible(packet);
     embeds = [buildSourcePickEmbed(packet, 'FREE PICK')];
-  } catch {
-    // An upcoming game is necessary but not enough to publish. Keep an
-    // incomplete or ineligible card useful as a private audit trail, but do
-    // not leave active publish buttons that will only fail after Kobe taps.
-    packet.status = 'UPCOMING_NEEDS_DETAILS';
-    publishDisabled = true;
-    // Keep unclear cards private and diagnostic rather than showing Kobe a
-    // misleading member-facing preview.
-    const source = packet.source;
-    const eventTiming = packet.verification?.event_start
-      ? `The game is verified upcoming (${new Date(packet.verification.event_start).toLocaleString('en-US', { timeZone: 'America/Phoenix', timeZoneName: 'short', hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' })}).`
-      : 'The game start could not be verified.';
-    const reviewType = source.publish_mode === 'terms_only'
-      ? 'Exclusive review'
-      : 'Free-pick writeup review';
-    embeds = [{
-      color: 0xD4AF37,
-      title: `New X candidate — #${packet.approval_number}`,
-      description: `**Type:** ${reviewType}\n**Source:** @${source.handle}\n**Posted:** ${source.posted_at}\n**Status:** ${packet.status}\n\n> ${quote(source.text)}\n\n[Open original X post](${source.post_url})`,
-      fields: [{
-        name: 'Source extraction',
-        value: extractionSummary(packet)
-      }, {
-        name: 'Next step',
-        value: `${eventTiming}\n\nThis is not ready to publish. Reject it or finish its missing details manually. Only complete player-prop writeups can become free picks.`
-      }],
-      footer: { text: `Pick ID: ${packet.pick_id} | Kobe Bot` },
-      timestamp: new Date().toISOString()
-    }];
+  } catch (error) {
+    // Kobe's review room is for decisions, not diagnostics. Retain the held
+    // packet in durable storage for audit, but do not send an unpublishable
+    // card with buttons that cannot safely work.
+    packet.status = 'HELD_NOT_READY';
+    packet.approval_ready = false;
+    packet.hold_reason = error instanceof Error ? error.message : 'The candidate is incomplete or not publishable.';
+    console.log(`Held ${packet.pick_id}; ${packet.hold_reason}`);
+    return null;
   }
+  packet.status = 'READY_FOR_APPROVAL';
+  packet.approval_ready = true;
+  const labels = await approvalButtonLabels(packet);
   const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: {
@@ -280,14 +309,7 @@ async function notifyApprovalChannel(packet) {
     },
     body: JSON.stringify({
       embeds,
-      components: [{
-        type: 1,
-        components: [
-          { type: 2, style: 3, label: 'Post as Free Pick', custom_id: `source-review:${packet.pick_id}:free`, disabled: publishDisabled },
-          { type: 2, style: 1, label: 'Post to Paid Sport', custom_id: `source-review:${packet.pick_id}:paid`, disabled: publishDisabled },
-          { type: 2, style: 4, label: 'Reject', custom_id: `source-review:${packet.pick_id}:reject` }
-        ]
-      }]
+      components: reviewButtons(packet.pick_id, labels)
     })
   });
 
@@ -387,6 +409,21 @@ async function runCollector({ maxCandidates } = {}) {
         continue;
       }
 
+      // A Discord approval must correspond to exactly one logged Pick ID and
+      // one final post. Multi-bet source graphics are held, not squeezed into
+      // a single card where the post and the canonical log could diverge.
+      if (!isSinglePlayPacket(packet)) {
+        packet.status = 'HELD_MULTIPLE_PICKS';
+        packet.approval_ready = false;
+        packet.hold_reason = 'The source contains multiple picks. It was held so each future approval card and Pick ID remains one-to-one.';
+        await fs.writeFile(outputPath, `${JSON.stringify(packet, null, 2)}\n`);
+        console.log(`Held @${source.handle} post ${post.id}; it contains ${visiblePlays(packet).length} picks and needs separate cards.`);
+        skipped += 1;
+        lastProcessedId = post.id;
+        handledPostIds.add(post.id);
+        continue;
+      }
+
       packet.discord_review_message_id = await notifyApprovalChannel(packet);
       await fs.writeFile(outputPath, `${JSON.stringify(packet, null, 2)}\n`);
       console.log(`Queued #${packet.approval_number} ${packet.pick_id} from @${source.handle}.`);
@@ -429,4 +466,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { runCollector };
+module.exports = { isSinglePlayPacket, runCollector };

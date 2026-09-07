@@ -11,7 +11,7 @@
     "trends:espn": "node pipeline/generate-espn-trends.js",
     "test:real-x-pick": "node pipeline/test-real-x-pick.js",
     "prepare:approval": "node pipeline/prepare-approval.js",
-    "test": "node --test bot/**/*.test.js"
+    "test": "node --test bot/**/*.test.js pipeline/**/*.test.js"
   },
   "engines": {
     "node": ">=20.0.0"

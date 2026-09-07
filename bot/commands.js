@@ -201,4 +201,8 @@ module.exports = [
   new SlashCommandBuilder()
     .setName('hub-help')
     .setDescription('Show the safe publishing workflow for this bot')
+  ,
+  new SlashCommandBuilder()
+    .setName('hub-status')
+    .setDescription('Privately check pick monitoring, logging, grading, and recap readiness')
 ].map((command) => command.toJSON());

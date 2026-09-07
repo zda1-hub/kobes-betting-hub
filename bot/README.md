@@ -20,6 +20,8 @@ automate a user account, place bets, or create picks from unverified claims.
   free-pick records—never the source, writeup, confidence, or X material.
 - `/post-welcome-invite` — administrator-only; posts a button in the configured welcome channel. A member receives the welcome DM only after clicking it.
 - `/hub-help` — shows the short publishing workflow.
+- `/hub-status` — Kobe/admin-only private health check for monitoring, durable
+  logging, grading, recap, and email readiness.
 
 ## ESPN research trends
 
@@ -98,7 +100,7 @@ verified result; a live game does not trigger a pending alert. Set
 `FREE_RECAP_ENABLED=false` to stop automatic free recaps.
 
 `AUTO_GRADE_FREE_PICKS` defaults to enabled. It checks ESPN final box scores
-for standard, exact-match MLB/NFL player props and moneylines, recording the
+for standard, exact-match MLB/NFL/NCAAF player props and moneylines, recording the
 ESPN source in the log. Ambiguous, exotic, or incomplete markets stay
 `PENDING` for manual verification; the automatic recap waits rather than
 inventing a result.

@@ -110,6 +110,15 @@ test('formats an exclusive approval card as capper, bet, and stated stake only',
   assert.equal(embed.description, '@CAPPERSCASH\nNew York Yankees ML -107 (80k)');
 });
 
+test('uses destination names directly on approval buttons', () => {
+  const buttons = require('./source-review').reviewButtons('20260907-001-X', {
+    freeLabel: 'Post to #daily-free-play',
+    paidLabel: 'Post to #mlb-writeups'
+  });
+  assert.equal(buttons[0].components[0].label, 'Post to #daily-free-play');
+  assert.equal(buttons[0].components[1].label, 'Post to #mlb-writeups');
+});
+
 test('does not treat a leaked-source account as the original capper', () => {
   const leakedPacket = {
     ...packet,
