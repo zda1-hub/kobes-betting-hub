@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName, sourceTerms } = require('./source-review');
+const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickApprovalEmbed, buildSourcePickEmbed, sourceCapperName, sourceTerms } = require('./source-review');
 
 const packet = {
   source: { handle: 'ExampleSource', media_urls: ['https://example.com/pick.png'] },
@@ -42,6 +42,14 @@ test('formats a writeup source in Kobe’s pick-first layout', () => {
   const embed = buildSourcePickEmbed(packet, 'FREE PICK');
   assert.equal(embed.description, 'Jacob Misiorowski OVER 6.5 strikeouts (-115)\nTeam ML (+120)\n\n• Cleared 6+ strikeouts in 4 of the last 5 starts\n• Opponent ranks bottom 10 in strikeout avoidance\n• Strong recent road form\n• Pitch count supports the over\n• Matchup favors strikeouts');
   assert.equal(embed.image.url, 'https://example.com/player-photo.png');
+});
+
+test('keeps the approval card identical to the member post except for the source link at the bottom', () => {
+  const sourcePost = 'https://x.com/ExampleSource/status/123';
+  const approval = buildSourcePickApprovalEmbed({ ...packet, source: { ...packet.source, post_url: sourcePost } }, 'FREE PICK');
+  const memberPost = buildSourcePickEmbed(packet, 'FREE PICK');
+  assert.equal(approval.description, `${memberPost.description}\n\n[Open original X post](${sourcePost})`);
+  assert.equal(memberPost.description.includes('original X post'), false);
 });
 
 test('removes duplicated prop text, timestamps, and promotional source claims', () => {

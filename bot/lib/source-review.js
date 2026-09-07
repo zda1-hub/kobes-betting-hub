@@ -224,6 +224,19 @@ function buildSourcePickEmbed(packet, destinationLabel) {
   return embed;
 }
 
+function buildSourcePickApprovalEmbed(packet, destinationLabel) {
+  // The approval card begins with the exact member-facing post. The only
+  // private addition is a source link at the bottom, so Kobe can inspect the
+  // original without having to parse operational metadata before deciding.
+  const embed = buildSourcePickEmbed(packet, destinationLabel);
+  const sourceUrl = visible(packet.source?.post_url, '');
+  if (!sourceUrl) return embed;
+  return {
+    ...embed,
+    description: `${embed.description}\n\n[Open original X post](${sourceUrl})`.slice(0, 4096)
+  };
+}
+
 function buttonLabel(value, fallback) {
   const label = visible(value, fallback).replace(/\s+/g, ' ').trim();
   return label.slice(0, 80);
@@ -240,4 +253,4 @@ function reviewButtons(pickId, { testOnly = false, freeLabel, paidLabel } = {}) 
   }];
 }
 
-module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, hasNamedPlayer, isPlayerProp, presentationConfidence, publicPickTerms, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
+module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickApprovalEmbed, buildSourcePickEmbed, hasNamedPlayer, isPlayerProp, presentationConfidence, publicPickTerms, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
