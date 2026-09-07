@@ -146,6 +146,20 @@ for every Pick ID, verify results and calculations, then publish the recap. Pend
 results remain visible and roll forward. Late corrections receive a timestamped
 note in the next recap and in the log.
 
+### Automatic free-pick recap
+
+The worker also creates a separate compact `Free Picks Recap` for the prior
+Pacific operating date. It reads only official posts from the configured free
+pick channel and displays a plain prop list with W/L/P/V results, that day’s
+record, and the cumulative free-pick record. It intentionally omits writeups,
+source accounts, confidence, images, X references, and member-channel picks.
+
+The recap posts to `FREE_RECAP_CHANNEL_ID` (or `RECAP_CHANNEL_ID`) after 08:00
+Arizona time by default, only after every free pick has a verified non-pending
+grade in `pick-log.csv`. While any result remains `PENDING`, the worker waits
+and checks again; it never publishes a final recap that quietly treats a
+pending result as settled.
+
 ### Canonical-log hosting requirement
 
 For production, `PICK_LOG_PATH` must point to durable storage (for example a

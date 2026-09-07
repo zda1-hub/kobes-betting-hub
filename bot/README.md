@@ -14,6 +14,10 @@ automate a user account, place bets, or create picks from unverified claims.
 - `/preview-recap` — privately generates the complete day from `pick-log.csv`.
 - `/publish-recap` — publishes that complete log-based overview to the configured
   recap channel.
+- The bot automatically posts a compact **Free Picks Recap** for the prior
+  Pacific operating day after all official free picks have verified grades. It
+  lists only the props and their W/L/P/V result, plus the day and cumulative
+  free-pick records—never the source, writeup, confidence, or X material.
 - `/post-welcome-invite` — administrator-only; posts a button in the configured welcome channel. A member receives the welcome DM only after clicking it.
 - `/hub-help` — shows the short publishing workflow.
 
@@ -85,6 +89,11 @@ so the bot cannot be aimed at an unintended channel.
    pick in the log across free and approved paid sport channels; review it, then
    use `/publish-recap`. Cross-post to Instagram Story and X only after those
    official account connections are configured and the recap is reviewed.
+
+The automatic free-pick recap uses `RECAP_CHANNEL_ID` by default; set
+`FREE_RECAP_CHANNEL_ID` to send it elsewhere. It checks after `08:00` Arizona
+time by default and waits for `PENDING` picks to be graded with `/grade-pick`
+before posting. Set `FREE_RECAP_ENABLED=false` to stop automatic free recaps.
 
 The `source_url` is shown publicly, so use it only for a public source that is
 appropriate for members to see. Keep internal approval notes in the project’s

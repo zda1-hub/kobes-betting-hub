@@ -6,7 +6,8 @@ const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes } =
 const commands = require('./commands');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds } = require('./lib/recap');
-const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, readPickLog, updateOfficialPick } = require('./lib/pick-log');
+const { buildFreePickRecapEmbed, freePickRecapRows } = require('./lib/free-recap');
+const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
 const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
@@ -28,6 +29,8 @@ const recapChannelId = process.env.RECAP_CHANNEL_ID || defaultChannelId;
 const welcomeChannelId = process.env.WELCOME_CHANNEL_ID;
 const welcomeRoleId = process.env.WELCOME_ROLE_ID;
 const freePickChannelId = process.env.FREE_PICK_CHANNEL_ID;
+const freeRecapChannelId = process.env.FREE_RECAP_CHANNEL_ID || recapChannelId;
+const freeRecapStatePath = path.join(path.dirname(pickLogPath()), 'free-recap-state.json');
 // The approved #exclusives destination is kept configurable for future moves.
 // The fallback preserves the currently approved server destination when an
 // older Render environment has not yet added the variable.
@@ -62,6 +65,8 @@ let trendsTimer = null;
 let trendsPublicationInProgress = false;
 let trendsInboxTimer = null;
 let trendsInboxInProgress = false;
+let freeRecapTimer = null;
+let freeRecapInProgress = false;
 
 // A shared kill switch for new public pick posts. The collector has its own
 // matching check, while this one protects existing Discord approval cards and
@@ -92,6 +97,105 @@ function pacificClock(date = new Date()) {
   }).formatToParts(date);
   const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
   return { date: `${values.year}-${values.month}-${values.day}`, time: `${values.hour}:${values.minute}` };
+}
+
+function freeRecapEnabled() {
+  // This is an administrative results post generated entirely from the
+  // canonical log, so it is on by default once a recap channel is configured.
+  return process.env.FREE_RECAP_ENABLED !== 'false';
+}
+
+function freeRecapDailyAt() {
+  const value = (process.env.FREE_RECAP_DAILY_AT || '08:00').trim();
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    console.warn('Ignoring invalid FREE_RECAP_DAILY_AT. Use HH:MM in Arizona time, for example 08:00.');
+    return null;
+  }
+  return value;
+}
+
+function previousPacificOperatingDate(now = new Date()) {
+  const [year, month, day] = pacificOperatingDate(now).split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day) - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+async function readFreeRecapState() {
+  try {
+    return JSON.parse(await fs.readFile(freeRecapStatePath, 'utf8'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return { dates: {} };
+    throw error;
+  }
+}
+
+async function saveFreeRecapState(state) {
+  await fs.mkdir(path.dirname(freeRecapStatePath), { recursive: true });
+  await fs.writeFile(freeRecapStatePath, `${JSON.stringify(state, null, 2)}\n`);
+}
+
+async function publishDueFreeRecap() {
+  if (freeRecapInProgress || !freeRecapChannelId) return;
+  freeRecapInProgress = true;
+  const date = previousPacificOperatingDate();
+  try {
+    const state = await readFreeRecapState();
+    if (state.dates?.[date]?.status === 'PUBLISHED' || state.dates?.[date]?.status === 'NO_FREE_PICKS') return;
+    const rows = await readPickLog();
+    const picks = freePickRecapRows(rows, date, freePickChannelId);
+    if (!picks.length) {
+      state.dates = { ...(state.dates || {}), [date]: { status: 'NO_FREE_PICKS', checked_at: new Date().toISOString() } };
+      await saveFreeRecapState(state);
+      console.log(`No official free picks were logged for ${date}; no free-pick recap was posted.`);
+      return;
+    }
+    if (picks.some((row) => resultFor(row) === 'PENDING')) {
+      console.log(`Free-pick recap for ${date} is waiting for ${picks.filter((row) => resultFor(row) === 'PENDING').length} verified result(s).`);
+      return;
+    }
+    const channel = await approvedTextChannel(freeRecapChannelId);
+    const message = await channel.send({ embeds: [buildFreePickRecapEmbed({ date, rows, freeChannelId: freePickChannelId })] });
+    state.dates = {
+      ...(state.dates || {}),
+      [date]: { status: 'PUBLISHED', channel_id: channel.id, message_id: message.id, published_at: new Date().toISOString() }
+    };
+    await saveFreeRecapState(state);
+    console.log(`Published automatic free-pick recap for ${date} to #${channel.name || channel.id}.`);
+  } catch (error) {
+    console.error(`Automatic free-pick recap failed: ${error instanceof Error ? error.message : error}`);
+  } finally {
+    freeRecapInProgress = false;
+  }
+}
+
+function startFreeRecapSchedule() {
+  if (!freeRecapEnabled()) {
+    console.log('Automatic free-pick recaps are disabled. Set FREE_RECAP_ENABLED=true to resume them.');
+    return;
+  }
+  if (!freeRecapChannelId) {
+    console.warn('Automatic free-pick recaps are unavailable: set FREE_RECAP_CHANNEL_ID or RECAP_CHANNEL_ID.');
+    return;
+  }
+  if (!freeRecapDailyAt()) return;
+  const run = () => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Phoenix', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+    if (`${values.hour}:${values.minute}` < freeRecapDailyAt()) return;
+    void publishDueFreeRecap();
+  };
+  const interval = 15 * 60 * 1000;
+  freeRecapTimer = setInterval(run, interval);
+  const now = new Date();
+  const currentArizonaTime = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Phoenix', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(now);
+  const values = Object.fromEntries(currentArizonaTime.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  const currentTime = `${values.hour}:${values.minute}`;
+  const dailyAt = freeRecapDailyAt();
+  if (currentTime >= dailyAt) run();
+  console.log(`Automatic free-pick recaps check every 15 minutes after ${dailyAt} Arizona time and publish only after every result is graded.`);
 }
 
 function trendsDailyTime() {
@@ -886,6 +990,7 @@ client.once(Events.ClientReady, (readyClient) => {
   startXMonitor();
   startTrendsSchedule();
   startTrendInbox();
+  startFreeRecapSchedule();
 });
 
 async function registerCommandsOnStart() {
