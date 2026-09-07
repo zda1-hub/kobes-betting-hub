@@ -49,6 +49,9 @@ const pickApproverUserIds = listFromEnv(process.env.PICK_APPROVER_USER_IDS);
 const reviewQueueRoot = reviewQueuePath();
 const trendsInboxQueueUrl = (process.env.TRENDS_INBOX_QUEUE_URL || '').replace(/\/$/, '');
 const trendsInboxQueueSecret = process.env.TRENDS_INBOX_QUEUE_SECRET || '';
+const recapNotificationQueueUrl = (process.env.RECAP_NOTIFICATION_QUEUE_URL || '').replace(/\/$/, '');
+const recapNotificationQueueSecret = process.env.RECAP_NOTIFICATION_QUEUE_SECRET || '';
+const recapNotificationRecipient = process.env.KOBE_RECAP_EMAIL || process.env.KOBE_APPROVAL_EMAIL || '';
 const sportChannelMap = new Map(
   (process.env.SPORT_CHANNEL_MAP || '').split(',')
     .map((entry) => entry.trim().split(':'))
@@ -134,6 +137,18 @@ async function saveFreeRecapState(state) {
   await fs.writeFile(freeRecapStatePath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
+async function queueRecapNotification({ id, subject, body }) {
+  if (!recapNotificationQueueUrl || !recapNotificationQueueSecret || !recapNotificationRecipient) return 'NOT_CONFIGURED';
+  const response = await fetch(`${recapNotificationQueueUrl}/api/queue/recap-notifications`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${recapNotificationQueueSecret}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, recipient: recapNotificationRecipient, subject, body })
+  });
+  if (response.status === 409) return 'ALREADY_QUEUED';
+  if (!response.ok) throw new Error(`Recap email queue returned ${response.status}.`);
+  return 'QUEUED';
+}
+
 async function autoGradePendingFreePicks(date) {
   if (process.env.AUTO_GRADE_FREE_PICKS === 'false') return;
   const rows = await readPickLog();
@@ -165,7 +180,24 @@ async function publishDueFreeRecap() {
   const date = previousPacificOperatingDate();
   try {
     const state = await readFreeRecapState();
-    if (state.dates?.[date]?.status === 'PUBLISHED' || state.dates?.[date]?.status === 'NO_FREE_PICKS') return;
+    const prior = state.dates?.[date];
+    if (prior?.status === 'PUBLISHED') {
+      // A recap can be posted before the optional email queue is configured. Once
+      // configured, catch that one up without reposting the Discord recap.
+      if (prior.email_status === 'NOT_CONFIGURED' && recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient) {
+        const rows = await readPickLog();
+        const embed = buildFreePickRecapEmbed({ date, rows, freeChannelId: freePickChannelId });
+        const emailStatus = await queueRecapNotification({
+          id: `free-recap-final-${date}`,
+          subject: `Kobe's Betting Hub — Free Picks Recap (${date})`,
+          body: embed.description.replaceAll('**', '')
+        });
+        state.dates[date] = { ...prior, email_status: emailStatus, email_queued_at: new Date().toISOString() };
+        await saveFreeRecapState(state);
+      }
+      return;
+    }
+    if (prior?.status === 'NO_FREE_PICKS') return;
     await autoGradePendingFreePicks(date);
     const rows = await readPickLog();
     const picks = freePickRecapRows(rows, date, freePickChannelId);
@@ -176,14 +208,33 @@ async function publishDueFreeRecap() {
       return;
     }
     if (picks.some((row) => resultFor(row) === 'PENDING')) {
-      console.log(`Free-pick recap for ${date} is waiting for ${picks.filter((row) => resultFor(row) === 'PENDING').length} verified result(s).`);
+      const pending = picks.filter((row) => resultFor(row) === 'PENDING');
+      const pendingIds = pending.map((row) => row.pick_id).join(', ');
+      const notificationId = `free-recap-pending-${date}-${pending.map((row) => row.pick_id).join('-').slice(0, 80)}`;
+      const previous = state.dates?.[date] || {};
+      if (previous.pending_ids !== pendingIds || (previous.email_status === 'NOT_CONFIGURED' && recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient)) {
+        const emailStatus = await queueRecapNotification({
+          id: notificationId,
+          subject: `Kobe's Betting Hub — Free-pick recap waiting (${date})`,
+          body: `The free-pick recap for ${date} is waiting for verified results for: ${pendingIds}.\n\nThe bot will retry ESPN grading and post the recap automatically once every result is settled.`
+        });
+        state.dates = { ...(state.dates || {}), [date]: { status: 'PENDING_RESULTS', pending_ids: pendingIds, notified_at: new Date().toISOString(), email_status: emailStatus } };
+        await saveFreeRecapState(state);
+      }
+      console.log(`Free-pick recap for ${date} is waiting for ${pending.length} verified result(s).`);
       return;
     }
     const channel = await approvedTextChannel(freeRecapChannelId);
-    const message = await channel.send({ embeds: [buildFreePickRecapEmbed({ date, rows, freeChannelId: freePickChannelId })] });
+    const embed = buildFreePickRecapEmbed({ date, rows, freeChannelId: freePickChannelId });
+    const message = await channel.send({ embeds: [embed] });
+    const emailStatus = await queueRecapNotification({
+      id: `free-recap-final-${date}`,
+      subject: `Kobe's Betting Hub — Free Picks Recap (${date})`,
+      body: embed.description.replaceAll('**', '')
+    });
     state.dates = {
       ...(state.dates || {}),
-      [date]: { status: 'PUBLISHED', channel_id: channel.id, message_id: message.id, published_at: new Date().toISOString() }
+      [date]: { status: 'PUBLISHED', channel_id: channel.id, message_id: message.id, published_at: new Date().toISOString(), email_status: emailStatus }
     };
     await saveFreeRecapState(state);
     console.log(`Published automatic free-pick recap for ${date} to #${channel.name || channel.id}.`);

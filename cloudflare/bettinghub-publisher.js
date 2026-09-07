@@ -10,6 +10,7 @@ const FREE_PICK_STATE_KEY = "free-picks/current.json";
 const FREE_PICK_MAX_BYTES = 5 * 1024 * 1024;
 const TREND_EMAIL_MAX_BYTES = 12 * 1024;
 const TREND_EMAIL_LEAGUES = new Set(["mlb", "nfl"]);
+const RECAP_NOTIFICATION_MAX_BYTES = 12 * 1024;
 const ALLOWED_IMAGE_TYPES = new Map([
   ["image/jpeg", "jpg"],
   ["image/png", "png"],
@@ -39,6 +40,9 @@ async function handleRequest(request, env) {
   if (url.pathname === "/api/queue/trends" && request.method === "POST") return enqueueTrendEmail(request, env);
   if (url.pathname === "/api/queue/trends" && request.method === "GET") return listTrendEmails(request, env);
   if (url.pathname === "/api/queue/trends/deliver" && request.method === "POST") return markTrendEmailDelivered(request, env);
+  if (url.pathname === "/api/queue/recap-notifications" && request.method === "POST") return enqueueRecapNotification(request, env);
+  if (url.pathname === "/api/queue/recap-notifications" && request.method === "GET") return listRecapNotifications(request, env);
+  if (url.pathname === "/api/queue/recap-notifications/deliver" && request.method === "POST") return markRecapNotificationDelivered(request, env);
   if (url.pathname === "/api/free-pick/current" && request.method === "GET") return getCurrentFreePick(request, env);
   if (url.pathname === "/media/free-pick/current" && request.method === "GET") return getCurrentFreePickImage(request, env);
   if (url.pathname === "/api/free-pick/publish" && request.method === "POST") return publishFreePick(request, env);
@@ -118,6 +122,71 @@ async function markTrendEmailDelivered(request, env) {
   await ensureTrendInbox(env);
   const result = await env.DB.prepare(
     `UPDATE trend_email_inbox SET status = 'delivered', delivered_at = ? WHERE id = ? AND status = 'pending'`
+  ).bind(new Date().toISOString(), id).run();
+  return json({ id, status: result.meta.changes ? 'delivered' : 'already_delivered' });
+}
+
+// The Worker stores notification requests only. Kobe's authorized Apps Script
+// sends the actual email from Gmail, so no mailbox credential is held here.
+async function ensureRecapNotifications(env) {
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS recap_notification_inbox (
+      id TEXT PRIMARY KEY,
+      recipient TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'delivered')),
+      delivered_at TEXT
+    )`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_recap_notification_pending ON recap_notification_inbox (status, created_at)')
+  ]);
+}
+
+function recapNotificationAuthorized(request, env) {
+  return hasBearer(request, env.RECAP_NOTIFICATION_QUEUE_SECRET);
+}
+
+async function enqueueRecapNotification(request, env) {
+  if (!await recapNotificationAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  let input;
+  try { input = await request.json(); } catch { return json({ error: 'Expected JSON' }, 400); }
+  const id = cleanTrendText(input.id, 160);
+  const recipient = cleanTrendText(input.recipient, 254).toLowerCase();
+  const allowedRecipient = cleanTrendText(env.RECAP_NOTIFICATION_RECIPIENT, 254).toLowerCase();
+  const subject = cleanTrendText(input.subject, 500);
+  const body = cleanTrendText(input.body, RECAP_NOTIFICATION_MAX_BYTES);
+  if (!id || !/^[A-Za-z0-9_-]+$/.test(id)) return json({ error: 'id is invalid' }, 400);
+  if (!allowedRecipient || recipient !== allowedRecipient) return json({ error: 'Recipient is not authorized' }, 403);
+  if (!subject || !body) return json({ error: 'subject and body are required' }, 400);
+  await ensureRecapNotifications(env);
+  const result = await env.DB.prepare(
+    `INSERT INTO recap_notification_inbox (id, recipient, subject, body, created_at, status)
+     VALUES (?, ?, ?, ?, ?, 'pending') ON CONFLICT(id) DO NOTHING`
+  ).bind(id, recipient, subject, body, new Date().toISOString()).run();
+  if (result.meta.changes === 0) return json({ id, status: 'already_queued' }, 409);
+  return json({ id, status: 'pending' }, 201);
+}
+
+async function listRecapNotifications(request, env) {
+  if (!await recapNotificationAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  await ensureRecapNotifications(env);
+  const { results } = await env.DB.prepare(
+    `SELECT id, recipient, subject, body, created_at AS createdAt
+     FROM recap_notification_inbox WHERE status = 'pending' ORDER BY created_at ASC LIMIT 25`
+  ).all();
+  return json({ notifications: results });
+}
+
+async function markRecapNotificationDelivered(request, env) {
+  if (!await recapNotificationAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  let input;
+  try { input = await request.json(); } catch { return json({ error: 'Expected JSON' }, 400); }
+  const id = cleanTrendText(input.id, 160);
+  if (!id || !/^[A-Za-z0-9_-]+$/.test(id)) return json({ error: 'id is invalid' }, 400);
+  await ensureRecapNotifications(env);
+  const result = await env.DB.prepare(
+    `UPDATE recap_notification_inbox SET status = 'delivered', delivered_at = ? WHERE id = ? AND status = 'pending'`
   ).bind(new Date().toISOString(), id).run();
   return json({ id, status: result.meta.changes ? 'delivered' : 'already_delivered' });
 }

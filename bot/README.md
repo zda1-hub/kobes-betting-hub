@@ -101,6 +101,11 @@ ESPN source in the log. Ambiguous, exotic, or incomplete markets stay
 `PENDING` for manual verification; the automatic recap waits rather than
 inventing a result.
 
+For an email copy of the final recap (and one pending-result alert), use the
+existing authorized Gmail Apps Script and Cloudflare Worker queue described in
+`../docs/free-recap-email-setup.md`. This is a one-time mailbox authorization;
+the bot never stores or needs a Gmail password.
+
 The `source_url` is shown publicly, so use it only for a public source that is
 appropriate for members to see. Keep internal approval notes in the project’s
 intake tracker instead.

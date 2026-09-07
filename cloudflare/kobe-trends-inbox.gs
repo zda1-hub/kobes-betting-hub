@@ -5,6 +5,7 @@ const TRENDS_LABEL = 'Kobe Trends';
 const TRENDS_QUEUED_LABEL = 'Kobe Trends/Queued';
 const TRENDS_QUEUE_SECRET_KEY = 'TRENDS_QUEUE_SECRET';
 const TRENDS_SENDER = 'kobedirwin@gmail.com';
+const RECAP_NOTIFICATION_QUEUE_SECRET_KEY = 'RECAP_NOTIFICATION_QUEUE_SECRET';
 
 function installKobeTrendsInbox() {
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
@@ -56,4 +57,33 @@ function trendLeague_(subject) {
 function emailAddress_(from) {
   const match = String(from || '').match(/<([^>]+)>/) || String(from || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
   return match ? String(match[1] || match[0]).trim() : '';
+}
+
+// Add this trigger in the same Apps Script project. It delivers only recap
+// status emails queued by the Render bot through the protected Worker queue.
+function installKobeRecapNotifications() {
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === 'deliverKobeRecapNotifications') ScriptApp.deleteTrigger(trigger);
+  });
+  ScriptApp.newTrigger('deliverKobeRecapNotifications').timeBased().everyMinutes(5).create();
+  return 'Kobe recap notifications will be delivered every five minutes.';
+}
+
+function deliverKobeRecapNotifications() {
+  const secret = PropertiesService.getScriptProperties().getProperty(RECAP_NOTIFICATION_QUEUE_SECRET_KEY);
+  if (!secret) throw new Error('Set ' + RECAP_NOTIFICATION_QUEUE_SECRET_KEY + ' in Apps Script Project Settings first.');
+  const response = UrlFetchApp.fetch(PUBLISHER_URL + '/api/queue/recap-notifications', {
+    method: 'get', headers: { Authorization: 'Bearer ' + secret }, muteHttpExceptions: true
+  });
+  if (response.getResponseCode() !== 200) throw new Error('Recap notification fetch failed (' + response.getResponseCode() + '): ' + response.getContentText());
+  const notifications = JSON.parse(response.getContentText()).notifications || [];
+  notifications.forEach(function(item) {
+    MailApp.sendEmail(item.recipient, item.subject, item.body);
+    const acknowledgement = UrlFetchApp.fetch(PUBLISHER_URL + '/api/queue/recap-notifications/deliver', {
+      method: 'post', contentType: 'application/json', headers: { Authorization: 'Bearer ' + secret },
+      payload: JSON.stringify({ id: item.id }), muteHttpExceptions: true
+    });
+    if (acknowledgement.getResponseCode() !== 200) throw new Error('Recap notification acknowledgement failed (' + acknowledgement.getResponseCode() + '): ' + acknowledgement.getContentText());
+  });
+  return notifications.length + ' recap notification(s) delivered.';
 }
