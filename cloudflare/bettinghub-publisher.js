@@ -150,7 +150,8 @@ function recapNotificationAuthorized(request, env) {
   // when it enqueues a notification.
   return hasBearer(request, env.RECAP_NOTIFICATION_QUEUE_SECRET)
     || hasBearer(request, env.QUEUE_INGEST_SECRET)
-    || hasBearer(request, env.TRENDS_QUEUE_SECRET);
+    || hasBearer(request, env.TRENDS_QUEUE_SECRET)
+    || hasBearer(request, env.X_PUBLISHER_QUEUE_SECRET);
 }
 
 async function enqueueRecapNotification(request, env) {
