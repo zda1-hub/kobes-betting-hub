@@ -11,8 +11,8 @@ const rows = [
 
 test('creates a compact free-pick-only recap and cumulative record', () => {
   const embed = buildFreePickRecapEmbed({ date: '2026-09-07', rows, freeChannelId: '1539061878062583848' });
-  assert.match(embed.description, /\*\*W\*\* — Jacob Misiorowski Over 17.5 Outs \(\+100\)/);
-  assert.match(embed.description, /\*\*L\*\* — Robert Gasser Over 4.5 Strikeouts \(-140\)/);
+  assert.match(embed.description, /✅ Jacob Misiorowski Over 17.5 Outs \(\+100\)/);
+  assert.match(embed.description, /❌ Robert Gasser Over 4.5 Strikeouts \(-140\)/);
   assert.match(embed.description, /\*\*Today:\*\* 1-1-0/);
   assert.match(embed.description, /\*\*Overall free-pick record:\*\* 2-1-0/);
   assert.doesNotMatch(embed.description, /nfl-writeups|Discord post|Source:|Confidence/i);

@@ -30,6 +30,13 @@ function propTerms(row) {
     .trim() || 'Published prop';
 }
 
+function resultMarker(result) {
+  if (result === 'W') return '✅';
+  if (result === 'L') return '❌';
+  if (result === 'P' || result === 'V') return '➖';
+  return '⏳';
+}
+
 function buildFreePickRecapEmbed({ date, rows, freeChannelId = '' }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Recap date must use YYYY-MM-DD.');
   const picks = freePickRecapRows(rows, date, freeChannelId);
@@ -40,7 +47,7 @@ function buildFreePickRecapEmbed({ date, rows, freeChannelId = '' }) {
     color: 0x2B90D9,
     title: `Free Picks Recap — ${date}`,
     description: [
-      ...picks.map((row) => `• **${resultFor(row)}** — ${propTerms(row)}`),
+      ...picks.map((row) => `${resultMarker(resultFor(row))} ${propTerms(row)}`),
       '',
       `**Today:** ${recordText(today)}`,
       `**Overall free-pick record:** ${recordText(overall)}`
@@ -50,4 +57,4 @@ function buildFreePickRecapEmbed({ date, rows, freeChannelId = '' }) {
   };
 }
 
-module.exports = { buildFreePickRecapEmbed, freePickRecapRows, freePickRow, record, recordText };
+module.exports = { buildFreePickRecapEmbed, freePickRecapRows, freePickRow, record, recordText, resultMarker };
