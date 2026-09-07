@@ -61,6 +61,20 @@ function isUsefulSupport(note, pickTerms) {
   return true;
 }
 
+function cleanEvidenceClaim(claim) {
+  let text = String(claim || '').trim().replace(/^(?:[-•]\s*)?✅\s*/, '').replace(/[.\s]+$/, '');
+  // Supporting research is stored with its source URL for audit, but Kobe's
+  // member-facing preview should read like a clean writeup—not like a scraped
+  // stat table. Remove parenthetical source labels and raw field aliases while
+  // retaining parenthetical facts that are actually part of the claim.
+  text = text.replace(/\s*\(([^)]*)\)/g, (whole, contents) => {
+    const sourceLabel = /\b(?:team\s+(?:cumulative\s+)?stat(?:istic)?s?|team\s+stats?\s+page|stats?\s+page|schedule(?:\s+lists?)?|scoreboard|standings|box\s+score|espn|official|source|data)\b/i;
+    const rawFieldAlias = /\b(?:opponents?\s+)?ppg\s*=|\b[A-Za-z][A-Za-z\s]{2,}\s*=\s*[-+]?\d/;
+    return sourceLabel.test(contents) || rawFieldAlias.test(contents) ? '' : whole;
+  });
+  return text.replace(/\s{2,}/g, ' ').trim();
+}
+
 function sourceEvidence(packet) {
   const extraction = packet.analysis?.extraction || {};
   const pickTerms = publicPickTerms(packet);
@@ -70,7 +84,8 @@ function sourceEvidence(packet) {
   ];
   return [...new Set(claims
     .filter((claim) => typeof claim === 'string' && claim.trim())
-    .map((claim) => claim.trim().replace(/^(?:[-•]\s*)?✅\s*/, '').replace(/[.\s]+$/, '')))]
+    .map(cleanEvidenceClaim)
+    .filter(Boolean))]
     .filter((claim) => isUsefulSupport(claim, pickTerms))
     .slice(0, 8);
 }

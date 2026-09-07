@@ -63,6 +63,26 @@ test('removes duplicated prop text, timestamps, and promotional source claims', 
   assert.equal(embed.description, 'Jacob Misiorowski over 17.5 outs (+100)\n\n• Over in 5 straight\n• Went 18 outs in both games vs. CHC');
 });
 
+test('keeps factual support while removing research-source labels and raw stat aliases', () => {
+  const embed = buildSourcePickEmbed({
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'SMU/Florida State over 53.5 points', line: '53.5', odds_american: '-118', units: '' }],
+        source_claims: [],
+        supporting_notes: [
+          { text: 'SMU averaged 32.23 points per game (Points Per Game PPG = 32.23) in the 2025 season (team cumulative statistics)' },
+          { text: 'Florida State averaged 33.00 points per game (Points Per Game = 33.00) in the 2025 season (team cumulative statistics)' },
+          { text: 'The matchup is scheduled for Sep. 7, 2026 at Florida State in Tallahassee (SMU’s 2026 schedule lists “at Florida State — Sep 7, Tallahassee, Fla.”)' }
+        ]
+      }
+    }
+  }, 'FREE PICK');
+  assert.equal(embed.description, 'SMU/Florida State over 53.5 points (-118)\n\n• SMU averaged 32.23 points per game in the 2025 season\n• Florida State averaged 33.00 points per game in the 2025 season\n• The matchup is scheduled for Sep. 7, 2026 at Florida State in Tallahassee');
+});
+
 test('formats leaked-capper picks as terms only, without the source image', () => {
   const embed = buildSourcePickEmbed({
     ...packet,
