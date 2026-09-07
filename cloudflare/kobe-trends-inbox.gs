@@ -70,8 +70,13 @@ function installKobeRecapNotifications() {
 }
 
 function deliverKobeRecapNotifications() {
-  const secret = PropertiesService.getScriptProperties().getProperty(RECAP_NOTIFICATION_QUEUE_SECRET_KEY);
-  if (!secret) throw new Error('Set ' + RECAP_NOTIFICATION_QUEUE_SECRET_KEY + ' in Apps Script Project Settings first.');
+  // Reuse the already-authorized publisher connection when it is present.
+  // This keeps recap delivery separate at the queue level without requiring
+  // a second copy of an existing secret in Apps Script.
+  const properties = PropertiesService.getScriptProperties();
+  const secret = properties.getProperty(RECAP_NOTIFICATION_QUEUE_SECRET_KEY)
+    || properties.getProperty(TRENDS_QUEUE_SECRET_KEY);
+  if (!secret) throw new Error('Set ' + RECAP_NOTIFICATION_QUEUE_SECRET_KEY + ' or ' + TRENDS_QUEUE_SECRET_KEY + ' in Apps Script Project Settings first.');
   const response = UrlFetchApp.fetch(PUBLISHER_URL + '/api/queue/recap-notifications', {
     method: 'get', headers: { Authorization: 'Bearer ' + secret }, muteHttpExceptions: true
   });

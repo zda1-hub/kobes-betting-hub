@@ -149,7 +149,8 @@ function recapNotificationAuthorized(request, env) {
   // recap-status delivery, while Render keeps using the recap-specific secret
   // when it enqueues a notification.
   return hasBearer(request, env.RECAP_NOTIFICATION_QUEUE_SECRET)
-    || hasBearer(request, env.QUEUE_INGEST_SECRET);
+    || hasBearer(request, env.QUEUE_INGEST_SECRET)
+    || hasBearer(request, env.TRENDS_QUEUE_SECRET);
 }
 
 async function enqueueRecapNotification(request, env) {
