@@ -90,7 +90,7 @@ test('formats leaked-capper picks as terms only, without the source image', () =
     ...packet,
     source: { ...packet.source, publish_mode: 'terms_only' }
   }, 'PAID PICK');
-  assert.equal(embed.description, 'Example Capper\nPlayer OVER 6.5 strikeouts -115 (1u)\nTeam ML +120');
+  assert.equal(embed.description, 'Example Capper\nJacob Misiorowski OVER 6.5 strikeouts -115 (1u)\nTeam ML +120');
   assert.equal(embed.image, undefined);
 });
 
@@ -136,7 +136,7 @@ test('does not allow unclear capper or non-pick extraction to publish', () => {
   const noCapper = { ...packet, source: {}, analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, source_capper_name: '' } } };
   assert.throws(() => assertPublishableExtraction(noCapper), /original capper/);
   assert.throws(() => assertPublishableExtraction({ ...packet, analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, is_pick_candidate: false } } }), /not a verified pick candidate/);
-  assert.deepEqual(sourceTerms(packet), ['Player OVER 6.5 strikeouts -115 (1u)', 'Team ML +120']);
+  assert.deepEqual(sourceTerms(packet), ['Jacob Misiorowski OVER 6.5 strikeouts -115 (1u)', 'Team ML +120']);
 });
 
 test('limits free posts to writeup player props', () => {

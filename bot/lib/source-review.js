@@ -68,7 +68,7 @@ function isPlayerProp(play) {
   // This deliberately looks at the published play itself rather than at a
   // source caption such as "MLB Play of the Day". A free post must be a
   // player-specific stat market, never a side, moneyline, spread, or total.
-  return /\b(?:strikeouts?|walks?(?: allowed)?|hits?|total bases?|rbi|runs?|stolen bases?|outs?|earned runs?|points?|rebounds?|assists?|three[- ]pointers?|threes?|blocks?|steals?|passing yards?|rushing yards?|receiving yards?|receptions?|sacks?|shots?(?: on goal)?|goals?|saves?)\b/i.test(play?.terms || '');
+  return /\b(?:strikeouts?|k'?s|walks?(?: allowed)?|hits?|total bases?|rbi|runs?|stolen bases?|outs?|earned runs?|points?|rebounds?|assists?|three[- ]pointers?|threes?|blocks?|steals?|passing yards?|rushing yards?|receiving yards?|receptions?|sacks?|shots?(?: on goal)?|goals?|saves?)\b/i.test(play?.terms || '');
 }
 
 function hasNamedPlayer(play) {
