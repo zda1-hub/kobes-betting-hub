@@ -7,6 +7,7 @@ const commands = require('./commands');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds } = require('./lib/recap');
 const { buildFreePickRecapEmbed, freePickRecapRows } = require('./lib/free-recap');
+const { gradePickFromEspn } = require('./lib/espn-grading');
 const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
 const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName } = require('./lib/source-review');
@@ -133,6 +134,31 @@ async function saveFreeRecapState(state) {
   await fs.writeFile(freeRecapStatePath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
+async function autoGradePendingFreePicks(date) {
+  if (process.env.AUTO_GRADE_FREE_PICKS === 'false') return;
+  const rows = await readPickLog();
+  const pending = freePickRecapRows(rows, date, freePickChannelId)
+    .filter((row) => resultFor(row) === 'PENDING');
+  for (const row of pending) {
+    const grade = await gradePickFromEspn(row);
+    if (grade.status !== 'GRADED') {
+      console.log(`Automatic grading kept ${row.pick_id} pending: ${grade.reason || 'not enough verified ESPN data'}.`);
+      continue;
+    }
+    const updated = await updateOfficialPick(row.pick_id, {
+      result: grade.result,
+      status: 'GRADED',
+      score_or_outcome: grade.outcome,
+      result_verified_source: `ESPN final box score: ${grade.source}`,
+      result_verified_at: new Date().toISOString(),
+      graded_by: 'auto:espn'
+    });
+    const net = netUnitsFor(updated);
+    if (net !== null) await updateOfficialPick(row.pick_id, { net_units: net });
+    console.log(`Automatically graded ${row.pick_id} as ${grade.result} from ESPN.`);
+  }
+}
+
 async function publishDueFreeRecap() {
   if (freeRecapInProgress || !freeRecapChannelId) return;
   freeRecapInProgress = true;
@@ -140,6 +166,7 @@ async function publishDueFreeRecap() {
   try {
     const state = await readFreeRecapState();
     if (state.dates?.[date]?.status === 'PUBLISHED' || state.dates?.[date]?.status === 'NO_FREE_PICKS') return;
+    await autoGradePendingFreePicks(date);
     const rows = await readPickLog();
     const picks = freePickRecapRows(rows, date, freePickChannelId);
     if (!picks.length) {

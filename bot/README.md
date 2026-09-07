@@ -95,6 +95,12 @@ The automatic free-pick recap uses `RECAP_CHANNEL_ID` by default; set
 time by default and waits for `PENDING` picks to be graded with `/grade-pick`
 before posting. Set `FREE_RECAP_ENABLED=false` to stop automatic free recaps.
 
+`AUTO_GRADE_FREE_PICKS` defaults to enabled. It checks ESPN final box scores
+for standard, exact-match MLB/NFL player props and moneylines, recording the
+ESPN source in the log. Ambiguous, exotic, or incomplete markets stay
+`PENDING` for manual verification; the automatic recap waits rather than
+inventing a result.
+
 The `source_url` is shown publicly, so use it only for a public source that is
 appropriate for members to see. Keep internal approval notes in the project’s
 intake tracker instead.
