@@ -101,14 +101,16 @@ function cleanEvidenceClaim(claim) {
 function sourceEvidence(packet) {
   const extraction = packet.analysis?.extraction || {};
   const pickTerms = publicPickTerms(packet);
-  const claims = [
-    ...(Array.isArray(extraction.source_claims) ? extraction.source_claims : []),
-    ...(Array.isArray(extraction.supporting_notes) ? extraction.supporting_notes.map((note) => note?.text) : [])
-  ];
+  // Only claims visibly extracted from the original post may reach a
+  // member-facing card. Never render legacy supporting_notes: those were
+  // independently researched and can introduce stats or third-party credits
+  // that were not present in the source post.
+  const claims = Array.isArray(extraction.source_claims) ? extraction.source_claims : [];
   return [...new Set(claims
     .filter((claim) => typeof claim === 'string' && claim.trim())
     .map(cleanEvidenceClaim)
-    .filter(Boolean))]
+    .filter(Boolean)
+    .filter((claim) => !/https?:\/\/|\b(?:espn|cbs\s+sports?|nfl\.com|patriots\.com|sports[- ]reference|pro[- ]football[- ]reference|yahoo\s+sports?|fox\s+sports?|bleacher\s+report)\b/i.test(claim)))]
     .filter((claim) => isUsefulSupport(claim, pickTerms))
     .slice(0, 8);
 }
