@@ -139,6 +139,7 @@ function researchContent(packet) {
       'Return 3 to 6 concise notes only when they directly support the player, exact stat market, matchup, opponent, role/workload, projected lineup, or relevant venue context.',
       'Do not include generic team facts, promotion language, betting advice, guarantees, odds movement, confidence language, or facts unrelated to the stated prop.',
       'Use reliable current sources, prioritizing official league/team data and ESPN. Each note must state a checkable fact and include the exact source URL used. If an exact fact cannot be verified, omit it rather than guessing.',
+      'These notes are internal writeup support. Keep them tightly tied to the exact player, prop, matchup, and role. Do not pad the writeup with unrelated team or player statistics. The member-facing formatter will remove source names and URLs, so write each note as a concise factual statement rather than a citation.',
       '',
       `League: ${extraction.league || extraction.sport || 'unknown'}`,
       `Event: ${extraction.event || 'unknown'}`,
@@ -261,10 +262,17 @@ async function enrichPacket(packet) {
   if (process.env.ENRICHMENT_ENABLED !== 'true') {
     return analysisWaiting('ENRICHMENT_OFF', 'Set ENRICHMENT_ENABLED=true only after the OpenAI API key is saved locally.');
   }
-  // Keep enrichment source-only. Outside research can introduce statistics or
-  // citations that were not present in the original post and must not appear
-  // in a source pick or its approval card.
-  return extractSourcePick(packet);
+  const analysis = await extractSourcePick(packet);
+  if (analysis.status !== 'SOURCE_EXTRACTED' || packet.source?.publish_mode === 'terms_only') return analysis;
+
+  // Regular writeups still receive focused, current support. Exclusives stay
+  // terms-only. Research is retained for audit, then sanitized by the
+  // member-facing formatter before it can be displayed.
+  const supportingNotes = await researchSupportingNotes({ ...packet, analysis });
+  return {
+    ...analysis,
+    extraction: { ...analysis.extraction, supporting_notes: supportingNotes }
+  };
 }
 
 async function newestPacket() {
