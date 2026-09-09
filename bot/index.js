@@ -112,7 +112,7 @@ function freeRecapEnabled() {
 function freeRecapCloseAt() {
   // Do not finalize a day's recap while new free picks can still be approved.
   // This defaults to the existing 11:00–15:00 Arizona X-monitoring window.
-  const value = (process.env.FREE_RECAP_CLOSE_AT || process.env.X_MONITOR_DAILY_STOP_AT || '15:00').trim();
+  const value = (process.env.FREE_RECAP_CLOSE_AT || xMonitorDailyStopAt() || '15:00').trim();
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
     console.warn('Ignoring invalid FREE_RECAP_CLOSE_AT. Use HH:MM in Arizona time, for example 15:00.');
     return null;
@@ -496,7 +496,14 @@ function xMonitorDailyAt() {
 }
 
 function xMonitorDailyStopAt() {
-  const raw = (process.env.X_MONITOR_DAILY_STOP_AT || '15:00').trim();
+  const overrideDate = (process.env.X_MONITOR_DAILY_STOP_OVERRIDE_DATE || '').trim();
+  const overrideAt = (process.env.X_MONITOR_DAILY_STOP_OVERRIDE_AT || '').trim();
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date());
+  const raw = overrideDate === today && overrideAt
+    ? overrideAt
+    : (process.env.X_MONITOR_DAILY_STOP_AT || '15:00').trim();
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
     console.warn('Ignoring invalid X_MONITOR_DAILY_STOP_AT. Use HH:MM in Arizona time, for example 15:00.');
     return null;
