@@ -9,7 +9,7 @@ function pacificDate(date) {
 }
 
 function espnLeague(packet) {
-  const text = `${packet.analysis?.extraction?.league || ''} ${packet.analysis?.extraction?.sport || ''}`.toLowerCase();
+  const text = `${packet.source?.text || ''} ${packet.analysis?.extraction?.league || ''} ${packet.analysis?.extraction?.sport || ''}`.toLowerCase();
   if (/\bmlb\b|baseball/.test(text)) return 'baseball/mlb';
   if (/\bncaaf\b|college football/.test(text)) return 'football/college-football';
   if (/\bnfl\b|football/.test(text)) return 'football/nfl';
@@ -19,6 +19,16 @@ function espnLeague(packet) {
   if (/\bnhl\b|hockey/.test(text)) return 'hockey/nhl';
   if (/\bmls\b/.test(text)) return 'soccer/usa.1';
   return null;
+}
+
+function isNFLPick(packet) {
+  const extraction = packet.analysis?.extraction || {};
+  const sourceText = packet.source?.text;
+  const classification = sourceText || `${extraction.sport || ''} ${extraction.league || ''}`;
+  if (!/\b(?:nfl|football)\b/i.test(classification)) return false;
+
+  const extracted = `${extraction.sport || ''} ${extraction.league || ''}`.toLowerCase();
+  return !/\b(?:mlb|baseball|nba|wnba|ncaab|basketball|nhl|hockey|mls|soccer)\b/.test(extracted);
 }
 
 function compact(value) {
@@ -70,4 +80,4 @@ function isRecentSourcePost(packet, { now = new Date(), maximumAgeHours = Number
   return now.getTime() - posted.getTime() <= hours * 60 * 60 * 1000;
 }
 
-module.exports = { isRecentSourcePost, matchesExtractedEvent, upcomingEventStatus };
+module.exports = { isNFLPick, isRecentSourcePost, matchesExtractedEvent, upcomingEventStatus };

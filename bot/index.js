@@ -13,7 +13,7 @@ const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib
 const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { reviewQueuePath } = require('./lib/review-queue-path');
-const { upcomingEventStatus } = require('./lib/event-timing');
+const { isNFLPick, upcomingEventStatus } = require('./lib/event-timing');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { enrichPacket } = require('../pipeline/enrich-pick');
 const { runCollector } = require('../pipeline/collect-x');
@@ -984,6 +984,9 @@ async function handleSourceReviewButton(interaction) {
       throw new Error('This source is approved for monitoring only. Use Kobe’s original wording and approved media with /publish-pick until source reuse permission is confirmed.');
     }
     assertPublishableExtraction(packet);
+    if (!isNFLPick(packet)) {
+      throw new Error('Only picks explicitly identified as NFL/football picks can be published.');
+    }
     const timing = await upcomingEventStatus(packet);
     if (timing.status !== 'UPCOMING') {
       throw new Error(timing.status === 'STARTED_OR_FINISHED'
@@ -1365,11 +1368,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const pickOptions = optionsFrom(interaction);
+    if (pickOptions.sport.toLowerCase() !== 'football' || !/\b(?:nfl|football)\b/i.test(`${pickOptions.sport} ${pickOptions.league}`)) {
+      throw new Error('Only NFL picks can be published. Set sport to Football and league to NFL.');
+    }
     const pickId = makePickId({ sport: pickOptions.sport, pickNumber: pickOptions.pickNumber });
     const embed = buildPickEmbed({ ...pickOptions, pickId });
     if (interaction.commandName === 'preview-pick') {
       await interaction.reply({ ephemeral: true, embeds: [embed] });
       return;
+    }
+
+    const manualPacket = {
+      analysis: { extraction: {
+        sport: pickOptions.sport,
+        league: pickOptions.league,
+        event: pickOptions.event
+      } }
+    };
+    const timing = await upcomingEventStatus(manualPacket);
+    if (timing.status !== 'UPCOMING') {
+      throw new Error('This pick was not verified as an upcoming NFL game scheduled today. No post was made.');
     }
 
     const channel = await destinationFor(interaction, defaultChannelId, pickOptions.sport.toLowerCase());

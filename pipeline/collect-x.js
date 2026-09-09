@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
-const { upcomingEventStatus } = require('../bot/lib/event-timing');
+const { isNFLPick, upcomingEventStatus } = require('../bot/lib/event-timing');
 const { assertFreePickEligible, buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, visiblePlays } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
@@ -381,6 +381,15 @@ async function runCollector({ maxCandidates } = {}) {
       sequence += 1;
       const { packet, outputPath } = await writePacket({ date, sequence, source, post, media });
       packet.analysis = await enrichPacket(packet);
+
+      if (!isNFLPick(packet)) {
+        await fs.rm(outputPath, { force: true });
+        console.log(`Skipped @${source.handle} post ${post.id}; it is not explicitly identified as an NFL/football pick.`);
+        skipped += 1;
+        lastProcessedId = post.id;
+        handledPostIds.add(post.id);
+        continue;
+      }
 
       // Repost/leak feeds must reveal the original capper. Do not make Kobe
       // review a card that would credit the feed itself or leave authorship

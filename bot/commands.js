@@ -1,12 +1,7 @@
 const { SlashCommandBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
 
 const sports = [
-  ['baseball', 'Baseball'],
-  ['basketball', 'Basketball'],
-  ['football', 'Football'],
-  ['hockey', 'Hockey'],
-  ['soccer', 'Soccer'],
-  ['other', 'Other']
+  ['football', 'Football (NFL only)']
 ];
 
 const pickOptions = (command) => command
@@ -17,7 +12,7 @@ const pickOptions = (command) => command
     .setMinValue(1))
   .addStringOption((option) => option
     .setName('sport')
-    .setDescription('Routes to the configured sport channel unless one is selected')
+    .setDescription('NFL picks only; routes to the NFL channel unless one is selected')
     .setRequired(true)
     .addChoices(...sports.map(([value, name]) => ({ name, value }))))
   .addStringOption((option) => option
@@ -60,7 +55,7 @@ const pickOptions = (command) => command
     .setMaxValue(10))
   .addStringOption((option) => option
     .setName('league')
-    .setDescription('League, for example MLB or NFL')
+    .setDescription('League; must be NFL')
     .setRequired(false)
     .setMaxLength(40))
   .addStringOption((option) => option
