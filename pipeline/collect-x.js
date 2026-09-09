@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { enrichPacket } = require('./enrich-pick');
+const { enrichPacket, researchSupportingNotes } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { isNFLPick, upcomingEventStatus } = require('../bot/lib/event-timing');
 const { assertFreePickEligible, buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, visiblePlays } = require('../bot/lib/source-review');
@@ -319,6 +319,35 @@ async function notifyApprovalChannel(packet) {
   return (await response.json()).id;
 }
 
+async function queueSplitPlayPackets(packet, outputPath) {
+  const extraction = packet.analysis?.extraction || {};
+  const plays = Array.isArray(extraction.plays) ? extraction.plays.filter((play) => visiblePlays({ analysis: { extraction: { plays: [play] } } }).length) : [];
+  await fs.rm(outputPath, { force: true });
+  let created = 0;
+  const baseId = packet.pick_id.replace(/-X$/, '');
+  for (let index = 0; index < plays.length; index += 1) {
+    const play = plays[index];
+    const single = structuredClone(packet);
+    const suffix = String(index + 1).padStart(2, '0');
+    single.pick_id = `${baseId}-${suffix}-X`;
+    single.approval_number = Number(`${packet.approval_number}${index + 1}`);
+    single.analysis.extraction = {
+      ...extraction,
+      ...play,
+      plays: [play],
+      supporting_notes: []
+    };
+    if (single.source?.publish_mode !== 'terms_only') {
+      single.analysis.extraction.supporting_notes = await researchSupportingNotes(single);
+    }
+    const splitPath = path.join(path.dirname(outputPath), `${baseId}-${suffix}.json`);
+    single.discord_review_message_id = await notifyApprovalChannel(single);
+    await fs.writeFile(splitPath, `${JSON.stringify(single, null, 2)}\n`);
+    if (single.discord_review_message_id) created += 1;
+  }
+  return created;
+}
+
 async function runCollector({ maxCandidates } = {}) {
   if (await pickWorkflowPaused()) {
     console.log('Pick workflow is paused; no X posts will be collected or sent for approval.');
@@ -418,16 +447,11 @@ async function runCollector({ maxCandidates } = {}) {
         continue;
       }
 
-      // A Discord approval must correspond to exactly one logged Pick ID and
-      // one final post. Multi-bet source graphics are held, not squeezed into
-      // a single card where the post and the canonical log could diverge.
       if (!isSinglePlayPacket(packet)) {
-        packet.status = 'HELD_MULTIPLE_PICKS';
-        packet.approval_ready = false;
-        packet.hold_reason = 'The source contains multiple picks. It was held so each future approval card and Pick ID remains one-to-one.';
-        await fs.writeFile(outputPath, `${JSON.stringify(packet, null, 2)}\n`);
-        console.log(`Held @${source.handle} post ${post.id}; it contains ${visiblePlays(packet).length} picks and needs separate cards.`);
-        skipped += 1;
+        const splitCreated = await queueSplitPlayPackets(packet, outputPath);
+        console.log(`Split @${source.handle} post ${post.id} into ${splitCreated} separate approval card(s).`);
+        created += splitCreated;
+        if (!splitCreated) skipped += 1;
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
         continue;
