@@ -27,6 +27,3 @@ footer { display:flex; flex-direction:column; align-items:center; justify-conten
 @media (prefers-reduced-motion:reduce) { .site-ticker-track { animation:none; } }
 @media (max-width:800px) { footer { align-items:center; }.footer-nav { justify-content:center; } }
 @media (max-width:800px) { .slideshow-section { padding:82px 0; }.slideshow-row { margin-top:48px; }.slideshow-row-heading { display:block; margin-bottom:16px; padding:0 24px; }.slideshow-row-heading .eyebrow { margin-bottom:11px; }.slideshow-card { width:218px; height:300px; }.slideshow-card:nth-child(2n) { width:180px; }.slideshow-card:nth-child(3n) { width:240px; }.review-card { height:250px; }.slip-card { height:230px; }.slideshow-disclaimer { margin-top:38px; padding:0 24px; } }
-/* Keep the supplied portrait slip collage fully visible in its rail card. */
-.slip-collage-card { background:#080808; }
-.slip-collage-card img { object-fit:contain; }
