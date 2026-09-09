@@ -104,7 +104,8 @@ function sourceContent(packet) {
     'source_capper_name is the original capper explicitly shown in the post, quoted post, or graphic — not the X account that reposted/leaked it. For example, when Cappers Cash reposts a yourdailycapper graphic, source_capper_name is "yourdailycapper", never "Cappers Cash". Do not use the monitoring source account as a fallback. Use an empty string if the original capper is not clearly identified.',
     'plays must contain every clearly visible play, in display order. Include the unit size or dollar stake only on the play where it is visibly shown. Do not invent a unit size for other plays.',
     'For a player prop, player_name must be the player’s full visible name, and selection must begin with that same name (for example, "Jacob Misiorowski Over 5.5 Strikeouts"). If a post says only "Over 5.5 K’s" with no player name, leave player_name empty and put the missing name in missing_or_ambiguous. Never invent a player name.',
-    'source_claims must contain only short, concrete claims that directly support an extracted player prop: player performance in that stat, role/workload, opponent matchup, lineup, or venue context. Omit promotional language, records without a connection to the prop, “best bet” language, confidence claims, and unrelated team facts.',
+    'source_claims must contain only short, concrete claims that are explicitly visible in the post text or image. Copy each claim faithfully; do not calculate, update, complete, paraphrase into a stronger claim, or add any statistic from memory or outside knowledge. Omit any claim that is not visibly present.',
+    'Never use web search or any outside source for this extraction. Do not add ESPN, league, team, sportsbook, news, or other third-party statistics, citations, source names, or URLs.',
     'Use an empty string for an unknown single field. Put uncertainty in missing_or_ambiguous.',
     'This is source extraction only, not research, advice, or verification.',
     '',
@@ -260,16 +261,10 @@ async function enrichPacket(packet) {
   if (process.env.ENRICHMENT_ENABLED !== 'true') {
     return analysisWaiting('ENRICHMENT_OFF', 'Set ENRICHMENT_ENABLED=true only after the OpenAI API key is saved locally.');
   }
-  const analysis = await extractSourcePick(packet);
-  if (analysis.status !== 'SOURCE_EXTRACTED' || sourceClaims(analysis.extraction).length >= 3) return analysis;
-
-  const supportingNotes = await researchSupportingNotes({ ...packet, analysis });
-  if (supportingNotes.length) {
-    analysis.extraction.supporting_notes = supportingNotes;
-    analysis.source_only = false;
-    analysis.detail = 'Terms were extracted from the source. Current supporting player-prop research was added for Kobe to review.';
-  }
-  return analysis;
+  // Keep enrichment source-only. Outside research can introduce statistics or
+  // citations that were not present in the original post and must not appear
+  // in a source pick or its approval card.
+  return extractSourcePick(packet);
 }
 
 async function newestPacket() {
