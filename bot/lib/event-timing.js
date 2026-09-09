@@ -23,12 +23,14 @@ function espnLeague(packet) {
 
 function isNFLPick(packet) {
   const extraction = packet.analysis?.extraction || {};
-  const sourceText = packet.source?.text;
-  const classification = sourceText || `${extraction.sport || ''} ${extraction.league || ''}`;
+  const classification = [
+    packet.source?.text || '',
+    extraction.sport || '',
+    extraction.league || ''
+  ].join(' ');
   if (!/\b(?:nfl|football)\b/i.test(classification)) return false;
 
-  const extracted = `${extraction.sport || ''} ${extraction.league || ''}`.toLowerCase();
-  return !/\b(?:mlb|baseball|nba|wnba|ncaab|basketball|nhl|hockey|mls|soccer)\b/.test(extracted);
+  return !/\b(?:mlb|baseball|nba|wnba|ncaab|basketball|nhl|hockey|mls|soccer)\b/i.test(classification);
 }
 
 function compact(value) {

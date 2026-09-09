@@ -1368,7 +1368,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const pickOptions = optionsFrom(interaction);
-    if (pickOptions.sport.toLowerCase() !== 'football' || !/\b(?:nfl|football)\b/i.test(`${pickOptions.sport} ${pickOptions.league}`)) {
+    if (pickOptions.sport.toLowerCase() !== 'football' || !/\bnfl\b/i.test(pickOptions.league)) {
       throw new Error('Only NFL picks can be published. Set sport to Football and league to NFL.');
     }
     const pickId = makePickId({ sport: pickOptions.sport, pickNumber: pickOptions.pickNumber });
