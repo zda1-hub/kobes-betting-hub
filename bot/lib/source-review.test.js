@@ -168,6 +168,40 @@ test('limits free posts to writeup player props', () => {
   }));
 });
 
+test('recognizes NFL player-prop shorthand and does not require units', () => {
+  for (const [terms, player_name] of [
+    ['Drake Maye Over 25.5 Rushing Yds', 'Drake Maye'],
+    ['Cooper Kupp Over 29.5 Receiving Yds', 'Cooper Kupp']
+  ]) {
+    assert.doesNotThrow(() => assertFreePickEligible({
+      ...packet,
+      analysis: {
+        ...packet.analysis,
+        extraction: {
+          ...packet.analysis.extraction,
+          plays: [{ terms, player_name, line: '', odds_american: '', units: '' }]
+        }
+      }
+    }));
+  }
+});
+
+test('keeps a regular approval card usable when units and odds are absent', () => {
+  const approval = buildSourcePickApprovalEmbed({
+    ...packet,
+    source: { ...packet.source, post_url: 'https://x.com/ExampleSource/status/456' },
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'Patriots-Seahawks UNDER', line: '44.5', odds_american: '', units: '' }],
+        source_claims: []
+      }
+    }
+  }, 'NFL PICK');
+  assert.equal(approval.description, 'Patriots-Seahawks UNDER 44.5\n\n[Open original X post](https://x.com/ExampleSource/status/456)');
+});
+
 test('does not approve a player prop when the player name is absent', () => {
   const unnamedPlayerProp = {
     ...packet,

@@ -5,7 +5,7 @@ const path = require('node:path');
 const { enrichPacket, researchSupportingNotes } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { isNFLPick, upcomingEventStatus } = require('../bot/lib/event-timing');
-const { assertFreePickEligible, buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, visiblePlays } = require('../bot/lib/source-review');
+const { buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, visiblePlays } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
@@ -283,10 +283,10 @@ async function notifyApprovalChannel(packet) {
   try {
     // A clear card is shown exactly as members will see it after approval.
     // Publishing does not add a second layer of wording or formatting.
-    // The free-pick approval channel is for player-prop writeups only. Do
-    // not make Kobe guess who "Over 5.5 K's" refers to: unnamed player props
-    // remain a diagnostic card until a full visible name is present.
-    if (packet.source?.publish_mode !== 'terms_only') assertFreePickEligible(packet);
+    // Approval cards may represent regular NFL picks, including sides and
+    // totals, and the source may omit optional units or odds. Free-pick
+    // eligibility is enforced only when Kobe clicks the Free button; the
+    // paid/NFL action remains available for regular picks.
     embeds = [buildSourcePickApprovalEmbed(packet, 'FREE PICK')];
   } catch (error) {
     // Kobe's review room is for decisions, not diagnostics. Retain the held
