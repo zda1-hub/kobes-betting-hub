@@ -1,14 +1,14 @@
 .brand-logo {
   display: block;
-  width: clamp(190px, 18vw, 260px);
-  height: 76px;
+  width: 298px;
+  height: 93px;
   object-fit: contain;
-  object-position: left center;
+  object-position: center;
 }
 
 @media (max-width: 760px) {
   .brand-logo {
-    width: 155px;
-    height: 50px;
+    width: min(194px, 58vw);
+    height: 62px;
   }
 }

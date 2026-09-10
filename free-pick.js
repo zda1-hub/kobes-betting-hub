@@ -34,7 +34,11 @@ function formatDate(value) {
 async function loadFreePick() {
   try {
     const response = await fetch(`${PUBLISHER_URL}/api/free-pick/current`, { cache: 'no-store' });
-    if (response.status === 404) return;
+    if (response.status === 404) {
+      statusNode.textContent = 'NOT POSTED';
+      captionNode.textContent = 'Today’s free pick has not been posted yet.';
+      return;
+    }
     if (!response.ok) throw new Error(`Free pick request failed: ${response.status}`);
     const pick = await response.json();
     if (!pick?.imageUrl || !pick?.publishedDate) throw new Error('Free pick response is incomplete');
@@ -46,6 +50,8 @@ async function loadFreePick() {
     imageNode.hidden = false;
     placeholderNode.hidden = true;
   } catch (error) {
+    statusNode.textContent = 'UPDATING';
+    captionNode.textContent = 'The free-pick service is temporarily updating. Please check back shortly.';
     console.warn('Unable to load today’s free pick.', error);
   }
 }
