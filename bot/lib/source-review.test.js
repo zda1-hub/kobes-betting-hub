@@ -73,6 +73,26 @@ test('removes duplicated prop text, timestamps, and promotional source claims', 
   assert.equal(embed.description, 'Jacob Misiorowski over 17.5 outs (+100)\n\n• Over in 5 straight\n• Went 18 outs in both games vs. CHC');
 });
 
+test('keeps writeup cards to the prop followed by clean relevant bullets', () => {
+  const embed = buildSourcePickEmbed({
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'Cooper Kupp Over 2.5 Receptions', player_name: 'Cooper Kupp', line: '2.5 receptions', odds_american: '-132', units: '' }],
+        source_claims: [
+          '• Kupp has cleared 2+ receptions in 9 of his last 10 games (ESPN)',
+          'Opponent allowed 7 receptions to the opposing slot receiver — NFL.com',
+          'Source: ESPN',
+          'https://example.com/research'
+        ]
+      }
+    }
+  }, 'FREE PICK');
+  assert.equal(embed.description, 'Cooper Kupp Over 2.5 Receptions (-132)\n\n• Kupp has cleared 2+ receptions in 9 of his last 10 games\n• Opponent allowed 7 receptions to the opposing slot receiver');
+});
+
 test('keeps factual support while removing research-source labels and raw stat aliases', () => {
   const embed = buildSourcePickEmbed({
     ...packet,

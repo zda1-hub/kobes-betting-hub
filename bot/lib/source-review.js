@@ -85,7 +85,12 @@ function isUsefulSupport(note, pickTerms) {
 }
 
 function cleanEvidenceClaim(claim) {
-  let text = String(claim || '').trim().replace(/^(?:[-•]\s*)?✅\s*/, '').replace(/[.\s]+$/, '');
+  let text = String(claim || '')
+    .replace(/\r?\n+/g, ' ')
+    .replace(/^(?:\s*(?:[-•*]|\d+[.)])\s*)?✅\s*/, '')
+    .replace(/^(?:\s*(?:[-•*]|\d+[.)])\s*)/, '')
+    .trim()
+    .replace(/[.\s]+$/, '');
   // Supporting research is stored with its source URL for audit, but Kobe's
   // member-facing preview should read like a clean writeup—not like a scraped
   // stat table. Remove parenthetical source labels and raw field aliases while
@@ -97,7 +102,14 @@ function cleanEvidenceClaim(claim) {
   });
   text = text.replace(/\b(?:according to|per)\s+(?:espn|cbs\s+sports?|nfl\.com|patriots\.com|sports[- ]reference|pro[- ]football[- ]reference|yahoo\s+sports?|fox\s+sports?|bleacher\s+report)\s*,?\s*/ig, '');
   text = text.replace(/\b(?:espn|cbs\s+sports?|nfl\.com|patriots\.com|sports[- ]reference|pro[- ]football[- ]reference|yahoo\s+sports?|fox\s+sports?|bleacher\s+report)\b\s*/ig, '');
-  return text.replace(/\s{2,}/g, ' ').replace(/\s+([,:;])/g, '$1').trim();
+  // Source URLs and citation wrappers are audit-only metadata. They must not
+  // leak into Kobe's clean writeup bullets, even when a research response
+  // returns them inline instead of in its structured source_url field.
+  text = text.replace(/\[[^\]]*\]\(https?:\/\/[^)]+\)/ig, '');
+  text = text.replace(/https?:\/\/\S+/ig, '');
+  text = text.replace(/\s*(?:[-–—|]\s*)?(?:source|reference|citation)\s*:\s*$/i, '');
+  text = text.replace(/\s*(?:[-–—|]\s*)?(?:via|from)\s*$/i, '');
+  return text.replace(/\s{2,}/g, ' ').replace(/\s+([,:;])/g, '$1').trim().replace(/[.\s·|–—-]+$/, '');
 }
 
 function sourceEvidence(packet) {
@@ -131,6 +143,17 @@ function publicPickTerms(packet) {
       oddsAmerican: typeof play.odds_american === 'string' ? play.odds_american.trim() : ''
     }))
     .filter(Boolean);
+}
+
+function writeupDescription(packet) {
+  // This is the single source of truth for regular approval and member posts:
+  // exact prop terms first, then a blank line, then only relevant reasons.
+  const terms = publicPickTerms(packet);
+  const evidence = sourceEvidence(packet);
+  return [
+    ...terms,
+    ...(evidence.length ? ['', ...evidence.map((claim) => `• ${claim}`)] : [])
+  ].join('\n');
 }
 
 // A consistent display rating for writeups. It is a formatting score based on
@@ -216,11 +239,7 @@ function buildSourcePickEmbed(packet, destinationLabel) {
   } else {
     // Kobe's writeup layout: player prop, plain factual bullet points, and an
     // optional approved player image below it.
-    const evidence = sourceEvidence(packet);
-    embed.description = [
-      ...publicPickTerms(packet),
-      ...(evidence.length ? ['', ...evidence.map((claim) => `• ${claim}`)] : [])
-    ].join('\n');
+    embed.description = writeupDescription(packet);
     // Never republish a source post graphic. A player image is optional and
     // must be supplied specifically for this approved publication.
     const imageUrl = packet.approval?.image_url;
@@ -258,4 +277,4 @@ function reviewButtons(pickId, { testOnly = false, freeLabel, paidLabel } = {}) 
   }];
 }
 
-module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickApprovalEmbed, buildSourcePickEmbed, hasNamedPlayer, isPlayerProp, presentationConfidence, publicPickTerms, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays };
+module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickApprovalEmbed, buildSourcePickEmbed, hasNamedPlayer, isPlayerProp, presentationConfidence, publicPickTerms, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays, writeupDescription };
