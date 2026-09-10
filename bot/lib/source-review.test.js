@@ -40,7 +40,7 @@ const packet = {
 
 test('formats a writeup source in Kobe’s pick-first layout', () => {
   const embed = buildSourcePickEmbed(packet, 'FREE PICK');
-  assert.equal(embed.description, 'Jacob Misiorowski OVER 6.5 strikeouts (-115)\nTeam ML (+120)\n\n• Cleared 6+ strikeouts in 4 of the last 5 starts\n• Opponent ranks bottom 10 in strikeout avoidance\n• Strong recent road form\n• Pitch count supports the over\n• Matchup favors strikeouts');
+  assert.equal(embed.description, 'Jacob Misiorowski OVER 6.5 strikeouts (-115)\nTeam ML (+120)\n\n- Cleared 6+ strikeouts in 4 of the last 5 starts\n- Opponent ranks bottom 10 in strikeout avoidance\n- Strong recent road form\n- Pitch count supports the over\n- Matchup favors strikeouts');
   assert.equal(embed.image.url, 'https://example.com/player-photo.png');
 });
 
@@ -70,7 +70,7 @@ test('removes duplicated prop text, timestamps, and promotional source claims', 
       }
     }
   }, 'FREE PICK');
-  assert.equal(embed.description, 'Jacob Misiorowski over 17.5 outs (+100)\n\n• Over in 5 straight\n• Went 18 outs in both games vs. CHC');
+  assert.equal(embed.description, 'Jacob Misiorowski over 17.5 outs (+100)\n\n- Over in 5 straight\n- Went 18 outs in both games vs. CHC');
 });
 
 test('keeps writeup cards to the prop followed by clean relevant bullets', () => {
@@ -90,7 +90,7 @@ test('keeps writeup cards to the prop followed by clean relevant bullets', () =>
       }
     }
   }, 'FREE PICK');
-  assert.equal(embed.description, 'Cooper Kupp Over 2.5 Receptions (-132)\n\n• Kupp has cleared 2+ receptions in 9 of his last 10 games\n• Opponent allowed 7 receptions to the opposing slot receiver');
+  assert.equal(embed.description, 'Cooper Kupp Over 2.5 Receptions (-132)\n\n- Kupp has cleared 2+ receptions in 9 of his last 10 games\n- Opponent allowed 7 receptions to the opposing slot receiver');
 });
 
 test('does not include promotional banger wording in a writeup', () => {
@@ -105,7 +105,7 @@ test('does not include promotional banger wording in a writeup', () => {
       }
     }
   }, 'FREE PICK');
-  assert.equal(embed.description, 'Cooper Kupp Over 2.5 Receptions (-132)\n\n• Kupp has cleared 2+ receptions in 9 of his last 10 games');
+  assert.equal(embed.description, 'Cooper Kupp Over 2.5 Receptions (-132)\n\n- Kupp has cleared 2+ receptions in 9 of his last 10 games');
 });
 
 test('keeps factual support while removing research-source labels and raw stat aliases', () => {
@@ -125,7 +125,7 @@ test('keeps factual support while removing research-source labels and raw stat a
       }
     }
   }, 'FREE PICK');
-  assert.equal(embed.description, 'SMU/Florida State over 53.5 points (-118)\n\n• SMU averaged 32.23 points per game in the 2025 season\n• Florida State averaged 33.00 points per game in the 2025 season\n• The matchup is scheduled for Sep. 7, 2026 at Florida State in Tallahassee');
+  assert.equal(embed.description, 'SMU/Florida State over 53.5 points (-118)\n\n- SMU averaged 32.23 points per game in the 2025 season\n- Florida State averaged 33.00 points per game in the 2025 season\n- The matchup is scheduled for Sep. 7, 2026 at Florida State in Tallahassee');
 });
 
 test('formats leaked-capper picks as terms only, without the source image', () => {

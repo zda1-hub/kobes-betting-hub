@@ -152,7 +152,7 @@ function writeupDescription(packet) {
   const evidence = sourceEvidence(packet);
   return [
     ...terms,
-    ...(evidence.length ? ['', ...evidence.map((claim) => `• ${claim}`)] : [])
+    ...(evidence.length ? ['', ...evidence.map((claim) => `- ${claim}`)] : [])
   ].join('\n');
 }
 
