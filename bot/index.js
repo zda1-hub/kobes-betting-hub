@@ -5,8 +5,8 @@ const path = require('node:path');
 const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes } = require('discord.js');
 const commands = require('./commands');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
-const { buildLogRecapEmbeds } = require('./lib/recap');
-const { buildFreePickRecapEmbed, freePickRecapRows } = require('./lib/free-recap');
+const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
+const { freePickRecapRows } = require('./lib/free-recap');
 const { gradePickFromEspn } = require('./lib/espn-grading');
 const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
@@ -164,12 +164,15 @@ async function queueRecapNotification({ id, subject, body }) {
   return 'QUEUED';
 }
 
-async function autoGradePendingFreePicks(date) {
+async function autoGradePendingOfficialPicks(date) {
   const attempts = new Map();
   if (process.env.AUTO_GRADE_FREE_PICKS === 'false') return attempts;
   const rows = await readPickLog();
-  const pending = freePickRecapRows(rows, date, freePickChannelId)
-    .filter((row) => resultFor(row) === 'PENDING');
+  const pending = rows.filter((row) => (
+    row.operating_date === date
+    && isPublishedRow(row)
+    && resultFor(row) === 'PENDING'
+  ));
   for (const row of pending) {
     const grade = await gradePickFromEspn(row);
     attempts.set(row.pick_id, grade);
@@ -192,6 +195,10 @@ async function autoGradePendingFreePicks(date) {
   return attempts;
 }
 
+function recapEmailBody(embeds) {
+  return embeds.map((embed) => embed.description || '').filter(Boolean).join('\n\n');
+}
+
 async function publishDueFreeRecap(date) {
   if (freeRecapInProgress || !freeRecapChannelId) return;
   freeRecapInProgress = true;
@@ -203,36 +210,41 @@ async function publishDueFreeRecap(date) {
       // configured, catch that one up without reposting the Discord recap.
       if (prior.email_status === 'NOT_CONFIGURED' && recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient) {
         const rows = await readPickLog();
-        const embed = buildFreePickRecapEmbed({ date, rows, freeChannelId: freePickChannelId });
+        const embeds = buildLogRecapEmbeds({ date, rows });
         const emailStatus = await queueRecapNotification({
-          id: `free-recap-final-${date}`,
-          subject: `Kobe's Betting Hub — Free Picks Recap (${date})`,
-          body: embed.description.replaceAll('**', '')
+          id: `official-recap-final-${date}`,
+          subject: `Kobe's Betting Hub — Daily Recap (${date})`,
+          body: recapEmailBody(embeds).replaceAll('**', '')
         });
         state.dates[date] = { ...prior, email_status: emailStatus, email_queued_at: new Date().toISOString() };
         await saveFreeRecapState(state);
       }
       return;
     }
-    const gradingAttempts = await autoGradePendingFreePicks(date);
-    const rows = await readPickLog();
-    const picks = freePickRecapRows(rows, date, freePickChannelId);
+    let rows = await readPickLog();
+    let picks = rows.filter((row) => (
+      row.operating_date === date
+      && isPublishedRow(row)
+    ));
     if (!picks.length) {
-      console.log(`No official free picks were logged for ${date}; no free-pick recap was posted.`);
+      console.log(`No successfully published official picks were logged for ${date}; no recap was posted.`);
       return;
     }
+    const gradingAttempts = await autoGradePendingOfficialPicks(date);
+    rows = await readPickLog();
+    picks = recapRows(rows, date);
     if (picks.some((row) => resultFor(row) === 'PENDING')) {
       const pending = picks.filter((row) => resultFor(row) === 'PENDING');
       const isCurrentOperatingDay = date === pacificOperatingDate();
       const closeAt = freeRecapCloseAt();
       if (isCurrentOperatingDay && (!closeAt || arizonaTimeNow() < closeAt)) {
-        console.log(`Free-pick recap for ${date} will become eligible after the ${closeAt || 'configured'} Arizona free-pick window closes.`);
+        console.log(`Official recap for ${date} will become eligible after the ${closeAt || 'configured'} Arizona pick window closes.`);
         return;
       }
       // A live game is normal, not a recap exception. Wait until ESPN marks
       // every event final before alerting Kobe about an actually unresolved row.
       if (pending.some((row) => gradingAttempts.get(row.pick_id)?.reason === 'The ESPN event is not final.')) {
-        console.log(`Free-pick recap for ${date} is waiting for the last game to become final on ESPN.`);
+        console.log(`Official recap for ${date} is waiting for the last game to become final on ESPN.`);
         return;
       }
       const pendingIds = pending.map((row) => row.pick_id).join(', ');
@@ -241,29 +253,30 @@ async function publishDueFreeRecap(date) {
       if (previous.pending_ids !== pendingIds || (previous.email_status === 'NOT_CONFIGURED' && recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient)) {
         const emailStatus = await queueRecapNotification({
           id: notificationId,
-          subject: `Kobe's Betting Hub — Free-pick recap waiting (${date})`,
-          body: `The free-pick recap for ${date} is waiting for verified results for: ${pendingIds}.\n\nThe bot will retry ESPN grading and post the recap automatically once every result is settled.`
+          subject: `Kobe's Betting Hub — Daily recap waiting (${date})`,
+          body: `The daily recap for ${date} is waiting for verified results for: ${pendingIds}.\n\nThe bot will retry ESPN grading and post the recap automatically once every result is settled.`
         });
         state.dates = { ...(state.dates || {}), [date]: { status: 'PENDING_RESULTS', pending_ids: pendingIds, notified_at: new Date().toISOString(), email_status: emailStatus } };
         await saveFreeRecapState(state);
       }
-      console.log(`Free-pick recap for ${date} is waiting for ${pending.length} verified result(s).`);
+      console.log(`Official recap for ${date} is waiting for ${pending.length} verified result(s).`);
       return;
     }
     const channel = await approvedTextChannel(freeRecapChannelId);
-    const embed = buildFreePickRecapEmbed({ date, rows, freeChannelId: freePickChannelId });
-    const message = await channel.send({ embeds: [embed] });
+    const embeds = buildLogRecapEmbeds({ date, rows });
+    const messages = [];
+    for (const embed of embeds) messages.push(await channel.send({ embeds: [embed] }));
     const emailStatus = await queueRecapNotification({
-      id: `free-recap-final-${date}`,
-      subject: `Kobe's Betting Hub — Free Picks Recap (${date})`,
-      body: embed.description.replaceAll('**', '')
+      id: `official-recap-final-${date}`,
+      subject: `Kobe's Betting Hub — Daily Recap (${date})`,
+      body: recapEmailBody(embeds).replaceAll('**', '')
     });
     state.dates = {
       ...(state.dates || {}),
-      [date]: { status: 'PUBLISHED', channel_id: channel.id, message_id: message.id, published_at: new Date().toISOString(), email_status: emailStatus }
+      [date]: { status: 'PUBLISHED', scope: 'official', channel_id: channel.id, message_ids: messages.map((message) => message.id), published_at: new Date().toISOString(), email_status: emailStatus }
     };
     await saveFreeRecapState(state);
-    console.log(`Published automatic free-pick recap for ${date} to #${channel.name || channel.id}.`);
+    console.log(`Published automatic official-pick recap for ${date} to #${channel.name || channel.id}.`);
   } catch (error) {
     console.error(`Automatic free-pick recap failed: ${error instanceof Error ? error.message : error}`);
   } finally {
@@ -273,11 +286,11 @@ async function publishDueFreeRecap(date) {
 
 function startFreeRecapSchedule() {
   if (!freeRecapEnabled()) {
-    console.log('Automatic free-pick recaps are disabled. Set FREE_RECAP_ENABLED=true to resume them.');
+    console.log('Automatic daily recaps are disabled. Set FREE_RECAP_ENABLED=true to resume them.');
     return;
   }
   if (!freeRecapChannelId) {
-    console.warn('Automatic free-pick recaps are unavailable: set FREE_RECAP_CHANNEL_ID or RECAP_CHANNEL_ID.');
+    console.warn('Automatic daily recaps are unavailable: set FREE_RECAP_CHANNEL_ID or RECAP_CHANNEL_ID.');
     return;
   }
   if (!freeRecapCloseAt()) return;
@@ -290,7 +303,7 @@ function startFreeRecapSchedule() {
   const interval = freeRecapIntervalMs();
   freeRecapTimer = setInterval(run, interval);
   run();
-  console.log(`Automatic free-pick recaps check every ${Math.round(interval / 60000)} minute(s), after the ${freeRecapCloseAt()} Arizona free-pick window closes, and publish once every result is graded.`);
+    console.log(`Automatic official-pick recaps check every ${Math.round(interval / 60000)} minute(s), after the ${freeRecapCloseAt()} Arizona pick window closes, and publish once every result is graded.`);
 }
 
 function trendsDailyTime() {
@@ -742,7 +755,7 @@ async function hubStatusText() {
     `**Pending free results:** ${pendingFree}`,
     `**Pick log:** ${durableLog}`,
     `**Automatic grading:** ${process.env.AUTO_GRADE_FREE_PICKS === 'false' ? 'off' : 'on (ESPN)'}`,
-    `**Free recap:** ${freeRecapEnabled() && freeRecapChannelId ? `on after ${freeRecapCloseAt()} Arizona time` : 'not configured'}`,
+    `**Automatic recap:** ${freeRecapEnabled() && freeRecapChannelId ? `on after ${freeRecapCloseAt()} Arizona time for every successfully published pick` : 'not configured'}`,
     `**Recap email:** ${emailConfigured ? 'connected' : 'not configured'}`
   ].join('\n');
 }

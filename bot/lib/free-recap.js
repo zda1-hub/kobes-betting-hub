@@ -1,4 +1,5 @@
 const { resultFor } = require('./pick-log');
+const { isPublishedRow } = require('./recap');
 
 function freePickRow(row, freeChannelId = '') {
   const destination = String(row.destination || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -9,7 +10,11 @@ function freePickRow(row, freeChannelId = '') {
 }
 
 function freePickRecapRows(rows, date, freeChannelId = '') {
-  return rows.filter((row) => row.operating_date === date && row.published_at && freePickRow(row, freeChannelId));
+  return rows.filter((row) => (
+    row.operating_date === date
+    && isPublishedRow(row)
+    && freePickRow(row, freeChannelId)
+  ));
 }
 
 function record(rows) {

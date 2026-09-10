@@ -60,3 +60,11 @@ test('uses the college-football ESPN endpoint for an NCAAF final', async () => {
 test('converts baseball innings notation to outs', () => {
   assert.equal(inningsToOuts('5.2'), 17);
 });
+
+test('recognizes longest-reception NFL props across ESPN stat-key variants', () => {
+  const spec = require('./espn-grading').statSpec({
+    selection: 'A.J. Brown Longest Reception Over 22.5 Yards',
+    published_line: 'Over 22.5 Yards'
+  }, [{ name: 'A.J. Brown', category: 'receiving', values: {} }]);
+  assert.deepEqual(spec.key, ['longestReception', 'longReception', 'long']);
+});

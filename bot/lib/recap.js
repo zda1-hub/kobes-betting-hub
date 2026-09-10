@@ -53,8 +53,17 @@ function entryLine(row) {
   return `**${result}** · \`${row.pick_id}\` · ${terms || 'published terms missing'} · risk ${units(row.units_risked)} · ${netText}\n${row.destination || 'destination missing'} · ${link} · ${source}`;
 }
 
+function isPublishedRow(row) {
+  const status = String(row.status || '').toUpperCase();
+  return Boolean(
+    row.published_at
+    && row.post_reference
+    && (!status || status === 'PUBLISHED' || status === 'GRADED')
+  );
+}
+
 function recapRows(rows, date) {
-  const matching = rows.filter((row) => row.operating_date === date && row.published_at);
+  const matching = rows.filter((row) => row.operating_date === date && isPublishedRow(row));
   if (matching.length === 0) throw new Error(`No official picks are logged for ${date}.`);
   return matching;
 }
@@ -112,4 +121,4 @@ function buildLogRecapEmbeds({ date, rows, summary = '', imageUrl, imageAttachme
   return embeds;
 }
 
-module.exports = { buildLogRecapEmbeds, buildRecapEmbed, entryLine, makeResults, recapRows };
+module.exports = { buildLogRecapEmbeds, buildRecapEmbed, entryLine, isPublishedRow, makeResults, recapRows };

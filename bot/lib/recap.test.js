@@ -36,3 +36,23 @@ test('builds a complete multi-channel recap from the canonical pick log', () => 
   assert.match(text, /#nfl-writeups/);
   assert.match(text, /PENDING/);
 });
+
+test('excludes a logged Discord send that failed before publication', () => {
+  assert.throws(() => buildLogRecapEmbeds({
+    date: '2026-08-17',
+    rows: [{ operating_date: '2026-08-17', published_at: '2026-08-17T12:00:00Z', status: 'POST_FAILED' }]
+  }), /No official picks are logged/);
+});
+
+test('keeps graded picks in the recap after publication', () => {
+  const embeds = buildLogRecapEmbeds({
+    date: '2026-08-17',
+    rows: [{
+      pick_id: '20260817-NFL-001', operating_date: '2026-08-17',
+      published_at: '2026-08-17T12:00:00Z', post_reference: 'https://discord.com/channels/1/2/3',
+      status: 'GRADED', result: 'W', destination: '#nfl-writeups', selection: 'Team A',
+      published_line: 'ML', published_odds_american: '-110', units_risked: '1', net_units: '0.91'
+    }]
+  });
+  assert.match(embeds.map((embed) => embed.description).join('\n'), /20260817-NFL-001/);
+});

@@ -14,10 +14,10 @@ automate a user account, place bets, or create picks from unverified claims.
 - `/preview-recap` — privately generates the complete day from `pick-log.csv`.
 - `/publish-recap` — publishes that complete log-based overview to the configured
   recap channel.
-- The bot automatically posts a compact **Free Picks Recap** for the prior
-  Pacific operating day after all official free picks have verified grades. It
-  lists only the props and their W/L/P/V result, plus the day and cumulative
-  free-pick records—never the source, writeup, confidence, or X material.
+- The bot automatically posts the complete **Daily Recap** for the prior
+  Pacific operating day after every successfully published official pick has a
+  verified grade. It reads the canonical log, preserves each destination, and
+  never counts approval-only or failed sends.
 - `/post-welcome-invite` — administrator-only; posts a button in the configured welcome channel. A member receives the welcome DM only after clicking it.
 - `/hub-help` — shows the short publishing workflow.
 - `/hub-status` — Kobe/admin-only private health check for monitoring, durable
@@ -92,16 +92,18 @@ so the bot cannot be aimed at an unintended channel.
    use `/publish-recap`. Cross-post to Instagram Story and X only after those
    official account connections are configured and the recap is reviewed.
 
-The automatic free-pick recap uses `RECAP_CHANNEL_ID` by default; set
+The automatic daily recap uses `RECAP_CHANNEL_ID` by default; set
 `FREE_RECAP_CHANNEL_ID` to send it elsewhere. It checks every five minutes and
-can finalize after the free-pick approval window closes (`FREE_RECAP_CLOSE_AT`,
-15:00 Arizona by default). It posts as soon as every official free pick has a
-verified result; a live game does not trigger a pending alert. Set
-`FREE_RECAP_ENABLED=false` to stop automatic free recaps.
+can finalize after the pick approval window closes (`FREE_RECAP_CLOSE_AT`,
+15:00 Arizona by default). It posts only after every official published pick
+has a verified result. Set `FREE_RECAP_ENABLED=false` to stop the automatic
+recap. The `FREE_RECAP_*` names are retained for compatibility with the live
+Render environment.
 
 `AUTO_GRADE_FREE_PICKS` defaults to enabled. It checks ESPN final box scores
-for standard, exact-match MLB/NFL/NCAAF player props and moneylines, recording the
-ESPN source in the log. Ambiguous, exotic, or incomplete markets stay
+for standard, exact-match MLB/NFL/NCAAF player props and moneylines, including
+longest-reception markets, recording the ESPN source in the log. Ambiguous or
+incomplete markets stay
 `PENDING` for manual verification; the automatic recap waits rather than
 inventing a result.
 

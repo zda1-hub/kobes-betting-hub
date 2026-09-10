@@ -83,9 +83,21 @@ function statSpec(row, entries) {
   if (/\bruns?\b/.test(text)) return pick('batting', 'runs', 'runs');
   if (/passing yards?/.test(text)) return pick('passing', 'passingYards', 'passing yards');
   if (/rushing yards?/.test(text)) return pick('rushing', 'rushingYards', 'rushing yards');
+  if (/longest reception|long reception|longest catch|long catch/.test(text)) {
+    return pick('receiving', ['longestReception', 'longReception', 'long'], 'longest reception');
+  }
   if (/receiving yards?/.test(text)) return pick('receiving', 'receivingYards', 'receiving yards');
   if (/receptions?/.test(text)) return pick('receiving', 'receptions', 'receptions');
   return null;
+}
+
+function statValue(entry, key) {
+  const keys = Array.isArray(key) ? key : [key];
+  for (const candidate of keys) {
+    const value = Number(entry?.values?.[candidate]);
+    if (Number.isFinite(value)) return value;
+  }
+  return NaN;
 }
 
 function inningsToOuts(value) {
@@ -141,7 +153,7 @@ async function gradePickFromEspn(row, { fetchImpl = fetch } = {}) {
   const spec = statSpec(row, athleteEntries(summary));
   if (!spec) return { status: 'PENDING', reason: 'No supported, exact player-stat match was found.' };
   const entry = athleteEntries(summary).find((candidate) => compact(candidate.name) === compact(spec.player.name) && candidate.category === spec.category);
-  const actual = spec.transform(entry?.values?.[spec.key]);
+  const actual = spec.transform(statValue(entry, spec.key));
   if (!Number.isFinite(actual)) return { status: 'PENDING', reason: 'The final ESPN box score did not contain the required stat.' };
   return {
     status: 'GRADED',
