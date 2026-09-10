@@ -64,7 +64,9 @@ function rosterAthletes(roster) {
   const athletes = Array.isArray(roster?.athletes)
     ? roster.athletes
     : Array.isArray(roster?.entries) ? roster.entries : [];
-  return athletes.map((entry) => entry.athlete || entry).filter(Boolean);
+  return athletes.flatMap((entry) => Array.isArray(entry?.items) ? entry.items : [entry])
+    .map((entry) => entry?.athlete || entry)
+    .filter(Boolean);
 }
 
 function athleteMatchesName(athlete, playerName) {

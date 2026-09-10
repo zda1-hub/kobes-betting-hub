@@ -52,7 +52,7 @@ test('blocks a player prop when the player is not on either event team', async (
   };
   const fetchImpl = async (url) => {
     if (url.includes('/scoreboard?')) return new Response(JSON.stringify(nflScoreboard), { status: 200 });
-    return new Response(JSON.stringify({ athletes: [{ displayName: url.includes('/17/') ? 'Drake Maye' : 'Sam Darnold' }] }), { status: 200 });
+    return new Response(JSON.stringify({ athletes: [{ position: 'offense', items: [{ displayName: url.includes('/17/') ? 'Drake Maye' : 'Sam Darnold' }] }] }), { status: 200 });
   };
   const result = await upcomingEventStatus(nflPacket, {
     now: new Date('2026-09-09T22:00:00.000Z'), fetchImpl
@@ -79,7 +79,7 @@ test('allows a player prop when the player is listed on an event team', async ()
   };
   const fetchImpl = async (url) => {
     if (url.includes('/scoreboard?')) return new Response(JSON.stringify(nflScoreboard), { status: 200 });
-    return new Response(JSON.stringify({ athletes: [{ displayName: url.includes('/17/') ? 'DeMario Douglas' : 'Sam Darnold' }] }), { status: 200 });
+    return new Response(JSON.stringify({ athletes: [{ position: 'offense', items: [{ displayName: url.includes('/17/') ? 'DeMario Douglas' : 'Sam Darnold' }] }] }), { status: 200 });
   };
   const result = await upcomingEventStatus(nflPacket, {
     now: new Date('2026-09-09T22:00:00.000Z'), fetchImpl
