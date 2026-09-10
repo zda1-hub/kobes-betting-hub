@@ -47,7 +47,7 @@ function likelyPick(text) {
 function likelyWriteupOrTrend(text, postMediaUrls) {
   if (likelyPick(text)) return true;
   if (postMediaUrls.length === 0) return false;
-  return /\b(trend|trends|model|edge|best bet|system play|record|writeup|analysis)\b/i.test(text || '');
+  return /\b(trend|trends|model|edge|best bet|system play|record|writeup|analysis|ladder|parlay|same game|sgp|bet slip|bet card)\b/i.test(text || '');
 }
 
 function shouldQueueForReview(source, post, postMediaUrls) {
@@ -502,4 +502,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { isSinglePlayPacket, runCollector };
+module.exports = { isSinglePlayPacket, likelyWriteupOrTrend, runCollector };
