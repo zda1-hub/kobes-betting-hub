@@ -37,6 +37,19 @@ Make the guide unusually useful before the sale:
 - include an author and update date;
 - publish only claims supported by dated records or first-party documentation.
 
+## Why the page uses questions carefully
+
+The questions above are search-intent research, not a recommendation to publish a page made of generic FAQs. The pillar should lead with an original editorial framework and evidence checklist, then use a short FAQ to resolve common follow-ups. This keeps the page useful to people first while still making the topic, subtopics, and language clear to search systems.
+
+## Google and AI-search readiness
+
+- Write for readers first: original guidance, clear definitions, useful examples, and no keyword-stuffed variations.
+- Keep the business entity consistent across the site: “Kobe’s Betting Hub,” official domain, About/contact information, membership terms, and responsible-gambling page.
+- Make important facts crawlable in HTML, with descriptive titles, headings, internal links, canonical URLs, sitemap coverage, and mobile-friendly performance.
+- Add only accurate structured data that matches visible content; use Article/BreadcrumbList where appropriate and FAQPage only for visible, genuinely useful FAQs.
+- Treat AI visibility as discoverability, not a promise of placement. Search assistants may select, summarize, or cite public pages when they are relevant and trustworthy; no “AI SEO” wording trick guarantees inclusion.
+- Earn corroboration through genuine first-party records and relevant independent mentions. Never manufacture reviews, betting slips, results, or “verified” claims.
+
 ## Internal-link plan
 
 Pillar → `/free-pick.html`, `/faq.html`, `/recaps.html`, `/responsible-gambling.html`, `/join.html`.
