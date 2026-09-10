@@ -18,6 +18,7 @@ const STATE_PATH = path.join(X_MONITORING_ROOT, 'state.json');
 // for the Discord card that refers to it, including across a Render deploy.
 const QUEUE_ROOT = reviewQueuePath();
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+const IMAGE_RESCAN_VERSION = 'writeup-image-rescan-v1';
 const PACIFIC_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Los_Angeles',
   year: 'numeric', month: '2-digit', day: '2-digit'
@@ -47,7 +48,12 @@ function likelyPick(text) {
 function likelyWriteupOrTrend(text, postMediaUrls) {
   if (likelyPick(text)) return true;
   if (postMediaUrls.length === 0) return false;
-  return /\b(trend|trends|model|edge|best bet|system play|record|writeup|analysis|ladder|parlay|same game|sgp|bet slip|bet card)\b/i.test(text || '');
+  // A monitored write-up account may put the actual pick and breakdown only
+  // in its image. Let the vision extractor inspect every media post; the
+  // later NFL, event, and approval gates still reject non-picks and other
+  // sports. This prevents valid cards like the LeBron-format example from
+  // being discarded solely because its caption is short or generic.
+  return true;
 }
 
 function shouldQueueForReview(source, post, postMediaUrls) {
@@ -138,6 +144,28 @@ async function existingCount(date) {
     if (error.code === 'ENOENT') return 0;
     throw error;
   }
+}
+
+async function existingSourcePostIds(date) {
+  const ids = new Set();
+  let files;
+  try {
+    files = (await fs.readdir(path.join(QUEUE_ROOT, date))).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return ids;
+    throw error;
+  }
+
+  for (const file of files) {
+    try {
+      const packet = JSON.parse(await fs.readFile(path.join(QUEUE_ROOT, date, file), 'utf8'));
+      const postId = packet.source?.post_id;
+      if (postId) ids.add(String(postId));
+    } catch {
+      // A malformed historical packet must not stop the live collector.
+    }
+  }
+  return ids;
 }
 
 async function writePacket({ date, sequence, source, post, media }) {
@@ -378,6 +406,7 @@ async function runCollector({ maxCandidates } = {}) {
   const state = await readJson(STATE_PATH, { sources: {} });
   const date = pacificDate();
   let sequence = await existingCount(date);
+  const queuedSourcePostIds = await existingSourcePostIds(date);
   let created = 0;
   let skipped = 0;
 
@@ -389,7 +418,9 @@ async function runCollector({ maxCandidates } = {}) {
     // without its saved cursor. A capper may have posted a valid play before
     // the 11 AM monitor begins; it should still reach Kobe if the event has not
     // started. Later passes return to the normal since_id-only polling.
-    const dailyCatchup = sourceState.catchup_date !== date;
+    const rescanImages = source.monitoring_mode === 'writeup_or_trend'
+      && sourceState.image_rescan_version !== IMAGE_RESCAN_VERSION;
+    const dailyCatchup = sourceState.catchup_date !== date || rescanImages;
     const response = await postsFor(source, userId, dailyCatchup ? undefined : sourceState.since_id);
     const media = mediaUrls(response);
     const posts = [...(response.data || [])].sort((a, b) => a.id.localeCompare(b.id));
@@ -401,11 +432,22 @@ async function runCollector({ maxCandidates } = {}) {
         completedSourcePass = false;
         break;
       }
-      if (handledPostIds.has(post.id)) {
+      const postMediaUrls = (post.attachments?.media_keys || []).map((key) => media[key]).filter(Boolean);
+      if (queuedSourcePostIds.has(String(post.id))) {
+        lastProcessedId = post.id;
+        handledPostIds.add(post.id);
+        continue;
+      }
+      // The one-time image rescan revisits posts previously marked handled by
+      // the old caption filter, but never creates a duplicate for a post that
+      // already has a current-day approval packet.
+      const revisitImage = rescanImages
+        && postMediaUrls.length > 0
+        && !queuedSourcePostIds.has(String(post.id));
+      if (handledPostIds.has(post.id) && !revisitImage) {
         lastProcessedId = post.id;
         continue;
       }
-      const postMediaUrls = (post.attachments?.media_keys || []).map((key) => media[key]).filter(Boolean);
       if (!shouldQueueForReview(source, post, postMediaUrls)) {
         console.log(`Skipped @${source.handle} post ${post.id}; no recognizable pick signal.`);
         skipped += 1;
@@ -459,6 +501,7 @@ async function runCollector({ maxCandidates } = {}) {
         console.log(`Split @${source.handle} post ${post.id} into ${splitCreated} separate approval card(s).`);
         created += splitCreated;
         if (!splitCreated) skipped += 1;
+        queuedSourcePostIds.add(String(post.id));
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
         continue;
@@ -468,6 +511,7 @@ async function runCollector({ maxCandidates } = {}) {
       await fs.writeFile(outputPath, `${JSON.stringify(packet, null, 2)}\n`);
       console.log(`Queued #${packet.approval_number} ${packet.pick_id} from @${source.handle}.`);
       created += 1;
+      queuedSourcePostIds.add(String(post.id));
       lastProcessedId = post.id;
       handledPostIds.add(post.id);
     }
@@ -475,12 +519,19 @@ async function runCollector({ maxCandidates } = {}) {
     // Advance only through posts we actually examined. If the candidate limit
     // stops the loop, leave later posts for the next collection cycle instead
     // of silently discarding them behind a newer since_id.
-    state.sources[source.handle] = {
+    const nextSourceState = {
       user_id: userId,
       since_id: lastProcessedId || response.meta?.newest_id || '',
       handled_post_ids: [...handledPostIds].slice(-250),
       ...(completedSourcePass ? { catchup_date: date } : {})
     };
+    if (sourceState.image_rescan_version) {
+      nextSourceState.image_rescan_version = sourceState.image_rescan_version;
+    }
+    if (rescanImages && completedSourcePass) {
+      nextSourceState.image_rescan_version = IMAGE_RESCAN_VERSION;
+    }
+    state.sources[source.handle] = nextSourceState;
   }
 
   await fs.mkdir(X_MONITORING_ROOT, { recursive: true });

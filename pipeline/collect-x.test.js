@@ -16,3 +16,7 @@ test('requires exactly one visible play for each approval card', () => {
 test('recognizes a graphic prop ladder from a writeup-or-trend source', () => {
   assert.equal(likelyWriteupOrTrend('DeMario Douglas Receptions Ladder', ['https://example.com/card.png']), true);
 });
+
+test('sends image-only write-up posts to vision extraction', () => {
+  assert.equal(likelyWriteupOrTrend('', ['https://example.com/lebron-card.png']), true);
+});
