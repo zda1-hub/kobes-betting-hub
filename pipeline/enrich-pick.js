@@ -54,7 +54,7 @@ const EXTRACTION_SCHEMA = {
 const RESEARCH_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['notes'],
+  required: ['notes', 'current_odds_american', 'current_odds_source_name', 'current_odds_source_url'],
   properties: {
     notes: {
       type: 'array',
@@ -68,7 +68,10 @@ const RESEARCH_SCHEMA = {
           source_url: { type: 'string' }
         }
       }
-    }
+    },
+    current_odds_american: { type: 'string' },
+    current_odds_source_name: { type: 'string' },
+    current_odds_source_url: { type: 'string' }
   }
 };
 
@@ -135,11 +138,12 @@ function researchContent(packet) {
   return [{
     type: 'input_text',
     text: [
-      'Use web search to find current, factual support for this specific player prop.',
-      'Return 3 to 6 concise notes only when they directly support the player, exact stat market, matchup, opponent, role/workload, projected lineup, or relevant venue context.',
-      'Do not include generic team facts, promotion language, betting advice, guarantees, odds movement, confidence language, or facts unrelated to the stated prop.',
-      'Use reliable current sources, prioritizing official league/team data and ESPN. Each note must state a checkable fact and include the exact source URL used. If an exact fact cannot be verified, omit it rather than guessing.',
-      'These notes are internal writeup support. Keep them tightly tied to the exact player, prop, matchup, and role. Do not pad the writeup with unrelated team or player statistics. The member-facing formatter will remove source names and URLs, so write each note as a concise factual statement rather than a citation.',
+      'Use web search to find current, factual support for this specific NFL pick.',
+      'Return 3 to 6 concise breakdown notes only when they directly support the player or team, exact market and line, matchup, opponent, role/workload, projected lineup, or relevant venue context.',
+      'Do not include generic team facts, promotion language, betting advice, guarantees, confidence language, odds movement, or facts unrelated to the stated pick.',
+      'Use reliable current sources, prioritizing official league/team data and established sports data pages. Each note must state a checkable fact and include the exact source URL used. If an exact fact cannot be verified, omit it rather than guessing.',
+      'Also search for the exact current price for the exact event, market, selection, and line on a reputable sportsbook or odds page. Return a price only when the match is exact; otherwise return an empty current_odds_american. Never substitute a nearby line or infer a price. Include the exact odds-page URL when a price is returned.',
+      'These notes are internal writeup support. Keep them tightly tied to the exact pick. The member-facing formatter will remove source names and URLs, so write each note as a concise factual statement rather than a citation.',
       '',
       `League: ${extraction.league || extraction.sport || 'unknown'}`,
       `Event: ${extraction.event || 'unknown'}`,
@@ -151,7 +155,7 @@ function researchContent(packet) {
 
 async function researchSupportingNotes(packet) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) return { notes: [], current_odds_american: '', current_odds_source_name: '', current_odds_source_url: '' };
 
   const model = process.env.OPENAI_PICK_ANALYSIS_MODEL || 'gpt-5';
   let response;
@@ -179,27 +183,35 @@ async function researchSupportingNotes(packet) {
     });
   } catch (error) {
     console.warn(`Supporting research was unavailable: ${error instanceof Error ? error.message : error}`);
-    return [];
+    return { notes: [], current_odds_american: '', current_odds_source_name: '', current_odds_source_url: '' };
   }
 
   if (!response.ok) {
     console.warn(`Supporting research was unavailable (OpenAI ${response.status}).`);
-    return [];
+    return { notes: [], current_odds_american: '', current_odds_source_name: '', current_odds_source_url: '' };
   }
 
   try {
     const payload = JSON.parse(outputText(await response.json()));
-    return (payload.notes || [])
+    const odds = typeof payload.current_odds_american === 'string' && /^[+-]\d{3,4}$/.test(payload.current_odds_american.trim())
+      ? payload.current_odds_american.trim()
+      : '';
+    return {
+      notes: (payload.notes || [])
       .filter((note) => typeof note?.text === 'string' && note.text.trim() && typeof note?.source_url === 'string' && note.source_url.trim())
       .map((note) => ({
         text: note.text.trim().replace(/^(?:[-•]\s*)?✅\s*/, '').replace(/[.\s]+$/, ''),
         source_name: typeof note.source_name === 'string' ? note.source_name.trim() : '',
         source_url: note.source_url.trim()
       }))
-      .slice(0, 6);
+      .slice(0, 6),
+      current_odds_american: odds,
+      current_odds_source_name: odds && typeof payload.current_odds_source_name === 'string' ? payload.current_odds_source_name.trim() : '',
+      current_odds_source_url: odds && typeof payload.current_odds_source_url === 'string' ? payload.current_odds_source_url.trim() : ''
+    };
   } catch {
     console.warn('Supporting research returned an unreadable response.');
-    return [];
+    return { notes: [], current_odds_american: '', current_odds_source_name: '', current_odds_source_url: '' };
   }
 }
 
@@ -268,10 +280,26 @@ async function enrichPacket(packet) {
   // Regular writeups still receive focused, current support. Exclusives stay
   // terms-only. Research is retained for audit, then sanitized by the
   // member-facing formatter before it can be displayed.
-  const supportingNotes = await researchSupportingNotes({ ...packet, analysis });
+  const research = await researchSupportingNotes({ ...packet, analysis });
+  const currentOdds = research.current_odds_american || '';
+  const extraction = analysis.extraction || {};
+  const plays = Array.isArray(extraction.plays) ? extraction.plays.map((play) => ({
+    ...play,
+    odds_american: typeof play.odds_american === 'string' && play.odds_american.trim()
+      ? play.odds_american
+      : currentOdds
+  })) : extraction.plays;
   return {
     ...analysis,
-    extraction: { ...analysis.extraction, supporting_notes: supportingNotes }
+    extraction: {
+      ...extraction,
+      odds_american: extraction.odds_american || currentOdds,
+      plays,
+      supporting_notes: research.notes,
+      current_odds_american: currentOdds,
+      current_odds_source_name: research.current_odds_source_name,
+      current_odds_source_url: research.current_odds_source_url
+    }
   };
 }
 
