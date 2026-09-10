@@ -5,7 +5,7 @@ const path = require('node:path');
 const { enrichPacket, researchSupportingNotes } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { isNFLPick, upcomingEventStatus } = require('../bot/lib/event-timing');
-const { buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, visiblePlays } = require('../bot/lib/source-review');
+const { buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, sourceEvidence, visiblePlays } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
@@ -287,6 +287,9 @@ async function notifyApprovalChannel(packet) {
     // totals, and the source may omit optional units or odds. Free-pick
     // eligibility is enforced only when Kobe clicks the Free button; the
     // paid/NFL action remains available for regular picks.
+    if (packet.source?.publish_mode !== 'terms_only' && sourceEvidence(packet).length === 0) {
+      throw new Error('A regular NFL writeup must include at least one visible breakdown point before approval.');
+    }
     embeds = [buildSourcePickApprovalEmbed(packet, 'FREE PICK')];
   } catch (error) {
     // Kobe's review room is for decisions, not diagnostics. Retain the held
