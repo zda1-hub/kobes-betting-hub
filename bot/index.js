@@ -1018,7 +1018,9 @@ async function handleSourceReviewButton(interaction) {
     if (timing.status !== 'UPCOMING') {
       throw new Error(timing.status === 'STARTED_OR_FINISHED'
         ? 'This game has already started, so this card cannot be published.'
-        : 'This pick is not verified for an upcoming game scheduled today. Reject it and use a current card.');
+        : timing.status === 'PLAYER_NOT_ON_EVENT_TEAM'
+          ? timing.reason
+          : 'This pick is not verified for an upcoming game scheduled today. Reject it and use a current card.');
     }
     const sport = normalizedSport(packet);
     if (action === 'free') {

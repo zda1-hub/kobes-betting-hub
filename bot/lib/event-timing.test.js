@@ -34,6 +34,59 @@ test('blocks a matching event after its scheduled start', async () => {
   assert.equal(result.status, 'STARTED_OR_FINISHED');
 });
 
+test('blocks a player prop when the player is not on either event team', async () => {
+  const nflPacket = {
+    analysis: { extraction: {
+      league: 'NFL', sport: 'Football', event: 'New England Patriots vs Seattle Seahawks',
+      player_name: 'A.J. Brown', selection: 'A.J. Brown Longest Reception Over 22.5 Yards'
+    } }
+  };
+  const nflScoreboard = {
+    events: [{
+      date: '2026-09-10T00:30:00.000Z',
+      competitions: [{ competitors: [
+        { team: { id: '17', displayName: 'New England Patriots', shortDisplayName: 'Patriots', abbreviation: 'NE' } },
+        { team: { id: '25', displayName: 'Seattle Seahawks', shortDisplayName: 'Seahawks', abbreviation: 'SEA' } }
+      ] }]
+    }]
+  };
+  const fetchImpl = async (url) => {
+    if (url.includes('/scoreboard?')) return new Response(JSON.stringify(nflScoreboard), { status: 200 });
+    return new Response(JSON.stringify({ athletes: [{ displayName: url.includes('/17/') ? 'Drake Maye' : 'Sam Darnold' }] }), { status: 200 });
+  };
+  const result = await upcomingEventStatus(nflPacket, {
+    now: new Date('2026-09-09T22:00:00.000Z'), fetchImpl
+  });
+  assert.equal(result.status, 'PLAYER_NOT_ON_EVENT_TEAM');
+  assert.match(result.reason, /A\.J\. Brown/);
+});
+
+test('allows a player prop when the player is listed on an event team', async () => {
+  const nflPacket = {
+    analysis: { extraction: {
+      league: 'NFL', sport: 'Football', event: 'New England Patriots vs Seattle Seahawks',
+      player_name: 'DeMario Douglas', selection: 'DeMario Douglas Over 3.5 Receptions'
+    } }
+  };
+  const nflScoreboard = {
+    events: [{
+      date: '2026-09-10T00:30:00.000Z',
+      competitions: [{ competitors: [
+        { team: { id: '17', displayName: 'New England Patriots', shortDisplayName: 'Patriots', abbreviation: 'NE' } },
+        { team: { id: '25', displayName: 'Seattle Seahawks', shortDisplayName: 'Seahawks', abbreviation: 'SEA' } }
+      ] }]
+    }]
+  };
+  const fetchImpl = async (url) => {
+    if (url.includes('/scoreboard?')) return new Response(JSON.stringify(nflScoreboard), { status: 200 });
+    return new Response(JSON.stringify({ athletes: [{ displayName: url.includes('/17/') ? 'DeMario Douglas' : 'Sam Darnold' }] }), { status: 200 });
+  };
+  const result = await upcomingEventStatus(nflPacket, {
+    now: new Date('2026-09-09T22:00:00.000Z'), fetchImpl
+  });
+  assert.equal(result.status, 'UPCOMING');
+});
+
 test('rejects a college-football pick that has no game scheduled today', async () => {
   const result = await upcomingEventStatus({
     analysis: { extraction: { league: 'NCAAF', sport: 'College Football', event: 'Texas Longhorns vs Ohio State Buckeyes' } }

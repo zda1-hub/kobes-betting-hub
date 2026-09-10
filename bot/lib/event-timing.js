@@ -49,6 +49,68 @@ function matchesExtractedEvent(packet, event) {
   return new Set(teamNames.filter((name) => sourceEvent.includes(name))).size >= 2;
 }
 
+function extractedPlayerNames(packet) {
+  const extraction = packet.analysis?.extraction || {};
+  const plays = Array.isArray(extraction.plays) && extraction.plays.length
+    ? extraction.plays
+    : [extraction];
+  return [...new Set(plays
+    .map((play) => play.player_name || play.playerName || '')
+    .filter((name) => typeof name === 'string' && name.trim())
+    .map((name) => name.trim()))];
+}
+
+function rosterAthletes(roster) {
+  const athletes = Array.isArray(roster?.athletes)
+    ? roster.athletes
+    : Array.isArray(roster?.entries) ? roster.entries : [];
+  return athletes.map((entry) => entry.athlete || entry).filter(Boolean);
+}
+
+function athleteMatchesName(athlete, playerName) {
+  const names = [
+    athlete.displayName,
+    athlete.fullName,
+    athlete.shortName,
+    [athlete.firstName, athlete.lastName].filter(Boolean).join(' ')
+  ].map(compact).filter((name) => name.length >= 4);
+  const target = compact(playerName);
+  return names.some((name) => name === target || name.includes(target) || target.includes(name));
+}
+
+async function verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl) {
+  const playerNames = extractedPlayerNames(packet);
+  if (!playerNames.length) return null;
+
+  const competitors = event.competitions?.[0]?.competitors || [];
+  const teamIds = [...new Set(competitors.map((competitor) => competitor.team?.id).filter(Boolean))];
+  if (teamIds.length < 2) {
+    return { status: 'UNVERIFIABLE', reason: 'ESPN did not provide both event team IDs for player verification.' };
+  }
+
+  const athletes = [];
+  try {
+    for (const teamId of teamIds) {
+      const response = await fetchImpl(`${ESPN_BASE_URL}/${leaguePath}/teams/${teamId}/roster`, {
+        headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) return { status: 'UNVERIFIABLE', reason: `ESPN roster verification returned ${response.status}.` };
+      athletes.push(...rosterAthletes(await response.json()));
+    }
+  } catch {
+    return { status: 'UNVERIFIABLE', reason: 'ESPN roster verification was unavailable.' };
+  }
+
+  const missing = playerNames.find((playerName) => !athletes.some((athlete) => athleteMatchesName(athlete, playerName)));
+  if (missing) {
+    return {
+      status: 'PLAYER_NOT_ON_EVENT_TEAM',
+      reason: `${missing} is not listed on either team in the matched ESPN event.`
+    };
+  }
+  return null;
+}
+
 async function upcomingEventStatus(packet, { now = new Date(), fetchImpl = fetch } = {}) {
   const leaguePath = espnLeague(packet);
   if (!leaguePath) return { status: 'UNVERIFIABLE', reason: 'No supported league for current-day schedule check.' };
@@ -70,6 +132,8 @@ async function upcomingEventStatus(packet, { now = new Date(), fetchImpl = fetch
   if (!event?.date) return { status: 'NOT_SCHEDULED_TODAY', reason: 'No matching event is scheduled today.' };
   const start = new Date(event.date);
   if (Number.isNaN(start.getTime())) return { status: 'UNVERIFIABLE', reason: 'ESPN did not provide a readable start time.' };
+  const playerVerification = await verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl);
+  if (playerVerification) return { ...playerVerification, eventStart: start.toISOString(), source: 'ESPN schedule and roster' };
   return start.getTime() > now.getTime()
     ? { status: 'UPCOMING', eventStart: start.toISOString(), source: 'ESPN schedule' }
     : { status: 'STARTED_OR_FINISHED', eventStart: start.toISOString(), source: 'ESPN schedule' };
@@ -82,4 +146,4 @@ function isRecentSourcePost(packet, { now = new Date(), maximumAgeHours = Number
   return now.getTime() - posted.getTime() <= hours * 60 * 60 * 1000;
 }
 
-module.exports = { isNFLPick, isRecentSourcePost, matchesExtractedEvent, upcomingEventStatus };
+module.exports = { athleteMatchesName, extractedPlayerNames, isNFLPick, isRecentSourcePost, matchesExtractedEvent, upcomingEventStatus };
