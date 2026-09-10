@@ -78,7 +78,7 @@ function hasNamedPlayer(play) {
 function isUsefulSupport(note, pickTerms) {
   const normalized = normalizedText(note);
   if (!normalized) return false;
-  if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|lets catch|let s catch|lets go|let s go|winner)\b/.test(normalized)) return false;
+  if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|banger|bang bang|two leg|2 leg|parlay|lets catch|let s catch|lets go|let s go|winner)\b/.test(normalized)) return false;
   if (/^\d{1,2}\s\d{2}\s*(?:am|pm)?\b/.test(normalized)) return false;
   if (pickTerms.some((term) => normalized === normalizedText(term))) return false;
   return true;

@@ -93,6 +93,21 @@ test('keeps writeup cards to the prop followed by clean relevant bullets', () =>
   assert.equal(embed.description, 'Cooper Kupp Over 2.5 Receptions (-132)\n\n• Kupp has cleared 2+ receptions in 9 of his last 10 games\n• Opponent allowed 7 receptions to the opposing slot receiver');
 });
 
+test('does not include promotional banger wording in a writeup', () => {
+  const embed = buildSourcePickEmbed({
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'Cooper Kupp Over 2.5 Receptions', player_name: 'Cooper Kupp', line: '2.5 receptions', odds_american: '-132', units: '' }],
+        source_claims: ['NFL 2 banger', 'Kupp has cleared 2+ receptions in 9 of his last 10 games']
+      }
+    }
+  }, 'FREE PICK');
+  assert.equal(embed.description, 'Cooper Kupp Over 2.5 Receptions (-132)\n\n• Kupp has cleared 2+ receptions in 9 of his last 10 games');
+});
+
 test('keeps factual support while removing research-source labels and raw stat aliases', () => {
   const embed = buildSourcePickEmbed({
     ...packet,

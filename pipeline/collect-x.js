@@ -338,6 +338,10 @@ async function queueSplitPlayPackets(packet, outputPath) {
       ...extraction,
       ...play,
       plays: [play],
+      // The original post may describe several picks together. Do not copy
+      // its shared caption onto every split card; each card gets fresh,
+      // play-specific breakdown notes below.
+      source_claims: [],
       supporting_notes: []
     };
     if (single.source?.publish_mode !== 'terms_only') {
