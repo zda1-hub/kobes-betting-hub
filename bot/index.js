@@ -50,8 +50,8 @@ const reviewQueueRoot = reviewQueuePath();
 const trendsInboxQueueUrl = (process.env.TRENDS_INBOX_QUEUE_URL || '').replace(/\/$/, '');
 const trendsInboxQueueSecret = process.env.TRENDS_INBOX_QUEUE_SECRET || '';
 const recapNotificationQueueUrl = (process.env.RECAP_NOTIFICATION_QUEUE_URL || '').replace(/\/$/, '');
-const recapNotificationQueueSecret = process.env.RECAP_NOTIFICATION_QUEUE_SECRET || '';
-const recapNotificationRecipient = process.env.KOBE_RECAP_EMAIL || process.env.KOBE_APPROVAL_EMAIL || '';
+const recapNotificationQueueSecret = (process.env.RECAP_NOTIFICATION_QUEUE_SECRET || '').trim();
+const recapNotificationRecipient = (process.env.KOBE_RECAP_EMAIL || process.env.KOBE_APPROVAL_EMAIL || '').trim();
 const sportChannelMap = new Map(
   (process.env.SPORT_CHANNEL_MAP || '').split(',')
     .map((entry) => entry.trim().split(':'))
