@@ -179,7 +179,7 @@ test('recognizes NFL player-prop shorthand and does not require units', () => {
         ...packet.analysis,
         extraction: {
           ...packet.analysis.extraction,
-          plays: [{ terms, player_name, line: '', odds_american: '', units: '' }]
+          plays: [{ selection: terms, player_name, line: '', odds_american: '', units: '' }]
         }
       }
     }));
