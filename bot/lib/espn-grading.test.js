@@ -68,3 +68,30 @@ test('recognizes longest-reception NFL props across ESPN stat-key variants', () 
   }, [{ name: 'A.J. Brown', category: 'receiving', values: {} }]);
   assert.deepEqual(spec.key, ['longestReception', 'longReception', 'long']);
 });
+
+test('grades grouped ESPN receiving stats for a final longest-reception prop', async () => {
+  const nflEvent = {
+    id: '401872656',
+    status: { type: { completed: true } },
+    competitions: [{ competitors: [
+      { team: { displayName: 'New England Patriots', shortDisplayName: 'Patriots', abbreviation: 'NE' } },
+      { team: { displayName: 'Seattle Seahawks', shortDisplayName: 'Seahawks', abbreviation: 'SEA' } }
+    ] }]
+  };
+  const nflSummary = {
+    header: { competitions: [{ status: { type: { completed: true } } }] },
+    boxscore: { players: [{ statistics: [{
+      name: 'receiving', keys: ['receptions', 'receivingYards', 'longReception'],
+      athletes: [{ athlete: { displayName: 'A.J. Brown' }, stats: ['3', '26', '14'] }]
+    }] }] }
+  };
+  const fetchImpl = async (url) => new Response(JSON.stringify(url.includes('/summary?')
+    ? nflSummary : { events: [nflEvent] }), { status: 200 });
+  const grade = await gradePickFromEspn({
+    operating_date: '2026-09-09', league: 'NFL', event: 'New England Patriots vs Seattle Seahawks',
+    selection: 'AJ Brown Longest Reception Over 22.5 Yards', published_line: 'Over 22.5 Yards', result: 'PENDING'
+  }, { fetchImpl });
+  assert.equal(grade.status, 'GRADED');
+  assert.equal(grade.result, 'L');
+  assert.equal(grade.outcome, 'A.J. Brown: 14 longest reception');
+});

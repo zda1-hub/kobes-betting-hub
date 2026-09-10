@@ -56,7 +56,7 @@ function athleteEntries(summary) {
   return (summary.boxscore?.players || []).flatMap((team) => (team.statistics || []).flatMap((group) =>
     (group.athletes || []).map((athlete) => ({
       name: athlete.athlete?.displayName || '',
-      category: group.type || '',
+      category: group.type || group.name || group.displayName || '',
       values: Object.fromEntries((group.keys || []).map((key, index) => [key, athlete.stats?.[index]]))
     }))
   ));
