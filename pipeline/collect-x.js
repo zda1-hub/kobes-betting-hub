@@ -256,6 +256,13 @@ function isSinglePlayPacket(packet) {
   return visiblePlays(packet).length === 1;
 }
 
+function shouldSplitPlayPackets(packet) {
+  // Regular posts get one approval card per play. Exclusives intentionally
+  // stay grouped so Kobe sees the original capper followed by every stated
+  // bet/stake as one bullet list, matching the requested public format.
+  return packet.source?.publish_mode !== 'terms_only' && !isSinglePlayPacket(packet);
+}
+
 function normalizedSport(packet) {
   const sourceSport = `${packet.analysis?.extraction?.sport || ''} ${packet.analysis?.extraction?.league || ''}`.toLowerCase();
   if (/baseball|mlb/.test(sourceSport)) return 'baseball';
@@ -496,7 +503,7 @@ async function runCollector({ maxCandidates } = {}) {
         continue;
       }
 
-      if (!isSinglePlayPacket(packet)) {
+      if (shouldSplitPlayPackets(packet)) {
         const splitCreated = await queueSplitPlayPackets(packet, outputPath);
         console.log(`Split @${source.handle} post ${post.id} into ${splitCreated} separate approval card(s).`);
         created += splitCreated;
@@ -557,4 +564,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { isSinglePlayPacket, likelyWriteupOrTrend, runCollector };
+module.exports = { isSinglePlayPacket, likelyWriteupOrTrend, runCollector, shouldSplitPlayPackets };

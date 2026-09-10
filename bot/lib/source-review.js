@@ -235,7 +235,7 @@ function buildSourcePickEmbed(packet, destinationLabel) {
     // Private exclusive cards deliberately mirror the eventual exclusive
     // post: capper name, then exact bets/stakes. No source image, analysis,
     // confidence score, or extra operational wording belongs here.
-    embed.description = [sourceCapperName(packet), ...terms].join('\n');
+    embed.description = [sourceCapperName(packet), ...terms.map((term) => `• ${term}`)].join('\n');
   } else {
     // Kobe's writeup layout: player prop, plain factual bullet points, and an
     // optional approved player image below it.

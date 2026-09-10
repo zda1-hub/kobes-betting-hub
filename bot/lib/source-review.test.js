@@ -133,7 +133,7 @@ test('formats leaked-capper picks as terms only, without the source image', () =
     ...packet,
     source: { ...packet.source, publish_mode: 'terms_only' }
   }, 'PAID PICK');
-  assert.equal(embed.description, 'Example Capper\nJacob Misiorowski OVER 6.5 strikeouts -115 (1u)\nTeam ML +120');
+  assert.equal(embed.description, 'Example Capper\n• Jacob Misiorowski OVER 6.5 strikeouts -115 (1u)\n• Team ML +120');
   assert.equal(embed.image, undefined);
 });
 
@@ -150,7 +150,7 @@ test('formats an exclusive approval card as capper, bet, and stated stake only',
       }
     }
   }, 'PAID PICK');
-  assert.equal(embed.description, '@CAPPERSCASH\nNew York Yankees ML -107 (80k)');
+  assert.equal(embed.description, '@CAPPERSCASH\n• New York Yankees ML -107 (80k)');
 });
 
 test('uses destination names directly on approval buttons', () => {
