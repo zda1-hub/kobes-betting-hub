@@ -208,7 +208,9 @@ async function publishDueFreeRecap(date) {
     if (prior?.status === 'PUBLISHED') {
       // A recap can be posted before the optional email queue is configured. Once
       // configured, catch that one up without reposting the Discord recap.
-      if (prior.email_status === 'NOT_CONFIGURED' && recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient) {
+      const emailConfigured = recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient;
+      const emailAlreadyHandled = ['QUEUED', 'ALREADY_QUEUED'].includes(prior.email_status);
+      if (!emailAlreadyHandled && emailConfigured) {
         const rows = await readPickLog();
         const embeds = buildLogRecapEmbeds({ date, rows });
         const emailStatus = await queueRecapNotification({
@@ -250,7 +252,9 @@ async function publishDueFreeRecap(date) {
       const pendingIds = pending.map((row) => row.pick_id).join(', ');
       const notificationId = `free-recap-pending-${date}-${pending.map((row) => row.pick_id).join('-').slice(0, 80)}`;
       const previous = state.dates?.[date] || {};
-      if (previous.pending_ids !== pendingIds || (previous.email_status === 'NOT_CONFIGURED' && recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient)) {
+      const emailConfigured = recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient;
+      const emailAlreadyHandled = ['QUEUED', 'ALREADY_QUEUED'].includes(previous.email_status);
+      if (previous.pending_ids !== pendingIds || (emailConfigured && !emailAlreadyHandled)) {
         const emailStatus = await queueRecapNotification({
           id: notificationId,
           subject: `Kobe's Betting Hub — Daily recap waiting (${date})`,
@@ -264,17 +268,32 @@ async function publishDueFreeRecap(date) {
     }
     const channel = await approvedTextChannel(freeRecapChannelId);
     const embeds = buildLogRecapEmbeds({ date, rows });
-    const messages = [];
-    for (const embed of embeds) messages.push(await channel.send({ embeds: [embed] }));
-    const emailStatus = await queueRecapNotification({
-      id: `official-recap-final-${date}`,
-      subject: `Kobe's Betting Hub — Daily Recap (${date})`,
-      body: recapEmailBody(embeds).replaceAll('**', '')
-    });
+    const priorPosting = state.dates?.[date]?.status === 'POSTING' ? state.dates[date] : {};
+    const messages = Array.isArray(priorPosting.message_ids) ? [...priorPosting.message_ids] : [];
     state.dates = {
       ...(state.dates || {}),
-      [date]: { status: 'PUBLISHED', scope: 'official', channel_id: channel.id, message_ids: messages.map((message) => message.id), published_at: new Date().toISOString(), email_status: emailStatus }
+      [date]: { ...priorPosting, status: 'POSTING', scope: 'official', channel_id: channel.id, message_ids: messages, posting_started_at: priorPosting.posting_started_at || new Date().toISOString() }
     };
+    await saveFreeRecapState(state);
+    for (let index = messages.length; index < embeds.length; index += 1) {
+      const message = await channel.send({ embeds: [embeds[index]] });
+      messages.push(message.id);
+      state.dates[date] = { ...state.dates[date], message_ids: messages };
+      await saveFreeRecapState(state);
+    }
+    let emailStatus;
+    try {
+      emailStatus = await queueRecapNotification({
+        id: `official-recap-final-${date}`,
+        subject: `Kobe's Betting Hub — Daily Recap (${date})`,
+        body: recapEmailBody(embeds).replaceAll('**', '')
+      });
+    } catch (error) {
+      state.dates[date] = { ...state.dates[date], status: 'PUBLISHED', published_at: new Date().toISOString(), email_status: 'FAILED' };
+      await saveFreeRecapState(state);
+      throw error;
+    }
+    state.dates[date] = { ...state.dates[date], status: 'PUBLISHED', published_at: new Date().toISOString(), email_status: emailStatus };
     await saveFreeRecapState(state);
     console.log(`Published automatic official-pick recap for ${date} to #${channel.name || channel.id}.`);
   } catch (error) {
