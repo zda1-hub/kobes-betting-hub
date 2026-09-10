@@ -14,10 +14,10 @@ automate a user account, place bets, or create picks from unverified claims.
 - `/preview-recap` — privately generates the complete day from `pick-log.csv`.
 - `/publish-recap` — publishes that complete log-based overview to the configured
   recap channel.
-- The bot automatically posts the complete **Daily Recap** for the prior
-  Pacific operating day after every successfully published official pick has a
-  verified grade. It reads the canonical log, preserves each destination, and
-  never counts approval-only or failed sends.
+- The bot automatically emails the complete **Daily Recap** to Kobe for review
+  after every successfully published official pick has a verified grade. Kobe
+  can then use `/publish-recap` to post it. It reads the canonical log,
+  preserves each destination, and never counts approval-only or failed sends.
 - `/post-welcome-invite` — administrator-only; posts a button in the configured welcome channel. A member receives the welcome DM only after clicking it.
 - `/hub-help` — shows the short publishing workflow.
 - `/hub-status` — Kobe/admin-only private health check for monitoring, durable
@@ -92,13 +92,13 @@ so the bot cannot be aimed at an unintended channel.
    use `/publish-recap`. Cross-post to Instagram Story and X only after those
    official account connections are configured and the recap is reviewed.
 
-The automatic daily recap uses `RECAP_CHANNEL_ID` by default; set
-`FREE_RECAP_CHANNEL_ID` to send it elsewhere. It checks every five minutes and
-can finalize after the pick approval window closes (`FREE_RECAP_CLOSE_AT`,
-15:00 Arizona by default). It posts only after every official published pick
-has a verified result. Set `FREE_RECAP_ENABLED=false` to stop the automatic
-recap. The `FREE_RECAP_*` names are retained for compatibility with the live
-Render environment.
+The automatic daily recap email checks every five minutes and can finalize
+after the pick approval window closes (`FREE_RECAP_CLOSE_AT`, 15:00 Arizona by
+default). It emails Kobe only after every official published pick has a
+verified result; it does not post to Discord automatically. Kobe can review the
+email and use `/publish-recap` when ready. Set `FREE_RECAP_ENABLED=false` to
+stop the automatic recap email. The `FREE_RECAP_*` names are retained for
+compatibility with the live Render environment.
 
 `AUTO_GRADE_FREE_PICKS` defaults to enabled. It checks ESPN final box scores
 for standard, exact-match MLB/NFL/NCAAF player props and moneylines, including

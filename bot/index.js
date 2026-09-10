@@ -104,9 +104,12 @@ function pacificClock(date = new Date()) {
 }
 
 function freeRecapEnabled() {
-  // This is an administrative results post generated entirely from the
-  // canonical log, so it is on by default once a recap channel is configured.
+  // This is an administrative email generated entirely from the canonical log.
   return process.env.FREE_RECAP_ENABLED !== 'false';
+}
+
+function recapEmailConfigured() {
+  return Boolean(recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient);
 }
 
 function freeRecapCloseAt() {
@@ -200,17 +203,17 @@ function recapEmailBody(embeds) {
 }
 
 async function publishDueFreeRecap(date) {
-  if (freeRecapInProgress || !freeRecapChannelId) return;
+  if (freeRecapInProgress || !recapEmailConfigured()) return;
   freeRecapInProgress = true;
   try {
     const state = await readFreeRecapState();
     const prior = state.dates?.[date];
+    if (prior?.status === 'EMAIL_SENT') return;
     if (prior?.status === 'PUBLISHED') {
       // A recap can be posted before the optional email queue is configured. Once
       // configured, catch that one up without reposting the Discord recap.
-      const emailConfigured = recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient;
       const emailAlreadyHandled = ['QUEUED', 'ALREADY_QUEUED'].includes(prior.email_status);
-      if (!emailAlreadyHandled && emailConfigured) {
+      if (!emailAlreadyHandled) {
         const rows = await readPickLog();
         const embeds = buildLogRecapEmbeds({ date, rows });
         const emailStatus = await queueRecapNotification({
@@ -252,9 +255,8 @@ async function publishDueFreeRecap(date) {
       const pendingIds = pending.map((row) => row.pick_id).join(', ');
       const notificationId = `free-recap-pending-${date}-${pending.map((row) => row.pick_id).join('-').slice(0, 80)}`;
       const previous = state.dates?.[date] || {};
-      const emailConfigured = recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient;
       const emailAlreadyHandled = ['QUEUED', 'ALREADY_QUEUED'].includes(previous.email_status);
-      if (previous.pending_ids !== pendingIds || (emailConfigured && !emailAlreadyHandled)) {
+      if (previous.pending_ids !== pendingIds || !emailAlreadyHandled) {
         const emailStatus = await queueRecapNotification({
           id: notificationId,
           subject: `Kobe's Betting Hub — Daily recap waiting (${date})`,
@@ -266,21 +268,7 @@ async function publishDueFreeRecap(date) {
       console.log(`Official recap for ${date} is waiting for ${pending.length} verified result(s).`);
       return;
     }
-    const channel = await approvedTextChannel(freeRecapChannelId);
     const embeds = buildLogRecapEmbeds({ date, rows });
-    const priorPosting = state.dates?.[date]?.status === 'POSTING' ? state.dates[date] : {};
-    const messages = Array.isArray(priorPosting.message_ids) ? [...priorPosting.message_ids] : [];
-    state.dates = {
-      ...(state.dates || {}),
-      [date]: { ...priorPosting, status: 'POSTING', scope: 'official', channel_id: channel.id, message_ids: messages, posting_started_at: priorPosting.posting_started_at || new Date().toISOString() }
-    };
-    await saveFreeRecapState(state);
-    for (let index = messages.length; index < embeds.length; index += 1) {
-      const message = await channel.send({ embeds: [embeds[index]] });
-      messages.push(message.id);
-      state.dates[date] = { ...state.dates[date], message_ids: messages };
-      await saveFreeRecapState(state);
-    }
     let emailStatus;
     try {
       emailStatus = await queueRecapNotification({
@@ -289,13 +277,13 @@ async function publishDueFreeRecap(date) {
         body: recapEmailBody(embeds).replaceAll('**', '')
       });
     } catch (error) {
-      state.dates[date] = { ...state.dates[date], status: 'PUBLISHED', published_at: new Date().toISOString(), email_status: 'FAILED' };
+      state.dates[date] = { ...(state.dates[date] || {}), status: 'EMAIL_PENDING', scope: 'official', email_status: 'FAILED' };
       await saveFreeRecapState(state);
       throw error;
     }
-    state.dates[date] = { ...state.dates[date], status: 'PUBLISHED', published_at: new Date().toISOString(), email_status: emailStatus };
+    state.dates[date] = { ...(state.dates[date] || {}), status: 'EMAIL_SENT', scope: 'official', emailed_at: new Date().toISOString(), email_status: emailStatus };
     await saveFreeRecapState(state);
-    console.log(`Published automatic official-pick recap for ${date} to #${channel.name || channel.id}.`);
+    console.log(`Emailed automatic official-pick recap for ${date} to the configured Kobe recipient.`);
   } catch (error) {
     console.error(`Automatic free-pick recap failed: ${error instanceof Error ? error.message : error}`);
   } finally {
@@ -308,21 +296,21 @@ function startFreeRecapSchedule() {
     console.log('Automatic daily recaps are disabled. Set FREE_RECAP_ENABLED=true to resume them.');
     return;
   }
-  if (!freeRecapChannelId) {
-    console.warn('Automatic daily recaps are unavailable: set FREE_RECAP_CHANNEL_ID or RECAP_CHANNEL_ID.');
+  if (!recapEmailConfigured()) {
+    console.warn('Automatic daily recap emails are unavailable: configure the recap notification queue and Kobe recipient.');
     return;
   }
   if (!freeRecapCloseAt()) return;
   const run = () => void (async () => {
-    // Yesterday remains eligible for a late ESPN correction; today publishes
-    // as soon as its free-pick window has closed and the final game settles.
+    // Yesterday remains eligible for a late ESPN correction; today emails Kobe
+    // as soon as its pick window has closed and the final game settles.
     await publishDueFreeRecap(previousPacificOperatingDate());
     await publishDueFreeRecap(pacificOperatingDate());
   })();
   const interval = freeRecapIntervalMs();
   freeRecapTimer = setInterval(run, interval);
   run();
-    console.log(`Automatic official-pick recaps check every ${Math.round(interval / 60000)} minute(s), after the ${freeRecapCloseAt()} Arizona pick window closes, and publish once every result is graded.`);
+    console.log(`Automatic official-pick recap emails check every ${Math.round(interval / 60000)} minute(s), after the ${freeRecapCloseAt()} Arizona pick window closes, and email once every result is graded.`);
 }
 
 function trendsDailyTime() {
@@ -774,7 +762,7 @@ async function hubStatusText() {
     `**Pending free results:** ${pendingFree}`,
     `**Pick log:** ${durableLog}`,
     `**Automatic grading:** ${process.env.AUTO_GRADE_FREE_PICKS === 'false' ? 'off' : 'on (ESPN)'}`,
-    `**Automatic recap:** ${freeRecapEnabled() && freeRecapChannelId ? `on after ${freeRecapCloseAt()} Arizona time for every successfully published pick` : 'not configured'}`,
+    `**Automatic recap email:** ${freeRecapEnabled() && emailConfigured ? `on after ${freeRecapCloseAt()} Arizona time for every successfully published pick` : 'not configured'}`,
     `**Recap email:** ${emailConfigured ? 'connected' : 'not configured'}`
   ].join('\n');
 }
