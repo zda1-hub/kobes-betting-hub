@@ -19,7 +19,10 @@ const STATE_PATH = path.join(X_MONITORING_ROOT, 'state.json');
 const QUEUE_ROOT = reviewQueuePath();
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
 const IMAGE_RESCAN_VERSION = 'writeup-image-rescan-v1';
-const NFL_SCOREBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
+const FOOTBALL_SCOREBOARD_URLS = [
+  'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
+  'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard'
+];
 const PACIFIC_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Los_Angeles',
   year: 'numeric', month: '2-digit', day: '2-digit'
@@ -126,21 +129,28 @@ async function xFetch(url) {
   return response.json();
 }
 
-async function nflGamesScheduledToday({ now = new Date(), fetchImpl = fetch } = {}) {
+async function footballGamesScheduledToday({ now = new Date(), fetchImpl = fetch } = {}) {
   const date = pacificDate(now).replaceAll('-', '');
-  try {
-    const response = await fetchImpl(`${NFL_SCOREBOARD_URL}?dates=${date}&limit=100`, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(10000)
-    });
-    if (!response.ok) return null;
-    const payload = await response.json();
-    return Array.isArray(payload.events) && payload.events.length > 0;
-  } catch (error) {
-    console.warn(`NFL schedule preflight was unavailable; continuing with normal gates: ${error instanceof Error ? error.message : error}`);
-    return null;
+  let successfulChecks = 0;
+  for (const scoreboardUrl of FOOTBALL_SCOREBOARD_URLS) {
+    try {
+      const response = await fetchImpl(`${scoreboardUrl}?dates=${date}&limit=100`, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) continue;
+      successfulChecks += 1;
+      const payload = await response.json();
+      if (Array.isArray(payload.events) && payload.events.length > 0) return true;
+    } catch (error) {
+      console.warn(`Football schedule preflight was unavailable; continuing with normal gates: ${error instanceof Error ? error.message : error}`);
+    }
   }
+  return successfulChecks > 0 ? false : null;
 }
+
+// Backward-compatible export name for local callers and older tests.
+const nflGamesScheduledToday = footballGamesScheduledToday;
 
 async function resolveUser(source, state) {
   const knownId = state.sources?.[source.handle]?.user_id;
@@ -438,12 +448,13 @@ async function runCollector({ maxCandidates } = {}) {
   }
 
   const date = pacificDate();
-  // There is no valid NFL candidate on a day with no NFL games. Avoid pulling
-  // and sending dozens of old posts through paid extraction/research in that
-  // case; the five-minute monitor remains alive and will recheck the schedule.
-  const nflGamesToday = await nflGamesScheduledToday();
-  if (nflGamesToday === false) {
-    console.log(`No NFL games are scheduled for ${date}; skipped X intake before paid extraction.`);
+  // There is no valid football candidate on a day with no NFL or college-
+  // football games. Avoid pulling and sending dozens of old posts through
+  // paid extraction/research; the five-minute monitor remains alive and will
+  // recheck the schedule.
+  const footballGamesToday = await footballGamesScheduledToday();
+  if (footballGamesToday === false) {
+    console.log(`No NFL or college-football games are scheduled for ${date}; skipped X intake before paid extraction.`);
     return { created: 0, skipped: 0, sourceCount: sources.length, noGames: true };
   }
 
@@ -617,4 +628,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { isSinglePlayPacket, likelyWriteupOrTrend, nflGamesScheduledToday, runCollector, shouldQueueForReview, shouldSplitPlayPackets };
+module.exports = { footballGamesScheduledToday, isSinglePlayPacket, likelyWriteupOrTrend, nflGamesScheduledToday, runCollector, shouldQueueForReview, shouldSplitPlayPackets };

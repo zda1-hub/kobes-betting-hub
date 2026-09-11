@@ -138,7 +138,7 @@ function researchContent(packet) {
   return [{
     type: 'input_text',
     text: [
-      'Use web search to find current, factual support for this specific NFL pick.',
+      'Use web search to find current, factual support for this specific NFL or college-football pick.',
       'Return 3 to 6 concise breakdown notes only when they directly support the player or team, exact market and line, matchup, opponent, role/workload, projected lineup, or relevant venue context.',
       'Do not include generic team facts, promotion language, betting advice, guarantees, confidence language, odds movement, or facts unrelated to the stated pick.',
       'Use reliable current sources, prioritizing official league/team data and established sports data pages. Each note must state a checkable fact and include the exact source URL used. If an exact fact cannot be verified, omit it rather than guessing.',

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { isSinglePlayPacket, likelyWriteupOrTrend, nflGamesScheduledToday, shouldQueueForReview, shouldSplitPlayPackets } = require('./collect-x');
+const { footballGamesScheduledToday, isSinglePlayPacket, likelyWriteupOrTrend, nflGamesScheduledToday, shouldQueueForReview, shouldSplitPlayPackets } = require('./collect-x');
 
 test('requires exactly one visible play for each approval card', () => {
   const base = { analysis: { extraction: { plays: [{ selection: 'Player A over 5.5 strikeouts', line: '5.5', odds_american: '-115' }] } } };
@@ -40,6 +40,21 @@ test('preflight detects when the NFL has no games today', async () => {
     fetchImpl: async () => ({ ok: true, async json() { return { events: [] }; } })
   });
   assert.equal(result, false);
+});
+
+test('preflight allows a college-football slate when the NFL is empty', async () => {
+  let calls = 0;
+  const result = await footballGamesScheduledToday({
+    now: new Date('2026-09-11T20:09:00.000Z'),
+    fetchImpl: async () => ({
+      ok: true,
+      async json() {
+        calls += 1;
+        return calls === 1 ? { events: [] } : { events: [{ name: 'Ranked college matchup' }] };
+      }
+    })
+  });
+  assert.equal(result, true);
 });
 
 test('keeps multi-play exclusives grouped while splitting regular posts', () => {
