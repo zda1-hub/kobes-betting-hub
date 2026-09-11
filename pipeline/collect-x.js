@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { addSupportingResearch, enrichPacket, researchSupportingNotes } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
-const { isNFLPick, upcomingEventStatus } = require('../bot/lib/event-timing');
+const { isSupportedSportPick, upcomingEventStatus } = require('../bot/lib/event-timing');
 const { buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, sourceEvidence, visiblePlays } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
@@ -75,6 +75,10 @@ function shouldQueueForReview(source, post, postMediaUrls) {
   // downstream gates inspect those candidates instead of dropping them just
   // because there is no attached image.
   return likelyPick(post.text);
+}
+
+function footballPriority(post) {
+  return /\b(?:nfl|ncaaf|cfb|college football|football)\b/i.test(post?.text || '') ? 0 : 1;
 }
 
 function oddsFrom(text) {
@@ -356,8 +360,8 @@ async function notifyApprovalChannel(packet) {
   try {
     // A clear card is shown exactly as members will see it after approval.
     // Publishing does not add a second layer of wording or formatting.
-    // Approval cards may represent regular NFL picks, including sides and
-    // totals, and the source may omit optional units or odds. Free-pick
+    // Approval cards may represent regular picks from any supported sport,
+    // including sides and totals, and the source may omit optional units or odds. Free-pick
     // eligibility is enforced only when Kobe clicks the Free button; the
     // paid/NFL action remains available for regular picks.
     if (packet.source?.publish_mode !== 'terms_only' && sourceEvidence(packet).length < 3) {
@@ -448,14 +452,14 @@ async function runCollector({ maxCandidates } = {}) {
   }
 
   const date = pacificDate();
-  // There is no valid football candidate on a day with no NFL or college-
-  // football games. Avoid pulling and sending dozens of old posts through
-  // paid extraction/research; the five-minute monitor remains alive and will
-  // recheck the schedule.
+  // Check the priority sports first, but do not use their slate as a global
+  // gate: baseball, basketball, hockey, soccer, and other configured sports
+  // must still be collected when football is off.
   const footballGamesToday = await footballGamesScheduledToday();
   if (footballGamesToday === false) {
-    console.log(`No NFL or college-football games are scheduled for ${date}; skipped X intake before paid extraction.`);
-    return { created: 0, skipped: 0, sourceCount: sources.length, noGames: true };
+    console.log(`No NFL or college-football games are scheduled for ${date}; continuing with all supported sports.`);
+  } else if (footballGamesToday === true) {
+    console.log(`NFL or college-football games are scheduled for ${date}; priority sports remain first in the intake gates.`);
   }
 
   await cleanMonitoringFolderIfDue();
@@ -477,7 +481,9 @@ async function runCollector({ maxCandidates } = {}) {
     const dailyCatchup = sourceState.catchup_date !== date || rescanImages;
     const response = await postsFor(source, userId, dailyCatchup ? undefined : sourceState.since_id);
     const media = mediaUrls(response);
-    const posts = [...(response.data || [])].sort((a, b) => a.id.localeCompare(b.id));
+    // Text-labelled NFL and college-football posts get first look. Keep the
+    // original ID as the tie-breaker so a source remains deterministic.
+    const posts = [...(response.data || [])].sort((a, b) => footballPriority(a) - footballPriority(b) || a.id.localeCompare(b.id));
     const handledPostIds = new Set(Array.isArray(sourceState.handled_post_ids) ? sourceState.handled_post_ids : []);
     let lastProcessedId = sourceState.since_id || '';
     let completedSourcePass = true;
@@ -518,9 +524,9 @@ async function runCollector({ maxCandidates } = {}) {
       // of the 38-account scan.
       packet.analysis = await enrichPacket(packet, { research: false });
 
-      if (!isNFLPick(packet)) {
+      if (!isSupportedSportPick(packet)) {
         await fs.rm(outputPath, { force: true });
-        console.log(`Skipped @${source.handle} post ${post.id}; it is not explicitly identified as an NFL/football pick.`);
+        console.log(`Skipped @${source.handle} post ${post.id}; it is not explicitly identified as a supported sport pick.`);
         skipped += 1;
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
@@ -548,9 +554,9 @@ async function runCollector({ maxCandidates } = {}) {
         continue;
       }
 
-      // A private card is useful only when its exact game is scheduled today
-      // and has not started. Reject undated/ambiguous old cards here rather
-      // than spending Kobe's approval time on them.
+      // A card is useful only when its exact event is scheduled today and has
+      // not started. Reject undated/ambiguous old cards here rather than
+      // spending Kobe's approval time on them.
       const timing = await upcomingEventStatus(packet);
       packet.verification.event_start = timing.eventStart || null;
       packet.verification.event_timezone = timing.source || null;
@@ -592,7 +598,10 @@ async function runCollector({ maxCandidates } = {}) {
     // of silently discarding them behind a newer since_id.
     const nextSourceState = {
       user_id: userId,
-      since_id: lastProcessedId || response.meta?.newest_id || '',
+      // With priority ordering, an incomplete pass can leave an older
+      // non-football post unexamined. Keep the old cursor in that case so the
+      // next interval can revisit it; handled_post_ids prevents duplicates.
+      since_id: completedSourcePass ? (lastProcessedId || response.meta?.newest_id || '') : (sourceState.since_id || ''),
       handled_post_ids: [...handledPostIds].slice(-250),
       ...(completedSourcePass ? { catchup_date: date } : {})
     };
@@ -628,4 +637,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { footballGamesScheduledToday, isSinglePlayPacket, likelyWriteupOrTrend, nflGamesScheduledToday, runCollector, shouldQueueForReview, shouldSplitPlayPackets };
+module.exports = { footballGamesScheduledToday, footballPriority, isSinglePlayPacket, likelyWriteupOrTrend, nflGamesScheduledToday, runCollector, shouldQueueForReview, shouldSplitPlayPackets };

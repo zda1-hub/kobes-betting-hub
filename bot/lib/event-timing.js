@@ -14,11 +14,15 @@ function espnLeague(packet) {
   if (/\bncaaf\b|college football/.test(text)) return 'football/college-football';
   if (/\bnfl\b|football/.test(text)) return 'football/nfl';
   if (/\bwnba\b/.test(text)) return 'basketball/wnba';
-  if (/\bncaab\b|men.s college basketball/.test(text)) return 'basketball/mens-college-basketball';
+  if (/\bncaab\b|college basketball|men.s college basketball/.test(text)) return 'basketball/mens-college-basketball';
   if (/\bnba\b|basketball/.test(text)) return 'basketball/nba';
   if (/\bnhl\b|hockey/.test(text)) return 'hockey/nhl';
   if (/\bmls\b/.test(text)) return 'soccer/usa.1';
   return null;
+}
+
+function isSupportedSportPick(packet) {
+  return Boolean(espnLeague(packet));
 }
 
 function isNFLPick(packet) {
@@ -148,4 +152,4 @@ function isRecentSourcePost(packet, { now = new Date(), maximumAgeHours = Number
   return now.getTime() - posted.getTime() <= hours * 60 * 60 * 1000;
 }
 
-module.exports = { athleteMatchesName, extractedPlayerNames, isNFLPick, isRecentSourcePost, matchesExtractedEvent, upcomingEventStatus };
+module.exports = { athleteMatchesName, espnLeague, extractedPlayerNames, isNFLPick, isRecentSourcePost, isSupportedSportPick, matchesExtractedEvent, upcomingEventStatus };
