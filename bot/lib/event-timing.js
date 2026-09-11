@@ -53,6 +53,22 @@ function matchesExtractedEvent(packet, event) {
   return new Set(teamNames.filter((name) => sourceEvent.includes(name))).size >= 2;
 }
 
+function packetForPlay(packet, play) {
+  const extraction = packet.analysis?.extraction || {};
+  return {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...extraction,
+        ...play,
+        event: play.event || extraction.event,
+        plays: [play]
+      }
+    }
+  };
+}
+
 function extractedPlayerNames(packet) {
   const extraction = packet.analysis?.extraction || {};
   const plays = Array.isArray(extraction.plays) && extraction.plays.length
@@ -120,7 +136,10 @@ async function verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl) {
 async function upcomingEventStatus(packet, { now = new Date(), fetchImpl = fetch } = {}) {
   const leaguePath = espnLeague(packet);
   if (!leaguePath) return { status: 'UNVERIFIABLE', reason: 'No supported league for current-day schedule check.' };
-  if (!packet.analysis?.extraction?.event?.trim()) return { status: 'UNVERIFIABLE', reason: 'The source did not identify an exact event.' };
+  const extraction = packet.analysis?.extraction || {};
+  const plays = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays : [extraction];
+  const hasPerPlayEvents = plays.length > 1 && plays.every((play) => typeof play.event === 'string' && play.event.trim());
+  if (!extraction.event?.trim() && !hasPerPlayEvents) return { status: 'UNVERIFIABLE', reason: 'The source did not identify an exact event.' };
 
   const date = pacificDate(now).replaceAll('-', '');
   let scoreboard;
@@ -134,15 +153,28 @@ async function upcomingEventStatus(packet, { now = new Date(), fetchImpl = fetch
     return { status: 'UNVERIFIABLE', reason: 'ESPN schedule check was unavailable.' };
   }
 
-  const event = (scoreboard.events || []).find((candidate) => matchesExtractedEvent(packet, candidate));
-  if (!event?.date) return { status: 'NOT_SCHEDULED_TODAY', reason: 'No matching event is scheduled today.' };
-  const start = new Date(event.date);
-  if (Number.isNaN(start.getTime())) return { status: 'UNVERIFIABLE', reason: 'ESPN did not provide a readable start time.' };
-  const playerVerification = await verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl);
-  if (playerVerification) return { ...playerVerification, eventStart: start.toISOString(), source: 'ESPN schedule and roster' };
-  return start.getTime() > now.getTime()
-    ? { status: 'UPCOMING', eventStart: start.toISOString(), source: 'ESPN schedule' }
-    : { status: 'STARTED_OR_FINISHED', eventStart: start.toISOString(), source: 'ESPN schedule' };
+  const playPackets = hasPerPlayEvents ? plays.map((play) => packetForPlay(packet, play)) : [packet];
+  const matchedEvents = playPackets.map((playPacket) => (scoreboard.events || [])
+    .find((candidate) => matchesExtractedEvent(playPacket, candidate)));
+  if (matchedEvents.some((event) => !event?.date)) {
+    return { status: 'NOT_SCHEDULED_TODAY', reason: 'No matching event is scheduled today.' };
+  }
+
+  const starts = matchedEvents.map((event) => new Date(event.date));
+  if (starts.some((start) => Number.isNaN(start.getTime()))) {
+    return { status: 'UNVERIFIABLE', reason: 'ESPN did not provide a readable start time.' };
+  }
+  for (let index = 0; index < matchedEvents.length; index += 1) {
+    const playerVerification = await verifyPlayersOnEventTeams(playPackets[index], matchedEvents[index], leaguePath, fetchImpl);
+    if (playerVerification) {
+      return { ...playerVerification, eventStart: starts[index].toISOString(), source: 'ESPN schedule and roster' };
+    }
+  }
+
+  const earliestStart = new Date(Math.min(...starts.map((start) => start.getTime())));
+  return earliestStart.getTime() > now.getTime()
+    ? { status: 'UPCOMING', eventStart: earliestStart.toISOString(), source: 'ESPN schedule' }
+    : { status: 'STARTED_OR_FINISHED', eventStart: earliestStart.toISOString(), source: 'ESPN schedule' };
 }
 
 function isRecentSourcePost(packet, { now = new Date(), maximumAgeHours = Number(process.env.X_MONITOR_MAX_POST_AGE_HOURS || 24) } = {}) {

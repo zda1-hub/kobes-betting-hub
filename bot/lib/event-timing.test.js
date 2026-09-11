@@ -97,6 +97,36 @@ test('rejects a college-football pick that has no game scheduled today', async (
   assert.equal(result.status, 'NOT_SCHEDULED_TODAY');
 });
 
+test('validates each leg of a multi-game college-football parlay', async () => {
+  const cfbPacket = {
+    analysis: { extraction: {
+      league: 'NCAAF', sport: 'College Football', event: 'Week 2 CFB Lotto',
+      plays: [
+        { selection: 'Indiana team total over 50 points', line: '50+', odds_american: '-371', units: '', event: 'Howard @ Indiana' },
+        { selection: 'Georgia team total over 50 points', line: '50+', odds_american: '+127', units: '', event: 'Western Kentucky @ Georgia' }
+      ]
+    } }
+  };
+  const result = await upcomingEventStatus(cfbPacket, {
+    now: new Date('2026-09-12T14:00:00.000Z'),
+    fetchImpl: async (url) => {
+      assert.match(url, /football\/college-football\/scoreboard/);
+      return new Response(JSON.stringify({ events: [
+        { date: '2026-09-12T16:00:00.000Z', competitions: [{ competitors: [
+          { team: { displayName: 'Howard Bison', shortDisplayName: 'Howard', abbreviation: 'HOW' } },
+          { team: { displayName: 'Indiana Hoosiers', shortDisplayName: 'Indiana', abbreviation: 'IND' } }
+        ] }] },
+        { date: '2026-09-12T16:45:00.000Z', competitions: [{ competitors: [
+          { team: { displayName: 'Western Kentucky Hilltoppers', shortDisplayName: 'Western Kentucky', abbreviation: 'WKU' } },
+          { team: { displayName: 'Georgia Bulldogs', shortDisplayName: 'Georgia', abbreviation: 'UGA' } }
+        ] }] }
+      ] }), { status: 200 });
+    }
+  });
+  assert.equal(result.status, 'UPCOMING');
+  assert.equal(result.eventStart, '2026-09-12T16:00:00.000Z');
+});
+
 test('does not allow an undated or unsupported pick through the schedule gate', async () => {
   const result = await upcomingEventStatus({
     analysis: { extraction: { league: 'Unknown league', event: '' } }
