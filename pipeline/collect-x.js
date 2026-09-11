@@ -58,7 +58,11 @@ function likelyWriteupOrTrend(text, postMediaUrls) {
 
 function shouldQueueForReview(source, post, postMediaUrls) {
   const mode = source.monitoring_mode || 'standard';
-  if (mode === 'photo_review') return postMediaUrls.length > 0;
+  // The pick may exist only inside the attached card. Send every media post
+  // from every enabled source through vision; the downstream NFL, exact-event,
+  // capper, and publishability gates decide whether it becomes an approval.
+  if (postMediaUrls.length > 0) return true;
+  if (mode === 'photo_review') return false;
   if (mode === 'writeup_or_trend') return likelyWriteupOrTrend(post.text, postMediaUrls);
   return likelyPick(post.text);
 }
@@ -425,8 +429,7 @@ async function runCollector({ maxCandidates } = {}) {
     // without its saved cursor. A capper may have posted a valid play before
     // the 11 AM monitor begins; it should still reach Kobe if the event has not
     // started. Later passes return to the normal since_id-only polling.
-    const rescanImages = source.monitoring_mode === 'writeup_or_trend'
-      && sourceState.image_rescan_version !== IMAGE_RESCAN_VERSION;
+    const rescanImages = sourceState.image_rescan_version !== IMAGE_RESCAN_VERSION;
     const dailyCatchup = sourceState.catchup_date !== date || rescanImages;
     const response = await postsFor(source, userId, dailyCatchup ? undefined : sourceState.since_id);
     const media = mediaUrls(response);
@@ -564,4 +567,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { isSinglePlayPacket, likelyWriteupOrTrend, runCollector, shouldSplitPlayPackets };
+module.exports = { isSinglePlayPacket, likelyWriteupOrTrend, runCollector, shouldQueueForReview, shouldSplitPlayPackets };
