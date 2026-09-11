@@ -179,7 +179,8 @@ async function researchSupportingNotes(packet) {
             schema: RESEARCH_SCHEMA
           }
         }
-      })
+      }),
+      signal: AbortSignal.timeout(45000)
     });
   } catch (error) {
     console.warn(`Supporting research was unavailable: ${error instanceof Error ? error.message : error}`);
@@ -220,25 +221,34 @@ async function extractSourcePick(packet) {
   if (!apiKey) return analysisWaiting('WAITING_FOR_OPENAI_API_KEY', 'Add OPENAI_API_KEY locally before enabling source extraction.');
 
   const model = process.env.OPENAI_PICK_ANALYSIS_MODEL || 'gpt-5';
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model,
-      input: [{ role: 'user', content: sourceContent(packet) }],
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'source_pick_extraction',
-          strict: true,
-          schema: EXTRACTION_SCHEMA
+  let response;
+  try {
+    response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        input: [{ role: 'user', content: sourceContent(packet) }],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'source_pick_extraction',
+            strict: true,
+            schema: EXTRACTION_SCHEMA
+          }
         }
-      }
-    })
-  });
+      }),
+      signal: AbortSignal.timeout(45000)
+    });
+  } catch (error) {
+    const reason = error?.name === 'TimeoutError' || error?.name === 'AbortError'
+      ? 'OpenAI extraction timed out.'
+      : `OpenAI extraction was unavailable: ${error instanceof Error ? error.message : error}`;
+    return analysisWaiting('EXTRACTION_FAILED', reason);
+  }
 
   if (!response.ok) {
     let message = '';
@@ -270,16 +280,11 @@ async function extractSourcePick(packet) {
   };
 }
 
-async function enrichPacket(packet) {
-  if (process.env.ENRICHMENT_ENABLED !== 'true') {
-    return analysisWaiting('ENRICHMENT_OFF', 'Set ENRICHMENT_ENABLED=true only after the OpenAI API key is saved locally.');
-  }
-  const analysis = await extractSourcePick(packet);
+async function addSupportingResearch(packet, analysis) {
   if (analysis.status !== 'SOURCE_EXTRACTED' || packet.source?.publish_mode === 'terms_only') return analysis;
 
-  // Regular writeups still receive focused, current support. Exclusives stay
-  // terms-only. Research is retained for audit, then sanitized by the
-  // member-facing formatter before it can be displayed.
+  // Regular writeups receive focused, current support only after the collector
+  // has already confirmed the source is an NFL pick for an upcoming event.
   const research = await researchSupportingNotes({ ...packet, analysis });
   const currentOdds = research.current_odds_american || '';
   const extraction = analysis.extraction || {};
@@ -301,6 +306,14 @@ async function enrichPacket(packet) {
       current_odds_source_url: research.current_odds_source_url
     }
   };
+}
+
+async function enrichPacket(packet, { research = true } = {}) {
+  if (process.env.ENRICHMENT_ENABLED !== 'true') {
+    return analysisWaiting('ENRICHMENT_OFF', 'Set ENRICHMENT_ENABLED=true only after the OpenAI API key is saved locally.');
+  }
+  const analysis = await extractSourcePick(packet);
+  return research ? addSupportingResearch(packet, analysis) : analysis;
 }
 
 async function newestPacket() {
@@ -337,4 +350,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { enrichPacket, outputText, EXTRACTION_SCHEMA, RESEARCH_SCHEMA, researchSupportingNotes, sourceClaims };
+module.exports = { addSupportingResearch, enrichPacket, outputText, EXTRACTION_SCHEMA, RESEARCH_SCHEMA, researchSupportingNotes, sourceClaims };

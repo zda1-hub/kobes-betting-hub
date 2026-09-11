@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { enrichPacket, researchSupportingNotes } = require('./enrich-pick');
+const { addSupportingResearch, enrichPacket, researchSupportingNotes } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { isNFLPick, upcomingEventStatus } = require('../bot/lib/event-timing');
 const { buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, sourceEvidence, visiblePlays } = require('../bot/lib/source-review');
@@ -116,7 +116,8 @@ async function cleanMonitoringFolderIfDue() {
 
 async function xFetch(url) {
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${process.env.X_BEARER_TOKEN}` }
+    headers: { Authorization: `Bearer ${process.env.X_BEARER_TOKEN}` },
+    signal: AbortSignal.timeout(15000)
   });
   if (!response.ok) {
     throw new Error(`X API request failed (${response.status}): ${await response.text()}`);
@@ -474,11 +475,24 @@ async function runCollector({ maxCandidates } = {}) {
 
       sequence += 1;
       const { packet, outputPath } = await writePacket({ date, sequence, source, post, media });
-      packet.analysis = await enrichPacket(packet);
+      // Extract the source terms first. Research is intentionally deferred
+      // until the cheap NFL, exact-event, and roster gates pass; otherwise a
+      // rejected candidate can spend minutes on web search and block the rest
+      // of the 38-account scan.
+      packet.analysis = await enrichPacket(packet, { research: false });
 
       if (!isNFLPick(packet)) {
         await fs.rm(outputPath, { force: true });
         console.log(`Skipped @${source.handle} post ${post.id}; it is not explicitly identified as an NFL/football pick.`);
+        skipped += 1;
+        lastProcessedId = post.id;
+        handledPostIds.add(post.id);
+        continue;
+      }
+
+      if (packet.analysis.status !== 'SOURCE_EXTRACTED' || !packet.analysis.extraction?.is_pick_candidate) {
+        await fs.rm(outputPath, { force: true });
+        console.log(`Skipped @${source.handle} post ${post.id}; the source did not identify a publishable pick.`);
         skipped += 1;
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
@@ -521,6 +535,10 @@ async function runCollector({ maxCandidates } = {}) {
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
         continue;
+      }
+
+      if (source.publish_mode !== 'terms_only') {
+        packet.analysis = await addSupportingResearch(packet, packet.analysis);
       }
 
       packet.discord_review_message_id = await notifyApprovalChannel(packet);
