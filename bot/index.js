@@ -90,7 +90,7 @@ function xMonitorIntervalMs(now = new Date()) {
   const overrideDate = (process.env.X_MONITOR_INTERVAL_OVERRIDE_DATE || '').trim();
   const overrideMs = (process.env.X_MONITOR_INTERVAL_OVERRIDE_MS || '').trim();
   const today = pacificClock(now).date;
-  const configured = Number(overrideDate === today && overrideMs
+  const configured = Number(overrideDate && overrideMs && today >= overrideDate
     ? overrideMs
     : (process.env.X_MONITOR_INTERVAL_MS || 300000));
   // Guard against an accidental rapid polling setting that could create an
