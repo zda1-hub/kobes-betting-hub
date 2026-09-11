@@ -34,6 +34,20 @@ function pacificDate(date = new Date()) {
   return `${value.year}-${value.month}-${value.day}`;
 }
 
+function pacificStartIso(date) {
+  const noon = new Date(`${date}T12:00:00Z`);
+  const offsetPart = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    timeZoneName: 'longOffset',
+    hour: 'numeric'
+  }).formatToParts(noon).find((part) => part.type === 'timeZoneName')?.value || 'GMT';
+  const match = offsetPart.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+  const offset = match
+    ? `${match[1]}${match[2].padStart(2, '0')}:${match[3] || '00'}`
+    : '+00:00';
+  return new Date(`${date}T00:00:00${offset}`).toISOString();
+}
+
 function numberFor(date, count) {
   return `${date.replaceAll('-', '')}-${String(count).padStart(3, '0')}`;
 }
@@ -164,14 +178,16 @@ async function resolveUser(source, state) {
   return lookup.data.id;
 }
 
-async function postsFor(source, userId, sinceId) {
+async function postsFor(source, userId, { sinceId, startTime, nextToken } = {}) {
   const url = new URL(`https://api.x.com/2/users/${userId}/tweets`);
   url.searchParams.set('exclude', 'retweets,replies');
-  url.searchParams.set('max_results', '20');
+  url.searchParams.set('max_results', '100');
   url.searchParams.set('tweet.fields', 'created_at,attachments,entities');
   url.searchParams.set('expansions', 'attachments.media_keys');
   url.searchParams.set('media.fields', 'url,preview_image_url,type');
   if (sinceId) url.searchParams.set('since_id', sinceId);
+  if (startTime) url.searchParams.set('start_time', startTime);
+  if (nextToken) url.searchParams.set('pagination_token', nextToken);
   return xFetch(url);
 }
 
@@ -473,17 +489,33 @@ async function runCollector({ maxCandidates } = {}) {
     if (created >= candidateLimit) break;
     const sourceState = state.sources[source.handle] || {};
     const userId = await resolveUser(source, state);
-    // On the first collection window each day, fetch the source's recent posts
-    // without its saved cursor. A capper may have posted a valid play before
-    // the 11 AM monitor begins; it should still reach Kobe if the event has not
-    // started. Later passes return to the normal since_id-only polling.
+    // On the first collection window each day, fetch every source post since
+    // today's Pacific midnight, not just the newest page. A capper may have
+    // posted a valid play earlier in the day; it should still reach Kobe if the
+    // event has not started. Later passes return to normal since_id polling.
     const rescanImages = sourceState.image_rescan_version !== IMAGE_RESCAN_VERSION;
     const dailyCatchup = sourceState.catchup_date !== date || rescanImages;
-    const response = await postsFor(source, userId, dailyCatchup ? undefined : sourceState.since_id);
-    const media = mediaUrls(response);
+    const startTime = dailyCatchup ? pacificStartIso(date) : undefined;
+    const responses = [];
+    let nextToken;
+    do {
+      const response = await postsFor(source, userId, {
+        sinceId: dailyCatchup ? undefined : sourceState.since_id,
+        startTime,
+        nextToken
+      });
+      responses.push(response);
+      nextToken = dailyCatchup ? response.meta?.next_token : undefined;
+    } while (nextToken);
+    const response = responses[0] || {};
+    const media = Object.assign({}, ...responses.map(mediaUrls));
     // Text-labelled NFL and college-football posts get first look. Keep the
     // original ID as the tie-breaker so a source remains deterministic.
-    const posts = [...(response.data || [])].sort((a, b) => footballPriority(a) - footballPriority(b) || a.id.localeCompare(b.id));
+    const posts = responses.flatMap((page) => page.data || [])
+      .sort((a, b) => footballPriority(a) - footballPriority(b) || a.id.localeCompare(b.id));
+    if (dailyCatchup && responses.length > 1) {
+      console.log(`Backfilled ${posts.length} post(s) from @${source.handle} since ${startTime}.`);
+    }
     const handledPostIds = new Set(Array.isArray(sourceState.handled_post_ids) ? sourceState.handled_post_ids : []);
     let lastProcessedId = sourceState.since_id || '';
     let completedSourcePass = true;
