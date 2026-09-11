@@ -856,6 +856,25 @@ async function closeApprovalCard(interaction, outcome) {
   }
 }
 
+async function respondToInteractionFailure(interaction, content, context) {
+  try {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(content);
+    } else {
+      await interaction.reply({ ephemeral: true, content });
+    }
+  } catch (error) {
+    // Discord interaction tokens expire. A stale button must not create an
+    // unhandled rejection or restart the worker while X monitoring runs.
+    const code = error?.code || error?.rawError?.code;
+    if (code === 50027 || /Invalid Webhook Token|Unknown interaction/i.test(String(error))) {
+      console.warn(`${context} could not be acknowledged because the Discord interaction token expired.`);
+      return;
+    }
+    console.error(`${context} could not send its failure response:`, error);
+  }
+}
+
 function sourceCardIdentity(message) {
   const embed = message?.embeds?.[0];
   const cardText = [
@@ -1193,11 +1212,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleTrendReviewButton(interaction);
     } catch (error) {
       console.error(error);
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply('Unable to complete this Trends action. No public post was made.');
-      } else {
-        await interaction.reply({ ephemeral: true, content: 'Unable to complete this Trends action. No public post was made.' });
-      }
+      await respondToInteractionFailure(interaction, 'Unable to complete this Trends action. No public post was made.', 'Trends interaction');
     }
     return;
   }
@@ -1206,11 +1221,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleSourceReviewButton(interaction);
     } catch (error) {
       console.error(error);
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply('Unable to complete this review action. No member-facing post was made.');
-      } else {
-        await interaction.reply({ ephemeral: true, content: 'Unable to complete this review action. No member-facing post was made.' });
-      }
+      await respondToInteractionFailure(interaction, 'Unable to complete this review action. No member-facing post was made.', 'Pick review interaction');
     }
     return;
   }
@@ -1235,11 +1246,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     } catch (error) {
       console.error(error);
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply('I could not send the welcome right now. Please try the button again in a moment.');
-      } else {
-        await interaction.reply({ ephemeral: true, content: 'I could not send the welcome right now. Please try the button again in a moment.' });
-      }
+      await respondToInteractionFailure(interaction, 'I could not send the welcome right now. Please try the button again in a moment.', 'Welcome interaction');
     }
     return;
   }
