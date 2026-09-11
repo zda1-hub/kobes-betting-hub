@@ -27,6 +27,13 @@ test('sends image-only posts from every enabled source to vision extraction', ()
   assert.equal(shouldQueueForReview({ monitoring_mode: 'photo_review' }, { text: '' }, ['https://example.com/card.png']), true);
 });
 
+test('sends text-only NFL picks from regular and exclusive sources to extraction', () => {
+  assert.equal(shouldQueueForReview({ monitoring_mode: 'standard' }, { text: 'NFL Rams -4.5 10u' }, []), true);
+  assert.equal(shouldQueueForReview({ monitoring_mode: 'standard' }, { text: 'NFL DeMario Douglas 4+ receptions' }, []), true);
+  assert.equal(shouldQueueForReview({ monitoring_mode: 'standard', publish_mode: 'terms_only' }, { text: 'NFL Matthew Stafford over .5 passing touchdown 4u' }, []), true);
+  assert.equal(shouldQueueForReview({ monitoring_mode: 'standard' }, { text: 'Patriots practice report and injury news' }, []), false);
+});
+
 test('keeps multi-play exclusives grouped while splitting regular posts', () => {
   const packet = {
     source: { publish_mode: 'terms_only' },

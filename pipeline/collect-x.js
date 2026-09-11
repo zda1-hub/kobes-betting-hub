@@ -36,13 +36,19 @@ function numberFor(date, count) {
 
 function likelyPick(text) {
   const post = text || '';
-  const market = /\b(over|under|ml|moneyline|spread|run line|puck line|ats)\b/i.test(post);
+  const market = /\b(over|under|ml|moneyline|spread|run line|puck line|ats|prop|pick|play|bet|wager|ladder|anytime|to score|first half|full game)\b/i.test(post);
   const odds = /(?:^|\s|\()[-+]\d{2,4}(?:\)|\b)/.test(post);
   const total = /\b(?:over|under|o|u)\s*\d+(?:\.\d+)?\b/i.test(post);
+  const line = /(?:^|\s)[-+]\d+(?:\.\d+)?(?=\s|$)/i.test(post);
+  const units = /\b\d+(?:\.\d+)?\s*(?:u|units?)\b/i.test(post);
+  const statMarket = /\b(?:receptions?|targets?|receiving|rushing|passing|yards?|touchdowns?|tds?|completions?|attempts?|interceptions?|sacks?|points?|rebounds?|assists?|hits?|strikeouts?|walks?|total bases?)\b/i.test(post);
+  const plusStat = /\b\d+(?:\.\d+)?\+\s*(?:receptions?|targets?|yards?|touchdowns?|tds?|completions?|attempts?|interceptions?|sacks?|points?|rebounds?|assists?|hits?|strikeouts?|walks?|total bases?)\b/i.test(post);
+  const explicitLeaguePick = /\b(?:nfl|football)\b/i.test(post) && (line || total || odds || statMarket || plusStat);
 
-  // Require a betting market plus a price or total. Sports commentary alone is
-  // not enough to enter the review queue.
-  return market && (odds || total);
+  // Text-only picks are valid. Require recognizable betting language plus a
+  // price, line, stake, or stat market so ordinary sports commentary does not
+  // flood the vision/extraction queue.
+  return (market || units || plusStat || explicitLeaguePick) && (odds || total || line || units || statMarket || plusStat);
 }
 
 function likelyWriteupOrTrend(text, postMediaUrls) {
@@ -57,13 +63,13 @@ function likelyWriteupOrTrend(text, postMediaUrls) {
 }
 
 function shouldQueueForReview(source, post, postMediaUrls) {
-  const mode = source.monitoring_mode || 'standard';
   // The pick may exist only inside the attached card. Send every media post
   // from every enabled source through vision; the downstream NFL, exact-event,
   // capper, and publishability gates decide whether it becomes an approval.
   if (postMediaUrls.length > 0) return true;
-  if (mode === 'photo_review') return false;
-  if (mode === 'writeup_or_trend') return likelyWriteupOrTrend(post.text, postMediaUrls);
+  // A pick can also be stated entirely in the post text. Let the same
+  // downstream gates inspect those candidates instead of dropping them just
+  // because there is no attached image.
   return likelyPick(post.text);
 }
 
