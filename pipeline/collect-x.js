@@ -19,6 +19,7 @@ const STATE_PATH = path.join(X_MONITORING_ROOT, 'state.json');
 const QUEUE_ROOT = reviewQueuePath();
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
 const IMAGE_RESCAN_VERSION = 'writeup-image-rescan-v1';
+const NFL_SCOREBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
 const PACIFIC_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Los_Angeles',
   year: 'numeric', month: '2-digit', day: '2-digit'
@@ -123,6 +124,22 @@ async function xFetch(url) {
     throw new Error(`X API request failed (${response.status}): ${await response.text()}`);
   }
   return response.json();
+}
+
+async function nflGamesScheduledToday({ now = new Date(), fetchImpl = fetch } = {}) {
+  const date = pacificDate(now).replaceAll('-', '');
+  try {
+    const response = await fetchImpl(`${NFL_SCOREBOARD_URL}?dates=${date}&limit=100`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return Array.isArray(payload.events) && payload.events.length > 0;
+  } catch (error) {
+    console.warn(`NFL schedule preflight was unavailable; continuing with normal gates: ${error instanceof Error ? error.message : error}`);
+    return null;
+  }
 }
 
 async function resolveUser(source, state) {
@@ -420,6 +437,15 @@ async function runCollector({ maxCandidates } = {}) {
     throw new Error('Missing X_BEARER_TOKEN. Add it to a local .env file; do not commit or send it in chat.');
   }
 
+  // There is no valid NFL candidate on a day with no NFL games. Avoid pulling
+  // and sending dozens of old posts through paid extraction/research in that
+  // case; the five-minute monitor remains alive and will recheck the schedule.
+  const nflGamesToday = await nflGamesScheduledToday();
+  if (nflGamesToday === false) {
+    console.log(`No NFL games are scheduled for ${date}; skipped X intake before paid extraction.`);
+    return { created: 0, skipped: 0, sourceCount: sources.length, noGames: true };
+  }
+
   await cleanMonitoringFolderIfDue();
   const state = await readJson(STATE_PATH, { sources: {} });
   const date = pacificDate();
@@ -591,4 +617,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { isSinglePlayPacket, likelyWriteupOrTrend, runCollector, shouldQueueForReview, shouldSplitPlayPackets };
+module.exports = { isSinglePlayPacket, likelyWriteupOrTrend, nflGamesScheduledToday, runCollector, shouldQueueForReview, shouldSplitPlayPackets };
