@@ -86,8 +86,13 @@ async function pickWorkflowPaused() {
   }
 }
 
-function xMonitorIntervalMs() {
-  const configured = Number(process.env.X_MONITOR_INTERVAL_MS || 300000);
+function xMonitorIntervalMs(now = new Date()) {
+  const overrideDate = (process.env.X_MONITOR_INTERVAL_OVERRIDE_DATE || '').trim();
+  const overrideMs = (process.env.X_MONITOR_INTERVAL_OVERRIDE_MS || '').trim();
+  const today = pacificClock(now).date;
+  const configured = Number(overrideDate === today && overrideMs
+    ? overrideMs
+    : (process.env.X_MONITOR_INTERVAL_MS || 300000));
   // Guard against an accidental rapid polling setting that could create an
   // unnecessary X API bill. Five minutes is the default; one minute is the floor.
   if (!Number.isFinite(configured) || configured < 60000) return 300000;
