@@ -18,7 +18,9 @@ const STATE_PATH = path.join(X_MONITORING_ROOT, 'state.json');
 // for the Discord card that refers to it, including across a Render deploy.
 const QUEUE_ROOT = reviewQueuePath();
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
-const IMAGE_RESCAN_VERSION = 'writeup-image-rescan-v1';
+// Revisit image posts once after changing the event gate so a previously held
+// multi-game card can be reconsidered under per-leg matchup validation.
+const IMAGE_RESCAN_VERSION = 'writeup-image-rescan-v2';
 const FOOTBALL_SCOREBOARD_URLS = [
   'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
   'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard'
