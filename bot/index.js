@@ -651,13 +651,16 @@ async function beginDailyXMonitor() {
     return;
   }
   const interval = xMonitorIntervalMs();
-  console.log(`X monitoring enabled at ${currentTime} Arizona time: checking every ${Math.round(interval / 60000)} minute(s) until ${limit ?? 'the configured'} daily free-pick limit is reached.`);
+  const stoppingRule = limit === null
+    ? 'until the daily cutoff'
+    : `until the ${limit}-pick daily free-pick limit is reached`;
+  console.log(`X monitoring enabled at ${currentTime} Arizona time: checking every ${Math.round(interval / 60000)} minute(s) ${stoppingRule}.`);
   void collectXSafely();
   xMonitorIntervalTimer = setInterval(() => void collectXSafely(), interval);
   if (dailyStopAt) {
     const stopAtMs = arizonaDailyTimestampMs(dailyStopAt);
     xMonitorStopTimer = setTimeout(() => stopXMonitor(`daily cutoff of ${dailyStopAt} Arizona time reached`), Math.max(0, stopAtMs - Date.now()));
-    console.log(`X monitoring is scheduled to stop at ${new Date(stopAtMs).toISOString()} each day if two picks have not been published.`);
+    console.log(`X monitoring is scheduled to stop at ${new Date(stopAtMs).toISOString()} each day at the configured daily cutoff.`);
   }
 }
 
