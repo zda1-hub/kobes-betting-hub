@@ -437,6 +437,7 @@ async function runCollector({ maxCandidates } = {}) {
     throw new Error('Missing X_BEARER_TOKEN. Add it to a local .env file; do not commit or send it in chat.');
   }
 
+  const date = pacificDate();
   // There is no valid NFL candidate on a day with no NFL games. Avoid pulling
   // and sending dozens of old posts through paid extraction/research in that
   // case; the five-minute monitor remains alive and will recheck the schedule.
@@ -448,7 +449,6 @@ async function runCollector({ maxCandidates } = {}) {
 
   await cleanMonitoringFolderIfDue();
   const state = await readJson(STATE_PATH, { sources: {} });
-  const date = pacificDate();
   let sequence = await existingCount(date);
   const queuedSourcePostIds = await existingSourcePostIds(date);
   let created = 0;
