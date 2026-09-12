@@ -21,6 +21,10 @@ const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
 // Revisit image posts once after changing source routing so previously held
 // image cards can be reconsidered under the current approval-card mode.
 const IMAGE_RESCAN_VERSION = 'source-routing-image-rescan-v3';
+// Revisit today's held posts once after expanding event verification from only
+// today to the verified upcoming weekend slate. This recovers Friday NFL
+// posts for Sunday without duplicating cards already delivered to Kobe.
+const UPCOMING_SLATE_RESCAN_VERSION = 'upcoming-slate-rescan-v1';
 const FOOTBALL_SCOREBOARD_URLS = [
   'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
   'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard'
@@ -514,7 +518,8 @@ async function runCollector({ maxCandidates } = {}) {
     // posted a valid play earlier in the day; it should still reach Kobe if the
     // event has not started. Later passes return to normal since_id polling.
     const rescanImages = sourceState.image_rescan_version !== IMAGE_RESCAN_VERSION;
-    const dailyCatchup = sourceState.catchup_date !== date || rescanImages;
+    const rescanUpcomingSlate = sourceState.upcoming_slate_rescan_version !== UPCOMING_SLATE_RESCAN_VERSION;
+    const dailyCatchup = sourceState.catchup_date !== date || rescanImages || rescanUpcomingSlate;
     const startTime = dailyCatchup ? pacificStartIso(date) : undefined;
     const responses = [];
     let nextToken;
@@ -550,10 +555,9 @@ async function runCollector({ maxCandidates } = {}) {
       // The one-time image rescan revisits posts previously marked handled by
       // the old caption filter, but never creates a duplicate for a post that
       // already has a current-day approval packet.
-      const revisitImage = rescanImages
-        && postMediaUrls.length > 0
-        && !queuedSourcePostIds.has(String(post.id));
-      if (handledPostIds.has(post.id) && !revisitImage) {
+      const revisitHeldPost = !queuedSourcePostIds.has(String(post.id))
+        && ((rescanImages && postMediaUrls.length > 0) || rescanUpcomingSlate);
+      if (handledPostIds.has(post.id) && !revisitHeldPost) {
         lastProcessedId = post.id;
         continue;
       }
@@ -665,6 +669,9 @@ async function runCollector({ maxCandidates } = {}) {
     }
     if (rescanImages && completedSourcePass) {
       nextSourceState.image_rescan_version = IMAGE_RESCAN_VERSION;
+    }
+    if (rescanUpcomingSlate && completedSourcePass) {
+      nextSourceState.upcoming_slate_rescan_version = UPCOMING_SLATE_RESCAN_VERSION;
     }
     return { source, nextSourceState, acceptedPackets };
   }

@@ -166,19 +166,28 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
     };
   }
 
-  const date = pacificDate(now).replaceAll('-', '');
-  let scoreboard;
+  // Friday NFL cards are normally for Sunday, and Saturday cards can be for
+  // Monday. Verify that near-term slate instead of silently discarding valid
+  // upcoming plays merely because kickoff is not on the calendar date of the
+  // source post.
+  const events = [];
   try {
-    const response = await fetchImpl(`${ESPN_BASE_URL}/${leaguePath}/scoreboard?dates=${date}&limit=100`, {
-      headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000)
-    });
-    if (!response.ok) return { status: 'UNVERIFIABLE', reason: `ESPN returned ${response.status}.` };
-    scoreboard = await response.json();
+    for (let offset = 0; offset <= 3; offset += 1) {
+      const day = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
+      const date = pacificDate(day).replaceAll('-', '');
+      const response = await fetchImpl(`${ESPN_BASE_URL}/${leaguePath}/scoreboard?dates=${date}&limit=100`, {
+        headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) continue;
+      const scoreboard = await response.json();
+      events.push(...(scoreboard.events || []));
+    }
   } catch {
     return { status: 'UNVERIFIABLE', reason: 'ESPN schedule check was unavailable.' };
   }
+  if (!events.length) return { status: 'NOT_SCHEDULED_TODAY', reason: 'No matching event is scheduled in the upcoming three-day slate.' };
 
-  const matchedEvents = playPackets.map((playPacket) => (scoreboard.events || [])
+  const matchedEvents = playPackets.map((playPacket) => events
     .find((candidate) => matchesExtractedEvent(playPacket, candidate)));
   const playStatuses = [];
   for (let index = 0; index < matchedEvents.length; index += 1) {

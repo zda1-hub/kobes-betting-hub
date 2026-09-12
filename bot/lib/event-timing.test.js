@@ -32,6 +32,23 @@ test('keeps a matching ESPN event only while it is upcoming', async () => {
   assert.equal(result.eventStart, '2026-08-30T21:10:00.000Z');
 });
 
+test('allows a verified NFL pick scheduled within the upcoming weekend slate', async () => {
+  const sundayPacket = {
+    analysis: { extraction: { league: 'NFL', sport: 'Football', event: 'Philadelphia Eagles at Dallas Cowboys' } }
+  };
+  const result = await upcomingEventStatus(sundayPacket, {
+    now: new Date('2026-09-11T18:00:00.000Z'),
+    fetchImpl: async (url) => new Response(JSON.stringify({ events: url.includes('dates=20260913') ? [{
+      date: '2026-09-13T20:25:00.000Z', competitions: [{ competitors: [
+        { team: { displayName: 'Philadelphia Eagles', shortDisplayName: 'Eagles', abbreviation: 'PHI' } },
+        { team: { displayName: 'Dallas Cowboys', shortDisplayName: 'Cowboys', abbreviation: 'DAL' } }
+      ] }]
+    }] : [] }), { status: 200 })
+  });
+  assert.equal(result.status, 'UPCOMING');
+  assert.equal(result.eventStart, '2026-09-13T20:25:00.000Z');
+});
+
 test('blocks a matching event after its scheduled start', async () => {
   const result = await upcomingEventStatus(packet, {
     now: new Date('2026-08-30T22:00:00.000Z'),
