@@ -28,6 +28,7 @@ function visiblePlays(packet) {
         imageSummary: extraction.image_summary
       }),
       event: visible(play.event || extraction.event, ''),
+      market: visible(play.market || extraction.market, ''),
       terms: [...new Set([play.selection, play.line, play.odds_american]
         .filter((value) => typeof value === 'string' && value.trim())
         .map((value) => value.trim())
@@ -111,6 +112,10 @@ function requiresNamedPlayer(play) {
   // individual-player props and therefore do not need an athlete name.
   if (/\bteam\b|\bgame\s+total\b|\btotal\s+points\b|\b(?:vs?\.?|@)\b|\//i.test(terms)) return false;
   return true;
+}
+
+function isUnnamedBareProp(play) {
+  return !play?.market && /^(?:over|under)\b/i.test(play?.terms || '');
 }
 
 function hasNamedPlayer(play) {
@@ -295,8 +300,11 @@ function assertPublishableExtraction(packet) {
     throw new Error('The play is not clearly visible, so this card cannot be published automatically.');
   }
   const plays = visiblePlays(packet);
-  if (plays.some(requiresNamedPlayer) && plays.some((play) => requiresNamedPlayer(play) && !hasNamedPlayer(play))) {
+  if (plays.some((play) => (requiresNamedPlayer(play) || isUnnamedBareProp(play)) && !hasNamedPlayer(play))) {
     throw new Error('A player prop must show the player’s full name before it can be approved or published.');
+  }
+  if (plays.some((play) => /^\s*(?:player props?:\s*)?(?:pass|no play|skip)\b/i.test(play.terms))) {
+    throw new Error('The source does not contain a definitive play.');
   }
 }
 

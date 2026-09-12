@@ -395,3 +395,28 @@ test('does not turn a team side into a fake player name from a source phrase', (
   };
   assert.equal(buildSourcePickEmbed(teamSide, 'PAID PICK').description.split('\n')[0], 'Iowa -14');
 });
+
+test('holds an unnamed bare prop and a non-pick pass marker', () => {
+  const bareProp = {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'Over', player_name: '', line: '3.5', odds_american: '', units: '', event: 'LAD @ MIA' }],
+        market: '',
+        source_claims: ['The matchup is scheduled today', 'A valid trend is visible', 'The line is playable']
+      }
+    }
+  };
+  assert.throws(() => buildSourcePickEmbed(bareProp, 'PAID PICK'), /player’s full name/);
+
+  const pass = {
+    ...bareProp,
+    analysis: {
+      ...bareProp.analysis,
+      extraction: { ...bareProp.analysis.extraction, plays: [{ selection: 'Player Props: PASS', line: '', odds_american: '', units: '', event: 'LAD @ MIA' }] }
+    }
+  };
+  assert.throws(() => buildSourcePickEmbed(pass, 'PAID PICK'), /definitive play/);
+});
