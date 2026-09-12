@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickApprovalEmbed, buildSourcePickEmbed, sourceCapperName, sourceTerms } = require('./source-review');
+const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickApprovalEmbed, buildSourcePickEmbed, sourceCapperName, sourceEvidence, sourceTerms } = require('./source-review');
 
 const packet = {
   source: { handle: 'ExampleSource', media_urls: ['https://example.com/pick.png'] },
@@ -106,6 +106,76 @@ test('does not include promotional banger wording in a writeup', () => {
     }
   }, 'FREE PICK');
   assert.equal(embed.description, 'Cooper Kupp Over 2.5 Receptions (-132)\n\n- Kupp has cleared 2+ receptions in 9 of his last 10 games');
+});
+
+test('does not count promotional copy as regular writeup breakdowns', () => {
+  const malformed = {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'Garrett Mitchell over 7.5 hitter fantasy score', player_name: 'Garrett Mitchell', line: '7.5', odds_american: '', units: '' }],
+        source_claims: [
+          'Make 620X your money',
+          '100$ to one person when this hits',
+          'If I like the demons',
+          'You gonna love regular',
+          '$1 to win $620',
+          '6-Pick Power Play',
+          'Slide for Refund: $1'
+        ]
+      }
+    }
+  };
+  assert.deepEqual(sourceEvidence(malformed), []);
+});
+
+test('does not use other selections as breakdown bullets', () => {
+  const malformed = {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'Corbin Carroll TO HIT A HOME RUN', player_name: 'Corbin Carroll', line: '', odds_american: '+470', units: '' }],
+        source_claims: [
+          'Pete Alonso TO Hit a Home Run',
+          'Corbin Carroll TO Hit a Home Run',
+          'Cal Raleigh TO Hit a Home Run',
+          '+7728'
+        ]
+      }
+    }
+  };
+  assert.deepEqual(sourceEvidence(malformed), []);
+});
+
+test('keeps relevant LeBron-style bullets and removes an unrelated player bullet', () => {
+  const writeup = {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'LeBron James over 22.5 points', player_name: 'LeBron James', line: '22.5 points', odds_american: '', units: '' }],
+        event: 'Philadelphia 76ers @ New York Knicks',
+        source_claims: [
+          'Has over 20 points in 6 straight',
+          'Has over 28 points against the Knicks in 6 of 8 matchups',
+          'Knicks missing Towns so James should see better interior looks',
+          'Embiid is hurt and James has scored over 25 in all games without Embiid',
+          'Christian Gonzalez put JSN in a body bag'
+        ]
+      }
+    }
+  };
+  assert.deepEqual(sourceEvidence(writeup), [
+    'Has over 20 points in 6 straight',
+    'Has over 28 points against the Knicks in 6 of 8 matchups',
+    'Knicks missing Towns so James should see better interior looks',
+    'Embiid is hurt and James has scored over 25 in all games without Embiid'
+  ]);
 });
 
 test('keeps factual support while removing research-source labels and raw stat aliases', () => {

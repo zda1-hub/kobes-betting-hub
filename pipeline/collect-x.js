@@ -392,7 +392,7 @@ async function notifyApprovalChannel(packet) {
     // eligibility is enforced only when Kobe clicks the Free button; the
     // paid/NFL action remains available for regular picks.
     if (packet.source?.publish_mode !== 'terms_only' && sourceEvidence(packet).length < 3) {
-      throw new Error('A regular NFL writeup must include at least three clean breakdown points before approval.');
+      throw new Error('A regular writeup must include at least three clean, relevant breakdown points before approval.');
     }
     embeds = [buildSourcePickApprovalEmbed(packet, 'FREE PICK')];
   } catch (error) {

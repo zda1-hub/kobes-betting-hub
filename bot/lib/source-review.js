@@ -75,12 +75,56 @@ function hasNamedPlayer(play) {
   return Boolean(playerNameFromPlay(play));
 }
 
-function isUsefulSupport(note, pickTerms) {
+function supportContext(packet) {
+  const extraction = packet.analysis?.extraction || {};
+  const plays = Array.isArray(extraction.plays) && extraction.plays.length
+    ? extraction.plays
+    : [extraction];
+  return [...new Set([
+    ...publicPickTerms(packet),
+    extraction.event,
+    ...plays.map((play) => play?.event)
+  ].filter((value) => typeof value === 'string' && value.trim()).map(normalizedText))];
+}
+
+function namedPhrases(text) {
+  // This is deliberately conservative: only multi-word proper names are used
+  // to identify an unrelated player/person. Team names such as Florida State
+  // remain valid when they are part of the card's event context.
+  return [...String(text || '').matchAll(/\b[A-Z][A-Za-z'’.-]{2,}(?:\s+[A-Z][A-Za-z'’.-]{2,})+\b/g)]
+    .map((match) => normalizedText(match[0]))
+    .filter(Boolean);
+}
+
+function hasUnrelatedNamedEntity(note, packet) {
+  const context = supportContext(packet);
+  // A generic team/game writeup has no player anchor to compare against. Do
+  // not reject its matchup facts merely because they contain a team name.
+  const hasPlayer = visiblePlays(packet).some(hasNamedPlayer);
+  if (!hasPlayer) return false;
+  return namedPhrases(note).some((phrase) => !context.some((anchor) => anchor.includes(phrase) || phrase.includes(anchor)));
+}
+
+function looksLikeSelection(note) {
+  const normalized = normalizedText(note);
+  if (/^[+-]?\d{2,4}(?:\s+[a-z]+)?$/.test(normalized)) return true;
+
+  // A copied betting selection is not a breakdown. Preserve factual lines
+  // such as "Over in 5 straight" and "Went over 20 points in 6 games".
+  const hasHistoricalContext = /\b(?:in|of|over|last|past|previous|straight|games?|starts?|matchups?|attempts?|season|seasons|rate|average|averaged|allowed|rank(?:ed|s)?|without|since|against)\b/.test(normalized);
+  if (/\b(?:to hit|to score|to record|anytime)\b/.test(normalized) && !hasHistoricalContext) return true;
+  if (/^(?:[a-z][a-z0-9'’-]*\s+){0,5}(?:over|under)\s+\d/.test(normalized) && !hasHistoricalContext) return true;
+  return false;
+}
+
+function isUsefulSupport(note, pickTerms, packet) {
   const normalized = normalizedText(note);
   if (!normalized) return false;
-  if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|banger|bang bang|two leg|2 leg|parlay|lets catch|let s catch|lets go|let s go|winner)\b/.test(normalized)) return false;
+  if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|banger|bang bang|two leg|2 leg|parlay|lets catch|let s catch|lets go|let s go|winner|profit|payout|refund|power play|ladder|make \d+\s*x|\d+\s*\$?\s*to\s+(?:win|one person)|you(?:'|’)ll love|you gonna love|like the demons|link on post|slide for)\b/.test(normalized)) return false;
   if (/^\d{1,2}\s\d{2}\s*(?:am|pm)?\b/.test(normalized)) return false;
   if (pickTerms.some((term) => normalized === normalizedText(term))) return false;
+  if (looksLikeSelection(note)) return false;
+  if (hasUnrelatedNamedEntity(note, packet)) return false;
   return true;
 }
 
@@ -126,7 +170,7 @@ function sourceEvidence(packet) {
     .map(cleanEvidenceClaim)
     .filter(Boolean)
     .filter((claim) => !/https?:\/\//i.test(claim)))]
-    .filter((claim) => isUsefulSupport(claim, pickTerms))
+    .filter((claim) => isUsefulSupport(claim, pickTerms, packet))
     .slice(0, 8);
 }
 
