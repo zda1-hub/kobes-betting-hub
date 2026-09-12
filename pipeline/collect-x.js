@@ -490,10 +490,10 @@ async function runCollector({ maxCandidates } = {}) {
   // Keep one Render service and one durable queue, but let a bounded number of
   // source scans run at once. This removes the old 38-account serial bottleneck
   // without creating duplicate workers or uncoordinated state files.
-  const configuredConcurrency = Number(process.env.X_MONITOR_CONCURRENCY || 6);
+  const configuredConcurrency = Number(process.env.X_MONITOR_CONCURRENCY || 12);
   const concurrency = Number.isInteger(configuredConcurrency) && configuredConcurrency >= 1
     ? Math.min(configuredConcurrency, 12)
-    : 6;
+    : 12;
   console.log(`Scanning ${sources.length} enabled X sources with ${Math.min(concurrency, sources.length)} bounded intake worker(s).`);
   const claimedSourcePostIds = new Set(queuedSourcePostIds);
   let created = 0;
@@ -528,7 +528,7 @@ async function runCollector({ maxCandidates } = {}) {
     // Text-labelled NFL and college-football posts get first look. Keep the
     // original ID as the tie-breaker so a source remains deterministic.
     const posts = responses.flatMap((page) => page.data || [])
-      .sort((a, b) => footballPriority(a) - footballPriority(b) || a.id.localeCompare(b.id));
+      .sort((a, b) => footballPriority(a) - footballPriority(b) || b.id.localeCompare(a.id));
     if (dailyCatchup && responses.length > 1) {
       console.log(`Backfilled ${posts.length} post(s) from @${source.handle} since ${startTime}.`);
     }
