@@ -172,10 +172,11 @@
     "handle": "DanGambleAI",
     "display_name": "Dan's AI Sports Picks",
     "enabled": true,
-    "monitoring_mode": "writeup_or_trend",
+    "monitoring_mode": "photo_review",
+    "publish_mode": "terms_only",
     "credit_line": "Source: @DanGambleAI",
     "reuse_permission": "PENDING_SOURCE_TERMS",
-    "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
+    "notes": "Exclusive-only image source. Send the original capper name, exact visible bets, and visible unit or stake only after Kobe approves."
   },
   {
     "handle": "sacstim",
