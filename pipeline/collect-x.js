@@ -18,9 +18,9 @@ const STATE_PATH = path.join(X_MONITORING_ROOT, 'state.json');
 // for the Discord card that refers to it, including across a Render deploy.
 const QUEUE_ROOT = reviewQueuePath();
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
-// Revisit image posts once after changing the event gate so a previously held
-// multi-game card can be reconsidered under per-leg matchup validation.
-const IMAGE_RESCAN_VERSION = 'writeup-image-rescan-v2';
+// Revisit image posts once after changing source routing so previously held
+// image cards can be reconsidered under the current approval-card mode.
+const IMAGE_RESCAN_VERSION = 'source-routing-image-rescan-v3';
 const FOOTBALL_SCOREBOARD_URLS = [
   'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
   'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard'
@@ -220,7 +220,10 @@ async function existingSourcePostIds(date) {
     try {
       const packet = JSON.parse(await fs.readFile(path.join(QUEUE_ROOT, date, file), 'utf8'));
       const postId = packet.source?.post_id;
-      if (postId) ids.add(String(postId));
+      // A packet without a Discord review message was held before approval.
+      // Leave it eligible for an explicit one-time rescan after a routing fix;
+      // packets already sent to Kobe remain deduplicated.
+      if (postId && packet.discord_review_message_id) ids.add(String(postId));
     } catch {
       // A malformed historical packet must not stop the live collector.
     }
