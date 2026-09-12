@@ -458,3 +458,25 @@ test('holds an unnamed bare prop and a non-pick pass marker', () => {
   };
   assert.throws(() => buildSourcePickEmbed(pass, 'PAID PICK'), /definitive play/);
 });
+
+test('holds stat tables and generic totals that do not show a real market or matchup', () => {
+  const statTable = {
+    ...packet,
+    analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, plays: [{ selection: 'Tyler Stephenson PA 5, H 3, BA .600', player_name: 'Tyler Stephenson', line: '', odds_american: '', units: '' }] } }
+  };
+  assert.throws(() => buildSourcePickEmbed(statTable, 'PAID PICK'), /explicit betting market/);
+
+  const genericTotal = {
+    ...packet,
+    analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, plays: [{ selection: 'OVER 8.5', player_name: '', line: '', odds_american: '', units: '', event: '' }] } }
+  };
+  assert.throws(() => buildSourcePickEmbed(genericTotal, 'PAID PICK'), /(player’s full name|must show the matchup)/);
+});
+
+test('formats a reversed player prop with the player first', () => {
+  const reversed = {
+    ...packet,
+    analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, plays: [{ selection: 'Over 17.5 Bryan Woo Outs', player_name: 'Bryan Woo', line: '17.5', odds_american: '-171', units: '' }] } }
+  };
+  assert.equal(buildSourcePickEmbed(reversed, 'PAID PICK').description.split('\n')[0], 'Bryan Woo Over 17.5 Outs (-171)');
+});

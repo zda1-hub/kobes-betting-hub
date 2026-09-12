@@ -85,11 +85,23 @@ function playerNameFromPlay(play) {
 function publicPlayTerm({ terms, selection, playerName, line, oddsAmerican, event, sourceClaims }) {
   const namedPlayer = playerNameFromPlay({ selection, playerName, line, event, sourceClaims });
   const baseSelection = selection || terms || '';
-  const base = namedPlayer && !normalizedText(baseSelection).includes(normalizedText(namedPlayer))
-    ? `${namedPlayer} ${baseSelection}`.trim()
+  const explicitPlayer = visible(playerName, '');
+  const selectionIncludesName = namedPlayer && normalizedText(baseSelection).includes(normalizedText(namedPlayer));
+  const shouldReorderPlayer = Boolean(explicitPlayer && selectionIncludesName && !normalizedText(baseSelection).startsWith(normalizedText(namedPlayer)));
+  const selectionWithoutName = shouldReorderPlayer
+    ? baseSelection.replace(new RegExp(`\\b${namedPlayer.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'i'), '').replace(/\\s{2,}/g, ' ').trim()
     : baseSelection;
-  const includesLine = line && normalizedText(base).includes(normalizedText(line));
-  return [base, includesLine ? '' : line, oddsAmerican ? `(${oddsAmerican})` : '']
+  // A source sometimes reads a prop backwards ("Over 17.5 Bryan Woo Outs").
+  // Put the named player first so the public card always has a usable play
+  // line rather than relying on Kobe to mentally reformat it.
+  const base = namedPlayer && (!selectionIncludesName || shouldReorderPlayer)
+    ? `${namedPlayer} ${selectionWithoutName}`.trim()
+    : baseSelection;
+  const cleanBase = base.replace(/\s{2,}/g, ' ').trim();
+  const includesLine = line && normalizedText(cleanBase).includes(normalizedText(line));
+  const requiresEvent = /^(?:over|under|o\s*\/\s*u|nrfi|yrfi|btts|yes|no)\b/i.test(cleanBase);
+  const eventContext = requiresEvent && event ? `— ${event}` : '';
+  return [cleanBase, includesLine ? '' : line, eventContext, oddsAmerican ? `(${oddsAmerican})` : '']
     .filter(Boolean)
     .join(' ');
 }
@@ -112,6 +124,14 @@ function requiresNamedPlayer(play) {
   // individual-player props and therefore do not need an athlete name.
   if (/\bteam\b|\bgame\s+total\b|\btotal\s+points\b|\b(?:vs?\.?|@)\b|\//i.test(terms)) return false;
   return true;
+}
+
+function hasExplicitBettingMarket(play) {
+  return /\b(?:over|under|o\s*\/\s*u|moneyline|\bml\b|spread|nrfi|yrfi|btts|to hit|anytime|team total|yes|no)\b|(?:^|\s)[+-]\d+(?:\.\d+)?/i.test(play?.terms || '');
+}
+
+function isGenericMarketWithoutEvent(play) {
+  return !hasNamedPlayer(play) && /^(?:over|under|o\s*\/\s*u|nrfi|yrfi|btts|yes|no)\b/i.test((play?.terms || '').trim()) && !visible(play?.event, '');
 }
 
 function isUnnamedBareProp(play) {
@@ -177,7 +197,7 @@ function isUsefulSupport(note, pickTerms, packet) {
   // A source post can mix a genuine bet graphic with timeline chatter,
   // promotional tooling, or a general sports rant. None of that is pick
   // analysis, even if an extractor happens to attach it to the card.
-  if (/\b(?:timeline|scamball|lawsuits?|pencil pushers?|executives?|headed to prison|done with gambling|changed the baseballs?|new batch of baseballs|contact[- ]quality|statcast|sportsbooks?|fanduel|draftkings|mlbhr|dfs|optimizer|prizepicks|free player prop trend tool|hit trends include|full card includes|saturday.?s \d+ legger|officially in (?:the )?.* era|i just scrolled|it(?:'|’)s gonna be|we are officially)\b/i.test(note)) return false;
+  if (/\b(?:timeline|scamball|lawsuits?|pencil pushers?|executives?|headed to prison|done with gambling|changed the baseballs?|new batch of baseballs|contact[- ]quality|statcast|sportsbooks?|fanduel|draftkings|mlbhr|dfs|optimizer|prizepicks|free player prop trend tool|hit trends include|full card includes|saturday.?s \d+ legger|officially in (?:the )?.* era|i just scrolled|it(?:'|’)s gonna be|we are officially|cashed|finished|celebrat(?:e|ing)|biggest wins?|claimed my|praise the lord|don.?t run parlays|will move to|calm \d+\s*-\s*\d+)\b/i.test(note)) return false;
   if (pickTerms.some((term) => normalized === normalizedText(term))) return false;
   if (looksLikeSelection(note)) return false;
   if (hasUnrelatedNamedEntity(note, packet)) return false;
@@ -309,11 +329,17 @@ function assertPublishableExtraction(packet) {
     throw new Error('The play is not clearly visible, so this card cannot be published automatically.');
   }
   const plays = visiblePlays(packet);
+  if (plays.some((play) => /^\s*(?:player props?:\s*)?(?:pass|no play|skip)\b/i.test(play.terms))) {
+    throw new Error('The source does not contain a definitive play.');
+  }
+  if (plays.some((play) => !hasExplicitBettingMarket(play))) {
+    throw new Error('The source does not show an explicit betting market.');
+  }
   if (plays.some((play) => (requiresNamedPlayer(play) || isUnnamedBareProp(play)) && !hasNamedPlayer(play))) {
     throw new Error('A player prop must show the player’s full name before it can be approved or published.');
   }
-  if (plays.some((play) => /^\s*(?:player props?:\s*)?(?:pass|no play|skip)\b/i.test(play.terms))) {
-    throw new Error('The source does not contain a definitive play.');
+  if (plays.some(isGenericMarketWithoutEvent)) {
+    throw new Error('A total or game market must show the matchup before it can be approved.');
   }
 }
 
