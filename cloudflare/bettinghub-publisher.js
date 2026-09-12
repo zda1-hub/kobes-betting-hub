@@ -37,6 +37,9 @@ async function handleRequest(request, env) {
   if (url.pathname === CALLBACK_PATH) return completeXAuthorization(url, env);
   if (url.pathname === "/api/queue/x" && request.method === "POST") return enqueueXPost(request, env);
   if (url.pathname === "/api/queue/x" && request.method === "GET") return listRecentPosts(request, env);
+  if (url.pathname === "/api/queue/daily-picks" && request.method === "POST") return enqueueDailyPick(request, env);
+  if (url.pathname === "/api/queue/daily-picks" && request.method === "GET") return listDailyPicks(request, env);
+  if (url.pathname === "/api/queue/daily-picks/deliver" && request.method === "POST") return markDailyPickDelivered(request, env);
   if (url.pathname === "/api/queue/trends" && request.method === "POST") return enqueueTrendEmail(request, env);
   if (url.pathname === "/api/queue/trends" && request.method === "GET") return listTrendEmails(request, env);
   if (url.pathname === "/api/queue/trends/deliver" && request.method === "POST") return markTrendEmailDelivered(request, env);
@@ -70,6 +73,69 @@ async function ensureTrendInbox(env) {
 
 function trendQueueAuthorized(request, env) {
   return hasBearer(request, env.TRENDS_QUEUE_SECRET);
+}
+
+function dailyPickQueueAuthorized(request, env) {
+  return hasBearer(request, env.DAILY_PICKS_QUEUE_SECRET);
+}
+
+async function ensureDailyPickQueue(env) {
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS daily_picks (
+      id TEXT PRIMARY KEY,
+      operating_date TEXT NOT NULL,
+      sport TEXT NOT NULL,
+      event TEXT NOT NULL,
+      market TEXT NOT NULL,
+      selection TEXT NOT NULL,
+      line_odds TEXT NOT NULL,
+      units TEXT,
+      reason TEXT,
+      cta TEXT,
+      source TEXT NOT NULL,
+      approved_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'approved' CHECK (status IN ('approved', 'emailed')),
+      created_at TEXT NOT NULL,
+      delivered_at TEXT
+    )`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_daily_picks_ready ON daily_picks (operating_date, status, created_at)')
+  ]);
+}
+
+function dailyPickText(value, maximum = 1000) {
+  return typeof value === 'string' ? value.replace(/\u0000/g, '').trim().slice(0, maximum) : String(value ?? '').trim().slice(0, maximum);
+}
+
+async function enqueueDailyPick(request, env) {
+  if (!dailyPickQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  let input;
+  try { input = await request.json(); } catch { return json({ error: 'Expected JSON' }, 400); }
+  const id = dailyPickText(input.id, 160);
+  const operatingDate = dailyPickText(input.operatingDate, 10);
+  const required = { id, operatingDate, sport: dailyPickText(input.sport, 80), event: dailyPickText(input.event), market: dailyPickText(input.market), selection: dailyPickText(input.selection), lineOdds: dailyPickText(input.lineOdds, 160), source: dailyPickText(input.source, 160), approvedAt: dailyPickText(input.approvedAt, 40) };
+  if (!/^[A-Za-z0-9_-]+$/.test(id) || !/^\d{4}-\d{2}-\d{2}$/.test(operatingDate) || !Number.isFinite(Date.parse(required.approvedAt)) || Object.values(required).some((value) => !value)) return json({ error: 'id, operatingDate, sport, event, market, selection, lineOdds, source, and valid approvedAt are required' }, 400);
+  await ensureDailyPickQueue(env);
+  const result = await env.DB.prepare(`INSERT INTO daily_picks (id, operating_date, sport, event, market, selection, line_odds, units, reason, cta, source, approved_at, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?) ON CONFLICT(id) DO NOTHING`).bind(id, operatingDate, required.sport, required.event, required.market, required.selection, required.lineOdds, dailyPickText(input.units, 40), dailyPickText(input.reason), dailyPickText(input.cta, 300), required.source, new Date(Date.parse(required.approvedAt)).toISOString(), new Date().toISOString()).run();
+  return json({ id, status: result.meta.changes ? 'approved' : 'already_queued' }, result.meta.changes ? 201 : 200);
+}
+
+async function listDailyPicks(request, env) {
+  if (!dailyPickQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  await ensureDailyPickQueue(env);
+  const date = dailyPickText(new URL(request.url).searchParams.get('date'), 10);
+  const { results } = await env.DB.prepare(`SELECT id, operating_date AS operatingDate, sport, event, market, selection, line_odds AS lineOdds, units, reason, cta, source, approved_at AS approvedAt FROM daily_picks WHERE status = 'approved' AND operating_date = ? ORDER BY created_at ASC`).bind(date).all();
+  return json({ picks: results });
+}
+
+async function markDailyPickDelivered(request, env) {
+  if (!dailyPickQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  let input;
+  try { input = await request.json(); } catch { return json({ error: 'Expected JSON' }, 400); }
+  const id = dailyPickText(input.id, 160);
+  if (!id) return json({ error: 'id is required' }, 400);
+  await ensureDailyPickQueue(env);
+  const result = await env.DB.prepare(`UPDATE daily_picks SET status = 'emailed', delivered_at = ? WHERE id = ? AND status = 'approved'`).bind(new Date().toISOString(), id).run();
+  return json({ id, status: result.meta.changes ? 'emailed' : 'already_emailed' });
 }
 
 function cleanTrendText(value, maximum) {
@@ -249,38 +315,48 @@ async function listRecentPosts(request, env) {
 async function publishFreePick(request, env) {
   if (!await hasBearer(request, env.QUEUE_INGEST_SECRET)) return json({ error: "Unauthorized" }, 401);
   if (!env.FREE_PICK_MEDIA) return json({ error: "Free Pick media storage is not configured" }, 503);
-  if (!request.headers.get("content-type")?.includes("multipart/form-data")) {
-    return json({ error: "Expected multipart form data" }, 400);
+  const contentTypeHeader = request.headers.get("content-type") || "";
+  let input = {};
+  let image = null;
+  let contentType = "";
+  if (contentTypeHeader.includes("multipart/form-data")) {
+    let form;
+    try { form = await request.formData(); } catch { return json({ error: "Could not read the upload" }, 400); }
+    input = Object.fromEntries([...form.entries()].filter(([key, value]) => typeof value === "string").map(([key, value]) => [key, value]));
+    image = form.get("image");
+    contentType = image instanceof File ? image.type : "";
+  } else if (contentTypeHeader.includes("application/json")) {
+    try { input = await request.json(); } catch { return json({ error: "Expected valid JSON" }, 400); }
+  } else {
+    return json({ error: "Expected multipart form data or JSON" }, 400);
   }
 
-  let form;
-  try {
-    form = await request.formData();
-  } catch {
-    return json({ error: "Could not read the image upload" }, 400);
-  }
-  const image = form.get("image");
-  const contentType = image instanceof File ? image.type : "";
   const extension = ALLOWED_IMAGE_TYPES.get(contentType);
-  if (!extension || !(image instanceof File)) return json({ error: "image must be a JPG, PNG, or WebP file" }, 400);
-  if (image.size < 1 || image.size > FREE_PICK_MAX_BYTES) return json({ error: "image must be no larger than 5 MB" }, 400);
+  if (image && (!(image instanceof File) || !extension)) return json({ error: "image must be a JPG, PNG, or WebP file" }, 400);
+  if (image && (image.size < 1 || image.size > FREE_PICK_MAX_BYTES)) return json({ error: "image must be no larger than 5 MB" }, 400);
 
-  const publishedDate = validDate(String(form.get("date") || "")) || phoenixDate();
-  const caption = String(form.get("caption") || `Today’s free pick is live. https://kobesbettinghub.com/free-pick`).trim();
+  const publishedDate = validDate(String(input.date || input.publishedDate || "")) || phoenixDate();
+  const details = normalizeFreePickDetails(input.details || input);
+  if (!details.selection && !details.pick) return json({ error: "selection or pick is required when no image is supplied" }, 400);
+  const caption = String(input.caption || `Today’s free pick is live. https://kobesbettinghub.com/free-pick`).trim();
   if (!caption || caption.length > MAX_POST_LENGTH) return json({ error: `caption must contain 1–${MAX_POST_LENGTH} characters` }, 400);
-  const replace = String(form.get("replace") || "").toLowerCase() === "true";
+  const replace = String(input.replace || "").toLowerCase() === "true";
   const existing = await readFreePick(env);
   if (existing?.publishedDate === publishedDate && existing.xStatus === "published" && !replace) {
     return json({ error: "A free pick has already been published for this date. Send replace=true only when intentionally replacing it." }, 409);
   }
 
-  const objectKey = `free-picks/${publishedDate}/${crypto.randomUUID()}.${extension}`;
-  await env.FREE_PICK_MEDIA.put(objectKey, image, {
-    httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" },
-  });
+  let objectKey = null;
+  if (image) {
+    objectKey = `free-picks/${publishedDate}/${crypto.randomUUID()}.${extension}`;
+    await env.FREE_PICK_MEDIA.put(objectKey, image, {
+      httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" },
+    });
+  }
 
-  const pick = { publishedDate, caption, objectKey, updatedAt: new Date().toISOString(), xStatus: "pending" };
+  const pick = { publishedDate, caption, details, objectKey, updatedAt: new Date().toISOString(), xStatus: image ? "pending" : "not_requested" };
   await writeFreePick(pick, env);
+  if (!image) return json({ ...publicFreePick(pick, new URL(request.url).origin), xPosted: false, message: "Text-only Free Pick published to the website." }, 201);
   try {
     const xPostId = await publishFreePickToX(image, contentType, caption, env);
     pick.xStatus = "published";
@@ -338,7 +414,23 @@ function publicFreePick(pick, origin) {
   return {
     publishedDate: pick.publishedDate,
     caption: pick.caption,
-    imageUrl: `${origin}/media/free-pick/current?v=${encodeURIComponent(pick.updatedAt || pick.publishedDate)}`,
+    details: pick.details || {},
+    imageUrl: pick.objectKey ? `${origin}/media/free-pick/current?v=${encodeURIComponent(pick.updatedAt || pick.publishedDate)}` : null,
+  };
+}
+
+function normalizeFreePickDetails(input) {
+  const source = input && typeof input === "object" ? input : {};
+  const read = (key, fallback = "") => dailyPickText(source[key] ?? fallback, 500);
+  return {
+    sport: read("sport"),
+    event: read("event"),
+    pick: read("pick"),
+    selection: read("selection"),
+    line: read("line"),
+    odds: read("odds"),
+    units: read("units"),
+    reason: read("reason"),
   };
 }
 

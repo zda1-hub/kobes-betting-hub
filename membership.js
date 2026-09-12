@@ -18,10 +18,9 @@ document.addEventListener('click', (event) => {
 });
 
 const checkoutEndpoint = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev/create-checkout';
-// Checkout stays closed until Stripe approval and a controlled Discord-access
-// test have both passed. This prevents public visitors reaching an incomplete
-// purchase flow.
-const checkoutEnabled = false;
+// Live Stripe checkout is enabled. Discord access is granted only after the
+// customer completes Stripe Checkout and explicitly connects their account.
+const checkoutEnabled = true;
 const checkoutMessage = document.querySelector('[data-checkout-message]');
 const discordConnect = document.querySelector('[data-discord-connect]');
 const setCheckoutMessage = (message) => { if (checkoutMessage) checkoutMessage.textContent = message; };
@@ -32,7 +31,9 @@ if (checkoutState === 'success') {
   setCheckoutMessage('Your membership is confirmed. Connect Discord now to receive member access.');
   if (discordConnect && checkoutSession) {
     discordConnect.hidden = false;
+    discordConnect.setAttribute('aria-hidden', 'false');
     discordConnect.href = `${checkoutEndpoint.replace('/create-checkout', '')}/discord/connect?session_id=${encodeURIComponent(checkoutSession)}`;
+    window.setTimeout(() => discordConnect.classList.add('is-ready'), 150);
   }
 }
 if (checkoutState === 'connected') setCheckoutMessage('Discord is connected. Your member access is ready.');

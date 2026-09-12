@@ -10,8 +10,7 @@
  *
  * Required Worker variables:
  *   STRIPE_MONTHLY_PRICE_ID    $32.99/month recurring Stripe Price ID
- *   STRIPE_STARTER_PRICE_ID    $10/week recurring Stripe Price ID
- *   STRIPE_FIRST_MONTH_COUPON  40%-off-once Stripe Coupon ID
+ *   STRIPE_STARTER_PRICE_ID    $10 one-time first-week-access Stripe Price ID
  *   DISCORD_CLIENT_ID          Discord OAuth application client ID
  *   DISCORD_GUILD_ID           Kobe's Discord server ID
  *   DISCORD_MEMBER_ROLE_ID     Paid-member role ID
@@ -29,7 +28,7 @@ const STRIPE_API = 'https://api.stripe.com/v1';
 
 const headers = (origin) => ({
   'Access-Control-Allow-Origin': ALLOWED_SITE_ORIGINS.has(origin) ? origin : SITE_ORIGIN,
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   Vary: 'Origin',
   'Content-Type': 'application/json; charset=utf-8',
@@ -115,16 +114,68 @@ async function readDiscordState(state, env) {
 async function activeSubscription(sessionId, env) {
   if (!/^cs_(live|test)_/.test(sessionId)) throw new Error('Invalid checkout session.');
   const session = await stripeGet(env, `/checkout/sessions/${encodeURIComponent(sessionId)}`);
-  if (session.status !== 'complete' || !session.subscription) throw new Error('Complete checkout before connecting Discord.');
+  if (session.status !== 'complete' || !['paid', 'no_payment_required'].includes(session.payment_status) || !session.subscription) throw new Error('Complete checkout before connecting Discord.');
   const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(session.subscription)}`);
   if (!['active', 'trialing'].includes(subscription.status)) throw new Error('Your membership is not active.');
   return subscription;
+}
+
+async function subscriptionForCancellation(sessionId, env) {
+  const subscription = await activeSubscription(sessionId, env);
+  if (subscription.cancel_at_period_end) throw new Error('This membership is already scheduled to cancel.');
+  return subscription;
+}
+
+async function cancellationOffer(request, env, origin) {
+  const sessionId = new URL(request.url).searchParams.get('session_id') || '';
+  try {
+    const subscription = await subscriptionForCancellation(sessionId, env);
+    return json({ retentionAvailable: !subscription.metadata?.retention_offer_used, status: subscription.status }, 200, origin);
+  } catch (error) { return json({ error: error.message }, 403, origin); }
+}
+
+async function retainMembership(request, env, origin) {
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  const percent = Number(data.percent);
+  const coupon = percent === 20 ? env.STRIPE_RETENTION_20_COUPON_ID : percent === 40 ? env.STRIPE_RETENTION_40_COUPON_ID : '';
+  if (!coupon) return json({ error: 'This retention offer is not configured yet.' }, 503, origin);
+  try {
+    const subscription = await subscriptionForCancellation(data.session_id || '', env);
+    if (subscription.metadata?.retention_offer_used) return json({ error: 'The one-time retention offer has already been used.' }, 409, origin);
+    const updated = await stripe(env, `/subscriptions/${encodeURIComponent(subscription.id)}`, {
+      'discounts[0][coupon]': coupon,
+      'metadata[retention_offer_used]': 'true',
+      'metadata[retention_offer_percent]': percent,
+      'metadata[retention_offer_redeemed_at]': new Date().toISOString(),
+    });
+    return json({ ok: true, percent, status: updated.status }, 200, origin);
+  } catch (error) { return json({ error: error.message }, 403, origin); }
+}
+
+async function confirmCancellation(request, env, origin) {
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  try {
+    const subscription = await subscriptionForCancellation(data.session_id || '', env);
+    const updated = await stripe(env, `/subscriptions/${encodeURIComponent(subscription.id)}`, { cancel_at_period_end: 'true' });
+    return json({ ok: true, ends_at: updated.current_period_end }, 200, origin);
+  } catch (error) { return json({ error: error.message }, 403, origin); }
 }
 
 async function discordRequest(path, options = {}) {
   const response = await fetch(`https://discord.com/api/v10${path}`, options);
   if (!response.ok) throw new Error('Discord could not complete the connection.');
   return response.status === 204 ? null : response.json();
+}
+
+async function removeMemberRole(subscription, env) {
+  const memberId = subscription?.metadata?.discord_user_id;
+  if (!memberId || !env.DISCORD_BOT_TOKEN || !env.DISCORD_GUILD_ID || !env.DISCORD_MEMBER_ROLE_ID) return;
+  await discordRequest(
+    `/guilds/${env.DISCORD_GUILD_ID}/members/${memberId}/roles/${env.DISCORD_MEMBER_ROLE_ID}`,
+    { method: 'DELETE', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } },
+  );
 }
 
 function redirect(url) {
@@ -169,10 +220,14 @@ async function finishDiscordConnection(request, env) {
     if (!tokenResponse.ok || !token.access_token) throw new Error('Discord authorization failed.');
     const user = await discordRequest('/users/@me', { headers: { Authorization: `Bearer ${token.access_token}` } });
     const botHeaders = { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' };
+    await stripe(env, `/subscriptions/${encodeURIComponent(subscription.id)}`, {
+      'metadata[discord_user_id]': user.id,
+      'metadata[discord_connected_at]': new Date().toISOString(),
+    });
     await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) });
     await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, { method: 'PUT', headers: botHeaders });
     await fetch('https://discord.com/api/oauth2/token/revoke', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form({ client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET, token: token.access_token, token_type_hint: 'access_token' }) });
-    return redirect(`${SITE_ORIGIN}${SITE_PATH}/membership.html?checkout=connected&subscription=${encodeURIComponent(subscription.id)}`);
+    return redirect(`${SITE_ORIGIN}${SITE_PATH}/membership.html?checkout=connected&subscription=${encodeURIComponent(subscription.id)}&session_id=${encodeURIComponent(sessionId)}`);
   } catch (error) {
     return new Response(error.message || 'Discord connection failed.', { status: 400 });
   }
@@ -181,12 +236,11 @@ async function finishDiscordConnection(request, env) {
 async function createCheckout(request, env, origin) {
   let data;
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
-  if (!['trial', 'starter'].includes(data.offer)) return json({ error: 'Choose a valid membership offer.' }, 400, origin);
-  if (!env.STRIPE_SECRET_KEY || !env.STRIPE_MONTHLY_PRICE_ID || !env.STRIPE_STARTER_PRICE_ID || !env.STRIPE_FIRST_MONTH_COUPON) {
+  if (!['starter', 'trial_2_day'].includes(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
+  if (!env.STRIPE_SECRET_KEY || !env.STRIPE_MONTHLY_PRICE_ID || (data.offer === 'starter' && !env.STRIPE_STARTER_PRICE_ID)) {
     return json({ error: 'Checkout is being finalized. Please try again shortly.' }, 503, origin);
   }
 
-  const isTrial = data.offer === 'trial';
   const membershipPage = `${SITE_ORIGIN}${SITE_PATH}/membership.html`;
   const values = {
     mode: 'subscription',
@@ -195,15 +249,16 @@ async function createCheckout(request, env, origin) {
     payment_method_collection: 'always',
     'payment_method_types[0]': 'card',
     billing_address_collection: 'auto',
-    'line_items[0][price]': isTrial ? env.STRIPE_MONTHLY_PRICE_ID : env.STRIPE_STARTER_PRICE_ID,
+    'line_items[0][price]': env.STRIPE_MONTHLY_PRICE_ID,
     'line_items[0][quantity]': 1,
     'metadata[offer]': data.offer,
     'subscription_data[metadata][offer]': data.offer,
+    'subscription_data[trial_period_days]': data.offer === 'starter' ? 7 : 2,
+    'subscription_data[trial_settings][end_behavior][missing_payment_method]': 'cancel',
   };
-  if (isTrial) {
-    values['discounts[0][coupon]'] = env.STRIPE_FIRST_MONTH_COUPON;
-    values['subscription_data[trial_period_days]'] = 2;
-    values['subscription_data[trial_settings][end_behavior][missing_payment_method]'] = 'cancel';
+  if (data.offer === 'starter') {
+    values['line_items[1][price]'] = env.STRIPE_STARTER_PRICE_ID;
+    values['line_items[1][quantity]'] = 1;
   }
   try {
     const session = await stripe(env, '/checkout/sessions', values);
@@ -213,26 +268,17 @@ async function createCheckout(request, env, origin) {
   }
 }
 
-async function scheduleStarterSubscription(subscriptionId, env) {
-  const schedule = await stripe(env, '/subscription_schedules', { from_subscription: subscriptionId });
-  await stripe(env, `/subscription_schedules/${schedule.id}`, {
-    end_behavior: 'release',
-    'phases[0][items][0][price]': env.STRIPE_STARTER_PRICE_ID,
-    'phases[0][items][0][quantity]': 1,
-    'phases[0][iterations]': 1,
-    'phases[1][items][0][price]': env.STRIPE_MONTHLY_PRICE_ID,
-    'phases[1][items][0][quantity]': 1,
-  });
-}
-
 async function handleWebhook(request, env) {
   const payload = await request.text();
   const valid = await verifyStripeSignature(payload, request.headers.get('Stripe-Signature'), env.STRIPE_WEBHOOK_SECRET);
   if (!valid) return new Response('Invalid Stripe signature.', { status: 400 });
   const event = JSON.parse(payload);
-  if (event.type === 'checkout.session.completed' && event.data?.object?.metadata?.offer === 'starter') {
-    try { await scheduleStarterSubscription(event.data.object.subscription, env); }
-    catch (error) { return new Response(`Starter schedule not created: ${error.message}`, { status: 500 }); }
+  if (['customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
+    const subscription = event.data?.object;
+    if (subscription && !['active', 'trialing'].includes(subscription.status)) {
+      try { await removeMemberRole(subscription, env); }
+      catch (error) { return new Response(`Member access could not be removed: ${error.message}`, { status: 500 }); }
+    }
   }
   return new Response('ok', { status: 200 });
 }
@@ -243,9 +289,12 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: headers(origin) });
     if (request.method === 'GET' && url.pathname === '/health') return json({ ok: true }, 200, origin);
+    if (request.method === 'GET' && url.pathname === '/cancel/offer') return cancellationOffer(request, env, origin);
     if (request.method === 'GET' && url.pathname === '/discord/connect') return startDiscordConnection(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/callback') return finishDiscordConnection(request, env);
     if (request.method === 'POST' && url.pathname === '/create-checkout') return createCheckout(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/cancel/retain') return retainMembership(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/cancel/confirm') return confirmCancellation(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/stripe-webhook') return handleWebhook(request, env);
     return json({ error: 'Not found.' }, 404, origin);
   },
