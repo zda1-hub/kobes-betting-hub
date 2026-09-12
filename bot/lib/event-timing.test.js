@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { isRecentSourcePost, upcomingEventStatus } = require('./event-timing');
+const { isRecentSourcePost, upcomingEventStatus, upcomingEventStatuses } = require('./event-timing');
 
 const packet = {
   source: { posted_at: '2026-08-30T14:00:00.000Z' },
@@ -125,6 +125,31 @@ test('validates each leg of a multi-game college-football parlay', async () => {
   });
   assert.equal(result.status, 'UPCOMING');
   assert.equal(result.eventStart, '2026-09-12T16:00:00.000Z');
+});
+
+test('reports valid upcoming legs separately when another parlay leg is not scheduled', async () => {
+  const cfbPacket = {
+    analysis: { extraction: {
+      league: 'NCAAF', sport: 'College Football', event: 'Saturday CFB Parlay',
+      plays: [
+        { selection: 'Michigan State alternate spread', line: '-13.5', odds_american: '-178', units: '', event: 'Eastern Michigan @ Michigan State' },
+        { selection: 'Unavailable team total over 50 points', line: '50', odds_american: '-110', units: '', event: 'Unavailable State @ Nowhere University' }
+      ]
+    } }
+  };
+  const result = await upcomingEventStatuses(cfbPacket, {
+    now: new Date('2026-09-12T14:00:00.000Z'),
+    fetchImpl: async () => new Response(JSON.stringify({ events: [
+      { date: '2026-09-12T19:30:00.000Z', competitions: [{ competitors: [
+        { team: { displayName: 'Eastern Michigan Eagles', shortDisplayName: 'Eastern Michigan', abbreviation: 'EMU' } },
+        { team: { displayName: 'Michigan State Spartans', shortDisplayName: 'Michigan State', abbreviation: 'MSU' } }
+      ] }] }
+    ] }), { status: 200 })
+  });
+  assert.equal(result.status, 'NOT_SCHEDULED_TODAY');
+  assert.equal(result.playStatuses[0].status, 'UPCOMING');
+  assert.equal(result.playStatuses[1].status, 'NOT_SCHEDULED_TODAY');
+  assert.equal(result.playStatuses[0].play.selection, 'Michigan State alternate spread');
 });
 
 test('does not allow an undated or unsupported pick through the schedule gate', async () => {

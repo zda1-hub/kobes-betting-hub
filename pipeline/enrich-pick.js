@@ -34,12 +34,13 @@ const EXTRACTION_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['selection', 'line', 'odds_american', 'units'],
+        required: ['selection', 'line', 'odds_american', 'units', 'event'],
         properties: {
           selection: { type: 'string' },
           line: { type: 'string' },
           odds_american: { type: 'string' },
-          units: { type: 'string' }
+          units: { type: 'string' },
+          event: { type: 'string' }
         }
       }
     },
@@ -80,6 +81,7 @@ function sourceContent(packet) {
     'Do not infer a team, player, event, odds, date, statistic, or outcome that is not clearly visible.',
     'source_capper_name is the original capper explicitly shown on the graphic, not the X reposting account. Use an empty string if no capper name is visible.',
     'plays must contain every clearly visible play, in display order. Include the unit size or dollar stake only on the play where it is visibly shown. Do not invent a unit size for other plays.',
+    'For a multi-game card or parlay, put the exact matchup for each play in that play’s event field (for example, "Eastern Michigan @ Michigan State"). Do not use a generic title such as "CFB Lotto" as the event for every play.',
     'source_claims must contain only short, concrete claims that are explicitly visible in the post text or image. Copy the claim faithfully; do not calculate, update, complete, paraphrase into a stronger claim, or add any statistic from memory or outside knowledge. Omit any claim that is not visibly present.',
     'Never use web search or any outside source for this extraction. Do not add ESPN, league, team, sportsbook, news, or other third-party statistics, citations, source names, or URLs.',
     'Use an empty string for an unknown single field. Put uncertainty in missing_or_ambiguous.',

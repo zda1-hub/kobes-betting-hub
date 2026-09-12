@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
-const { isSupportedSportPick, upcomingEventStatus } = require('../bot/lib/event-timing');
+const { isSupportedSportPick, upcomingEventStatuses } = require('../bot/lib/event-timing');
 const { buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, sourceEvidence, visiblePlays } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
@@ -439,11 +439,12 @@ async function queueSplitPlayPackets(packet, outputPath) {
       ...extraction,
       ...play,
       plays: [play],
-      // The original post may describe several picks together. Do not copy
-      // its shared caption onto every split card; each card gets fresh,
-      // play-specific breakdown notes below.
-      source_claims: [],
-      supporting_notes: []
+      // Keep the source-visible breakdown on every split card. The public
+      // layout remains exact terms first, followed by the same clean bullets;
+      // removing them here would create the incomplete cards Kobe has been
+      // seeing.
+      source_claims: Array.isArray(extraction.source_claims) ? [...extraction.source_claims] : [],
+      supporting_notes: Array.isArray(extraction.supporting_notes) ? [...extraction.supporting_notes] : []
     };
     const splitPath = path.join(path.dirname(outputPath), `${baseId}-${suffix}.json`);
     single.discord_review_message_id = await notifyApprovalChannel(single);
@@ -597,11 +598,40 @@ async function runCollector({ maxCandidates } = {}) {
       }
 
       // A card is useful only when its exact event is scheduled today and has
-      // not started. Reject undated/ambiguous old cards here rather than
-      // spending Kobe's approval time on them.
-      const timing = await upcomingEventStatus(packet);
+      // not started. For regular multi-play cards, keep the valid upcoming
+      // legs and split them into separate cards instead of losing the whole
+      // post because one leg is stale or ambiguous. Exclusives stay grouped.
+      const timing = await upcomingEventStatuses(packet);
       packet.verification.event_start = timing.eventStart || null;
       packet.verification.event_timezone = timing.source || null;
+      const extractedPlays = Array.isArray(packet.analysis.extraction.plays)
+        ? packet.analysis.extraction.plays
+        : [];
+      const validPlayStatuses = Array.isArray(timing.playStatuses)
+        ? timing.playStatuses.filter((result) => result.status === 'UPCOMING')
+        : [];
+      if (packet.source?.publish_mode !== 'terms_only' && extractedPlays.length > 1 && validPlayStatuses.length > 0) {
+        const validPlays = validPlayStatuses.map((result) => result.play);
+        packet.analysis.extraction.plays = validPlays;
+        const validStarts = validPlayStatuses
+          .map((result) => Date.parse(result.eventStart || ''))
+          .filter((value) => Number.isFinite(value));
+        if (validStarts.length > 0) {
+          packet.verification.event_start = new Date(Math.min(...validStarts)).toISOString();
+          packet.verification.event_timezone = validPlayStatuses[0].source || null;
+        }
+        if (validPlays.length === 1 && validPlays[0].event) {
+          packet.analysis.extraction.event = validPlays[0].event;
+        }
+        const firstRejected = timing.playStatuses.find((result) => result.status !== 'UPCOMING');
+        if (firstRejected) {
+          console.log(`Kept ${validPlays.length} upcoming leg(s) from @${source.handle} post ${post.id}; dropped other leg(s): ${firstRejected.reason || firstRejected.status}.`);
+        }
+        acceptedPackets.push({ packet, postId: String(post.id), source, post });
+        lastProcessedId = post.id;
+        handledPostIds.add(post.id);
+        continue;
+      }
       if (timing.status !== 'UPCOMING') {
         console.log(`Skipped @${source.handle} post ${post.id}; ${timing.reason || 'the event is not an upcoming game scheduled today'}.`);
         skipped += 1;

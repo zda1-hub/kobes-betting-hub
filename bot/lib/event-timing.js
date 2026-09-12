@@ -133,13 +133,19 @@ async function verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl) {
   return null;
 }
 
-async function upcomingEventStatus(packet, { now = new Date(), fetchImpl = fetch } = {}) {
+async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fetch } = {}) {
   const leaguePath = espnLeague(packet);
   if (!leaguePath) return { status: 'UNVERIFIABLE', reason: 'No supported league for current-day schedule check.' };
   const extraction = packet.analysis?.extraction || {};
   const plays = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays : [extraction];
-  const hasPerPlayEvents = plays.length > 1 && plays.every((play) => typeof play.event === 'string' && play.event.trim());
-  if (!extraction.event?.trim() && !hasPerPlayEvents) return { status: 'UNVERIFIABLE', reason: 'The source did not identify an exact event.' };
+  const playPackets = plays.map((play) => packetForPlay(packet, play));
+  if (playPackets.some((playPacket) => !playPacket.analysis.extraction.event?.trim())) {
+    return {
+      status: 'UNVERIFIABLE',
+      reason: 'The source did not identify an exact event.',
+      playStatuses: plays.map((play) => ({ play, status: 'UNVERIFIABLE', reason: 'The source did not identify an exact event.' }))
+    };
+  }
 
   const date = pacificDate(now).replaceAll('-', '');
   let scoreboard;
@@ -153,28 +159,46 @@ async function upcomingEventStatus(packet, { now = new Date(), fetchImpl = fetch
     return { status: 'UNVERIFIABLE', reason: 'ESPN schedule check was unavailable.' };
   }
 
-  const playPackets = hasPerPlayEvents ? plays.map((play) => packetForPlay(packet, play)) : [packet];
   const matchedEvents = playPackets.map((playPacket) => (scoreboard.events || [])
     .find((candidate) => matchesExtractedEvent(playPacket, candidate)));
-  if (matchedEvents.some((event) => !event?.date)) {
-    return { status: 'NOT_SCHEDULED_TODAY', reason: 'No matching event is scheduled today.' };
-  }
-
-  const starts = matchedEvents.map((event) => new Date(event.date));
-  if (starts.some((start) => Number.isNaN(start.getTime()))) {
-    return { status: 'UNVERIFIABLE', reason: 'ESPN did not provide a readable start time.' };
-  }
+  const playStatuses = [];
   for (let index = 0; index < matchedEvents.length; index += 1) {
-    const playerVerification = await verifyPlayersOnEventTeams(playPackets[index], matchedEvents[index], leaguePath, fetchImpl);
-    if (playerVerification) {
-      return { ...playerVerification, eventStart: starts[index].toISOString(), source: 'ESPN schedule and roster' };
+    const event = matchedEvents[index];
+    if (!event?.date) {
+      playStatuses.push({ play: plays[index], status: 'NOT_SCHEDULED_TODAY', reason: 'No matching event is scheduled today.' });
+      continue;
     }
+    const start = new Date(event.date);
+    if (Number.isNaN(start.getTime())) {
+      playStatuses.push({ play: plays[index], status: 'UNVERIFIABLE', reason: 'ESPN did not provide a readable start time.' });
+      continue;
+    }
+    const playerVerification = await verifyPlayersOnEventTeams(playPackets[index], event, leaguePath, fetchImpl);
+    if (playerVerification) {
+      playStatuses.push({
+        play: plays[index],
+        ...playerVerification,
+        eventStart: start.toISOString(),
+        source: 'ESPN schedule and roster'
+      });
+      continue;
+    }
+    playStatuses.push({
+      play: plays[index],
+      status: start.getTime() > now.getTime() ? 'UPCOMING' : 'STARTED_OR_FINISHED',
+      eventStart: start.toISOString(),
+      source: 'ESPN schedule'
+    });
   }
 
-  const earliestStart = new Date(Math.min(...starts.map((start) => start.getTime())));
-  return earliestStart.getTime() > now.getTime()
-    ? { status: 'UPCOMING', eventStart: earliestStart.toISOString(), source: 'ESPN schedule' }
-    : { status: 'STARTED_OR_FINISHED', eventStart: earliestStart.toISOString(), source: 'ESPN schedule' };
+  const firstFailure = playStatuses.find((result) => result.status !== 'UPCOMING');
+  if (firstFailure) return { ...firstFailure, playStatuses };
+  const earliestStart = new Date(Math.min(...playStatuses.map((result) => Date.parse(result.eventStart))));
+  return { status: 'UPCOMING', eventStart: earliestStart.toISOString(), source: 'ESPN schedule', playStatuses };
+}
+
+async function upcomingEventStatus(packet, options = {}) {
+  return upcomingEventStatuses(packet, options);
 }
 
 function isRecentSourcePost(packet, { now = new Date(), maximumAgeHours = Number(process.env.X_MONITOR_MAX_POST_AGE_HOURS || 24) } = {}) {
@@ -184,4 +208,4 @@ function isRecentSourcePost(packet, { now = new Date(), maximumAgeHours = Number
   return now.getTime() - posted.getTime() <= hours * 60 * 60 * 1000;
 }
 
-module.exports = { athleteMatchesName, espnLeague, extractedPlayerNames, isNFLPick, isRecentSourcePost, isSupportedSportPick, matchesExtractedEvent, upcomingEventStatus };
+module.exports = { athleteMatchesName, espnLeague, extractedPlayerNames, isNFLPick, isRecentSourcePost, isSupportedSportPick, matchesExtractedEvent, upcomingEventStatus, upcomingEventStatuses };
