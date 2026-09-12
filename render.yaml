@@ -34,6 +34,10 @@ services:
         sync: false
       - key: FREE_PICK_X_QUEUE_SECRET
         sync: false
+      - key: FREE_PICK_SITE_PUBLISH_URL
+        value: https://bettinghub-publisher.kobesbettinghub-publisher.workers.dev
+      - key: FREE_PICK_SITE_PUBLISH_SECRET
+        sync: false
       - key: X_MONITOR_ENABLED
         sync: false
       - key: X_MONITOR_START_AT

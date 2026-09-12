@@ -1,4 +1,4 @@
-const PUBLISHER_URL = 'https://bettinghub-publisher.kobedirwin.workers.dev';
+const PUBLISHER_URL = 'https://bettinghub-publisher.kobesbettinghub-publisher.workers.dev';
 
 const year = document.getElementById('year');
 if (year) year.textContent = new Date().getFullYear();
@@ -24,6 +24,11 @@ const dateNode = document.querySelector('[data-free-pick-date]');
 const captionNode = document.querySelector('[data-free-pick-caption]');
 const statusNode = document.querySelector('[data-free-pick-status]');
 const imageNode = document.querySelector('[data-free-pick-image]');
+const textCardNode = document.querySelector('[data-free-pick-text-card]');
+const selectionNode = document.querySelector('[data-free-pick-selection]');
+const lineNode = document.querySelector('[data-free-pick-line]');
+const eventNode = document.querySelector('[data-free-pick-event]');
+const reasonNode = document.querySelector('[data-free-pick-reason]');
 const placeholderNode = document.querySelector('[data-free-pick-placeholder]');
 
 function formatDate(value) {
@@ -41,13 +46,22 @@ async function loadFreePick() {
     }
     if (!response.ok) throw new Error(`Free pick request failed: ${response.status}`);
     const pick = await response.json();
-    if (!pick?.imageUrl || !pick?.publishedDate) throw new Error('Free pick response is incomplete');
+    if (!pick?.publishedDate) throw new Error('Free pick response is incomplete');
 
     dateNode.textContent = formatDate(pick.publishedDate);
     captionNode.textContent = pick.caption || 'Today’s free pick is live.';
     statusNode.textContent = 'LIVE';
-    imageNode.src = pick.imageUrl;
-    imageNode.hidden = false;
+    if (pick.imageUrl) {
+      imageNode.src = pick.imageUrl;
+      imageNode.hidden = false;
+    } else {
+      const details = pick.details || {};
+      selectionNode.textContent = details.selection || details.pick || 'Approved free play';
+      lineNode.textContent = [details.line, details.odds ? `(${details.odds})` : '', details.units ? `${details.units}u` : ''].filter(Boolean).join(' ');
+      eventNode.textContent = [details.sport, details.event].filter(Boolean).join(' • ');
+      reasonNode.textContent = details.reason || 'Published from the approved Discord pick.';
+      textCardNode.hidden = false;
+    }
     placeholderNode.hidden = true;
   } catch (error) {
     statusNode.textContent = 'UPDATING';

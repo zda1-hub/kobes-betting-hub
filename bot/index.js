@@ -12,6 +12,7 @@ const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickL
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
 const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
+const { publishApprovedFreePickToSite } = require('./lib/free-pick-site');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { isNFLPick, upcomingEventStatus } = require('./lib/event-timing');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -820,6 +821,43 @@ function firstExtractedUnits(packet) {
   return firstPlay?.units || extraction.units || '';
 }
 
+function dailyPickOperatingDate(instant) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date(instant));
+  const value = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+async function syncApprovedPickToDailyQueue(entry) {
+  const publisherUrl = process.env.DAILY_PICKS_QUEUE_URL || process.env.FREE_PICK_X_PUBLISH_URL;
+  const secret = process.env.DAILY_PICKS_QUEUE_SECRET;
+  if (!publisherUrl || !secret) {
+    console.warn('Daily Picks bridge not configured; pick was published but was not queued for the email workflow.', { pickId: entry.pick_id });
+    return;
+  }
+  const response = await fetch(`${publisherUrl.replace(/\/$/, '')}/api/queue/daily-picks`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: entry.pick_id,
+      operatingDate: dailyPickOperatingDate(entry.published_at || new Date().toISOString()),
+      sport: entry.sport,
+      event: entry.event,
+      market: entry.market,
+      selection: entry.selection,
+      lineOdds: [entry.published_line, entry.published_odds_american].filter(Boolean).join(' '),
+      units: entry.units_risked,
+      reason: entry.notes || '',
+      cta: 'Check the posted line and time before placing anything.',
+      source: entry.source_name || 'Kobe submission',
+      approvedAt: entry.approved_at || entry.published_at
+    })
+  });
+  if (!response.ok) throw new Error(`Daily Picks bridge failed (${response.status}): ${await response.text()}`);
+  console.log(`Daily Picks queue synced for ${entry.pick_id}.`);
+}
+
 async function postAndLogOfficialPick({ channel, payload, entry }) {
   await appendOfficialPick(entry);
   try {
@@ -828,6 +866,11 @@ async function postAndLogOfficialPick({ channel, payload, entry }) {
       post_reference: discordPostReference(channel, message),
       status: 'PUBLISHED'
     });
+    try {
+      await syncApprovedPickToDailyQueue(entry);
+    } catch (error) {
+      console.error('Published pick was not synced to Daily Picks; retry is safe because the queue is idempotent.', { pickId: entry.pick_id, message: error instanceof Error ? error.message : String(error) });
+    }
     return message;
   } catch (error) {
     await updateOfficialPick(entry.pick_id, {
@@ -1093,6 +1136,16 @@ async function handleSourceReviewButton(interaction) {
     await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
     const postReference = discordPostReference(channel, publishedMessage);
     await closeApprovalCard(interaction, { channel, postReference });
+    let siteNote = '';
+    if (action === 'free') {
+      try {
+        const siteSync = await publishApprovedFreePickToSite(packet);
+        siteNote = siteSync.status === 'disabled' ? ' Website sync is not configured.' : ` Website sync: ${siteSync.status}${siteSync.image ? ' with image.' : ' as a text card.'}`;
+      } catch (siteError) {
+        console.error('Approved Discord free pick was not synced to the website', { pickId: packet.pick_id, message: String(siteError) });
+        siteNote = ' Website sync needs attention.';
+      }
+    }
     let xNote = '';
     if (action === 'free') {
       try {
@@ -1103,7 +1156,7 @@ async function handleSourceReviewButton(interaction) {
         xNote = ' Discord post is live; X sync needs attention.';
       }
     }
-    await interaction.editReply(`Published to ${channel}. [View official post](${postReference})${xNote}`);
+    await interaction.editReply(`Published to ${channel}. [View official post](${postReference})${siteNote}${xNote}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to complete this approval action.';
     await interaction.editReply(message);
