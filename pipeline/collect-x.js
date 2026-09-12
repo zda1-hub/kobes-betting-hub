@@ -228,7 +228,7 @@ async function existingSourcePostIds(date) {
   return ids;
 }
 
-async function writePacket({ date, sequence, source, post, media }) {
+function createPacket({ date, sequence, source, post, media }) {
   const pickNumber = numberFor(date, sequence);
   const packet = {
     pick_id: `${pickNumber}-X`,
@@ -287,10 +287,16 @@ async function writePacket({ date, sequence, source, post, media }) {
     created_at: new Date().toISOString()
   };
 
+  return packet;
+}
+
+async function writePacket({ date, packet }) {
+  const pickNumber = numberFor(date, packet.approval_number);
   const outputDir = path.join(QUEUE_ROOT, date);
+  const outputPath = path.join(outputDir, `${pickNumber}.json`);
   await fs.mkdir(outputDir, { recursive: true });
-  await fs.writeFile(path.join(outputDir, `${pickNumber}.json`), `${JSON.stringify(packet, null, 2)}\n`);
-  return { packet, outputPath: path.join(outputDir, `${pickNumber}.json`) };
+  await fs.writeFile(outputPath, `${JSON.stringify(packet, null, 2)}\n`);
+  return outputPath;
 }
 
 function quote(text, maximum = 900) {
@@ -481,11 +487,22 @@ async function runCollector({ maxCandidates } = {}) {
   const state = await readJson(STATE_PATH, { sources: {} });
   let sequence = await existingCount(date);
   const queuedSourcePostIds = await existingSourcePostIds(date);
+  // Keep one Render service and one durable queue, but let a bounded number of
+  // source scans run at once. This removes the old 38-account serial bottleneck
+  // without creating duplicate workers or uncoordinated state files.
+  const configuredConcurrency = Number(process.env.X_MONITOR_CONCURRENCY || 6);
+  const concurrency = Number.isInteger(configuredConcurrency) && configuredConcurrency >= 1
+    ? Math.min(configuredConcurrency, 12)
+    : 6;
+  console.log(`Scanning ${sources.length} enabled X sources with ${Math.min(concurrency, sources.length)} bounded intake worker(s).`);
+  const claimedSourcePostIds = new Set(queuedSourcePostIds);
   let created = 0;
   let skipped = 0;
 
-  for (const source of sources) {
-    if (created >= candidateLimit) break;
+  let nextSourceIndex = 0;
+  let commitChain = Promise.resolve();
+
+  async function inspectSource(source) {
     const sourceState = state.sources[source.handle] || {};
     const userId = await resolveUser(source, state);
     // On the first collection window each day, fetch every source post since
@@ -518,13 +535,10 @@ async function runCollector({ maxCandidates } = {}) {
     const handledPostIds = new Set(Array.isArray(sourceState.handled_post_ids) ? sourceState.handled_post_ids : []);
     let lastProcessedId = sourceState.since_id || '';
     let completedSourcePass = true;
+    const acceptedPackets = [];
     for (const post of posts) {
-      if (created >= candidateLimit) {
-        completedSourcePass = false;
-        break;
-      }
       const postMediaUrls = (post.attachments?.media_keys || []).map((key) => media[key]).filter(Boolean);
-      if (queuedSourcePostIds.has(String(post.id))) {
+      if (claimedSourcePostIds.has(String(post.id))) {
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
         continue;
@@ -546,9 +560,9 @@ async function runCollector({ maxCandidates } = {}) {
         handledPostIds.add(post.id);
         continue;
       }
+      claimedSourcePostIds.add(String(post.id));
 
-      sequence += 1;
-      const { packet, outputPath } = await writePacket({ date, sequence, source, post, media });
+      const packet = createPacket({ date, sequence: 0, source, post, media });
       // Extract the source terms first. Research is intentionally deferred
       // until the cheap NFL, exact-event, and roster gates pass; otherwise a
       // rejected candidate can spend minutes on web search and block the rest
@@ -556,7 +570,6 @@ async function runCollector({ maxCandidates } = {}) {
       packet.analysis = await enrichPacket(packet, { research: false });
 
       if (!isSupportedSportPick(packet)) {
-        await fs.rm(outputPath, { force: true });
         console.log(`Skipped @${source.handle} post ${post.id}; it is not explicitly identified as a supported sport pick.`);
         skipped += 1;
         lastProcessedId = post.id;
@@ -565,7 +578,6 @@ async function runCollector({ maxCandidates } = {}) {
       }
 
       if (packet.analysis.status !== 'SOURCE_EXTRACTED' || !packet.analysis.extraction?.is_pick_candidate) {
-        await fs.rm(outputPath, { force: true });
         console.log(`Skipped @${source.handle} post ${post.id}; the source did not identify a publishable pick.`);
         skipped += 1;
         lastProcessedId = post.id;
@@ -577,7 +589,6 @@ async function runCollector({ maxCandidates } = {}) {
       // review a card that would credit the feed itself or leave authorship
       // ambiguous.
       if (source.publish_mode === 'terms_only' && !sourceCapperName(packet)) {
-        await fs.rm(outputPath, { force: true });
         console.log(`Skipped @${source.handle} post ${post.id}; original capper is not clearly identified.`);
         skipped += 1;
         lastProcessedId = post.id;
@@ -592,7 +603,6 @@ async function runCollector({ maxCandidates } = {}) {
       packet.verification.event_start = timing.eventStart || null;
       packet.verification.event_timezone = timing.source || null;
       if (timing.status !== 'UPCOMING') {
-        await fs.rm(outputPath, { force: true });
         console.log(`Skipped @${source.handle} post ${post.id}; ${timing.reason || 'the event is not an upcoming game scheduled today'}.`);
         skipped += 1;
         lastProcessedId = post.id;
@@ -600,22 +610,7 @@ async function runCollector({ maxCandidates } = {}) {
         continue;
       }
 
-      if (shouldSplitPlayPackets(packet)) {
-        const splitCreated = await queueSplitPlayPackets(packet, outputPath);
-        console.log(`Split @${source.handle} post ${post.id} into ${splitCreated} separate approval card(s).`);
-        created += splitCreated;
-        if (!splitCreated) skipped += 1;
-        queuedSourcePostIds.add(String(post.id));
-        lastProcessedId = post.id;
-        handledPostIds.add(post.id);
-        continue;
-      }
-
-      packet.discord_review_message_id = await notifyApprovalChannel(packet);
-      await fs.writeFile(outputPath, `${JSON.stringify(packet, null, 2)}\n`);
-      console.log(`Queued #${packet.approval_number} ${packet.pick_id} from @${source.handle}.`);
-      created += 1;
-      queuedSourcePostIds.add(String(post.id));
+      acceptedPackets.push({ packet, postId: String(post.id), source, post });
       lastProcessedId = post.id;
       handledPostIds.add(post.id);
     }
@@ -638,8 +633,58 @@ async function runCollector({ maxCandidates } = {}) {
     if (rescanImages && completedSourcePass) {
       nextSourceState.image_rescan_version = IMAGE_RESCAN_VERSION;
     }
-    state.sources[source.handle] = nextSourceState;
+    return { source, nextSourceState, acceptedPackets };
   }
+
+  async function commitSourceResult(result) {
+    state.sources[result.source.handle] = result.nextSourceState;
+    for (const candidate of result.acceptedPackets) {
+      if (created >= candidateLimit) break;
+      sequence += 1;
+      const packet = candidate.packet;
+      packet.approval_number = sequence;
+      packet.pick_id = `${numberFor(date, sequence)}-X`;
+      const outputPath = await writePacket({ date, packet });
+
+      if (shouldSplitPlayPackets(packet)) {
+        const splitCreated = await queueSplitPlayPackets(packet, outputPath);
+        console.log(`Split @${candidate.source.handle} post ${candidate.post.id} into ${splitCreated} separate approval card(s).`);
+        created += splitCreated;
+        if (!splitCreated) skipped += 1;
+        queuedSourcePostIds.add(candidate.postId);
+        continue;
+      }
+
+      packet.discord_review_message_id = await notifyApprovalChannel(packet);
+      await fs.writeFile(outputPath, `${JSON.stringify(packet, null, 2)}\n`);
+      console.log(`Queued #${packet.approval_number} ${packet.pick_id} from @${candidate.source.handle}.`);
+      created += 1;
+      queuedSourcePostIds.add(candidate.postId);
+    }
+  }
+
+  async function sourceWorker() {
+    while (true) {
+      const sourceIndex = nextSourceIndex;
+      nextSourceIndex += 1;
+      if (sourceIndex >= sources.length) return;
+      const source = sources[sourceIndex];
+      try {
+        const result = await inspectSource(source);
+        // Discord/file writes remain serialized, while source fetching,
+        // extraction, and event checks overlap across the bounded workers.
+        commitChain = commitChain
+          .then(() => commitSourceResult(result))
+          .catch((error) => console.error(`Commit failed for @${source.handle}: ${error.message}`));
+        await commitChain;
+      } catch (error) {
+        console.error(`Source scan failed for @${source.handle}: ${error.message}`);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, sources.length) }, () => sourceWorker()));
+  await commitChain;
 
   await fs.mkdir(X_MONITORING_ROOT, { recursive: true });
   await fs.writeFile(STATE_PATH, `${JSON.stringify(state, null, 2)}\n`);
