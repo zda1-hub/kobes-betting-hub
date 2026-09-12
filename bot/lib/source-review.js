@@ -155,6 +155,11 @@ function hasUnrelatedNamedEntity(note, packet) {
 function looksLikeSelection(note) {
   const normalized = normalizedText(note);
   if (/^[+-]?\d{2,4}(?:\s+[a-z]+)?$/.test(normalized)) return true;
+  // Headers and board entries copied from a larger card are not a reason for
+  // this pick. They were the source of cards that looked like writeups but
+  // merely listed other bets (for example, "Spread: Iowa -14").
+  if (/^(?:spread|total|player props?|o\s*\/\s*u|moneyline|ml|nrfi|yes|no)\s*[:·-]/i.test(String(note || '').trim())) return true;
+  if (/^[+-]?\d+(?:\.\d+)?\s*(?:edge|ev)\b/i.test(String(note || '').trim())) return true;
 
   // A copied betting selection is not a breakdown. Preserve factual lines
   // such as "Over in 5 straight" and "Went over 20 points in 6 games".
@@ -169,6 +174,10 @@ function isUsefulSupport(note, pickTerms, packet) {
   if (!normalized) return false;
   if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|banger|bang bang|two leg|2 leg|parlay|lets catch|let s catch|lets go|let s go|winner|profit|payout|refund|power play|ladder|make \d+\s*x|\d+\s*\$?\s*to\s+(?:win|one person)|you(?:'|’)ll love|you gonna love|like the demons|link on post|slide for)\b/.test(normalized)) return false;
   if (/^\d{1,2}\s\d{2}\s*(?:am|pm)?\b/.test(normalized)) return false;
+  // A source post can mix a genuine bet graphic with timeline chatter,
+  // promotional tooling, or a general sports rant. None of that is pick
+  // analysis, even if an extractor happens to attach it to the card.
+  if (/\b(?:timeline|scamball|lawsuits?|pencil pushers?|executives?|headed to prison|done with gambling|changed the baseballs?|new batch of baseballs|contact[- ]quality|statcast|sportsbooks?|fanduel|draftkings|mlbhr|dfs|optimizer|prizepicks|free player prop trend tool|hit trends include|full card includes|saturday.?s \d+ legger|officially in (?:the )?.* era|i just scrolled|it(?:'|’)s gonna be|we are officially)\b/i.test(note)) return false;
   if (pickTerms.some((term) => normalized === normalizedText(term))) return false;
   if (looksLikeSelection(note)) return false;
   if (hasUnrelatedNamedEntity(note, packet)) return false;

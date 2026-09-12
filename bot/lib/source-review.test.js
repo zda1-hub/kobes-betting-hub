@@ -151,6 +151,44 @@ test('does not use other selections as breakdown bullets', () => {
   assert.deepEqual(sourceEvidence(malformed), []);
 });
 
+test('rejects unrelated timeline chatter even when it appears beside a real pick', () => {
+  const malformed = {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'Joey Loperfido - Houston Astros 3-run home run', player_name: 'Joey Loperfido', line: '', odds_american: '+950', units: '' }],
+        source_claims: [
+          'I just scrolled the entire @mlbhr timeline tonight and found five total parlays that hit',
+          'We are officially in the MLB scamball era',
+          'It is going to be amazing watching lawsuits against sportsbooks',
+          'Pencil pushers, executives, and players are all headed to prison',
+          'There is strong evidence that MLB changed the baseballs',
+          'Almost every contact-quality Statcast metric has seen an outlier uptick',
+          'I am just done with gambling'
+        ]
+      }
+    }
+  };
+  assert.deepEqual(sourceEvidence(malformed), []);
+});
+
+test('rejects copied board headings and other selections from a pick breakdown', () => {
+  const malformed = {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'Michigan State -13.5', player_name: '', line: '-13.5', odds_american: '-178', units: '' }],
+        source_claims: ['Spread: Iowa State +14', 'Total: Over 47.5', 'Player Props: PASS', '+12% edge']
+      }
+    }
+  };
+  assert.deepEqual(sourceEvidence(malformed), []);
+});
+
 test('keeps relevant LeBron-style bullets and removes an unrelated player bullet', () => {
   const writeup = {
     ...packet,
