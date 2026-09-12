@@ -319,4 +319,57 @@ test('does not approve a player prop when the player name is absent', () => {
     }
   };
   assert.throws(() => assertFreePickEligible(unnamedPlayerProp), /player’s full name/);
+  assert.throws(() => buildSourcePickEmbed(unnamedPlayerProp, 'PAID PICK'), /player’s full name/);
+});
+
+test('keeps an explicitly visible player name when extraction stored it in the event', () => {
+  const eventNamed = {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{
+          selection: 'UNDER 1.5 Total Bases',
+          player_name: '',
+          line: 'UNDER 1.5',
+          odds_american: '',
+          units: '',
+          event: 'Jose Ramirez — Cleveland Guardians (CLE)'
+        }],
+        source_claims: [
+          'Jose Ramirez UNDER 1.5 Total Bases — 10/10 Games',
+          'Cleveland has limited opposing production recently',
+          'The matchup is scheduled today'
+        ]
+      }
+    }
+  };
+  assert.equal(buildSourcePickEmbed(eventNamed, 'PAID PICK').description.split('\n')[0], 'Jose Ramirez UNDER 1.5 Total Bases');
+});
+
+test('recovers a player name only from a matching visible source claim', () => {
+  const claimNamed = {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{
+          selection: 'Over 2.5 Earned Runs',
+          player_name: '',
+          line: '2.5',
+          odds_american: '-124',
+          units: '',
+          event: 'CIN @ MIL'
+        }],
+        source_claims: [
+          'Brady Singer O 2.5 ER (-124)',
+          'Over this line in 8 of his last 10 starts',
+          'The matchup is scheduled today'
+        ]
+      }
+    }
+  };
+  assert.equal(buildSourcePickEmbed(claimNamed, 'PAID PICK').description.split('\n')[0], 'Brady Singer Over 2.5 Earned Runs (-124)');
 });

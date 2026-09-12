@@ -13,7 +13,8 @@ function visiblePlays(packet) {
       player_name: extraction.player_name,
       line: extraction.line,
       odds_american: extraction.odds_american,
-      units: extraction.units
+      units: extraction.units,
+      event: extraction.event
     }];
   return plays
     .map((play) => ({
@@ -21,7 +22,12 @@ function visiblePlays(packet) {
       // and the structured odds field. Keep the exact visible terms, but do
       // not make Kobe review a noisy duplicated price such as "-107 -107".
       selection: visible(play.selection, ''),
-      playerName: visible(play.player_name, ''),
+      playerName: playerNameFromPlay({
+        ...play,
+        sourceClaims: extraction.source_claims,
+        imageSummary: extraction.image_summary
+      }),
+      event: visible(play.event || extraction.event, ''),
       terms: [...new Set([play.selection, play.line, play.odds_american]
         .filter((value) => typeof value === 'string' && value.trim())
         .map((value) => value.trim())
@@ -36,6 +42,14 @@ function normalizedText(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9.]+/g, ' ').trim();
 }
 
+function playerNameFromText(text) {
+  const nameToken = "(?:[A-Z]{2,}|[A-Z](?:\\.[A-Z])+|[A-Z][a-z'’-]{1,})";
+  const match = String(text || '').match(new RegExp(`\\b(${nameToken}(?:\\s+${nameToken}){1,3})\\b`));
+  return match
+    ? match[1].replace(/\s+(?:Over|Under|Anytime|To|First|Last|Hit|Home|Run|Runs|Points?|Receptions?|Receiving|Rushing|Passing|Strikeouts?|Earned|Hits?|Walks?|Bases?)\b.*$/i, '').trim()
+    : '';
+}
+
 function playerNameFromPlay(play) {
   const explicit = visible(play?.playerName || play?.player_name, '');
   if (explicit && !/^player$/i.test(explicit)) return explicit;
@@ -44,12 +58,29 @@ function playerNameFromPlay(play) {
   // selection already visibly starts with a real-looking full name, but do
   // not guess a name from a bare "Over 5.5 K's" type of market.
   const selection = visible(play?.selection, '');
-  const match = selection.match(/^([A-Z][a-z'’-]{1,}(?:\s+[A-Z][a-z'’-]{1,}){1,3})\b/);
-  return match ? match[1] : '';
+  const selectionName = playerNameFromText(selection);
+  if (selectionName && !/^(?:Over|Under|Anytime|Player|Team|Total|First|Last|To|Hit|Home|Run|Runs|Points?|Receptions?|Receiving|Rushing|Passing|Strikeouts?|Earned|Hits?|Walks?|Bases?)\b/i.test(selectionName)) return selectionName;
+
+  // Some image extractors put the player and team in the play event instead
+  // of player_name. Recover only the explicit name before a team marker.
+  const event = visible(play?.event, '');
+  const eventName = event.match(/^(.+?)\s+[—-]\s+.+(?:\([A-Z]{2,4}\))?$/)?.[1]?.trim() || '';
+  if (eventName && playerNameFromText(eventName)) return playerNameFromText(eventName);
+
+  // Older packets sometimes put the name in a source claim while leaving the
+  // selection as only "Over" or "Under". Use a claim only when it repeats
+  // the visible line/market, never from an unrelated sentence.
+  const claims = Array.isArray(play?.sourceClaims) ? play.sourceClaims : [];
+  const lineMatches = claims.filter((claim) => play?.line
+    && String(claim || '').toLowerCase().includes(String(play.line).toLowerCase())
+    && playerNameFromText(claim));
+  const marketMatches = claims.filter((claim) => /(?:strikeouts?|earned runs?|hits? allowed|total bases?|receptions?|receiving|rushing|passing|points?|rebounds?|assists?|home runs?)/i.test(String(claim || '')) && playerNameFromText(claim));
+  const matchingClaim = lineMatches[0] || (lineMatches.length === 0 && marketMatches.length === 1 ? marketMatches[0] : undefined);
+  return matchingClaim ? playerNameFromText(matchingClaim) : '';
 }
 
-function publicPlayTerm({ terms, selection, playerName, line, oddsAmerican }) {
-  const namedPlayer = playerNameFromPlay({ selection, playerName });
+function publicPlayTerm({ terms, selection, playerName, line, oddsAmerican, event, sourceClaims }) {
+  const namedPlayer = playerNameFromPlay({ selection, playerName, line, event, sourceClaims });
   const baseSelection = selection || terms || '';
   const base = namedPlayer && !normalizedText(baseSelection).includes(normalizedText(namedPlayer))
     ? `${namedPlayer} ${baseSelection}`.trim()
@@ -69,6 +100,15 @@ function isPlayerProp(play) {
   // source caption such as "MLB Play of the Day". A free post must be a
   // player-specific stat market, never a side, moneyline, spread, or total.
   return /\b(?:strikeouts?|k'?s|walks?(?: allowed)?|hits?|total bases?|rbi|runs?|stolen bases?|outs?|earned runs?|points?|rebounds?|assists?|three[- ]pointers?|threes?|blocks?|steals?|passing\s+(?:yards?|yds?)|rushing\s+(?:yards?|yds?)|receiving\s+(?:yards?|yds?)|receptions?|sacks?|shots?(?: on goal)?|goals?|saves?)\b/i.test(play?.terms || '');
+}
+
+function requiresNamedPlayer(play) {
+  const terms = play?.terms || '';
+  if (!isPlayerProp(play)) return false;
+  // Team sides/totals can contain words such as points or runs. They are not
+  // individual-player props and therefore do not need an athlete name.
+  if (/\bteam\b|\bgame\s+total\b|\btotal\s+points\b|\b(?:vs?\.?|@)\b|\//i.test(terms)) return false;
+  return true;
 }
 
 function hasNamedPlayer(play) {
@@ -184,7 +224,9 @@ function publicPickTerms(packet) {
       selection: typeof play.selection === 'string' ? play.selection.trim() : '',
       playerName: typeof play.player_name === 'string' ? play.player_name.trim() : '',
       line: typeof play.line === 'string' ? play.line.trim() : '',
-      oddsAmerican: typeof play.odds_american === 'string' ? play.odds_american.trim() : ''
+      oddsAmerican: typeof play.odds_american === 'string' ? play.odds_american.trim() : '',
+      event: typeof play.event === 'string' ? play.event.trim() : '',
+      sourceClaims: extraction.source_claims
     }))
     .filter(Boolean);
 }
@@ -249,6 +291,10 @@ function assertPublishableExtraction(packet) {
   }
   if (sourceTerms(packet).length === 0) {
     throw new Error('The play is not clearly visible, so this card cannot be published automatically.');
+  }
+  const plays = visiblePlays(packet);
+  if (plays.some(requiresNamedPlayer) && plays.some((play) => requiresNamedPlayer(play) && !hasNamedPlayer(play))) {
+    throw new Error('A player prop must show the player’s full name before it can be approved or published.');
   }
 }
 

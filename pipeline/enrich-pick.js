@@ -14,7 +14,7 @@ const EXTRACTION_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   required: [
-    'is_pick_candidate', 'source_capper_name', 'sport', 'league', 'event', 'market', 'selection',
+    'is_pick_candidate', 'source_capper_name', 'sport', 'league', 'event', 'market', 'selection', 'player_name',
     'line', 'odds_american', 'units', 'plays', 'source_claims', 'image_summary',
     'missing_or_ambiguous'
   ],
@@ -26,6 +26,7 @@ const EXTRACTION_SCHEMA = {
     event: { type: 'string' },
     market: { type: 'string' },
     selection: { type: 'string' },
+    player_name: { type: 'string' },
     line: { type: 'string' },
     odds_american: { type: 'string' },
     units: { type: 'string' },
@@ -34,9 +35,10 @@ const EXTRACTION_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['selection', 'line', 'odds_american', 'units', 'event'],
+        required: ['selection', 'player_name', 'line', 'odds_american', 'units', 'event'],
         properties: {
           selection: { type: 'string' },
+          player_name: { type: 'string' },
           line: { type: 'string' },
           odds_american: { type: 'string' },
           units: { type: 'string' },
@@ -81,6 +83,7 @@ function sourceContent(packet) {
     'Do not infer a team, player, event, odds, date, statistic, or outcome that is not clearly visible.',
     'source_capper_name is the original capper explicitly shown on the graphic, not the X reposting account. Use an empty string if no capper name is visible.',
     'plays must contain every clearly visible play, in display order. Include the unit size or dollar stake only on the play where it is visibly shown. Do not invent a unit size for other plays.',
+    'For every player prop, extract the player’s full name into player_name and keep that name in the selection. If the player name is not clearly visible, leave player_name empty and record the ambiguity; never guess it from outside knowledge.',
     'For a multi-game card or parlay, put the exact matchup for each play in that play’s event field (for example, "Eastern Michigan @ Michigan State"). Do not use a generic title such as "CFB Lotto" as the event for every play.',
     'source_claims must contain only short, concrete claims that are explicitly visible in the post text or image. Copy the claim faithfully; do not calculate, update, complete, paraphrase into a stronger claim, or add any statistic from memory or outside knowledge. Omit any claim that is not visibly present.',
     'Never use web search or any outside source for this extraction. Do not add ESPN, league, team, sportsbook, news, or other third-party statistics, citations, source names, or URLs.',
