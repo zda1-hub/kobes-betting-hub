@@ -373,3 +373,25 @@ test('recovers a player name only from a matching visible source claim', () => {
   };
   assert.equal(buildSourcePickEmbed(claimNamed, 'PAID PICK').description.split('\n')[0], 'Brady Singer Over 2.5 Earned Runs (-124)');
 });
+
+test('does not turn a team side into a fake player name from a source phrase', () => {
+  const teamSide = {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{
+          selection: 'Iowa -14',
+          player_name: '',
+          line: '-14',
+          odds_american: '',
+          units: '',
+          event: 'Iowa State at Iowa'
+        }],
+        source_claims: ['SPREAD IOWA -14', 'The game is scheduled today', 'Iowa is favored']
+      }
+    }
+  };
+  assert.equal(buildSourcePickEmbed(teamSide, 'PAID PICK').description.split('\n')[0], 'Iowa -14');
+});

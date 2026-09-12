@@ -71,10 +71,12 @@ function playerNameFromPlay(play) {
   // selection as only "Over" or "Under". Use a claim only when it repeats
   // the visible line/market, never from an unrelated sentence.
   const claims = Array.isArray(play?.sourceClaims) ? play.sourceClaims : [];
+  const playerPropClaim = /(?:strikeouts?|\bks?\b|earned runs?|\ber\b|hits? allowed|total bases?|\btb\b|receptions?|receiving|rushing|passing|points?|rebounds?|assists?|home runs?|\brbi\b)/i;
   const lineMatches = claims.filter((claim) => play?.line
     && String(claim || '').toLowerCase().includes(String(play.line).toLowerCase())
+    && playerPropClaim.test(String(claim || ''))
     && playerNameFromText(claim));
-  const marketMatches = claims.filter((claim) => /(?:strikeouts?|earned runs?|hits? allowed|total bases?|receptions?|receiving|rushing|passing|points?|rebounds?|assists?|home runs?)/i.test(String(claim || '')) && playerNameFromText(claim));
+  const marketMatches = claims.filter((claim) => playerPropClaim.test(String(claim || '')) && playerNameFromText(claim));
   const matchingClaim = lineMatches[0] || (lineMatches.length === 0 && marketMatches.length === 1 ? marketMatches[0] : undefined);
   return matchingClaim ? playerNameFromText(matchingClaim) : '';
 }
