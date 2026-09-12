@@ -189,6 +189,17 @@ test('rejects copied board headings and other selections from a pick breakdown',
   assert.deepEqual(sourceEvidence(malformed), []);
 });
 
+test('rejects percentage EV board cells as writeup evidence', () => {
+  const malformed = {
+    ...packet,
+    analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction,
+      plays: [{ selection: 'Tyler Bass Kicking Points Over 7.5', player_name: 'Tyler Bass', line: '7.5', odds_american: '', units: '' }],
+      source_claims: ['3% EV', '0% EV', '9% EV', '2% EV']
+    } }
+  };
+  assert.deepEqual(sourceEvidence(malformed), []);
+});
+
 test('keeps relevant LeBron-style bullets and removes an unrelated player bullet', () => {
   const writeup = {
     ...packet,

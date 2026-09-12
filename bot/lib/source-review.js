@@ -179,7 +179,7 @@ function looksLikeSelection(note) {
   // this pick. They were the source of cards that looked like writeups but
   // merely listed other bets (for example, "Spread: Iowa -14").
   if (/^(?:spread|total|player props?|o\s*\/\s*u|moneyline|ml|nrfi|yes|no)\s*[:·-]/i.test(String(note || '').trim())) return true;
-  if (/^[+-]?\d+(?:\.\d+)?\s*(?:edge|ev)\b/i.test(String(note || '').trim())) return true;
+  if (/^[+-]?\d+(?:\.\d+)?%?\s*(?:edge|ev)\b/i.test(String(note || '').trim())) return true;
 
   // A copied betting selection is not a breakdown. Preserve factual lines
   // such as "Over in 5 straight" and "Went over 20 points in 6 games".
