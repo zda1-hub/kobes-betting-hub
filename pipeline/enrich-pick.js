@@ -201,4 +201,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { enrichPacket, outputText, EXTRACTION_SCHEMA, RESEARCH_SCHEMA, researchSupportingNotes, sourceClaims };
+module.exports = { enrichPacket, outputText, EXTRACTION_SCHEMA, sourceClaims };

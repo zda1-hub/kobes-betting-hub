@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { addSupportingResearch, enrichPacket, researchSupportingNotes } = require('./enrich-pick');
+const { enrichPacket } = require('./enrich-pick');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { isSupportedSportPick, upcomingEventStatus } = require('../bot/lib/event-timing');
 const { buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, sourceEvidence, visiblePlays } = require('../bot/lib/source-review');
@@ -439,9 +439,6 @@ async function queueSplitPlayPackets(packet, outputPath) {
       source_claims: [],
       supporting_notes: []
     };
-    if (single.source?.publish_mode !== 'terms_only') {
-      single.analysis.extraction.supporting_notes = await researchSupportingNotes(single);
-    }
     const splitPath = path.join(path.dirname(outputPath), `${baseId}-${suffix}.json`);
     single.discord_review_message_id = await notifyApprovalChannel(single);
     await fs.writeFile(splitPath, `${JSON.stringify(single, null, 2)}\n`);
@@ -612,10 +609,6 @@ async function runCollector({ maxCandidates } = {}) {
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
         continue;
-      }
-
-      if (source.publish_mode !== 'terms_only') {
-        packet.analysis = await addSupportingResearch(packet, packet.analysis);
       }
 
       packet.discord_review_message_id = await notifyApprovalChannel(packet);
