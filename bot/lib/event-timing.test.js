@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { isRecentSourcePost, upcomingEventStatus, upcomingEventStatuses } = require('./event-timing');
+const { espnLeague, isRecentSourcePost, upcomingEventStatus, upcomingEventStatuses } = require('./event-timing');
 
 const packet = {
   source: { posted_at: '2026-08-30T14:00:00.000Z' },
@@ -16,6 +16,12 @@ const scoreboard = {
     ] }]
   }]
 };
+
+test('classifies image-extracted sport-specific markets when the league label is missing', () => {
+  assert.equal(espnLeague({ analysis: { extraction: { selection: 'Corbin Carroll to hit a home run +470' } } }), 'baseball/mlb');
+  assert.equal(espnLeague({ analysis: { extraction: { selection: 'DeMario Douglas over 3.5 receptions' } } }), 'football/nfl');
+  assert.equal(espnLeague({ analysis: { extraction: { selection: 'LeBron James over 22.5 points', market: 'player points' } } }), 'basketball/nba');
+});
 
 test('keeps a matching ESPN event only while it is upcoming', async () => {
   const result = await upcomingEventStatus(packet, {

@@ -9,15 +9,34 @@ function pacificDate(date) {
 }
 
 function espnLeague(packet) {
-  const text = `${packet.source?.text || ''} ${packet.analysis?.extraction?.league || ''} ${packet.analysis?.extraction?.sport || ''}`.toLowerCase();
+  const extraction = packet.analysis?.extraction || {};
+  const plays = Array.isArray(extraction.plays) ? extraction.plays : [];
+  const text = [
+    packet.source?.text || '', extraction.league || '', extraction.sport || '',
+    extraction.market || '', extraction.selection || '', extraction.line || '',
+    extraction.event || '',
+    ...plays.flatMap((play) => [play?.selection || '', play?.line || '', play?.event || ''])
+  ].join(' ').toLowerCase();
   if (/\bmlb\b|baseball/.test(text)) return 'baseball/mlb';
   if (/\bncaaf\b|college football/.test(text)) return 'football/college-football';
   if (/\bnfl\b|football/.test(text)) return 'football/nfl';
+  // Image cards frequently omit the league label even though the visible
+  // market identifies the sport. Use only sport-specific betting language as
+  // a fallback; the exact event and current-day schedule gates still run
+  // afterward, so this never turns an ambiguous post into a publishable pick.
+  if (/\b(?:receptions?|receiving|rushing|passing|quarterback|wide receiver|tight end|passing touchdowns?|rushing touchdowns?|receiving touchdowns?)\b/.test(text)) return 'football/nfl';
+  if (/\b(?:hitter|home runs?|strikeouts?|pitcher|total bases?|rbi|stolen bases?|innings? pitched|hits?|walks? allowed)\b/.test(text)) return 'baseball/mlb';
   if (/\bwnba\b/.test(text)) return 'basketball/wnba';
   if (/\bncaab\b|college basketball|men.s college basketball/.test(text)) return 'basketball/mens-college-basketball';
   if (/\bnba\b|basketball/.test(text)) return 'basketball/nba';
+  const hasNamedPlayer = Boolean(extraction.player_name || plays.some((play) => play?.player_name)
+    || /\b[A-Z][A-Za-z'’.-]{2,}\s+[A-Z][A-Za-z'’.-]{2,}\b/.test(extraction.selection || ''));
+  if (hasNamedPlayer && /\bpoints?\b/.test(text)) return 'basketball/nba';
+  if (/\b(?:rebounds?|assists?|three[- ]pointers?|threes?|blocks?|double[- ]double|triple[- ]double)\b/.test(text)) return 'basketball/nba';
   if (/\bnhl\b|hockey/.test(text)) return 'hockey/nhl';
+  if (/\b(?:shots? on goal|goaltender|goalie|puck line)\b/.test(text)) return 'hockey/nhl';
   if (/\bmls\b/.test(text)) return 'soccer/usa.1';
+  if (/\b(?:soccer|fifa|anytime goalscorer|shots? on target)\b/.test(text)) return 'soccer/usa.1';
   return null;
 }
 
