@@ -10,11 +10,11 @@ const { freePickRecapRows } = require('./lib/free-recap');
 const { gradePickFromEspn } = require('./lib/espn-grading');
 const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
-const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName } = require('./lib/source-review');
+const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName, sourceEvidence } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { publishApprovedFreePickToSite } = require('./lib/free-pick-site');
 const { reviewQueuePath } = require('./lib/review-queue-path');
-const { isNFLPick, upcomingEventStatus } = require('./lib/event-timing');
+const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { enrichPacket } = require('../pipeline/enrich-pick');
 const { runCollector } = require('../pipeline/collect-x');
@@ -1081,8 +1081,11 @@ async function handleSourceReviewButton(interaction) {
       throw new Error('This source is approved for monitoring only. Use Kobe’s original wording and approved media with /publish-pick until source reuse permission is confirmed.');
     }
     assertPublishableExtraction(packet);
-    if (!isNFLPick(packet)) {
-      throw new Error('Only picks explicitly identified as NFL/football picks can be published.');
+    if (!isSupportedSportPick(packet)) {
+      throw new Error('Only picks explicitly identified as a supported sport can be published.');
+    }
+    if (packet.source?.publish_mode !== 'terms_only' && sourceEvidence(packet).length < 3) {
+      throw new Error('This regular card does not contain at least three clean, relevant breakdown points. Reject it and wait for a corrected card.');
     }
     const timing = await upcomingEventStatus(packet);
     if (timing.status !== 'UPCOMING') {
@@ -1465,8 +1468,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const pickOptions = optionsFrom(interaction);
-    if (pickOptions.sport.toLowerCase() !== 'football' || !/\bnfl\b/i.test(pickOptions.league)) {
-      throw new Error('Only NFL picks can be published. Set sport to Football and league to NFL.');
+    if (!isSupportedSportPick({ analysis: { extraction: { sport: pickOptions.sport, league: pickOptions.league } } })) {
+      throw new Error('Only supported major-sport picks can be published. Set a supported sport and league.');
     }
     const pickId = makePickId({ sport: pickOptions.sport, pickNumber: pickOptions.pickNumber });
     const embed = buildPickEmbed({ ...pickOptions, pickId });
@@ -1484,7 +1487,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     };
     const timing = await upcomingEventStatus(manualPacket);
     if (timing.status !== 'UPCOMING') {
-      throw new Error('This pick was not verified as an upcoming NFL game scheduled today. No post was made.');
+      throw new Error('This pick was not verified as an upcoming supported-sport game scheduled today. No post was made.');
     }
 
     const channel = await destinationFor(interaction, defaultChannelId, pickOptions.sport.toLowerCase());
