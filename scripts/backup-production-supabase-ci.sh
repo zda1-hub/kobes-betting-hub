@@ -42,6 +42,23 @@ if [[ "${actual_project_ref}" != "${expected_project_ref}" ]]; then
   exit 1
 fi
 
+# The application connection string may contain Node-pg's compatibility flag.
+# Native libpq tools reject it, so remove that one non-credential parameter in
+# memory while preserving every host, identity, TLS, and routing parameter.
+pg_database_url="$(python3 - <<'PY'
+import os
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+parsed = urlsplit(os.environ['DATABASE_URL'])
+query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+         if key.lower() != 'uselibpqcompat']
+print(urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment)))
+PY
+)"
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+  printf '::add-mask::%s\n' "${pg_database_url}"
+fi
+
 for command_name in python3 pg_dump pg_restore openssl shasum; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     printf 'Required command is unavailable: %s\n' "${command_name}" >&2
@@ -60,8 +77,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-pg_dump \
-  --dbname "${database_url}" \
+PGDATABASE="${pg_database_url}" pg_dump \
   --format custom \
   --no-owner \
   --no-acl \

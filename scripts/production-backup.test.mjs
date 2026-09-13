@@ -16,6 +16,8 @@ test('production backup is locked to the production project and encrypted before
   assert.match(script, /urlparse\(os\.environ\['DATABASE_URL'\]\)/);
   assert.match(script, /unquote\(parsed\.username/);
   assert.match(script, /hostname\.endswith\('\.pooler\.supabase\.com'\)/);
+  assert.match(script, /key\.lower\(\) != 'uselibpqcompat'/);
+  assert.match(script, /PGDATABASE="\$\{pg_database_url\}" pg_dump/);
   assert.match(script, /sslmode=(?:require|verify-ca|verify-full)/);
   assert.match(script, /pg_dump/);
   assert.match(script, /openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000/);
