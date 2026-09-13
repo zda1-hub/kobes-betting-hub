@@ -1,10 +1,10 @@
 # Kobe's Betting Hub — Project Control File
 
-**Status:** Active production system with unresolved operational and compliance risks
+**Status:** Active production system preparing for a public-beta launch; customer-facing acceptance lifecycle remains open
 
-**Last verified:** 2026-09-12 19:38 MST
+**Last verified:** 2026-09-13 15:53 MST
 
-**Production runtime change set:** repository/Render auto-deploy from `main`; Checkout Worker `0cf0d235-aa26-432c-8478-df6239efed48`; Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365`; public-site Worker `5fcc4678-1b88-4b09-8616-2203db498b1b`
+**Production runtime change set:** repository/Render auto-deploy from `main` at `6989dd1b346508728dea43b3`; Checkout Worker `00cdf542-4592-4204-b0b2-ab5c6b2e536c`; Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365`; public-site Worker `59485719-9cab-42eb-bf90-1074c21f0156`
 
 **Control-file owner:** Zakai Martin
 
@@ -25,6 +25,15 @@ The owners do not need to read every repository document. The operating chat sho
 Kobe's Betting Hub is a paid sports-pick membership centered on Discord. It also has a public website, Stripe checkout, Discord entitlement automation, a monitored X-source pick pipeline, human approval in Discord, result grading through ESPN, recap email queues, a public Free Pick page, and optional X publishing.
 
 The system is not a single application. It currently spans GitHub, Cloudflare Workers/D1/KV, Render, Discord, Stripe, X, OpenAI, ESPN, Gmail Apps Script, and Supabase Postgres. Supabase is the shared membership and pick/API audit ledger. OpenAI provider reconciliation is live through a dedicated read-only organization Admin key; Apps Script and some SDK-internal calls still need equivalent records before the ledger is literally exhaustive.
+
+### Immediate launch gate
+
+- **Passed:** production website, Checkout health, Publisher health, current Free Pick API, Free Pick page, and client asset passed the post-hotfix `5/5` read-only smoke suite.
+- **Passed:** Discord approval-verification hotfix `6989dd1` is live on Render. Startup registered commands, logged in as Kobe Bot, refreshed three pending locked-format cards, and stopped X monitoring at the expected 15:00 Arizona cutoff.
+- **Passed:** the once-daily Apps Script email remains enabled at 0% displayed error and now exits silently when no approved picks exist. The failing five-minute recap trigger was deleted after owner approval.
+- **Waiting on Kobe:** complete the live billing-portal cancellation for the intended acceptance membership and report completion. Until then, no subscription should be changed by an operator.
+- **Still required before unrestricted invitations:** read-only reconcile that cancellation across Stripe, Supabase, and Discord; then verify access remains through the paid-through date and is removed at entitlement end. A fresh approval card must also prove that the hotfix produces a clear terminal result. Do not publish a test pick publicly without explicit approval.
+- **Known exception:** two live `$32.99/month` subscriptions were observed under the same member email. Do not cancel either one until the intended subscription is identified and the owner confirms the exact action.
 
 ### What is definitely live
 
@@ -49,14 +58,14 @@ Observed output-quality evidence: the 2026-09-12 Discord screenshot shows a publ
 
 ### What is not production-ready even though parts are live
 
-- The public Terms and Privacy pages still say they are drafts/not effective and describe a pre-checkout site with no payment or member account integration. That is factually inconsistent with the live product.
-- No owner-supplied proof of legal entity, jurisdiction, official support/privacy contact, refund policy, or counsel approval exists in the repository.
+- Effective public Terms and Privacy pages are live for Kobe Irwin operating publicly as Kobe's Betting Hub in California. They disclose recurring billing, public-beta status, cancellation, refund exceptions, retention offers, and dispute-based access suspension. Counsel review and a legal/compliance owner remain operational follow-ups, not proof that the technical lifecycle works.
+- `support@kobesbettinghub.com` is active and forwards to `themartinventures@gmail.com`. Published support hours and a response target are still undecided.
 - Membership persistence now uses Supabase for normalized customer/subscription state and signed webhook event idempotency. Stripe remains the payment and subscription source of truth; Discord role state is the derived entitlement.
 - The Checkout Worker now authenticates returning members with Discord OAuth and then creates a Stripe Customer Portal session. Discord proves which linked member is acting; Stripe authenticates and performs billing, recurring subscription, invoices, payment-method changes, and cancellation.
 - All 38 X sources are approved for monitoring only and are marked `PENDING_SOURCE_TERMS`; none is marked `CONFIRMED` for reuse/publication. `X_SOURCE_PUBLISHING_ENABLED=false` now enforces that owner decision in production.
 - Render has a pooled `DATABASE_URL` and `AUDIT_DATABASE_REQUIRED=true`. The audit-aware worker completed database initialization, registered Discord commands, and logged in as Kobe Bot after deployment.
 - Provider calls from the Node collector/bot and Checkout Worker are written to Supabase with endpoint class, payload hashes, outcome, latency, provider request ID where available, and workflow references. Apps Script and Discord SDK-internal traffic remain separate gaps.
-- The read-only OpenAI organization Admin key is currently installed on the long-lived Render service to support reconciliation. It does not grant model-write or billing-write access, but it should be moved to an isolated reconciliation runtime (or removed between manual runs) because every process on that service inherits its organization-wide read scope.
+- The read-only OpenAI organization Admin key is isolated in GitHub Actions for reconciliation rather than inherited by the long-lived production bot.
 - Marketing is intentionally a future workstream, not the current priority.
 
 ## System map
@@ -92,19 +101,19 @@ Kobe Trends email
 | Checkout | Cloudflare Worker | `cloudflare/kobes-checkout-worker.js` | Stripe + Supabase | Secure Discord-authenticated portal and webhook persistence live |
 | Payments | Stripe | called by Checkout Worker | Stripe subscription and invoice records | Live |
 | Member access | Discord | Checkout Worker OAuth/role calls | Stripe status governs Discord role | Live with daily reconciliation; full test-identity lifecycle still required |
-| Discord operations | Render Node worker | `bot/index.js`, `bot/commands.js` | Discord messages + Supabase workflow events + local logs | Live on `f9b2141` |
+| Discord operations | Render Node worker | `bot/index.js`, `bot/commands.js` | Discord messages + Supabase workflow events + local logs | Live on `6989dd1`; bounded approval verification deployed |
 | X monitoring | Render Node worker | `pipeline/collect-x.js`, `data/twitter-sources.json` | source roster + persistent cursor | Live; cursor/dedupe root is on `/var/data` |
 | Model extraction | OpenAI Responses API | `pipeline/enrich-pick.js` | response/request IDs + structured output | Luna + extraction audit live; next-window production evidence pending |
 | Pick approval | private Discord channel | `bot/lib/source-review.js`, `bot/index.js` | Kobe button action | Live |
 | Pick publication | Discord | `bot/index.js` | Discord message ID + audit event | Live |
 | Pick log | Render persistent disk | `bot/lib/pick-log.js` | `/var/data/pick-log.csv` | Live, single-host CSV |
-| Pick/member audit DB | Supabase Postgres | `pipeline/audit-store.js`, `pipeline/migrations/` | Supabase Postgres | Migrations `001`–`004` live; Worker and Render connected |
+| Pick/member audit DB | Supabase Postgres | `pipeline/audit-store.js`, `pipeline/migrations/` | Supabase Postgres | Migrations through `009` live; Worker and Render connected |
 | Event/result verification | ESPN public APIs | `bot/lib/event-timing.js`, `bot/lib/espn-grading.js`, `bot/lib/espn-trends.js` | stored response snapshot/reference after audit cutover | Live, partial market coverage |
 | Public Free Pick | Publisher Worker + KV | `cloudflare/bettinghub-publisher.js`, `free-pick.js` | KV `free-picks/current.json` | Live with canonical Bijan text-only item; dedicated cross-service credential verified by hash only |
 | X publishing | Publisher Worker + D1 | `cloudflare/bettinghub-publisher.js` | D1 queue/delivery log + X post ID | Connected |
 | Trends inbox | Gmail Apps Script + D1 + Render | `cloudflare/kobe-trends-inbox.gs`, publisher Worker, bot | D1 queue + approval packet | Configuration status needs verification |
-| Recap email | Render + D1 + Gmail Apps Script | `bot/index.js`, Apps Script | CSV grades + D1 notification status | Live configuration reported; end-to-end proof needed |
-| Support | static support page/manual action | `support.html`, `docs/ISSUE_PLAYBOOKS.md` | None established | Incomplete |
+| Recap email | Render + D1 + Gmail Apps Script | `bot/index.js`, Apps Script | CSV grades + D1 notification status | Render path active; daily zero-pick email suppressed; broken five-minute Apps Script trigger removed; approved-pick proof still needed |
+| Support | static support page/manual action | `support.html`, `docs/ISSUE_PLAYBOOKS.md` | `support@kobesbettinghub.com` forwarding to owner | Live manually; hours/SLA and ticket automation pending |
 | Marketing | not yet defined | historical assets/docs only | None | Deferred |
 
 ## End-to-end business flows
@@ -265,15 +274,15 @@ Status meanings: **Complete** means the intended production control and its imme
 
 | # | Workstream | Status | Durable evidence / verified outcome | What remains / acceptance test |
 |---:|---|---|---|---|
-| 1 | Cloudflare stale site | **Complete** | Full cache purge completed; custom-domain static Worker `5fcc4678-1b88-4b09-8616-2203db498b1b` and shared site manifest deployed; `cancel`, `cancel.html`, and `cancel.js` returned `200`; the production smoke verified the public Free Pick HTML and client asset. | Recheck after future public-site deployments and record the deployed Worker version. |
-| 2 | Membership lifecycle | **Partial** | Stripe test Checkout creation, signed subscription webhooks, Supabase membership persistence, Discord OAuth identity linking, Stripe Customer Portal routing, cancellation handling, Discord role code, replay-safe link ownership, and retry-safe Checkout Session idempotency are live. Worker `0cf0d235-aa26-432c-8478-df6239efed48` passed health and CORS verification after deployment. | Run one dedicated test Discord identity through Checkout → link → portal → cancel → role removal and retain Stripe event IDs, Discord user/role evidence, Supabase rows, and timestamps. Add Turnstile/rate limiting after keys are authorized. Implement owner-approved failed-payment/refund/dispute rules. |
+| 1 | Cloudflare stale site | **Complete** | Corrected public-site Worker `59485719-9cab-42eb-bf90-1074c21f0156` is live; the responsive membership page and effective policy/support pages were verified; the post-Render-hotfix production smoke again passed all five public checks. | Recheck after future public-site deployments and record the deployed Worker version. |
+| 2 | Membership lifecycle | **Partial — live acceptance waiting** | Stripe test Checkout creation, signed subscription webhooks, Supabase membership persistence, Discord OAuth identity linking, Stripe Customer Portal routing, cancellation handling, Discord role code, replay-safe link ownership, retry-safe Checkout Session idempotency, failed-payment entitlement suspension, and dispute blocks are live. Checkout Worker `00cdf542-4592-4204-b0b2-ab5c6b2e536c` passed health/CORS/webhook checks after promotion. | Kobe must finish the intended live portal cancellation. Then reconcile Stripe/Supabase/Discord without changing another subscription, verify paid-through access, and later verify terminal role removal. Identify the intended membership because two active live subscriptions were observed under the same email. |
 | 3 | Luna/X monitoring proof | **Complete for the authorized smoke test** | `X_TEST_CANDIDATE_LIMIT=1 node pipeline/test-real-x-pick.js --no-discord` checked one recent `@CappersUSA` post through `gpt-5.6-luna`; outcome was `SOURCE_EXTRACTED`; no Discord, X, member, or public-site publication occurred. | Use the same no-publication harness for future model/prompt changes; the next normal window must still prove bounded production behavior in the durable ledger. |
 | 4 | Durable API trail | **Partial / operational** | Supabase migrations `001`–`005` are live; explicit Node and Checkout Worker calls write endpoint/outcome/latency/hash/workflow metadata; eight production ESPN events were observed immediately after cutover. Discord SDK REST responses are audited without route identifiers or bodies. Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365` routes all five outbound X calls through an append-only, redacted D1 ledger with Worker-version attribution. | Capture the first production Publisher X/OAuth audit row without generating an unauthorized post; add equivalent explicit Apps Script request records and Discord pre-response failure records; then reconcile zero unclassified provider traffic for a controlled window. |
-| 5 | Provider billing reconciliation | **Complete for first OpenAI reconciliation** | Dedicated read-only, 90-day Admin key is encrypted only in Render. The first 48-hour import wrote 14 usage and three cost rows; audited provider data attributes all 3,046 incident requests to `Default project` / `Kobe Pick Monitor` / `gpt-5-mini-2025-08-07`, with 5,519,913 input tokens, 7,085,809 output tokens, and $16.10030665 in the UTC September 12 project cost bucket. | Move the Admin key out of the long-lived bot into an isolated reconciliation runtime (or remove it between runs), pin expected org/project identity, schedule/operate imports before expiry, add equivalent X/Cloudflare billing exports where available, and prove one zero-unclassified controlled window. |
+| 5 | Provider billing reconciliation | **Complete for first OpenAI reconciliation** | Dedicated read-only, 90-day Admin key is isolated in GitHub Actions. The first 48-hour import wrote 14 usage and three cost rows; audited provider data attributes all 3,046 incident requests to `Default project` / `Kobe Pick Monitor` / `gpt-5-mini-2025-08-07`, with 5,519,913 input tokens, 7,085,809 output tokens, and $16.10030665 in the UTC September 12 project cost bucket. | Operate imports before credential expiry, add equivalent X/Cloudflare billing exports where available, and prove one zero-unclassified controlled window. |
 | 6 | Cost containment | **Complete, monitoring required** | Luna is active; durable X cursor/dedupe uses `/var/data`; hard pre-call limits are 50 OpenAI requests/day, 500/month, $1 estimated/day, and $15 estimated/month; a concurrency-safe cap permits at most two new model calls per collection run and defers overflow without advancing its cursor; monitored-source publishing is disabled. | Verify the first production deferral/cutoff events and confirm deferred candidates drain across later intervals without unexplained provider traffic. |
 | 7 | Free Pick mismatch | **Complete for text-only production path** | A dedicated least-privilege credential was generated and stored encrypted in Cloudflare and Render; intermediate exposed rotation values were invalidated. Runtime verification compared only a non-secret hash prefix. The first authorized publish exposed a read-path defect for `objectKey: null`; a regression test was added, and Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365` is live. Canonical pick `20260912-148-X` returned `201`; after normal KV propagation, `/api/free-pick/current` returned `200`, the public page rendered the Bijan selection, and the new five-check production smoke passed with no Discord/X side effect. | Test the image-backed path separately before using it. |
 | 8 | Membership reconciliation | **Complete for scheduled control** | Checkout Worker `0cf0d235-aa26-432c-8478-df6239efed48` runs Stripe → Supabase → Discord reconciliation daily at `15 16 * * *` (09:15 Arizona) and records outcomes/failures. | Add an external alert destination for failed reconciliation and prove one mismatch repair in a controlled test. |
-| 9 | Legal/support operations | **Blocked on owner decisions** | Draft Terms, Privacy, support pages, and issue playbooks exist, but the public legal text is inconsistent with the live paid product and is not owner/counsel approved. | Supply the legal business identity/address, jurisdiction, support/privacy email, refund and failed-payment grace rules, retention policy, backup operator, and approval authority; then publish and timestamp effective policies. |
+| 9 | Legal/support operations | **Partial — customer pages live** | Effective Terms, Privacy, and support pages identify Kobe Irwin operating as Kobe's Betting Hub in California; disclose recurring billing, cancellation, no-refund exceptions, the 75%-off retention option, public beta, and dispute-based access suspension; `support@kobesbettinghub.com` forwards to the owner. | Choose published support hours/response target, retention periods, backup operator, age/jurisdiction controls, and legal/compliance reviewer. A street address is not required merely to prove the technical payment lifecycle, but applicable business/email-marketing laws may separately require one. |
 
 ## Current backlog
 
@@ -292,7 +301,7 @@ Status meanings: **Complete** means the intended production control and its imme
 - [x] Move the collection-run cap to the actual pre-provider boundary; production permits two new model calls per run and defers overflow without losing its cursor.
 - [ ] Reduce production deploy churn: batch changes, use local tests/staging, and do not use `main` as the test loop.
 - [x] Enforce the owner decision that the 38 sources are approved for monitoring only by setting `X_SOURCE_PUBLISHING_ENABLED=false`.
-- [ ] Make public Terms/Privacy/support claims match the live paid product, with owner/legal approval.
+- [x] Make public Terms/Privacy/support claims match the live paid product and publish them with the owner-approved operating identity and policy.
 
 ### P1 — make memberships and operations reliable
 
@@ -301,7 +310,7 @@ Status meanings: **Complete** means the intended production control and its imme
 - [x] Make ambiguous browser retries reuse a validated Stripe Checkout idempotency key and retain that request ID in the audit event.
 - [ ] Complete a live test-identity lifecycle: Checkout, Discord link, portal, cancel, and role removal.
 - [ ] Alert on failed webhook processing, Discord role grant/removal, unmatched payment, and duplicate access.
-- [ ] Define and implement refund, past-due/grace, dispute, access restoration, and support escalation policy.
+- [x] Implement the owner-approved no-refund exceptions, failed-payment/dispute access suspension, and payment-recovered restoration behavior; support escalation remains manual.
 - [ ] Establish a shared support ticket system with named owner and response targets.
 - [ ] Finish API audit coverage across Apps Script and Cloudflare. Checkout Worker and all Publisher outbound X call paths are covered; Apps Script requests and Discord pre-response failures remain.
 - [ ] Verify end-to-end recap email, Trends email approval, and X delivery with test evidence. The text-only public Free Pick update is verified.
@@ -410,16 +419,20 @@ Database direction: the existing free Supabase Postgres project is the first pro
 | 2026-09-12 | Deploy `2d73527` on Render as `dep-daj0ogu7bikc73abcsdg`: harden OpenAI reconciliation to preflight, filter, and validate the expected production project/key; fetch usage and costs before writes; correlate calls with one operation ID; and preserve the initial project-only cost rows under an explicit unscoped label. Operation `85814110-ae15-4ba9-8c7b-f62973360df1` recorded three successful HTTP 200 calls under the same commit. | Zakai Martin | Live and production-verified |
 | 2026-09-12 | Replace the post-extraction approval-card cap with a concurrency-safe pre-provider reservation. Production now permits two new OpenAI extraction calls per 15-minute pass and retains deferred posts for the next interval. The worker restarted after the daily cutoff, so no X scan or Discord publication occurred during this rollout. | Zakai Martin | Live; 121/121 tests passed |
 | 2026-09-12 | Credential-free post-deploy smoke passed Checkout health, Publisher health, current Free Pick API, public Free Pick page, and Free Pick client asset. | Zakai Martin | Complete |
+| 2026-09-13 | Use a public beta rather than a closed cohort. Invitations may open after the customer-facing acceptance gate, while backend improvements continue without degrading the member experience. | Zakai Martin | Adopted |
+| 2026-09-13 | Publish effective policies under Kobe Irwin operating publicly as Kobe's Betting Hub in California; use `support@kobesbettinghub.com` forwarding to the owner. | Zakai Martin | Live |
+| 2026-09-13 | Deploy the bounded Discord approval-verification hotfix. Render deployment `dep-dajifs7qj5pc73b9j7pg` made commit `6989dd1` live; startup was healthy and the post-deploy read-only smoke suite passed `5/5`. | Zakai Martin | Complete; fresh approval-card acceptance still required |
+| 2026-09-13 | Keep the daily approved-picks Apps Script email but make zero-pick days silent. Delete only the failing `deliverKobeRecapNotifications` five-minute trigger; the Apps Script trigger page then showed two remaining triggers and `sendDailyPackage` at 0% error. | Zakai Martin | Complete |
 
 ## Owner answers still required
 
 These cannot be learned safely from source code:
 
-1. What are the daily and monthly budgets for OpenAI, X, Cloudflare, Render, and total infrastructure? At what dollar/request threshold should automation stop versus alert?
+1. OpenAI's temporary hard stops are already approved and live. What are the daily/monthly budgets and stop-versus-alert thresholds for X, Cloudflare, Render, and total infrastructure?
 2. Who is the backup technical/billing operator and who is the legal/compliance owner?
-3. Should the paid product remain live while Terms/Privacy and support/refund policy remain incomplete? The cancellation authentication, audit database, and scheduled entitlement reconciliation are now deployed, although their full test-identity acceptance run is still open.
+3. What support hours and response target should be published during the public beta?
 4. Which Stripe account/mode, Discord server, Cloudflare account, Render workspace, GitHub account, X project, OpenAI organization/project, and Gmail account are the official production accounts? Record identifiers, never secrets.
-5. What refund policy, grace period, supported jurisdictions, age rule, official business entity/address, and support/privacy email are approved?
+5. The operating identity, California jurisdiction, support email, cancellation/no-refund exceptions, retention offer, and payment-dispute suspension rules are approved. What age/jurisdiction restrictions, records-retention policy, and legal-review owner should be adopted?
 6. What retention period is required for API logs, source content, model inputs/outputs, member identifiers, payment references, and incidents?
 
 ## Detailed references
