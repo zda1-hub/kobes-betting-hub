@@ -24,8 +24,39 @@
     "DISCORD_MEMBER_ROLE_ID": "1539063967878619218",
     "DISCORD_REDIRECT_URI": "https://kobes-betting-hub-checkout.kobedirwin.workers.dev/discord/callback",
     "STRIPE_FIRST_MONTH_COUPON": "O9RCPLIa",
+    "STRIPE_GLOBAL_PAYOUTS_VERSION": "2026-08-26.preview",
     "STRIPE_MONTHLY_PRICE_ID": "price_1U7mwnE6p9BmPii3ge8dmJw2",
     "STRIPE_STARTER_PRICE_ID": "price_1U8sr9E6p9BmPii3C2r5jTb4",
     "SUPABASE_URL": "https://mpajyubbnnsdpgdizvht.supabase.co"
+  },
+  "env": {
+    "staging": {
+      "name": "kobes-betting-hub-checkout-staging",
+      "workers_dev": true,
+      "version_metadata": {
+        "binding": "CF_VERSION_METADATA"
+      },
+      // Staging reconciliation remains manual until all test-only resources are configured.
+      "triggers": {
+        "crons": []
+      },
+      // Wrangler does not inherit vars into named environments. Keep every external
+      // resource here test-only; these placeholders deliberately fail closed.
+      "vars": {
+        "APP_ENV": "staging",
+        "DISCORD_CLIENT_ID": "1548556799513333770",
+        "DISCORD_GUILD_ID": "1548568770123927562",
+        "DISCORD_MEMBER_ROLE_ID": "1548578573177061416",
+        "DISCORD_REDIRECT_URI": "https://kobes-betting-hub-checkout-staging.kobedirwin.workers.dev/discord/callback",
+        "STRIPE_FIRST_MONTH_COUPON": "",
+        "STRIPE_GLOBAL_PAYOUTS_VERSION": "2026-08-26.preview",
+        "STRIPE_MONTHLY_PRICE_ID": "price_1U8UpxE6p9BmPii3GoBjAXII",
+        "STRIPE_PORTAL_CONFIGURATION_ID": "bpc_1UF9gPE6p9BmPii3pI6NPPAn",
+        "STRIPE_RETENTION_COUPON_ID": "VJxmdXFz",
+        "STRIPE_STARTER_PRICE_ID": "price_1U8UpLE6p9BmPii3ErYC4FPr",
+        "SITE_ORIGIN": "https://kobes-betting-hub-staging.kobedirwin.workers.dev",
+        "SUPABASE_URL": "https://ctqmksvfqrysomvckqrm.supabase.co"
+      }
+    }
   }
 }

@@ -53,3 +53,70 @@ test('records Discord SDK REST responses without retaining route identifiers or 
   assert.equal(JSON.stringify(events[0]).includes('secret member message'), false);
   assert.equal(JSON.stringify(events[0]).includes('123456789'), false);
 });
+
+test('records Discord failures that happen before a response without retaining route tokens, bodies, or error messages', async () => {
+  const rest = new EventEmitter();
+  rest.queueRequest = async () => {
+    throw new TypeError('network refused request with private-token-in-error');
+  };
+  const events = [];
+  const originalQueueRequest = rest.queueRequest;
+  const audit = attachDiscordRestAudit(rest, {
+    callerComponent: 'bot/test',
+    triggerType: 'test'
+  }, {
+    recordImpl: async (event) => events.push(event)
+  });
+
+  await assert.rejects(() => rest.queueRequest({
+    method: 'POST',
+    fullRoute: '/interactions/123456789/private-interaction-token/callback',
+    body: { content: 'private member response' }
+  }), /private-token-in-error/);
+  await audit.flush();
+  audit.detach();
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].endpointClass, '/interactions/{id}/{token}/callback');
+  assert.equal(events[0].method, 'POST');
+  assert.equal(events[0].responseStatus, null);
+  assert.equal(events[0].responsePayloadSha256, null);
+  assert.equal(events[0].outcome, 'NETWORK_ERROR');
+  assert.equal(events[0].errorClass, 'NETWORK_ERROR');
+  assert.equal(events[0].requestPayloadSha256.length, 64);
+  assert.ok(Number.isInteger(events[0].latencyMs) && events[0].latencyMs >= 0);
+  assert.equal(JSON.stringify(events[0]).includes('123456789'), false);
+  assert.equal(JSON.stringify(events[0]).includes('private-interaction-token'), false);
+  assert.equal(JSON.stringify(events[0]).includes('private member response'), false);
+  assert.equal(JSON.stringify(events[0]).includes('private-token-in-error'), false);
+  assert.equal(rest.queueRequest, originalQueueRequest);
+});
+
+test('does not double-record an HTTP error already captured by the Discord response event', async () => {
+  const rest = new EventEmitter();
+  rest.queueRequest = async (request) => {
+    rest.emit('response', {
+      method: request.method,
+      route: request.fullRoute,
+      data: { body: request.body },
+      retries: 0
+    }, new Response('{"message":"private Discord error"}', {
+      status: 503,
+      headers: { 'content-type': 'application/json' }
+    }));
+    const error = new Error('private Discord error');
+    error.status = 503;
+    throw error;
+  };
+  const events = [];
+  const audit = attachDiscordRestAudit(rest, {}, { recordImpl: async (event) => events.push(event) });
+
+  await assert.rejects(() => rest.queueRequest({ method: 'POST', fullRoute: '/channels/123456789/messages', body: { content: 'private' } }));
+  await audit.flush();
+  audit.detach();
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].outcome, 'HTTP_ERROR');
+  assert.equal(events[0].responseStatus, 503);
+  assert.equal(JSON.stringify(events[0]).includes('private Discord error'), false);
+});

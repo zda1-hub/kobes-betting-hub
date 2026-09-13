@@ -9,5 +9,15 @@
     "directory": "./.public-site",
     "not_found_handling": "404-page",
     "html_handling": "drop-trailing-slash"
+  },
+  "env": {
+    "staging": {
+      "name": "kobes-betting-hub-staging",
+      "assets": {
+        "directory": "./.public-site",
+        "not_found_handling": "404-page",
+        "html_handling": "drop-trailing-slash"
+      }
+    }
   }
 }

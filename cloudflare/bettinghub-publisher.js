@@ -18,6 +18,12 @@ const ALLOWED_IMAGE_TYPES = new Map([
 ]);
 
 const X_AUDIT_TABLE = "x_api_call_audit";
+const APPS_SCRIPT_AUDIT_TABLE = "apps_script_api_call_audit";
+const APPS_SCRIPT_AUDITED_ROUTES = new Set([
+  "POST /api/queue/trends",
+  "GET /api/queue/recap-notifications",
+  "POST /api/queue/recap-notifications/deliver",
+]);
 
 async function sha256Hex(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value)));
@@ -123,6 +129,71 @@ async function auditedXFetch(env, endpoint, init, audit) {
   }
 }
 
+async function ensureAppsScriptApiAudit(env) {
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS ${APPS_SCRIPT_AUDIT_TABLE} (
+      id TEXT PRIMARY KEY,
+      occurred_at TEXT NOT NULL,
+      provider TEXT NOT NULL CHECK (provider = 'cloudflare-worker'),
+      endpoint_class TEXT NOT NULL,
+      method TEXT NOT NULL,
+      caller_component TEXT NOT NULL CHECK (caller_component = 'gmail-apps-script'),
+      outcome TEXT NOT NULL CHECK (outcome IN ('SUCCEEDED', 'HTTP_ERROR', 'NO_RESPONSE')),
+      response_status INTEGER,
+      latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+      client_request_id TEXT,
+      request_payload_sha256 TEXT,
+      error_class TEXT,
+      worker_version TEXT
+    )`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_apps_script_api_call_audit_time ON ${APPS_SCRIPT_AUDIT_TABLE} (occurred_at DESC)`),
+    env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS apps_script_api_call_audit_no_update
+      BEFORE UPDATE ON ${APPS_SCRIPT_AUDIT_TABLE}
+      BEGIN SELECT RAISE(ABORT, 'apps_script_api_call_audit is append-only'); END`),
+    env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS apps_script_api_call_audit_no_delete
+      BEFORE DELETE ON ${APPS_SCRIPT_AUDIT_TABLE}
+      BEGIN SELECT RAISE(ABORT, 'apps_script_api_call_audit is append-only'); END`),
+  ]);
+}
+
+async function recordAppsScriptApiCall(env, values) {
+  try {
+    await ensureAppsScriptApiAudit(env);
+    await env.DB.prepare(`INSERT INTO ${APPS_SCRIPT_AUDIT_TABLE} (
+      id, occurred_at, provider, endpoint_class, method, caller_component,
+      outcome, response_status, latency_ms, client_request_id,
+      request_payload_sha256, error_class, worker_version
+    ) VALUES (?, ?, 'cloudflare-worker', ?, ?, 'gmail-apps-script', ?, ?, ?, ?, ?, ?, ?)`).bind(
+      crypto.randomUUID(), new Date().toISOString(), values.endpointClass,
+      values.method, values.outcome, values.responseStatus, values.latencyMs,
+      values.clientRequestId, values.requestPayloadSha256, values.errorClass,
+      env.CF_VERSION_METADATA?.id || env.WORKER_VERSION || null,
+    ).run();
+  } catch (error) {
+    console.error("Unable to persist Apps Script API audit event", { message: String(error?.message || error) });
+  }
+}
+
+async function appsScriptAuditContext(request, env) {
+  if (request.headers.get("x-kbh-caller") !== "gmail-apps-script") return null;
+  const url = new URL(request.url);
+  const method = request.method.toUpperCase();
+  if (!APPS_SCRIPT_AUDITED_ROUTES.has(`${method} ${url.pathname}`)) return null;
+  const authorized = url.pathname === "/api/queue/trends"
+    ? await trendQueueAuthorized(request, env)
+    : await recapNotificationAuthorized(request, env);
+  if (!authorized) return null;
+  const rawClientRequestId = request.headers.get("x-kbh-client-request-id") || "";
+  const clientRequestId = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(rawClientRequestId) ? rawClientRequestId : null;
+  let requestPayloadSha256 = null;
+  if (method !== "GET" && method !== "HEAD") {
+    try {
+      requestPayloadSha256 = await sha256Hex(await request.clone().text());
+    } catch {}
+  }
+  return { endpointClass: url.pathname, method, clientRequestId, requestPayloadSha256 };
+}
+
 export default {
   fetch(request, env) {
     return handleRequest(request, env);
@@ -134,6 +205,32 @@ export default {
 };
 
 async function handleRequest(request, env) {
+  const audit = await appsScriptAuditContext(request, env);
+  if (!audit) return routeRequest(request, env);
+  const startedAt = Date.now();
+  try {
+    const response = await routeRequest(request, env);
+    await recordAppsScriptApiCall(env, {
+      ...audit,
+      outcome: response.ok ? "SUCCEEDED" : "HTTP_ERROR",
+      responseStatus: response.status,
+      latencyMs: Date.now() - startedAt,
+      errorClass: response.ok ? null : "HTTP_ERROR",
+    });
+    return response;
+  } catch (error) {
+    await recordAppsScriptApiCall(env, {
+      ...audit,
+      outcome: "NO_RESPONSE",
+      responseStatus: null,
+      latencyMs: Date.now() - startedAt,
+      errorClass: error?.name || "Error",
+    });
+    throw error;
+  }
+}
+
+async function routeRequest(request, env) {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request) });
   if (url.pathname === "/health") {
@@ -850,6 +947,7 @@ function html(message, status = 200) {
 }
 
 export const __test = {
+  appsScriptAuditContext,
   auditedXFetch,
   redactedResponseShape,
 };

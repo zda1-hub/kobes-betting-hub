@@ -1,5 +1,7 @@
 # Kobe's Betting Hub — Launch Today
 
+> **Superseded on 2026-09-13.** This historical checklist contains obsolete offer and campaign details and must not be used as launch authorization. Use `PROJECT_CONTROL.md` for current system state and `docs/BETA_LAUNCH_CHECKLIST.md` for the active beta/public-launch gates.
+
 Use this page as the live checklist. Do every unchecked item in order. Do not post the comeback campaign until the payment and access tests pass.
 
 ## Already completed

@@ -103,9 +103,13 @@ function attachDiscordRestAudit(rest, context = {}, options = {}) {
   const recordImpl = options.recordImpl || recordApiCall;
   const onError = options.onError || ((error) => console.error('Unable to persist Discord API audit event:', error?.message || error));
   const pending = new Set();
+  const enqueue = (event) => {
+    const job = Promise.resolve(event).then((resolved) => recordImpl(resolved));
+    pending.add(job);
+    job.catch(onError).finally(() => pending.delete(job));
+  };
   const listener = (request = {}, response = {}) => {
-    const job = (async () => {
-      await recordImpl({
+    enqueue((async () => ({
         service: 'discord',
         endpointClass: endpointClass(request.route || request.path || '/unknown'),
         method: String(request.method || 'GET').toUpperCase(),
@@ -123,18 +127,61 @@ function attachDiscordRestAudit(rest, context = {}, options = {}) {
         outcome: response.ok ? 'SUCCEEDED' : 'HTTP_ERROR',
         errorClass: response.ok ? null : 'HTTP_ERROR',
         retryCount: Number.isInteger(request.retries) ? request.retries : 0
-      });
-    })();
-    pending.add(job);
-    job.catch(onError).finally(() => pending.delete(job));
+      }))());
   };
   rest.on('response', listener);
+  const originalQueueRequest = typeof rest.queueRequest === 'function' ? rest.queueRequest : null;
+  let auditedQueueRequest = null;
+  if (originalQueueRequest) {
+    auditedQueueRequest = async function(request = {}) {
+      const startedAt = Date.now();
+      try {
+        return await originalQueueRequest.call(this, request);
+      } catch (error) {
+        // DiscordAPIError and HTTPError have a status and were already captured
+        // by the SDK's response event. The remaining failures happened before
+        // any response existed (network, abort, local rate-limit rejection).
+        if (!Number.isFinite(error?.status)) {
+          const errorName = String(error?.constructor?.name || error?.name || '');
+          const errorClass = /abort/i.test(errorName)
+            ? 'ABORTED'
+            : /ratelimit/i.test(errorName)
+              ? 'RATE_LIMIT_REJECTED'
+              : errorName === 'TypeError'
+                ? 'NETWORK_ERROR'
+                : 'REQUEST_ERROR';
+          enqueue({
+            service: 'discord',
+            endpointClass: endpointClass(request.fullRoute || request.route || '/unknown'),
+            method: String(request.method || 'GET').toUpperCase(),
+            callerComponent: context.callerComponent || 'discord-sdk',
+            triggerType: context.triggerType || 'runtime',
+            operationId: context.operationId,
+            workflowId: context.workflowId,
+            pickId: context.pickId,
+            memberId: context.memberId,
+            clientRequestId: context.clientRequestId,
+            requestPayloadSha256: requestBodyHash(request.body),
+            responsePayloadSha256: null,
+            responseStatus: null,
+            outcome: 'NETWORK_ERROR',
+            errorClass,
+            retryCount: 0,
+            latencyMs: Date.now() - startedAt
+          });
+        }
+        throw error;
+      }
+    };
+    rest.queueRequest = auditedQueueRequest;
+  }
   return {
     async flush() {
       while (pending.size) await Promise.allSettled([...pending]);
     },
     detach() {
       rest.off('response', listener);
+      if (auditedQueueRequest && rest.queueRequest === auditedQueueRequest) rest.queueRequest = originalQueueRequest;
     }
   };
 }

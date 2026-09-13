@@ -6,15 +6,16 @@
 
 ## Credential control
 
-- OpenAI organization Admin key name: `Kobe Betting Hub Usage Reconciliation`
-- Non-secret Admin key ID: `key_jtBdyNxNSPYbeNCZ`
+- OpenAI organization Admin key name: `Kobe Betting Hub Usage Reconciliation final`
+- Non-secret active Admin key ID: `key_Y50uH3VCo3mzNJM5`
 - Permission: read-only
-- Created: 2026-09-12 19:12:08 MST
-- Expiration: 2026-12-11 19:12:08 MST; rotate no later than 2026-12-10
+- Created: 2026-09-12
+- Expiration: 2026-12-11; rotate no later than 2026-12-10
 - Rotation owner: Zakai Martin; backup owner is still unassigned
-- Storage: encrypted Render environment variable `OPENAI_ADMIN_KEY`
+- Storage: encrypted GitHub Actions repository secret `OPENAI_ADMIN_KEY`; the production `DATABASE_URL` is a separate encrypted Actions secret
 - The credential value is intentionally absent from Git, Supabase, this document, terminal output, and application audit records.
-- Current least-privilege gap: the variable is attached to the long-lived bot service. Move it to an isolated reconciliation runtime or remove it between manual runs so unrelated bot processes do not inherit organization-wide read access.
+- The long-lived Render bot no longer has the Admin credential. Render environment removal was verified and cleanup deployment `dep-daj22t3m8hqs73elspv0` reached Live.
+- Revoked/inactive IDs: original `key_jtBdyNxNSPYbeNCZ`, first exposed replacement `key_06qVlp80Cm0NUp9Z`, and second exposed replacement `key_toaVGldRCO1HXxOT`. The final key was transferred without reading its value into accessibility/tool output.
 
 Emergency rotation procedure: revoke the Admin key in the OpenAI organization dashboard, remove the Render secret, inspect OpenAI/audit-ledger activity for misuse, create a replacement with read-only permission and a finite expiry, install it only in the reconciliation runtime, run a read-only verification, and record only the non-secret key name/ID and timestamps.
 
@@ -31,6 +32,8 @@ The first sync imported OpenAI organization Usage data into `provider_usage_snap
 The hardened sync now requires the expected production project and API-key IDs, verifies that key through an audited preflight, sends both identifiers as Usage/Costs filters, groups new cost snapshots by project and API key, rejects any mismatched or missing scope, fetches both datasets before writing either, and uses one operation ID for the complete reconciliation. Migration `005_relabel_unscoped_openai_cost_snapshots.sql` preserves the three initial project-only cost rows while relabeling them as `openai_costs_api_unscoped`; it does not delete or rewrite their payloads.
 
 Production verification at 19:38 MST used commit `2d73527`, Render deployment `dep-daj0ogu7bikc73abcsdg`, and reconciliation operation `85814110-ae15-4ba9-8c7b-f62973360df1`. The guarded re-run returned 14 usage rows and three cost rows. Supabase contains the three preserved unscoped historical cost rows, three new rows scoped to `key_TDES2zUP3W9UZaej`, and 14 keyed usage rows. The preflight, Usage, and Costs calls all returned HTTP 200, were marked `SUCCEEDED`, and carry the same operation ID and commit. Across the complete 48-hour keyed usage window, the 14 current snapshots contain 3,611 model requests; the incident interval remains the 3,046-request subset documented below.
+
+Isolated-run acceptance at 21:02 MST used GitHub Actions run `34736914218` from commit `d02dd4e`. It returned `usage_rows: 14`, `cost_rows: 3`, and operation `39eb92c5-f391-47c5-ba4a-93b7f1bcf805`. A direct Supabase query verified three rows for that operation: the expected project-key preflight, `/organization/costs`, and `/organization/usage/completions`; each returned HTTP 200 with outcome `SUCCEEDED` and a provider request ID. GitHub reported a Node 20 deprecation warning for the Actions toolchain; the import itself succeeded.
 
 ## Incident attribution
 

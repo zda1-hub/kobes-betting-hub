@@ -12,7 +12,7 @@ const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickL
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
 const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName, sourceEvidence } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
-const { publishApprovedFreePickToSite } = require('./lib/free-pick-site');
+const { manualFreePickPacket, publishApprovedFreePickToSite, shouldUseStandaloneXSync } = require('./lib/free-pick-site');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -1282,9 +1282,11 @@ async function handleSourceReviewButton(interaction) {
     const postReference = discordPostReference(channel, publishedMessage);
     await closeApprovalCard(interaction, { channel, postReference });
     let siteNote = '';
+    let imageSiteSync = null;
     if (action === 'free') {
       try {
         const siteSync = await publishApprovedFreePickToSite(packet);
+        imageSiteSync = shouldUseStandaloneXSync(siteSync) ? null : siteSync;
         siteNote = siteSync.status === 'disabled' ? ' Website sync is not configured.' : ` Website sync: ${siteSync.status}${siteSync.image ? ' with image.' : ' as a text card.'}`;
       } catch (siteError) {
         console.error('Approved Discord free pick was not synced to the website', { pickId: packet.pick_id, message: String(siteError) });
@@ -1292,7 +1294,13 @@ async function handleSourceReviewButton(interaction) {
       }
     }
     let xNote = '';
-    if (action === 'free') {
+    if (action === 'free' && imageSiteSync) {
+      // The image upload endpoint already makes the corresponding X request.
+      // Calling the text queue too would create two X posts for one approval.
+      xNote = imageSiteSync.xPosted
+        ? ' X sync: published with the approved image.'
+        : ' Website image is live; X image delivery needs attention.';
+    } else if (action === 'free') {
       try {
         const xSync = await syncApprovedFreePickToX(packet);
         xNote = xSync.status === 'disabled' ? ' X sync is disabled.' : ` X sync: ${xSync.status}.`;
@@ -1682,7 +1690,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const channel = await destinationFor(interaction, defaultChannelId, pickOptions.sport.toLowerCase());
-    if (channel.id === freePickChannelId) await enforceDailyFreePickLimit();
+    const isFreePickDestination = channel.id === freePickChannelId;
+    if (isFreePickDestination) await enforceDailyFreePickLimit();
     await postAndLogOfficialPick({
       channel,
       payload: { embeds: [embed] },
@@ -1706,7 +1715,35 @@ client.on(Events.InteractionCreate, async (interaction) => {
         notes: 'Published with /publish-pick.'
       }
     });
-    await interaction.reply({ ephemeral: true, content: `Published to ${channel}.` });
+    let destinationSyncNote = '';
+    if (isFreePickDestination) {
+      const approvedPacket = manualFreePickPacket(pickId, pickOptions);
+      let imageSiteSync = null;
+      try {
+        const siteSync = await publishApprovedFreePickToSite(approvedPacket);
+        imageSiteSync = shouldUseStandaloneXSync(siteSync) ? null : siteSync;
+        destinationSyncNote = siteSync.status === 'disabled'
+          ? ' Website sync is not configured.'
+          : ` Website sync: ${siteSync.status}${siteSync.image ? ' with image.' : ' as a text card.'}`;
+      } catch (siteError) {
+        console.error('Manual Discord free pick was not synced to the website', { pickId, message: String(siteError) });
+        destinationSyncNote = ' Website sync needs attention.';
+      }
+      if (imageSiteSync) {
+        destinationSyncNote += imageSiteSync.xPosted
+          ? ' X sync: published with the approved image.'
+          : ' Website image is live; X image delivery needs attention.';
+      } else {
+        try {
+          const xSync = await syncApprovedFreePickToX(approvedPacket);
+          destinationSyncNote += xSync.status === 'disabled' ? ' X sync is disabled.' : ` X sync: ${xSync.status}.`;
+        } catch (xError) {
+          console.error('Manual Discord free pick was not synced to X', { pickId, message: String(xError) });
+          destinationSyncNote += ' Discord post is live; X sync needs attention.';
+        }
+      }
+    }
+    await interaction.reply({ ephemeral: true, content: `Published to ${channel}.${destinationSyncNote}` });
   } catch (error) {
     console.error(error);
     const message = error instanceof Error ? error.message : 'Unable to process this pick.';

@@ -29,7 +29,7 @@ function queueKobeTrendEmails() {
       if (sender !== TRENDS_SENDER) return;
       const league = trendLeague_(message.getSubject());
       if (!league) return;
-      const response = UrlFetchApp.fetch(PUBLISHER_URL + '/api/queue/trends', {
+      const response = auditedPublisherFetch_('/api/queue/trends', {
         method: 'post', contentType: 'application/json',
         headers: { Authorization: 'Bearer ' + secret },
         payload: JSON.stringify({
@@ -39,7 +39,7 @@ function queueKobeTrendEmails() {
         muteHttpExceptions: true
       });
       const status = response.getResponseCode();
-      if (status !== 201 && status !== 409) throw new Error('Trends queue request failed (' + status + '): ' + response.getContentText());
+      if (status !== 201 && status !== 409) throw new Error('Trends queue request failed (' + status + ').');
       queued += status === 201 ? 1 : 0;
     });
     thread.addLabel(queuedLabel);
@@ -77,18 +77,41 @@ function deliverKobeRecapNotifications() {
   const secret = properties.getProperty(RECAP_NOTIFICATION_QUEUE_SECRET_KEY)
     || properties.getProperty(TRENDS_QUEUE_SECRET_KEY);
   if (!secret) throw new Error('Set ' + RECAP_NOTIFICATION_QUEUE_SECRET_KEY + ' or ' + TRENDS_QUEUE_SECRET_KEY + ' in Apps Script Project Settings first.');
-  const response = UrlFetchApp.fetch(PUBLISHER_URL + '/api/queue/recap-notifications', {
+  const response = auditedPublisherFetch_('/api/queue/recap-notifications', {
     method: 'get', headers: { Authorization: 'Bearer ' + secret }, muteHttpExceptions: true
   });
-  if (response.getResponseCode() !== 200) throw new Error('Recap notification fetch failed (' + response.getResponseCode() + '): ' + response.getContentText());
+  if (response.getResponseCode() !== 200) throw new Error('Recap notification fetch failed (' + response.getResponseCode() + ').');
   const notifications = JSON.parse(response.getContentText()).notifications || [];
   notifications.forEach(function(item) {
     MailApp.sendEmail(item.recipient, item.subject, item.body);
-    const acknowledgement = UrlFetchApp.fetch(PUBLISHER_URL + '/api/queue/recap-notifications/deliver', {
+    const acknowledgement = auditedPublisherFetch_('/api/queue/recap-notifications/deliver', {
       method: 'post', contentType: 'application/json', headers: { Authorization: 'Bearer ' + secret },
       payload: JSON.stringify({ id: item.id }), muteHttpExceptions: true
     });
-    if (acknowledgement.getResponseCode() !== 200) throw new Error('Recap notification acknowledgement failed (' + acknowledgement.getResponseCode() + '): ' + acknowledgement.getContentText());
+    if (acknowledgement.getResponseCode() !== 200) throw new Error('Recap notification acknowledgement failed (' + acknowledgement.getResponseCode() + ').');
   });
   return notifications.length + ' recap notification(s) delivered.';
+}
+
+// Marks only the protected Publisher queue calls made by this script. The
+// Worker persists the redacted trail after authenticating the normal queue
+// request; this helper never sends a credential, request body, or response body
+// to an audit-specific destination.
+function auditedPublisherFetch_(endpointClass, options) {
+  const requestOptions = Object.assign({}, options || {});
+  requestOptions.headers = Object.assign({}, requestOptions.headers || {}, {
+    'X-KBH-Caller': 'gmail-apps-script',
+    'X-KBH-Client-Request-Id': Utilities.getUuid()
+  });
+  try {
+    return UrlFetchApp.fetch(PUBLISHER_URL + endpointClass, requestOptions);
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: 'publisher_request_no_response',
+      endpointClass: endpointClass,
+      method: String(requestOptions.method || 'get').toUpperCase(),
+      errorClass: error && error.name ? String(error.name) : 'Error'
+    }));
+    throw error;
+  }
 }

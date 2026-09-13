@@ -44,6 +44,27 @@ test('formats a writeup source in Kobe’s pick-first layout', () => {
   assert.equal(embed.image.url, 'https://example.com/player-photo.png');
 });
 
+test('does not repeat American odds already present in the approved selection', () => {
+  const embed = buildSourcePickEmbed({
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{
+          selection: 'Bijan Robinson OVER 29.5 Receiving Yards (-140)',
+          player_name: 'Bijan Robinson',
+          line: 'OVER 29.5 Receiving Yards',
+          odds_american: '-140',
+          units: '',
+        }],
+      },
+    },
+  }, 'FREE PICK');
+  assert.match(embed.description, /^Bijan Robinson OVER 29\.5 Receiving Yards \(-140\)\n/);
+  assert.doesNotMatch(embed.description, /\(-140\) \(-140\)/);
+});
+
 test('keeps the approval card exactly identical to the member post with no source URL', () => {
   const approval = buildSourcePickApprovalEmbed({ ...packet, source: { ...packet.source, post_url: 'https://x.com/ExampleSource/status/123' } }, 'FREE PICK');
   const memberPost = buildSourcePickEmbed(packet, 'FREE PICK');
