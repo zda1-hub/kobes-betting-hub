@@ -1,6 +1,6 @@
 # X monitor latency audit — 2026-09-13
 
-Status: production monitoring is running, but the current candidate backlog policy is a pick-approval launch blocker. No public post was sent during this read-only audit.
+Status: the approved production remediation is deployed and verified. Automatic public X/source publishing remains disabled.
 
 Scope: read-only production Supabase audit review covering the 10:00 and 10:15 Arizona collection cycles on 2026-09-13. No Render, X, OpenAI, Discord, database, or production configuration was changed.
 
@@ -35,4 +35,13 @@ At two extractions per 15-minute cycle, 853 distinct deferred posts cannot drain
 5. After the selection fix passes tests, start with six Luna calls per 15-minute pass while retaining the existing 50/day, 500/month, $1/day, and $15/month hard stops.
 6. Acceptance target: a new qualifying text or approved-photo-source pick reaches `#pick-approvals` during the same collection pass; no generic-media backlog is replayed; every provider and gate outcome remains attributable in Supabase.
 
-Production remediation requires an explicit production deployment/configuration approval. Until then, Kobe can still publish manually, but the automatic X-to-approval intake should not be represented as timely.
+## Production remediation and acceptance
+
+- Zakai Martin explicitly approved the production code deployment and the bounded model-call cap increase from 2 to 6.
+- Production `main` deployed exact commit `518161b97b8645631bf1412996d8a208f35f8d86` successfully on Render at 10:35 Arizona time.
+- Startup confirmed 38 enabled X sources and 12 bounded intake workers.
+- The live worker used exactly 6/6 permitted Luna calls; the independent 50/day, 500/month, $1/day, and $15/month hard stops remained unchanged.
+- Deferred candidates fell from 476 on the first remediated startup that was still subject to the stale two-call Render override to 85 after the override was corrected to six, an 82% reduction.
+- The first remediated production startup created one private review packet. The six-call verification cycle created none because its inspected items were rejected or held by the existing event and writeup-quality gates, not because of the model-call bottleneck.
+- Generic media now requires a cheap betting-caption signal before Luna, except for dedicated `photo_review` sources; strong text candidates are prioritized and media-only intake is bounded per source.
+- No automatic public source publishing was enabled or performed.
