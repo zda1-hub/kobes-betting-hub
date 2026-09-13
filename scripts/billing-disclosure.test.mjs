@@ -63,6 +63,20 @@ test('management and help routes preserve cancellation and mandatory refund exce
   }
 });
 
+test('public legal pages identify the approved operator and are effective', async () => {
+  for (const relativePath of ['terms.html', 'privacy.html']) {
+    const html = await readRepositoryFile(relativePath);
+    const text = visibleText(html);
+    assert.doesNotMatch(text, /draft|not yet effective|business review required/i, `${relativePath} must not ship as a draft`);
+    assert.match(text, /effective september 13, 2026/i);
+    assert.match(text, /Kobe Irwin/);
+    assert.match(text, /Kobe's Betting Hub/);
+    assert.match(text, /California/i);
+    assert.match(text, /support@kobesbettinghub\.com/i);
+    assert.doesNotMatch(html, /name=["']robots["'][^>]*noindex/i, `${relativePath} must be publicly indexable`);
+  }
+});
+
 test('scheduled production health workflow is read-only and credential-free', async () => {
   const workflow = await readRepositoryFile('.github/workflows/production-health.yml');
 

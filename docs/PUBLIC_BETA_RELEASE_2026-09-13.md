@@ -3,6 +3,9 @@
 Owner and final production approver: Zakai Martin  
 Release model: public beta, improved continuously while live  
 Customer-experience requirement: checkout, Discord access, billing management, cancellation, and approved-pick publication must work before invitations open.
+Public operator identity approved by owner: Kobe Irwin, operating as Kobe's Betting Hub
+
+Governing jurisdiction approved by owner: California
 
 ## Integrated release candidate
 
