@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Kobe's Betting Hub members can earn $10 cash for eligible referrals." />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#faf9f7" />
+    <title>Refer a Friend | Kobe's Betting Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="home.css?v=20260902" />
+    <link rel="stylesheet" href="referral.css?v=20260912" />
+  </head>
+  <body>
+    <header class="site-header" data-header>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-menu" data-menu-toggle>Explore <span aria-hidden="true">+</span></button>
+      <a class="brand" href="index.html" aria-label="Kobe's Betting Hub home"><img src="betting-hub-logo-final.png" alt="Kobe's Betting Hub" /></a>
+      <a class="header-join" href="join.html">Join the Hub</a>
+      <nav class="site-menu" id="site-menu" aria-label="Primary navigation" data-menu>
+        <a href="index.html">Home</a>
+        <a href="join.html">Membership</a>
+        <a href="cancel.html">Manage membership</a>
+      </nav>
+    </header>
+
+    <main class="referral-page">
+      <section class="referral-hero" aria-labelledby="referral-title">
+        <div class="referral-copy">
+          <p class="eyebrow">MEMBER REFERRALS</p>
+          <h1 id="referral-title">Share the Hub. Get $10 cash.</h1>
+          <p class="referral-lead">Active members receive $10 for each eligible friend who joins through their link and completes the first $32.99 membership payment.</p>
+          <a class="button referral-login" data-referral-login href="https://kobes-betting-hub-checkout.kobedirwin.workers.dev/referrals/login">Connect Discord &amp; get my link <span aria-hidden="true">→</span></a>
+          <p class="responsible">US members only. You must be 21+. Rewards are subject to verification, the seven-day hold, and the program rules below.</p>
+        </div>
+
+        <aside class="referral-card" aria-label="Referral reward summary">
+          <p class="card-kicker">CASH REWARD <span>$10</span></p>
+          <div class="referral-amount"><strong>$10</strong><span>cash per eligible paid referral</span></div>
+          <ol>
+            <li><span>01</span>Connect the Discord account tied to your active membership.</li>
+            <li><span>02</span>Share your personal link. It offers only the two-day trial, then $32.99/month.</li>
+            <li><span>03</span>After the first successful $32.99 payment and seven-day hold, Stripe sends your reward.</li>
+          </ol>
+        </aside>
+      </section>
+
+      <section class="referral-dashboard" data-referral-dashboard hidden aria-live="polite">
+        <div>
+          <p class="eyebrow">YOUR REFERRAL LINK</p>
+          <h2>Ready to share.</h2>
+          <p>This link is tied to your verified Discord member account.</p>
+        </div>
+        <div class="referral-link-box">
+          <label for="referral-link">Personal link</label>
+          <div class="copy-row">
+            <input id="referral-link" data-referral-link readonly />
+            <button type="button" class="button" data-copy-referral>Copy link</button>
+          </div>
+          <p data-referral-message>Connect your payout account so cash can be sent when a reward clears.</p>
+          <a class="referral-payout" data-payout-setup>Connect payout account through Stripe <span aria-hidden="true">→</span></a>
+        </div>
+      </section>
+
+      <section class="referral-rules" aria-labelledby="rules-title">
+        <div><p class="eyebrow">PROGRAM RULES</p><h2 id="rules-title">Simple, verified, auditable.</h2></div>
+        <div class="rules-grid">
+          <article><h3>Eligible purchase</h3><p>The friend must be a new member using your link, select the referral offer, finish the two-day trial, and successfully pay the first $32.99 charge.</p></article>
+          <article><h3>Seven-day hold</h3><p>The reward enters a seven-day review period after that payment. Refunded, disputed, duplicate, fraudulent, or self-referred purchases do not qualify.</p></article>
+          <article><h3>Cash delivery</h3><p>Rewards are sent in US dollars through Stripe to the payout method you provide directly to Stripe. Processing time and eligibility can depend on Stripe verification.</p></article>
+          <article><h3>Taxes and review</h3><p>You are responsible for applicable taxes. Kobe's Betting Hub may request tax information, pause suspicious rewards, or correct payment errors.</p></article>
+        </div>
+      </section>
+    </main>
+    <footer><span>© <span id="year"></span> KOBE'S BETTING HUB</span><span class="footer-nav"><a href="index.html">Home</a><a href="join.html">Membership</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></span><span>21+ • WAGER RESPONSIBLY</span></footer>
+    <script src="referral.js?v=20260912"></script>
+  </body>
+</html>

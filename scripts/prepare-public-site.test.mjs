@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   injectMembershipConfig,
+  preparePublicSite,
   productionMembershipWorkerOrigin,
   resolveMembershipConfig,
 } from './prepare-public-site.mjs';
@@ -54,4 +55,8 @@ test('membership configuration injection replaces exactly one browser config blo
   assert.match(output, /"workerOrigin":"https:\/\/staging\.example"/);
   assert.doesNotMatch(output, /production\.example/);
   assert.throws(() => injectMembershipConfig('<html></html>', {}, 'join.html'), /exactly one/);
+});
+
+test('production site preparation includes every declared public asset', async () => {
+  await preparePublicSite({ env: {} });
 });
