@@ -2,11 +2,13 @@
 
 Audit time: 2026-09-12 18:34 MST
 
-Scope: Stripe Checkout and Customer Portal, Discord OAuth and paid-role synchronization, Supabase membership persistence, webhook behavior, and the daily reconciliation job. This audit made no live charge, refund, cancellation, Discord role change, or public post.
+Latest staging verification: 2026-09-12 23:45 MST
+
+Scope: Stripe Checkout and Customer Portal, Discord OAuth and paid-role synchronization, Supabase membership persistence, webhook behavior, and the daily reconciliation job. This audit made no live charge, refund, subscription cancellation, member entitlement grant/removal, or public post. The only Discord mutation was owner-confirmed deletion of an empty obsolete staging role after exact-ID verification.
 
 ## Executive status
 
-The architecture is valid: Stripe is the payment and subscription authority; Discord OAuth authenticates the community identity; Supabase stores the Stripe-to-Discord relationship and event history. The current build is **not yet fully release-validated** because exception billing events and the legal/policy layer are incomplete, and a complete test-mode lifecycle has not been run with a dedicated Discord test identity.
+The architecture is valid: Stripe is the payment and subscription authority; Discord OAuth authenticates the community identity; Supabase stores the Stripe-to-Discord relationship and event history. The isolated staging environment is now complete and ready for a controlled lifecycle transaction. The current build is **not yet fully release-validated** because exception billing events and the legal/policy layer are incomplete, and a complete test-mode lifecycle has not been run with a dedicated Discord test identity.
 
 ## Evidence verified
 
@@ -18,7 +20,11 @@ The architecture is valid: Stripe is the payment and subscription authority; Dis
 - `customer.subscription.created`, `.updated`, and `.deleted` persist subscription state and grant or remove the Discord role based on `active`/`trialing` status.
 - The manage-membership page authenticates the linked Discord identity and then creates a Stripe Customer Portal session. Checkout-session cancellation endpoints are disabled.
 - Supabase membership tables have row-level security enabled and revoke `anon` and `authenticated` access.
-- The full local test suite passes: **110 tests passed, 0 failed**. Checkout Worker coverage now includes malformed/omitted request IDs and CORS support; a browser-level fixture proves retry reuse and cleanup.
+- The isolated staging stack uses Supabase project `ctqmksvfqrysomvckqrm`, static-site Worker `kobes-betting-hub-staging`, and Checkout Worker `kobes-betting-hub-checkout-staging`; staging cron and payouts are disabled.
+- The intended `Kobesbettinghub` Stripe test account has the isolated prices, seven-event webhook `we_1UF61QE6p9BmPii30UGuNEMO`, and end-of-period Customer Portal cancellation. Every restricted-key value that appeared in browser output was rotated with immediate expiration; the final value was installed only as encrypted Cloudflare staging `STRIPE_SECRET_KEY` and was not rendered or retained.
+- Discord staging application `1548556799513333770` and guild `1548568770123927562` use only the staging callback. The bot has `Manage Roles`; active member role `1548578573177061416` is below the bot. Empty obsolete role `1548568981906919464` was verified by exact ID and deleted with owner confirmation.
+- Cloudflare lists the six expected encrypted staging secret names. Active secret-change deployment `18b83c76-0f37-486d-aa09-bba6d73255d3` returned HTTP `200` from `/health`.
+- The full local test suite passes: **146 tests passed, 0 failed**. Checkout Worker coverage includes malformed/omitted request IDs and CORS support; a browser-level fixture proves retry reuse and cleanup.
 
 ## Hardening release
 
@@ -58,10 +64,8 @@ Release `2075964` is deployed as Checkout Worker `0cf0d235-aa26-432c-8478-df6239
 
 4. **No paid-without-access alert.** If a customer pays but never completes Discord linking, reconciliation records `NO_DISCORD_LINK` but there is no external alert or owner queue.
 5. **Checkout abuse controls are partial.** Retry-safe Stripe idempotency is deployed, but `/create-checkout` still has no server-side rate limiter or Turnstile verification. An attacker can still generate fresh request UUIDs and inflate Stripe/API volume without completing a payment.
-6. **Webhook event registration is not independently evidenced.** The code expects Checkout and subscription events, but the Stripe Dashboard endpoint selection and Customer Portal configuration still need a dashboard check.
-7. **No staging environment is defined.** `wrangler.jsonc` targets one Worker and live-looking price IDs. Safe repeatable end-to-end testing should use a separate Worker, Stripe test keys/prices/webhook, test Discord server/role, and staging Supabase data.
-8. **Support relinking is undefined.** The new first-claim protection deliberately fails closed if a member needs to move access to another Discord identity. An owner-approved, audited support procedure is required.
-9. **Database integrity is application-enforced.** The subscription-to-customer relationship has no foreign key, and event status/actor fields have no constraints. This is acceptable for the smoke-test phase but should be hardened before reporting depends on it.
+6. **Support relinking is undefined.** The new first-claim protection deliberately fails closed if a member needs to move access to another Discord identity. An owner-approved, audited support procedure is required.
+7. **Database integrity is application-enforced.** The subscription-to-customer relationship has no foreign key, and event status/actor fields have no constraints. This is acceptable for the smoke-test phase but should be hardened before reporting depends on it.
 
 ## Exact inputs required from the owner
 
@@ -86,8 +90,8 @@ Test credentials and resources:
 
 ## Required final validation sequence
 
-1. Deploy the prepared hardening to an isolated staging Worker.
-2. Run the full test-mode lifecycle and retain Stripe event IDs, Supabase event rows, Discord role before/after evidence, and Worker version ID.
+1. **Complete:** deploy the prepared hardening to an isolated staging Worker and verify its segregated Stripe, Discord, Supabase, callback, secret, and role configuration.
+2. **Next, with separate transaction-time approval:** run the full test-mode lifecycle and retain Stripe event IDs, Supabase event rows, Discord role before/after evidence, and Worker version ID.
 3. Implement the approved past-due/refund/dispute state rules and automated alerts.
 4. Approve and publish effective Terms, Privacy, refund, renewal, cancellation, and support language.
 5. Deploy production, run one owner-approved low-value live transaction if required, cancel/refund it under the approved policy, and attach the resulting evidence to this audit trail.
