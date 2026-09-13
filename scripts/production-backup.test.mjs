@@ -38,5 +38,9 @@ test('production backup is locked to the production project and encrypted before
   assert.match(workflow, /https:\/\/apt\.postgresql\.org\/pub\/repos\/apt/);
   assert.match(workflow, /retention-days: 3/);
   assert.match(workflow, /path: production-backup\//);
+  assert.match(workflow, /apply-membership-migrations/);
+  assert.match(workflow, /PRODUCTION_DATABASE_URL: \$\{\{ secrets\.DATABASE_URL \}\}/);
+  assert.match(workflow, /PRODUCTION_MIGRATION_CONFIRM: APPLY_PRODUCTION_MIGRATIONS_TO_mpajyubbnnsdpgdizvht/);
+  assert.match(workflow, /node pipeline\/migrate-production\.js --apply/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
 });

@@ -31,6 +31,7 @@ Governing jurisdiction approved by owner: California
 - The production Supabase project is on the free plan and explicitly reports that provider-managed project backups are unavailable. An encrypted logical dump is therefore required immediately before migrations 007–009.
 - Backup preparation was checked again from the authenticated production dashboard. Supabase exposes the IPv4 session-pooler endpoint `aws-0-us-east-2.pooler.supabase.com:5432`, database `postgres`, and user `postgres.mpajyubbnnsdpgdizvht`. The database password is intentionally absent from the repository, process environment, and macOS Keychain, so no logical dump has been attempted and no password has been rotated. The operator must supply the existing password through the hidden local prompt in `scripts/backup-production-supabase.sh`, or personally reset it, before the encrypted dump can be created. The script streams the dump directly into AES-256 encryption, verifies it with `pg_restore --list`, stores the encrypted artifact outside the repository, and stores the encryption key separately in macOS Keychain.
 - The GitHub repository already contains masked `DATABASE_URL` and `PRODUCTION_BACKUP_KEY` Actions secrets. The guarded `encrypted-backup` operation in `.github/workflows/sync-openai-usage.yml` can therefore create and verify the logical dump without exposing or rotating the database password. Its encrypted artifact is retained in GitHub Actions for three days so it can be downloaded into owner-controlled storage before expiration.
+- Encrypted production backup run `34783539955` completed successfully from release commit `e267fbb4cf704ced77c30901423388b6125cca47`. The PostgreSQL 17.11 custom-format dump was encrypted with AES-256-CBC/PBKDF2 at 200,000 iterations, decrypted in-stream for `pg_restore --list` verification, and uploaded as a private three-day GitHub artifact. It was downloaded to owner-controlled local storage under `/Users/z/Library/Application Support/KobesBettingHub/backups/github-run-34783539955`; its manifest and local SHA-256 both equal `265130003678b5641b3f38e567c1aa576f17ec0f2d2e3fe3aa6736edc769dbb7`.
 - Stripe remains the payment/subscription authority. Discord OAuth identifies the member; Discord is not a payment method. Supabase persists the Stripe-to-Discord mapping and event/audit trail.
 
 ## Public-beta decision
@@ -48,7 +49,7 @@ The public-beta label does not waive the customer-facing acceptance gate. Before
 
 ## Final production promotion checklist
 
-- [ ] Create and verify a fresh encrypted production logical backup; store its encryption key separately.
+- [x] Create and verify a fresh encrypted production logical backup; store its encryption key separately.
 - [x] Confirm referral migrations 005 and 006 already appear in the production ledger.
 - [ ] Apply only migrations 007, 008, and 009 with the locked migration runner.
 - [ ] Verify RLS, revoked browser grants, service-role privileges, cancellation fields, and entitlement-block fields.
