@@ -44,8 +44,8 @@
       "vars": {
         "APP_ENV": "staging",
         "DISCORD_CLIENT_ID": "1548556799513333770",
-        "DISCORD_GUILD_ID": "REPLACE_WITH_STAGING_DISCORD_GUILD_ID",
-        "DISCORD_MEMBER_ROLE_ID": "REPLACE_WITH_STAGING_DISCORD_MEMBER_ROLE_ID",
+        "DISCORD_GUILD_ID": "1548568770123927562",
+        "DISCORD_MEMBER_ROLE_ID": "1548568981906919464",
         "DISCORD_REDIRECT_URI": "https://kobes-betting-hub-checkout-staging.kobedirwin.workers.dev/discord/callback",
         "STRIPE_FIRST_MONTH_COUPON": "",
         "STRIPE_GLOBAL_PAYOUTS_VERSION": "2026-08-26.preview",
