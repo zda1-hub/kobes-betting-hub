@@ -1265,6 +1265,7 @@ async function handleSourceReviewButton(interaction) {
       assertCompleteWriteup(publicationPacket);
       assertApprovalCopyMatches(publicationPacket);
     }
+    trace('event verification started');
     const timing = await upcomingEventStatus(publicationPacket);
     trace(`event verification ${timing.status}`);
     if (timing.status !== 'UPCOMING') {

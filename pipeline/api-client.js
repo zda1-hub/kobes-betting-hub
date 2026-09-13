@@ -50,34 +50,14 @@ async function responseBodyHash(response) {
   }
 }
 
-async function auditedFetch(url, init = {}, context = {}, fetchImpl = fetch) {
+async function auditedFetch(url, init = {}, context = {}, fetchImpl = fetch, recordImpl = recordApiCall) {
   const method = String(init.method || 'GET').toUpperCase();
   const startedAt = Date.now();
+  let response;
   try {
-    const response = await fetchImpl(url, init);
-    await recordApiCall({
-      service: context.service || inferredService(url),
-      endpointClass: context.endpointClass || endpointClass(url),
-      method,
-      callerComponent: context.callerComponent || 'node-worker',
-      triggerType: context.triggerType || 'runtime',
-      operationId: context.operationId,
-      workflowId: context.workflowId,
-      pickId: context.pickId,
-      memberId: context.memberId,
-      providerRequestId: response.headers?.get?.('x-request-id') || response.headers?.get?.('cf-ray') || null,
-      clientRequestId: context.clientRequestId,
-      requestPayloadSha256: requestBodyHash(init.body),
-      responsePayloadSha256: await responseBodyHash(response),
-      responseStatus: response.status,
-      outcome: response.ok ? 'SUCCEEDED' : 'HTTP_ERROR',
-      errorClass: response.ok ? null : 'HTTP_ERROR',
-      retryCount: context.retryCount || 0,
-      latencyMs: Date.now() - startedAt
-    });
-    return response;
+    response = await fetchImpl(url, init);
   } catch (error) {
-    await recordApiCall({
+    await recordImpl({
       service: context.service || inferredService(url),
       endpointClass: context.endpointClass || endpointClass(url),
       method,
@@ -96,6 +76,33 @@ async function auditedFetch(url, init = {}, context = {}, fetchImpl = fetch) {
     });
     throw error;
   }
+
+  // Keep provider failures separate from audit failures. Previously an audit
+  // insert error was caught by the network-error branch above, which attempted
+  // a second insert and could leave a Discord interaction waiting through two
+  // database timeouts. A required audit failure still fails closed, but only
+  // once and with its real error intact.
+  await recordImpl({
+    service: context.service || inferredService(url),
+    endpointClass: context.endpointClass || endpointClass(url),
+    method,
+    callerComponent: context.callerComponent || 'node-worker',
+    triggerType: context.triggerType || 'runtime',
+    operationId: context.operationId,
+    workflowId: context.workflowId,
+    pickId: context.pickId,
+    memberId: context.memberId,
+    providerRequestId: response.headers?.get?.('x-request-id') || response.headers?.get?.('cf-ray') || null,
+    clientRequestId: context.clientRequestId,
+    requestPayloadSha256: requestBodyHash(init.body),
+    responsePayloadSha256: await responseBodyHash(response),
+    responseStatus: response.status,
+    outcome: response.ok ? 'SUCCEEDED' : 'HTTP_ERROR',
+    errorClass: response.ok ? null : 'HTTP_ERROR',
+    retryCount: context.retryCount || 0,
+    latencyMs: Date.now() - startedAt
+  });
+  return response;
 }
 
 function attachDiscordRestAudit(rest, context = {}, options = {}) {
