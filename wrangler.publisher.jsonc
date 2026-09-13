@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bettinghub-publisher",
+  "account_id": "f541faefbba2bcb7a22967292aa7fc85",
+  "main": "cloudflare/bettinghub-publisher.js",
+  "compatibility_date": "2026-09-12",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1
+    }
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "bettinghub-publisher",
+      "database_id": "e691ccde-f288-4e18-b85b-f93a0aeba9be"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "FREE_PICK_KV",
+      "id": "195f86457c37475cb94ec69d4a3b8618"
+    }
+  ],
+  "vars": {
+    "RECAP_NOTIFICATION_RECIPIENT": "kobedirwin@gmail.com",
+    "X_CLIENT_ID": "MHhtSGlFT2ZsazNOWmhIeWdqNVA6MTpjaQ"
+  }
+}

@@ -397,6 +397,31 @@ async function openAIBudgetStatus(env = process.env) {
   }, limits);
 }
 
+async function recordProviderUsageSnapshot(values) {
+  const snapshotKey = sha256([
+    values.provider, values.source, values.windowStart, values.windowEnd,
+    values.projectReference || '', values.apiKeyReference || '', values.model || ''
+  ].join('|'));
+  await query(`
+    INSERT INTO provider_usage_snapshots (
+      id, snapshot_key, provider, account_reference, project_reference, api_key_reference,
+      model, window_start, window_end, request_count, input_tokens, cached_input_tokens,
+      output_tokens, provider_cost_usd, source, payload_sha256, imported_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+    ON CONFLICT (snapshot_key) WHERE snapshot_key IS NOT NULL DO UPDATE SET
+      request_count=EXCLUDED.request_count, input_tokens=EXCLUDED.input_tokens,
+      cached_input_tokens=EXCLUDED.cached_input_tokens, output_tokens=EXCLUDED.output_tokens,
+      provider_cost_usd=EXCLUDED.provider_cost_usd, payload_sha256=EXCLUDED.payload_sha256,
+      imported_at=EXCLUDED.imported_at`, [
+      crypto.randomUUID(), snapshotKey, values.provider, values.accountReference || null,
+      values.projectReference || null, values.apiKeyReference || null, values.model || null,
+      values.windowStart, values.windowEnd, values.requestCount ?? null,
+      values.inputTokens ?? null, values.cachedInputTokens ?? null, values.outputTokens ?? null,
+      values.providerCostUsd ?? null, values.source, values.payloadSha256 || null, nowIso()
+    ]);
+  return snapshotKey;
+}
+
 async function readAuditTimeline(identifier) {
   if (!auditConfigured()) return { configured: false };
   const postId = String(identifier || '').match(/\/status\/(\d+)/)?.[1] || String(identifier || '').trim();
@@ -451,6 +476,7 @@ module.exports = {
   evaluateOpenAIBudget,
   openAIBudgetLimits,
   openAIBudgetStatus,
+  recordProviderUsageSnapshot,
   recordApprovalAction,
   recordApiCall,
   recordApprovalCard,

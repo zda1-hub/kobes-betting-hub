@@ -430,6 +430,45 @@ async function syncMemberRole(subscription, env) {
   return 'ROLE_REMOVED';
 }
 
+async function reconcileMemberships(env) {
+  if (!supabaseReady(env) || !env.STRIPE_SECRET_KEY) {
+    throw new Error('Membership reconciliation requires Supabase and Stripe configuration.');
+  }
+  const rows = await supabase(env, 'membership_subscriptions?select=stripe_subscription_id&order=updated_at.asc&limit=500');
+  const summary = { checked: 0, rolesGranted: 0, rolesRemoved: 0, noDiscordLink: 0, failed: 0 };
+  for (const row of rows || []) {
+    const subscriptionId = row?.stripe_subscription_id || '';
+    if (!subscriptionId) continue;
+    summary.checked += 1;
+    try {
+      const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+      await persistSubscription(env, subscription);
+      const outcome = await syncMemberRole(subscription, env);
+      if (outcome === 'ROLE_GRANTED') summary.rolesGranted += 1;
+      else if (outcome === 'ROLE_REMOVED') summary.rolesRemoved += 1;
+      else summary.noDiscordLink += 1;
+      await recordMembershipEvent(env, {
+        eventType: 'MEMBERSHIP_RECONCILED', actorType: 'system', subscriptionId,
+        customerId: stripeId(subscription.customer), discordUserId: await discordUserForSubscription(env, subscription),
+        details: { status: subscription.status, outcome },
+      });
+    } catch (error) {
+      summary.failed += 1;
+      console.error('Membership reconciliation failed.', { subscriptionId, message: error?.message || error });
+      try {
+        await recordMembershipEvent(env, {
+          eventType: 'MEMBERSHIP_RECONCILIATION_FAILED', actorType: 'system', subscriptionId,
+          details: { error: String(error?.message || error).slice(0, 300) },
+        });
+      } catch (auditError) {
+        console.error('Unable to record membership reconciliation failure.', auditError?.message || auditError);
+      }
+    }
+  }
+  console.log('Membership reconciliation completed.', summary);
+  return summary;
+}
+
 function redirect(url) {
   return new Response(null, { status: 302, headers: { Location: url } });
 }
@@ -632,5 +671,8 @@ export default {
     if (request.method === 'POST' && ['/cancel/retain', '/cancel/confirm'].includes(url.pathname)) return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'POST' && url.pathname === '/stripe-webhook') return handleWebhook(request, env);
     return json({ error: 'Not found.' }, 404, origin);
+  },
+  scheduled(controller, env, ctx) {
+    ctx.waitUntil(reconcileMemberships(env));
   },
 };

@@ -13,6 +13,7 @@
     "test:real-x-pick": "node pipeline/test-real-x-pick.js",
     "prepare:approval": "node pipeline/prepare-approval.js",
     "migrate:audit": "node pipeline/migrate-audit.js",
+    "sync:openai-usage": "node scripts/sync-openai-usage.mjs",
     "test": "node --test bot/**/*.test.js pipeline/**/*.test.js cloudflare/*.test.mjs"
   },
   "engines": {

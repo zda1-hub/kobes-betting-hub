@@ -1,4 +1,4 @@
-const DEFAULT_PUBLISHER_URL = 'https://bettinghub-publisher.kobesbettinghub-publisher.workers.dev';
+const DEFAULT_PUBLISHER_URL = 'https://bettinghub-publisher.kobedirwin.workers.dev';
 const { publicPickTerms, sourceEvidence } = require('./source-review');
 const { auditedFetch } = require('../../pipeline/api-client');
 

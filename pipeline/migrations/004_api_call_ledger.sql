@@ -31,6 +31,7 @@ CREATE INDEX IF NOT EXISTS api_call_events_workflow_time
 
 CREATE TABLE IF NOT EXISTS provider_usage_snapshots (
   id uuid PRIMARY KEY,
+  snapshot_key text,
   provider text NOT NULL,
   account_reference text,
   project_reference text,
@@ -47,6 +48,12 @@ CREATE TABLE IF NOT EXISTS provider_usage_snapshots (
   payload_sha256 text,
   imported_at timestamptz NOT NULL
 );
+
+ALTER TABLE provider_usage_snapshots ADD COLUMN IF NOT EXISTS snapshot_key text;
+
+CREATE UNIQUE INDEX IF NOT EXISTS provider_usage_snapshots_key
+  ON provider_usage_snapshots (snapshot_key)
+  WHERE snapshot_key IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS provider_usage_snapshots_lookup
   ON provider_usage_snapshots (provider, window_start, project_reference, model);

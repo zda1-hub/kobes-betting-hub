@@ -1,4 +1,4 @@
-const PUBLISHER_URL = 'https://bettinghub-publisher.kobesbettinghub-publisher.workers.dev';
+const PUBLISHER_URL = 'https://bettinghub-publisher.kobedirwin.workers.dev';
 
 const year = document.getElementById('year');
 if (year) year.textContent = new Date().getFullYear();

@@ -32,3 +32,7 @@ test('oversized Stripe webhooks are rejected before buffering', async () => {
   }), {});
   assert.equal(response.status, 413);
 });
+
+test('checkout worker exposes a scheduled membership reconciliation handler', () => {
+  assert.equal(typeof worker.scheduled, 'function');
+});

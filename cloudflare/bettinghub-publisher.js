@@ -31,7 +31,7 @@ async function handleRequest(request, env) {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request) });
   if (url.pathname === "/health") {
-    return json({ service: "bettinghub-publisher", status: "ready", xConnected: await hasXConnection(env), freePickReady: Boolean(env.FREE_PICK_MEDIA) });
+    return json({ service: "bettinghub-publisher", status: "ready", xConnected: await hasXConnection(env), freePickReady: hasFreePickStore(env) });
   }
   if (url.pathname === START_PATH) return beginXAuthorization(url, env);
   if (url.pathname === CALLBACK_PATH) return completeXAuthorization(url, env);
@@ -314,7 +314,7 @@ async function listRecentPosts(request, env) {
 // then served to the public Free Pick page and attached to the corresponding X Post.
 async function publishFreePick(request, env) {
   if (!await hasBearer(request, env.QUEUE_INGEST_SECRET)) return json({ error: "Unauthorized" }, 401);
-  if (!env.FREE_PICK_MEDIA) return json({ error: "Free Pick media storage is not configured" }, 503);
+  if (!hasFreePickStore(env)) return json({ error: "Free Pick media storage is not configured" }, 503);
   const contentTypeHeader = request.headers.get("content-type") || "";
   let input = {};
   let image = null;
@@ -349,9 +349,7 @@ async function publishFreePick(request, env) {
   let objectKey = null;
   if (image) {
     objectKey = `free-picks/${publishedDate}/${crypto.randomUUID()}.${extension}`;
-    await env.FREE_PICK_MEDIA.put(objectKey, image, {
-      httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" },
-    });
+    await putFreePickObject(env, objectKey, image, contentType, "public, max-age=31536000, immutable");
   }
 
   const pick = { publishedDate, caption, details, objectKey, updatedAt: new Date().toISOString(), xStatus: image ? "pending" : "not_requested" };
@@ -374,30 +372,31 @@ async function publishFreePick(request, env) {
 }
 
 async function getCurrentFreePick(request, env) {
-  if (!env.FREE_PICK_MEDIA) return json({ error: "Free Pick media storage is not configured" }, 503, corsHeaders(request));
+  if (!hasFreePickStore(env)) return json({ error: "Free Pick media storage is not configured" }, 503, corsHeaders(request));
   const pick = await readFreePick(env);
   if (!pick) return json({ error: "No current free pick" }, 404, corsHeaders(request));
   return json(publicFreePick(pick, new URL(request.url).origin), 200, corsHeaders(request));
 }
 
 async function getCurrentFreePickImage(request, env) {
-  if (!env.FREE_PICK_MEDIA) return new Response("Free Pick media storage is not configured", { status: 503, headers: corsHeaders(request) });
+  if (!hasFreePickStore(env)) return new Response("Free Pick media storage is not configured", { status: 503, headers: corsHeaders(request) });
   const pick = await readFreePick(env);
   if (!pick) return new Response("No current free pick", { status: 404, headers: corsHeaders(request) });
-  const object = await env.FREE_PICK_MEDIA.get(pick.objectKey);
+  const object = await getFreePickObject(env, pick.objectKey);
   if (!object) return new Response("Current free pick image was not found", { status: 404, headers: corsHeaders(request) });
   const headers = new Headers(corsHeaders(request));
-  object.writeHttpMetadata(headers);
-  headers.set("etag", object.httpEtag);
+  if (object.writeHttpMetadata) object.writeHttpMetadata(headers);
+  if (object.httpEtag) headers.set("etag", object.httpEtag);
+  if (object.contentType) headers.set("content-type", object.contentType);
   headers.set("cache-control", "public, max-age=300");
   return new Response(object.body, { headers });
 }
 
 async function readFreePick(env) {
-  const object = await env.FREE_PICK_MEDIA.get(FREE_PICK_STATE_KEY);
-  if (!object) return null;
+  const stored = await getFreePickText(env, FREE_PICK_STATE_KEY);
+  if (!stored) return null;
   try {
-    const pick = JSON.parse(await object.text());
+    const pick = JSON.parse(stored);
     return validDate(pick?.publishedDate) && typeof pick?.objectKey === "string" && typeof pick?.caption === "string" ? pick : null;
   } catch {
     return null;
@@ -405,9 +404,39 @@ async function readFreePick(env) {
 }
 
 async function writeFreePick(pick, env) {
-  await env.FREE_PICK_MEDIA.put(FREE_PICK_STATE_KEY, JSON.stringify(pick), {
-    httpMetadata: { contentType: "application/json; charset=UTF-8", cacheControl: "no-store" },
+  await putFreePickObject(env, FREE_PICK_STATE_KEY, JSON.stringify(pick), "application/json; charset=UTF-8", "no-store");
+}
+
+function hasFreePickStore(env) {
+  return Boolean(env.FREE_PICK_MEDIA || env.FREE_PICK_KV);
+}
+
+async function putFreePickObject(env, key, value, contentType, cacheControl) {
+  if (env.FREE_PICK_MEDIA) {
+    await env.FREE_PICK_MEDIA.put(key, value, { httpMetadata: { contentType, cacheControl } });
+    return;
+  }
+  await env.FREE_PICK_KV.put(key, value instanceof File ? await value.arrayBuffer() : value, {
+    metadata: { contentType, cacheControl },
   });
+}
+
+async function getFreePickText(env, key) {
+  if (env.FREE_PICK_MEDIA) {
+    const object = await env.FREE_PICK_MEDIA.get(key);
+    return object ? object.text() : null;
+  }
+  return env.FREE_PICK_KV.get(key, "text");
+}
+
+async function getFreePickObject(env, key) {
+  if (env.FREE_PICK_MEDIA) return env.FREE_PICK_MEDIA.get(key);
+  const object = await env.FREE_PICK_KV.getWithMetadata(key, "arrayBuffer");
+  if (!object?.value) return null;
+  return {
+    body: object.value,
+    contentType: object.metadata?.contentType || "application/octet-stream",
+  };
 }
 
 function publicFreePick(pick, origin) {

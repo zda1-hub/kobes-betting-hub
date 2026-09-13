@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
 const { recordWorkflowEvent, upsertPickCandidate } = require('./audit-store');
+const { auditedFetch } = require('./api-client');
 const { assertPublishableExtraction, reviewButtons } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
@@ -19,7 +20,13 @@ function likelyPick(text) {
 }
 
 async function xFetch(url) {
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${process.env.X_BEARER_TOKEN}` } });
+  const response = await auditedFetch(url, {
+    headers: { Authorization: `Bearer ${process.env.X_BEARER_TOKEN}` }
+  }, {
+    service: 'x',
+    callerComponent: 'pipeline/test-real-x-pick',
+    triggerType: 'manual_test'
+  });
   if (!response.ok) throw new Error(`X API request failed (${response.status}).`);
   return response.json();
 }
@@ -115,7 +122,7 @@ async function sendTestCard(packet) {
     { name: 'Posted via', value: `@${packet.source.handle}`, inline: true },
     { name: 'Plays shown', value: extractedPlayLines(extraction) }
   ] : [];
-  const response = await fetch(`https://discord.com/api/v10/channels/${process.env.PICK_APPROVAL_CHANNEL_ID}/messages`, {
+  const response = await auditedFetch(`https://discord.com/api/v10/channels/${process.env.PICK_APPROVAL_CHANNEL_ID}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -142,6 +149,13 @@ async function sendTestCard(packet) {
       }],
       components: reviewButtons(packet.pick_id, { testOnly: true })
     })
+  }, {
+    service: 'discord',
+    endpointClass: '/api/v10/channels/{channel_id}/messages',
+    callerComponent: 'pipeline/test-real-x-pick',
+    triggerType: 'manual_test',
+    workflowId: packet.pick_id,
+    pickId: packet.pick_id
   });
   if (!response.ok) throw new Error(`Discord test-card upload failed (${response.status}).`);
 }

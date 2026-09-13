@@ -12,6 +12,9 @@
       "head_sampling_rate": 1
     }
   },
+  "triggers": {
+    "crons": ["15 16 * * *"]
+  },
   "vars": {
     "DISCORD_CLIENT_ID": "1541299881044615238",
     "DISCORD_GUILD_ID": "1215407647155683358",

@@ -7,11 +7,13 @@ const {
   estimateOpenAICost,
   findReusableExtraction,
   finishExtractionRun,
+  openAIBudgetStatus,
   recordSourcePost,
   sha256,
   startExtractionRun,
   usageFromResponse
 } = require('./audit-store');
+const { auditedFetch } = require('./api-client');
 
 const ROOT = path.join(__dirname, '..');
 const QUEUE_ROOT = path.join(ROOT, 'data', 'monitoring', 'x', 'review-queue');
@@ -203,6 +205,11 @@ async function extractSourcePick(packet) {
     };
   }
 
+  const budget = await openAIBudgetStatus();
+  if (!budget.allowed) {
+    return analysisWaiting('BUDGET_EXCEEDED', `${budget.reason} No OpenAI request was sent.`);
+  }
+
   const extractionRunId = await startExtractionRun({
     sourcePostId,
     provider: 'openai',
@@ -215,13 +222,20 @@ async function extractSourcePick(packet) {
   const startedAt = Date.now();
   let response;
   try {
-    response = await fetch(API_URL, {
+    response = await auditedFetch(API_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(requestBody)
+    }, {
+      service: 'openai',
+      endpointClass: '/v1/responses',
+      callerComponent: 'pipeline/enrich-pick',
+      triggerType: 'source_extraction',
+      workflowId: sourcePostId,
+      pickId: packet.pick_id || null
     });
   } catch (error) {
     await finishExtractionRun(extractionRunId, {
