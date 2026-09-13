@@ -31,6 +31,7 @@ The system is not a single application. It currently spans GitHub, Cloudflare Wo
 - **Passed:** production website, Checkout health, Publisher health, current Free Pick API, Free Pick page, and client asset passed the post-hotfix `5/5` read-only smoke suite.
 - **Passed:** Discord approval-verification hotfix `6989dd1` is live on Render. Startup registered commands, logged in as Kobe Bot, refreshed three pending locked-format cards, and stopped X monitoring at the expected 15:00 Arizona cutoff.
 - **Passed:** the once-daily Apps Script email remains enabled at 0% displayed error and now exits silently when no approved picks exist. The failing five-minute recap trigger was deleted after owner approval.
+- **Passed:** the Apps Script source is now version-controlled with four no-send/credential/trigger invariants; the complete release suite passes `180/180`.
 - **Waiting on Kobe:** complete the live billing-portal cancellation for the intended acceptance membership and report completion. Until then, no subscription should be changed by an operator.
 - **Staging time-based proof passed:** an isolated Stripe test clock produced the `$8.25` one-time discounted invoice, returned the following invoice to `$32.99`, ended the canceled subscription, persisted Supabase `canceled`, recorded `PROCESSED/ROLE_REMOVED`, and received Discord role DELETE `204`.
 - **Still required before public-beta invitations:** read-only reconcile Kobe's live cancellation across Stripe, Supabase, and Discord and verify access remains through the paid-through date. A fresh approval card must also prove that the hotfix produces a clear terminal result. Production role removal at the later entitlement end can be monitored as a public-beta acceptance item because the isolated terminal path has already passed. Do not publish a test pick publicly without explicit approval.
@@ -113,7 +114,7 @@ Kobe Trends email
 | Public Free Pick | Publisher Worker + KV | `cloudflare/bettinghub-publisher.js`, `free-pick.js` | KV `free-picks/current.json` | Live with canonical Bijan text-only item; dedicated cross-service credential verified by hash only |
 | X publishing | Publisher Worker + D1 | `cloudflare/bettinghub-publisher.js` | D1 queue/delivery log + X post ID | Connected |
 | Trends inbox | Gmail Apps Script + D1 + Render | `cloudflare/kobe-trends-inbox.gs`, publisher Worker, bot | D1 queue + approval packet | Configuration status needs verification |
-| Recap email | Render + D1 + Gmail Apps Script | `bot/index.js`, Apps Script | CSV grades + D1 notification status | Render path active; daily zero-pick email suppressed; broken five-minute Apps Script trigger removed; approved-pick proof still needed |
+| Recap email | Render + D1 + Gmail Apps Script | `bot/index.js`, `cloudflare/kobe-daily-picks-email.gs` | CSV grades + D1 notification status | Render path active; daily zero-pick email suppressed; broken five-minute Apps Script trigger removed; versioned source invariants pass; approved-pick proof still needed |
 | Support | static support page/manual action | `support.html`, `docs/ISSUE_PLAYBOOKS.md` | `support@kobesbettinghub.com` forwarding to owner | Live manually; hours/SLA and ticket automation pending |
 | Marketing | not yet defined | historical assets/docs only | None | Deferred |
 
@@ -424,6 +425,7 @@ Database direction: the existing free Supabase Postgres project is the first pro
 | 2026-09-13 | Publish effective policies under Kobe Irwin operating publicly as Kobe's Betting Hub in California; use `support@kobesbettinghub.com` forwarding to the owner. | Zakai Martin | Live |
 | 2026-09-13 | Deploy the bounded Discord approval-verification hotfix. Render deployment `dep-dajifs7qj5pc73b9j7pg` made commit `6989dd1` live; startup was healthy and the post-deploy read-only smoke suite passed `5/5`. | Zakai Martin | Complete; fresh approval-card acceptance still required |
 | 2026-09-13 | Keep the daily approved-picks Apps Script email but make zero-pick days silent. Delete only the failing `deliverKobeRecapNotifications` five-minute trigger; the Apps Script trigger page then showed two remaining triggers and `sendDailyPackage` at 0% error. | Zakai Martin | Complete |
+| 2026-09-13 | Bring the formerly Google-only daily email implementation under repository control and add four invariants covering zero-pick silence, no empty X queue call, no embedded credentials, and trigger-disabled recap polling. | Zakai Martin | Complete; release suite `180/180` |
 
 ## Owner answers still required
 
