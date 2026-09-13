@@ -30,11 +30,11 @@
 - [ ] Supported locations and governing jurisdiction.
 - [ ] Official support/privacy email and support hours in Arizona time.
 - [ ] Backup operator when Zakai is unavailable.
-- [ ] Failed-payment rule. Current behavior removes access when Stripe reports `past_due` and restores it when the subscription returns to `active`; approve this behavior or specify a grace period.
+- [x] Failed-payment rule: suspend access when Stripe reports `past_due`; automatically restore only when Stripe returns to `active` or `trialing`.
 - [ ] Refund/dispute rule. Recommended beta rule: any refund or open dispute blocks access immediately; restoration requires verified payment state and an audited owner action.
 - [ ] Discord relink authority and verification method.
-- [ ] Retention periods for membership/audit records and support tickets.
-- [ ] Pick-day assignments: reviewer, publisher, grader, and closeout checker; Kobe remains content approver.
+- [x] Provisional retention: membership/API audit records for 24 months and ordinary support tickets for 12 months, subject to legal/privacy review.
+- [x] Pick-day assignments: Kobe approves and publishes; deterministic ESPN automation grades supported markets; Zakai performs daily closeout and handles exceptions.
 - [ ] Beta hours and Wave A five-person roster.
 
 ## Production actions requiring separate action-time approval
