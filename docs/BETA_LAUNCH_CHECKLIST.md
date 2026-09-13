@@ -65,11 +65,11 @@ Record each answer and approval date before beta payments open:
 - [ ] Legal business/entity name and public business address.
 - [ ] Governing jurisdiction and the locations in which membership will be offered.
 - [ ] Legal/compliance reviewer and approval of Terms, Privacy, recurring billing, and responsible-gambling language.
-- [ ] Official support/privacy email. `themartinventures@gmail.com` is recorded as the technical/billing account email; it is **not automatically the public support address**.
+- [x] Intended public support/privacy alias: `support@kobesbettinghub.com`, forwarding to `themartinventures@gmail.com`. Routing and page-level acceptance are still required before paid invitations.
 - [ ] Staffed support hours and timezone.
-- [ ] Backup operator when Zakai is unavailable.
+- [ ] Backup operator when Zakai is unavailable. Zakai accepted sole-operator risk for the initial beta and will communicate outages; this does not satisfy unrestricted-launch redundancy.
 - [x] Failed-payment rule: suspend access when Stripe reports `past_due`; automatically restore only when Stripe returns to `active` or `trialing`. Automated coverage passes; isolated external evidence remains below.
-- [ ] Mandatory refund/dispute access effect and exception authority. Standard policy is no voluntary refunds, except where law, card-network rules, or a written owner exception requires otherwise.
+- [x] Mandatory refund/dispute access effect: any refund or open dispute suspends access immediately. Restoration requires verified eligible payment state and an audited Zakai-approved action. Standard policy is no voluntary refunds, except where law, card-network rules, or a written owner exception requires otherwise.
 - [ ] Discord-account relink verification and who may authorize it.
 - [x] Provisional retention selected: membership/API audit records 24 months and ordinary support tickets 12 months, subject to legal/privacy review. Support-ticket storage is not yet implemented.
 - [ ] Alert destination for paid-without-access and reconciliation failures.

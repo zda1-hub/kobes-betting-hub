@@ -2,7 +2,7 @@
 
 **Status:** Active production system with unresolved operational and compliance risks
 
-**Last verified:** 2026-09-13 10:36 MST
+**Last verified:** 2026-09-13 12:30 MST
 
 **Production runtime change set:** repository/Render auto-deploy from `main`; Checkout Worker `ae9e52fb-c95b-46c5-8008-8ecaca8e2334`; Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365`; public-site Worker `0f79cda2-fc03-4382-8cf6-98a7acce08b6`
 
@@ -63,6 +63,8 @@ The system is not a single application. It currently spans GitHub, Cloudflare Wo
 - Discord `#daily-free-play` contains canonical record `20260912-148-X` (Bijan Robinson over 29.5 receiving yards, -140). A dedicated website-publication credential is now encrypted independently in Render and Cloudflare. The owner-approved text-only synchronization returned `201`, the KV current endpoint returned `200`, and the live public page rendered the same Bijan selection. No Discord or X action occurred during this repair.
 - A controlled manual audit checked one recent `@CappersUSA` X candidate through Luna with a one-candidate cap and `--no-discord`. It was held as `SOURCE_EXTRACTED`; no member or Discord publication occurred.
 - Commit `f9b2141` is deployed on Render. It contains the exact Bijan production formatting regression fixture and formatter corrections for duplicated `YDs`/`Yards` terms, a repeated shorthand selection bullet, and the dangling URL-dependent clause.
+- Production X fairness commit `25a487b` is live: the six-call ceiling is unchanged, the 38-source roster rotates, and one source cannot consume more than one extraction slot per run. The first post-deploy cycle scanned from roster offset 0 and rejected 527 non-publishable candidates without making a public post.
+- Discord approval latency commits `78b9ad7` and `ff147a2` are live on Render. ESPN schedule and roster checks now run concurrently; approval packet lookup uses the exact date-coded path instead of rereading the historical queue; required audit-database queries fail closed within seven seconds; and stage timings identify any remaining delay. Deploy `dep-dajfgctckfvc739pnomg` is Live and the exact-main suite passed 126/126. A fresh Kobe button acceptance is still required before the approval P1 is closed.
 
 Observed output-quality evidence: the 2026-09-12 Discord screenshot shows a published Bijan Robinson card with duplicated pick terms in the title/first bullet and an incomplete sentence ending in “including 82 yards at”. That exact case is now a passing regression fixture: future rendering collapses `YDs`/`Yards` duplicates, removes the repeated selection bullet, and trims the broken URL-dependent clause. A successful transport remains insufficient proof of a correct card.
 
@@ -488,6 +490,8 @@ Database direction: the existing free Supabase Postgres project is the first pro
 | 2026-09-13 | Verify today's production X-to-private-approval path. A real Jaxson Dart over 204.5 passing yards (-115) candidate reached private `#pick-approvals` at 10:36 Arizona and remains unposted. Kobe must make the betting/content decision; Codex will not choose or publish it. | Kobe | Private delivery passed; publication/log/grade/recap acceptance pending |
 | 2026-09-13 | Run the production membership migrator in plan-only mode after creating a second fresh encrypted backup. GitHub run `34775096023` verified exact target `mpajyubbnnsdpgdizvht`, reported only migrations `007`, `008`, and `009` pending, explicitly made no database writes, and produced a second checksum-verified encrypted archive. | Zakai Martin | Plan accepted; apply still requires final production approval |
 | 2026-09-13 | Re-audit X pick throughput from the 11:36 Arizona production cycle. Existing unanswered cards do not block new intake. The cycle started 6/6 Luna calls, deferred 388 candidate-like posts, rejected 186, and created zero cards; 14 additional eligible split plays were held because they lacked three clean breakdown bullets. Implement a local fairness patch that keeps the six-call cap, limits one extraction per source per run, rotates the 38-source starting wave, and prioritizes source-supported posts. | Zakai Martin | Local only; focused 16/16 and full 181/181 tests pass; production deployment and private observation window require approval |
+| 2026-09-13 | Deploy X fairness commit `25a487b`, then remediate the Discord approval spinner in commits `78b9ad7` and `ff147a2`. The final hotfix reads the date-coded packet directly, bounds required audit queries, and logs approval stages. Render deploy `dep-dajfgctckfvc739pnomg` is Live; exact-main tests pass 126/126. | Zakai Martin | Live; one fresh Kobe approval/rejection acceptance is required to close the P1 |
+| 2026-09-13 | Select `support@kobesbettinghub.com` as the intended public support alias forwarding to `themartinventures@gmail.com`; Zakai remains the sole primary operator for the initial beta and will communicate outages. Adopt immediate access suspension for any refund or open dispute, with restoration only after verified eligible payment state and an audited owner action. Prefer a seven-day Monday-to-Monday invite-only beta before unrestricted promotion. | Zakai Martin | Decisions recorded; email routing is not yet configured, no backup operator is assigned, and public legal/address requirements remain unresolved |
 
 ## Owner answers still required
 

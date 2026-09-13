@@ -14,7 +14,8 @@
 - [x] The same-member repeat retention-offer guard passed in isolated staging.
 - [x] The repeat-test subscription completed authenticated cancellation and terminal clock advancement: Stripe/Supabase `canceled`, event `evt_1UFHpPE6p9BmPii39F5ZuPiF` `PROCESSED/ROLE_REMOVED`, and member-attributed Discord DELETE `204`.
 - [x] Today's production X-to-private-approval path delivered a real current candidate at 10:36 Arizona: Jaxson Dart over 204.5 passing yards (-115). It remains pending in `#pick-approvals`; no member-facing post was made. Kobe must choose the destination or reject it before the publication/log/grade/recap acceptance can continue.
-- [x] X throughput was re-audited against the 11:36 Arizona production cycle. Two unanswered cards do not block intake. The cycle used 6/6 Luna calls, deferred 388 candidates, rejected 186, created zero cards, and separately held 14 valid terms because they lacked three clean breakdown bullets. A six-call-preserving fairness patch now rotates the 38-source roster, limits one extraction per source per run, and prioritizes source-supported posts; 16/16 focused and 181/181 full tests pass locally. It is not deployed.
+- [x] X throughput was re-audited against the 11:36 Arizona production cycle. Two unanswered cards do not block intake. The six-call-preserving fairness patch is now live as commit `25a487b`; the first post-deploy cycle rotated to roster offset 0 and rejected 527 non-publishable candidates without a public post.
+- [x] Discord approval latency hotfix `ff147a2` is Live as Render deploy `dep-dajfgctckfvc739pnomg`. It combines concurrent ESPN verification, direct date-coded packet lookup, bounded required-audit queries, and per-stage timing. The exact-main suite passed 126/126; a fresh Kobe click remains the external acceptance.
 
 ## Work Zakai and Codex can finish today
 
@@ -26,20 +27,21 @@
 6. **Prepare production promotion.** Review the candidate commit, migration plan, Worker bindings/secret names, Stripe webhook events, Discord role hierarchy, and rollback points. Production mutation requires Zakai's action-time approval.
 7. **Run today's real pick acceptance — waiting on Kobe's pick decision.** The Jaxson Dart candidate reached private approval at 10:36 Arizona. Kobe must inspect the source/evidence and either choose the Free Pick or NFL destination or reject it. If approved, verify the member post, canonical log, final grading, and recap trail. Do not republish monitored-source material without confirmed rights.
 8. **Set up the beta desk.** Confirm support address/hours, backup operator, Discord support warning, roster, incident owner, and the first five trusted testers.
-9. **Deploy the X fairness patch only after owner approval.** Observe one 30–60 minute private window, then compare distinct sources selected, eligible cards, held cards, model calls, and cost per ready approval. Do not raise the six-call cap during this test.
+9. **Observe the deployed X fairness patch.** Compare distinct sources selected, eligible cards, held cards, model calls, and cost per ready approval. Do not raise the six-call cap during this test.
 
 ## Decisions Zakai must provide before paid beta opens
 
 - [ ] Public seller name: legal individual name, registered company, or approved DBA; plus the public business/contact address required for the selected jurisdictions.
 - [ ] Supported locations and governing jurisdiction.
-- [ ] Official support/privacy email and support hours in Arizona time.
-- [ ] Backup operator when Zakai is unavailable.
+- [x] Intended support alias: `support@kobesbettinghub.com` forwarding to `themartinventures@gmail.com`; routing and public-page acceptance remain.
+- [ ] Support hours in Arizona time.
+- [ ] Backup operator when Zakai is unavailable. Zakai has accepted sole-operator risk for the initial beta, with outage communication as the fallback.
 - [x] Failed-payment rule: suspend access when Stripe reports `past_due`; automatically restore only when Stripe returns to `active` or `trialing`.
-- [ ] Refund/dispute rule. Recommended beta rule: any refund or open dispute blocks access immediately; restoration requires verified payment state and an audited owner action.
+- [x] Refund/dispute rule: any refund or open dispute blocks access immediately; restoration requires verified eligible payment state and an audited owner action. Voluntary refunds are not offered except where law, card-network rules, or a written owner exception requires one.
 - [ ] Discord relink authority and verification method.
 - [x] Provisional retention: membership/API audit records for 24 months and ordinary support tickets for 12 months, subject to legal/privacy review.
 - [x] Pick-day assignments: Kobe approves and publishes; deterministic ESPN automation grades supported markets; Zakai performs daily closeout and handles exceptions.
-- [ ] Beta hours and Wave A five-person roster.
+- [ ] Beta hours and Wave A roster. Owner preference is a seven-day Monday-to-Monday invite-only beta before unrestricted promotion.
 
 ## Production actions requiring separate action-time approval
 

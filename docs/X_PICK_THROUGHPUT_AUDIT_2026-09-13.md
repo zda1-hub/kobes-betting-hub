@@ -1,6 +1,6 @@
 # X pick throughput audit — 2026-09-13
 
-Status: production diagnosis complete; fairness remediation implemented and tested locally. No production deployment, public post, or pick decision was made by this work.
+Status: production diagnosis and fairness deployment complete. Commit `25a487b` is live; it made no public post or pick decision.
 
 ## Direct answer
 
@@ -25,7 +25,7 @@ The same hour also recorded 14 otherwise-eligible split plays as `HELD_NOT_READY
 3. Source-local sorting preferred recognizable betting language, but did not prefer posts already containing enough statistical support to survive the three-bullet writeup gate.
 4. The system intentionally holds thin picks instead of publishing invented support or a low-quality writeup.
 
-## Local remediation
+## Deployed remediation
 
 - Preserve the six-call run-wide spend cap.
 - Default to one paid Luna extraction per source per run.
@@ -33,7 +33,7 @@ The same hour also recorded 14 otherwise-eligible split plays as `HELD_NOT_READY
 - Within each source, prioritize explicit football picks with a selection line plus at least three numeric/statistical support lines, followed by bare terms and image-only candidates.
 - Preserve deferred posts and all existing audit events; do not auto-publish anything.
 
-Verification: focused collector suite 16/16; full repository suite 181/181.
+Verification before deployment: focused collector suite 16/16; full repository suite 181/181. The first production cycle after deployment scanned from roster offset 0 and rejected 527 non-publishable candidates without a public post. Discord approval latency was then separately remediated through commits `78b9ad7` and `ff147a2`; the final Render deploy is `dep-dajfgctckfvc739pnomg` and its exact-main suite passed 126/126.
 
 ## Recommended next iteration
 
