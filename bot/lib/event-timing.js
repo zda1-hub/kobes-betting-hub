@@ -130,10 +130,8 @@ async function verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl) {
     return { status: 'UNVERIFIABLE', reason: 'ESPN did not provide both event team IDs for player verification.' };
   }
 
-  const athletes = [];
   try {
-    for (const teamId of teamIds) {
-      const response = await auditedFetch(`${ESPN_BASE_URL}/${leaguePath}/teams/${teamId}/roster`, {
+    const responses = await Promise.all(teamIds.map((teamId) => auditedFetch(`${ESPN_BASE_URL}/${leaguePath}/teams/${teamId}/roster`, {
         headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000)
       }, {
         service: 'espn',
@@ -142,22 +140,23 @@ async function verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl) {
         triggerType: 'candidate_verification',
         workflowId: packet.pick_id,
         pickId: packet.pick_id
-      }, fetchImpl);
-      if (!response.ok) return { status: 'UNVERIFIABLE', reason: `ESPN roster verification returned ${response.status}.` };
-      athletes.push(...rosterAthletes(await response.json()));
+      }, fetchImpl)));
+    const failed = responses.find((response) => !response.ok);
+    if (failed) return { status: 'UNVERIFIABLE', reason: `ESPN roster verification returned ${failed.status}.` };
+    const rosters = await Promise.all(responses.map((response) => response.json()));
+    const athletes = rosters.flatMap(rosterAthletes);
+
+    const missing = playerNames.find((playerName) => !athletes.some((athlete) => athleteMatchesName(athlete, playerName)));
+    if (missing) {
+      return {
+        status: 'PLAYER_NOT_ON_EVENT_TEAM',
+        reason: `${missing} is not listed on either team in the matched ESPN event.`
+      };
     }
+    return null;
   } catch {
     return { status: 'UNVERIFIABLE', reason: 'ESPN roster verification was unavailable.' };
   }
-
-  const missing = playerNames.find((playerName) => !athletes.some((athlete) => athleteMatchesName(athlete, playerName)));
-  if (missing) {
-    return {
-      status: 'PLAYER_NOT_ON_EVENT_TEAM',
-      reason: `${missing} is not listed on either team in the matched ESPN event.`
-    };
-  }
-  return null;
 }
 
 async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fetch } = {}) {
@@ -180,10 +179,10 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
   // source post.
   const events = [];
   try {
-    for (let offset = 0; offset <= 3; offset += 1) {
+    const responses = await Promise.all(Array.from({ length: 4 }, async (_, offset) => {
       const day = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
       const date = pacificDate(day).replaceAll('-', '');
-      const response = await auditedFetch(`${ESPN_BASE_URL}/${leaguePath}/scoreboard?dates=${date}&limit=100`, {
+      return auditedFetch(`${ESPN_BASE_URL}/${leaguePath}/scoreboard?dates=${date}&limit=100`, {
         headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000)
       }, {
         service: 'espn',
@@ -193,6 +192,8 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
         workflowId: packet.pick_id,
         pickId: packet.pick_id
       }, fetchImpl);
+    }));
+    for (const response of responses) {
       if (!response.ok) continue;
       const scoreboard = await response.json();
       events.push(...(scoreboard.events || []));

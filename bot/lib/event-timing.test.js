@@ -49,6 +49,44 @@ test('allows a verified NFL pick scheduled within the upcoming weekend slate', a
   assert.equal(result.eventStart, '2026-09-13T20:25:00.000Z');
 });
 
+test('runs independent ESPN schedule and roster lookups concurrently', async () => {
+  const calls = [];
+  let releaseScoreboards;
+  const scoreboardsReady = new Promise((resolve) => { releaseScoreboards = resolve; });
+  let releaseRosters;
+  const rostersReady = new Promise((resolve) => { releaseRosters = resolve; });
+  const concurrencyPacket = {
+    pick_id: 'concurrency-test',
+    analysis: { extraction: {
+      league: 'NFL', sport: 'Football', event: 'New York Giants vs Dallas Cowboys',
+      player_name: 'Jaxson Dart', selection: 'Jaxson Dart over 204.5 passing yards'
+    } }
+  };
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url.includes('/scoreboard?')) {
+      if (calls.filter((value) => value.includes('/scoreboard?')).length === 4) releaseScoreboards();
+      await scoreboardsReady;
+      return new Response(JSON.stringify({ events: [{
+        date: '2026-09-13T17:00:00.000Z', competitions: [{ competitors: [
+          { team: { id: '19', displayName: 'New York Giants', shortDisplayName: 'Giants', abbreviation: 'NYG' } },
+          { team: { id: '6', displayName: 'Dallas Cowboys', shortDisplayName: 'Cowboys', abbreviation: 'DAL' } }
+        ] }]
+      }] }), { status: 200 });
+    }
+    if (calls.filter((value) => value.includes('/roster')).length === 2) releaseRosters();
+    await rostersReady;
+    return new Response(JSON.stringify({ athletes: [{ items: [{ displayName: url.includes('/19/') ? 'Jaxson Dart' : 'Dak Prescott' }] }] }), { status: 200 });
+  };
+
+  const result = await upcomingEventStatus(concurrencyPacket, {
+    now: new Date('2026-09-13T12:00:00.000Z'), fetchImpl
+  });
+  assert.equal(result.status, 'UPCOMING');
+  assert.equal(calls.filter((url) => url.includes('/scoreboard?')).length, 4);
+  assert.equal(calls.filter((url) => url.includes('/roster')).length, 2);
+});
+
 test('blocks a matching event after its scheduled start', async () => {
   const result = await upcomingEventStatus(packet, {
     now: new Date('2026-08-30T22:00:00.000Z'),
