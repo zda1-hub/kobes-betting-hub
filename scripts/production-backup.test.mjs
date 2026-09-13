@@ -37,5 +37,6 @@ test('production backup is locked to the production project and encrypted before
   assert.match(workflow, /https:\/\/www\.postgresql\.org\/media\/keys\/ACCC4CF8\.asc/);
   assert.match(workflow, /https:\/\/apt\.postgresql\.org\/pub\/repos\/apt/);
   assert.match(workflow, /retention-days: 3/);
+  assert.match(workflow, /path: production-backup\//);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
 });
