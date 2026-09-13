@@ -60,11 +60,11 @@ jobs:
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
       - name: Create and verify encrypted production backup
-        run: ./scripts/backup-production-supabase-ci.sh
+        run: PRODUCTION_BACKUP_DIR="$GITHUB_WORKSPACE/.production-backup" ./scripts/backup-production-supabase-ci.sh
       - name: Store encrypted backup temporarily
         uses: actions/upload-artifact@v4
         with:
           name: kbh-production-backup-${{ github.run_id }}
-          path: ${{ runner.temp }}/kbh-production-backup/
+          path: .production-backup/
           if-no-files-found: error
           retention-days: 3
