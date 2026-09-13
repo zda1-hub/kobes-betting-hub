@@ -12,15 +12,30 @@ function inferredService(url) {
 }
 
 function endpointClass(url) {
-  return new URL(url).pathname
+  let pathname;
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    pathname = new URL(String(url), 'https://audit.invalid').pathname;
+  }
+  return pathname
+    .replace(/\/(webhooks|interactions)\/[^/]+\/[^/]+(?=\/|$)/gi, '/$1/{id}/{token}')
     .replace(/\/\d{6,}(?=\/|$)/g, '/{id}')
-    .replace(/\/[0-9a-f]{24,}(?=\/|$)/gi, '/{id}');
+    .replace(/\/[0-9a-f]{24,}(?=\/|$)/gi, '/{id}')
+    .replace(/\/:([a-z_]+)(?=\/|$)/gi, '/{$1}');
 }
 
 function requestBodyHash(body) {
   if (body === undefined || body === null) return null;
   if (typeof body === 'string') return sha256(body);
   if (body instanceof URLSearchParams) return sha256(body.toString());
+  if (typeof body === 'object') {
+    try {
+      return sha256(body);
+    } catch {
+      return null;
+    }
+  }
   return null;
 }
 
@@ -83,4 +98,45 @@ async function auditedFetch(url, init = {}, context = {}, fetchImpl = fetch) {
   }
 }
 
-module.exports = { auditedFetch, endpointClass, inferredService, requestBodyHash };
+function attachDiscordRestAudit(rest, context = {}, options = {}) {
+  if (!rest?.on || !rest?.off) throw new TypeError('A Discord REST event emitter is required.');
+  const recordImpl = options.recordImpl || recordApiCall;
+  const onError = options.onError || ((error) => console.error('Unable to persist Discord API audit event:', error?.message || error));
+  const pending = new Set();
+  const listener = (request = {}, response = {}) => {
+    const job = (async () => {
+      await recordImpl({
+        service: 'discord',
+        endpointClass: endpointClass(request.route || request.path || '/unknown'),
+        method: String(request.method || 'GET').toUpperCase(),
+        callerComponent: context.callerComponent || 'discord-sdk',
+        triggerType: context.triggerType || 'runtime',
+        operationId: context.operationId,
+        workflowId: context.workflowId,
+        pickId: context.pickId,
+        memberId: context.memberId,
+        providerRequestId: response.headers?.get?.('x-request-id') || response.headers?.get?.('cf-ray') || null,
+        clientRequestId: context.clientRequestId,
+        requestPayloadSha256: requestBodyHash(request.data?.body),
+        responsePayloadSha256: await responseBodyHash(response),
+        responseStatus: Number.isFinite(response.status) ? response.status : null,
+        outcome: response.ok ? 'SUCCEEDED' : 'HTTP_ERROR',
+        errorClass: response.ok ? null : 'HTTP_ERROR',
+        retryCount: Number.isInteger(request.retries) ? request.retries : 0
+      });
+    })();
+    pending.add(job);
+    job.catch(onError).finally(() => pending.delete(job));
+  };
+  rest.on('response', listener);
+  return {
+    async flush() {
+      while (pending.size) await Promise.allSettled([...pending]);
+    },
+    detach() {
+      rest.off('response', listener);
+    }
+  };
+}
+
+module.exports = { attachDiscordRestAudit, auditedFetch, endpointClass, inferredService, requestBodyHash };

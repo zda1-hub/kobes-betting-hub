@@ -82,7 +82,7 @@ async function auditExternalCall(env, values) {
         error_class: values.errorClass || null,
         retry_count: 0,
         latency_ms: values.latencyMs ?? null,
-        code_commit: env.WORKER_VERSION || null,
+        code_commit: env.CF_VERSION_METADATA?.id || env.WORKER_VERSION || null,
         occurred_at: new Date().toISOString(),
       }),
     });
@@ -216,6 +216,56 @@ async function membershipCustomerForDiscord(env, discordUserId) {
   return rows?.[0] || null;
 }
 
+async function membershipCustomerForStripe(env, customerId) {
+  const rows = await supabase(env, `membership_customers?stripe_customer_id=eq.${encodeURIComponent(customerId)}&select=stripe_customer_id,discord_user_id,current_subscription_id&limit=1`);
+  return rows?.[0] || null;
+}
+
+async function claimDiscordLink(env, customerId, subscriptionId, discordUserId) {
+  if (!customerId || !subscriptionId || !discordUserId) throw new Error('The membership connection request is incomplete.');
+
+  // Ensure the checkout customer exists, but never overwrite an established
+  // Discord link as part of this preparatory upsert.
+  await persistCustomer(env, customerId, { subscriptionId });
+
+  const existingCustomer = await membershipCustomerForStripe(env, customerId);
+  if (existingCustomer?.discord_user_id && existingCustomer.discord_user_id !== discordUserId) {
+    throw new Error('This membership is already connected to another Discord account. Contact support to change it.');
+  }
+
+  const existingDiscordLink = await membershipCustomerForDiscord(env, discordUserId);
+  if (existingDiscordLink?.stripe_customer_id && existingDiscordLink.stripe_customer_id !== customerId) {
+    throw new Error('This Discord account is already connected to another membership. Contact support for help.');
+  }
+  if (existingCustomer?.discord_user_id === discordUserId) return existingCustomer;
+
+  const now = new Date().toISOString();
+  let claimed;
+  try {
+    claimed = await supabase(env, `membership_customers?stripe_customer_id=eq.${encodeURIComponent(customerId)}&discord_user_id=is.null`, {
+      method: 'PATCH',
+      prefer: 'return=representation',
+      body: {
+        discord_user_id: discordUserId,
+        current_subscription_id: subscriptionId,
+        linked_at: now,
+        updated_at: now,
+      },
+    });
+  } catch (error) {
+    // A unique-key conflict means this Discord identity was claimed elsewhere.
+    // Keep the public error generic instead of returning database details.
+    throw new Error('This Discord account could not be connected safely. Contact support for help.');
+  }
+  if (claimed?.[0]?.discord_user_id === discordUserId) return claimed[0];
+
+  // Another callback may have won the conditional claim between the reads and
+  // PATCH. Accept an idempotent retry, but fail closed for a different account.
+  const winner = await membershipCustomerForStripe(env, customerId);
+  if (winner?.discord_user_id === discordUserId) return winner;
+  throw new Error('This membership is already connected to another Discord account. Contact support to change it.');
+}
+
 async function discordUserForSubscription(env, subscription) {
   if (subscription?.metadata?.discord_user_id) return subscription.metadata.discord_user_id;
   const customerId = stripeId(subscription?.customer);
@@ -304,11 +354,16 @@ function secureEqual(left, right) {
 
 async function verifyStripeSignature(payload, signature, secret) {
   if (!signature || !secret) return false;
-  const parts = Object.fromEntries(signature.split(',').map((piece) => piece.split('=')));
-  const timestamp = Number(parts.t);
-  if (!timestamp || !parts.v1 || Math.abs(Date.now() / 1000 - timestamp) > 300) return false;
+  const parts = signature.split(',').map((piece) => {
+    const separator = piece.indexOf('=');
+    return separator === -1 ? ['', ''] : [piece.slice(0, separator).trim(), piece.slice(separator + 1).trim()];
+  });
+  const timestamp = Number(parts.find(([key]) => key === 't')?.[1]);
+  const signatures = parts.filter(([key]) => key === 'v1').map(([, value]) => value);
+  if (!timestamp || !signatures.length || Math.abs(Date.now() / 1000 - timestamp) > 300) return false;
   const digest = await crypto.subtle.sign('HMAC', await signingKey(secret), new TextEncoder().encode(`${timestamp}.${payload}`));
-  return secureEqual(toHex(digest), parts.v1);
+  const expected = toHex(digest);
+  return signatures.some((candidate) => secureEqual(expected, candidate));
 }
 
 async function sign(value, secret) {
@@ -480,16 +535,16 @@ async function startDiscordConnection(request, env) {
   catch (error) { return new Response(error.message, { status: 403 }); }
 
   const state = await createDiscordState({ sessionId, intent: 'connect' }, env);
-  return redirect(discordAuthorizationUrl(state, env));
+  return redirect(discordAuthorizationUrl(state, env, 'connect'));
 }
 
-function discordAuthorizationUrl(state, env) {
+function discordAuthorizationUrl(state, env, intent) {
   const authorization = new URL('https://discord.com/oauth2/authorize');
   authorization.search = new URLSearchParams({
     client_id: env.DISCORD_CLIENT_ID,
     response_type: 'code',
     redirect_uri: env.DISCORD_REDIRECT_URI,
-    scope: 'identify guilds.join',
+    scope: intent === 'portal' ? 'identify' : 'identify guilds.join',
     state,
     prompt: 'consent',
   }).toString();
@@ -501,7 +556,7 @@ async function startPortalLogin(request, env) {
   const intent = new URL(request.url).searchParams.get('intent');
   if (intent !== 'portal') return new Response('Invalid membership-management request.', { status: 400 });
   const state = await createDiscordState({ intent: 'portal' }, env);
-  return redirect(discordAuthorizationUrl(state, env));
+  return redirect(discordAuthorizationUrl(state, env, 'portal'));
 }
 
 async function finishDiscordConnection(request, env) {
@@ -550,20 +605,18 @@ async function finishDiscordConnection(request, env) {
 
     const subscription = await activeSubscription(state.sessionId, env);
     const session = await stripeGet(env, `/checkout/sessions/${encodeURIComponent(state.sessionId)}`);
+    const customerId = stripeId(session.customer) || stripeId(subscription.customer);
     const botHeaders = { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' };
+    if (!supabaseReady(env)) throw new Error('Membership persistence is not configured.');
+    await claimDiscordLink(env, customerId, subscription.id, user.id);
     await stripe(env, `/subscriptions/${encodeURIComponent(subscription.id)}`, {
       'metadata[discord_user_id]': user.id,
       'metadata[discord_connected_at]': new Date().toISOString(),
     });
-    if (!supabaseReady(env)) throw new Error('Membership persistence is not configured.');
-    await persistCustomer(env, stripeId(session.customer) || stripeId(subscription.customer), {
-      discordUserId: user.id,
-      subscriptionId: subscription.id,
-    });
     await persistSubscription(env, { ...subscription, metadata: { ...(subscription.metadata || {}), discord_user_id: user.id } });
     await recordMembershipEvent(env, {
       eventType: 'DISCORD_ACCOUNT_LINKED', actorType: 'discord_user', actorId: user.id,
-      customerId: stripeId(session.customer) || stripeId(subscription.customer),
+      customerId,
       subscriptionId: subscription.id, discordUserId: user.id,
     });
     await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) }, env);
@@ -675,4 +728,12 @@ export default {
   scheduled(controller, env, ctx) {
     ctx.waitUntil(reconcileMemberships(env));
   },
+};
+
+export const __test = {
+  claimDiscordLink,
+  createDiscordState,
+  discordAuthorizationUrl,
+  readDiscordState,
+  verifyStripeSignature,
 };

@@ -18,7 +18,7 @@ const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timin
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { enrichPacket } = require('../pipeline/enrich-pick');
 const { runCollector } = require('../pipeline/collect-x');
-const { auditedFetch } = require('../pipeline/api-client');
+const { attachDiscordRestAudit, auditedFetch } = require('../pipeline/api-client');
 const {
   auditConfigured,
   initializeAuditStore,
@@ -71,6 +71,10 @@ const sportChannelMap = new Map(
     .map(([sport, channelId]) => [sport.toLowerCase(), channelId])
 );
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+attachDiscordRestAudit(client.rest, {
+  callerComponent: 'bot/index',
+  triggerType: 'discord_bot'
+});
 const welcomedMemberIds = new Set();
 let xCollectionInProgress = false;
 let xMonitorCreated = 0;
@@ -1412,10 +1416,19 @@ async function registerCommandsOnStart() {
     throw new Error('DISCORD_APPLICATION_ID is required when AUTO_REGISTER_COMMANDS=true.');
   }
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+  const restAudit = attachDiscordRestAudit(rest, {
+    callerComponent: 'bot/index',
+    triggerType: 'command_registration'
+  });
   const route = process.env.DISCORD_GUILD_ID
     ? Routes.applicationGuildCommands(process.env.DISCORD_APPLICATION_ID, process.env.DISCORD_GUILD_ID)
     : Routes.applicationCommands(process.env.DISCORD_APPLICATION_ID);
-  await rest.put(route, { body: commands });
+  try {
+    await rest.put(route, { body: commands });
+  } finally {
+    await restAudit.flush();
+    restAudit.detach();
+  }
   console.log(process.env.DISCORD_GUILD_ID ? 'Registered guild commands on startup.' : 'Registered global commands on startup.');
 }
 

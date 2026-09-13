@@ -313,7 +313,12 @@ async function listRecentPosts(request, env) {
 // Staff uses this endpoint once with the final daily image. The stored image is
 // then served to the public Free Pick page and attached to the corresponding X Post.
 async function publishFreePick(request, env) {
-  if (!await hasBearer(request, env.QUEUE_INGEST_SECRET)) return json({ error: "Unauthorized" }, 401);
+  // Keep website publication isolated from the broader queue credential. The
+  // legacy queue secret remains accepted so existing operators do not break
+  // during the credential split.
+  const authorized = await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)
+    || await hasBearer(request, env.QUEUE_INGEST_SECRET);
+  if (!authorized) return json({ error: "Unauthorized" }, 401);
   if (!hasFreePickStore(env)) return json({ error: "Free Pick media storage is not configured" }, 503);
   const contentTypeHeader = request.headers.get("content-type") || "";
   let input = {};

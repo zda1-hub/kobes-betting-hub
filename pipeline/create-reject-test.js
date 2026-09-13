@@ -3,6 +3,7 @@ require('dotenv').config();
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { reviewButtons } = require('../bot/lib/source-review');
+const { auditedFetch } = require('./api-client');
 
 const ROOT = path.join(__dirname, '..');
 const REVIEW_QUEUE_ROOT = path.join(ROOT, 'data', 'monitoring', 'x', 'review-queue');
@@ -32,7 +33,7 @@ async function main() {
   await fs.mkdir(directory, { recursive: true });
   await fs.writeFile(path.join(directory, `${pickId}.json`), `${JSON.stringify(packet, null, 2)}\n`);
 
-  const response = await fetch(`https://discord.com/api/v10/channels/${process.env.PICK_APPROVAL_CHANNEL_ID}/messages`, {
+  const response = await auditedFetch(`https://discord.com/api/v10/channels/${process.env.PICK_APPROVAL_CHANNEL_ID}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -45,6 +46,10 @@ async function main() {
       }],
       components: reviewButtons(pickId, { testOnly: true })
     })
+  }, {
+    service: 'discord',
+    callerComponent: 'pipeline/create-reject-test',
+    triggerType: 'manual_diagnostic'
   });
   if (!response.ok) throw new Error(`Discord reject-test upload failed (${response.status}).`);
   console.log('Reject-only test card sent to #pick-approvals.');
