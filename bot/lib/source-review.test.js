@@ -72,6 +72,38 @@ test('removes duplicated prop text, timestamps, and promotional source claims', 
   assert.equal(embed.description, 'Jacob Misiorowski over 17.5 outs (+100)\n\n- Over in 5 straight\n- Went 18 outs in both games vs. CHC');
 });
 
+test('cleans the exact Bijan production duplication and dangling-link fragment', () => {
+  const embed = buildSourcePickEmbed({
+    ...packet,
+    approval: { image_url: null },
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        event: 'ATL @ PIT',
+        market: 'Receiving Yards',
+        plays: [{
+          selection: 'Bijan Robinson o29.5 Receiving YDs',
+          player_name: 'Bijan Robinson',
+          line: '29.5 Receiving Yards',
+          odds_american: '-140',
+          units: '',
+          event: 'ATL @ PIT'
+        }],
+        source_claims: [
+          'Bijan Robinson o 29.5 Receiving Yards (-140 DK)',
+          'Bijan averaged 48.2 receiving yards per game last season, finishing with 103 targets, 79 catches and 820 yards.',
+          'He cleared 29.5 in 12 of 17 games (71%), including 82 yards at https://t.co/example',
+          'Avg: 40.7',
+          'Median: 38',
+          '7 of 10 games 70%'
+        ]
+      }
+    }
+  }, 'FREE PICK');
+  assert.equal(embed.description, 'Bijan Robinson o29.5 Receiving YDs (-140)\n\n- Bijan averaged 48.2 receiving yards per game last season, finishing with 103 targets, 79 catches and 820 yards\n- He cleared 29.5 in 12 of 17 games (71%)\n- Avg: 40.7\n- Median: 38\n- 7 of 10 games 70%');
+});
+
 test('keeps writeup cards to the prop followed by clean relevant bullets', () => {
   const embed = buildSourcePickEmbed({
     ...packet,

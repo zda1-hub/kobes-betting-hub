@@ -43,7 +43,7 @@ The system is not a single application. It currently spans GitHub, Cloudflare Wo
 - A controlled manual audit checked one recent `@CappersUSA` X candidate through Luna with a one-candidate cap and `--no-discord`. It was held as `SOURCE_EXTRACTED`; no member or Discord publication occurred.
 - The latest GitHub Pages deployment for `f7711bb` completed successfully.
 
-Observed output-quality evidence: the 2026-09-12 Discord screenshot shows a published Bijan Robinson card with duplicated pick terms in the title/first bullet and an incomplete sentence ending in “including 82 yards at”. A successful Discord post is therefore not sufficient proof of a correct card. The audit must score completeness, duplication, formatting, and factual support in addition to transport success.
+Observed output-quality evidence: the 2026-09-12 Discord screenshot shows a published Bijan Robinson card with duplicated pick terms in the title/first bullet and an incomplete sentence ending in “including 82 yards at”. That exact case is now a passing regression fixture: future rendering collapses `YDs`/`Yards` duplicates, removes the repeated selection bullet, and trims the broken URL-dependent clause. A successful transport remains insufficient proof of a correct card.
 
 ### What is not production-ready even though parts are live
 

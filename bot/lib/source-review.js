@@ -40,7 +40,8 @@ function visiblePlays(packet) {
 }
 
 function normalizedText(value) {
-  return String(value || '').toLowerCase().replace(/[^a-z0-9.]+/g, ' ').trim();
+  return String(value || '').toLowerCase().replace(/[^a-z0-9.]+/g, ' ').trim()
+    .replace(/\byds?\b/g, 'yards');
 }
 
 function playerNameFromText(text) {
@@ -186,6 +187,7 @@ function looksLikeSelection(note) {
   const hasHistoricalContext = /\b(?:in|of|over|last|past|previous|straight|games?|starts?|matchups?|attempts?|season|seasons|rate|average|averaged|allowed|rank(?:ed|s)?|without|since|against)\b/.test(normalized);
   if (/\b(?:to hit|to score|to record|anytime)\b/.test(normalized) && !hasHistoricalContext) return true;
   if (/^(?:[a-z][a-z0-9'’-]*\s+){0,5}(?:over|under)\s+\d/.test(normalized) && !hasHistoricalContext) return true;
+  if (/^(?:[a-z][a-z0-9'’-]*\s+){1,5}(?:o|u)\s*\d/.test(normalized) && !hasHistoricalContext) return true;
   return false;
 }
 
@@ -229,6 +231,10 @@ function cleanEvidenceClaim(claim) {
   text = text.replace(/https?:\/\/\S+/ig, '');
   text = text.replace(/\s*(?:[-–—|]\s*)?(?:source|reference|citation)\s*:\s*$/i, '');
   text = text.replace(/\s*(?:[-–—|]\s*)?(?:via|from)\s*$/i, '');
+  // Removing an inline URL can leave a broken trailing clause such as
+  // "..., including 82 yards at". Keep the complete statistic before the
+  // comma and drop only the fragment that depended on the removed link.
+  text = text.replace(/,\s+(?:including|with)\b[^,;:.!?]*\b(?:at|via|from|to)\s*$/i, '');
   return text.replace(/\s{2,}/g, ' ').replace(/\s+([,:;])/g, '$1').trim().replace(/[.\s·|–—-]+$/, '');
 }
 
