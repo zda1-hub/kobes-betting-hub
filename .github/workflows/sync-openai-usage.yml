@@ -5,6 +5,15 @@ on:
     # GitHub cron is UTC. Arizona remains UTC-7 year-round: 03:15 MST.
     - cron: "15 10 * * *"
   workflow_dispatch:
+    inputs:
+      operation:
+        description: Production-safe operation to run
+        required: true
+        default: reconcile
+        type: choice
+        options:
+          - reconcile
+          - encrypted-backup
 
 permissions:
   contents: read
@@ -15,6 +24,7 @@ concurrency:
 
 jobs:
   reconcile:
+    if: github.event_name == 'schedule' || inputs.operation == 'reconcile'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -36,3 +46,26 @@ jobs:
         run: npm ci
       - name: Import audited OpenAI usage and cost snapshots
         run: node scripts/sync-openai-usage.mjs
+
+  encrypted-backup:
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'encrypted-backup'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      PRODUCTION_BACKUP_KEY: ${{ secrets.PRODUCTION_BACKUP_KEY }}
+      PRODUCTION_BACKUP_DIR: ${{ runner.temp }}/kbh-production-backup
+    steps:
+      - name: Check out the approved release source
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Create and verify encrypted production backup
+        run: ./scripts/backup-production-supabase-ci.sh
+      - name: Store encrypted backup temporarily
+        uses: actions/upload-artifact@v4
+        with:
+          name: kbh-production-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/kbh-production-backup/
+          if-no-files-found: error
+          retention-days: 3
