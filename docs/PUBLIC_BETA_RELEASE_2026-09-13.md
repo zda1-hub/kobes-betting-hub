@@ -24,6 +24,8 @@ Customer-experience requirement: checkout, Discord access, billing management, c
 - Render uses a 1 GB persistent disk mounted at `/var/data`; `PICK_LOG_PATH` is `/var/data/pick-log.csv`, and the X review queue is durable under `/var/data/x-review-queue`.
 - Cloudflare Email Routing is enabled for `kobesbettinghub.com`.
 - `support@kobesbettinghub.com` is active and forwards to the verified destination `themartinventures@gmail.com`.
+- The production migration ledger was checked read-only on 2026-09-13 and contains referral migrations `005_referral_cash_rewards` and `006_referral_reward_ten_dollars`.
+- The production Supabase project is on the free plan and explicitly reports that provider-managed project backups are unavailable. An encrypted logical dump is therefore required immediately before migrations 007–009.
 - Stripe remains the payment/subscription authority. Discord OAuth identifies the member; Discord is not a payment method. Supabase persists the Stripe-to-Discord mapping and event/audit trail.
 
 ## Public-beta decision
@@ -41,8 +43,8 @@ The public-beta label does not waive the customer-facing acceptance gate. Before
 
 ## Final production promotion checklist
 
-- [ ] Verify a fresh encrypted production backup and the production migration ledger.
-- [ ] Confirm referral migrations 005 and 006 already appear in the production ledger.
+- [ ] Create and verify a fresh encrypted production logical backup; store its encryption key separately.
+- [x] Confirm referral migrations 005 and 006 already appear in the production ledger.
 - [ ] Apply only migrations 007, 008, and 009 with the locked migration runner.
 - [ ] Verify RLS, revoked browser grants, service-role privileges, cancellation fields, and entitlement-block fields.
 - [ ] Deploy the integrated Checkout Worker and record its Cloudflare version ID.
@@ -72,4 +74,3 @@ These can be improved during public beta without blocking invitations once accep
 - Do not publish an approval card whose locked payload has changed.
 - Do not use source text or media beyond the adopted source-rights policy. Monitoring and independent factual research may continue.
 - Do not roll back the Checkout Worker without reconciling membership events created after the promoted schema became active.
-
