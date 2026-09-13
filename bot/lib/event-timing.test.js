@@ -49,10 +49,8 @@ test('allows a verified NFL pick scheduled within the upcoming weekend slate', a
   assert.equal(result.eventStart, '2026-09-13T20:25:00.000Z');
 });
 
-test('runs independent ESPN schedule and roster lookups concurrently', async () => {
+test('uses one scoreboard lookup for a current-day match and concurrent roster lookups', async () => {
   const calls = [];
-  let releaseScoreboards;
-  const scoreboardsReady = new Promise((resolve) => { releaseScoreboards = resolve; });
   let releaseRosters;
   const rostersReady = new Promise((resolve) => { releaseRosters = resolve; });
   const concurrencyPacket = {
@@ -65,8 +63,6 @@ test('runs independent ESPN schedule and roster lookups concurrently', async () 
   const fetchImpl = async (url) => {
     calls.push(url);
     if (url.includes('/scoreboard?')) {
-      if (calls.filter((value) => value.includes('/scoreboard?')).length === 4) releaseScoreboards();
-      await scoreboardsReady;
       return new Response(JSON.stringify({ events: [{
         date: '2026-09-13T17:00:00.000Z', competitions: [{ competitors: [
           { team: { id: '19', displayName: 'New York Giants', shortDisplayName: 'Giants', abbreviation: 'NYG' } },
@@ -83,8 +79,18 @@ test('runs independent ESPN schedule and roster lookups concurrently', async () 
     now: new Date('2026-09-13T12:00:00.000Z'), fetchImpl
   });
   assert.equal(result.status, 'UPCOMING');
-  assert.equal(calls.filter((url) => url.includes('/scoreboard?')).length, 4);
+  assert.equal(calls.filter((url) => url.includes('/scoreboard?')).length, 1);
   assert.equal(calls.filter((url) => url.includes('/roster')).length, 2);
+});
+
+test('bounds an event verification that never returns', async () => {
+  const result = await upcomingEventStatus(packet, {
+    now: new Date('2026-08-30T18:00:00.000Z'),
+    timeoutMs: 5,
+    fetchImpl: async () => new Promise(() => {})
+  });
+  assert.equal(result.status, 'UNVERIFIABLE');
+  assert.match(result.reason, /3 seconds/);
 });
 
 test('blocks a matching event after its scheduled start', async () => {

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { attachDiscordRestAudit, endpointClass, inferredService, requestBodyHash } = require('./api-client');
+const { attachDiscordRestAudit, auditedFetch, endpointClass, inferredService, requestBodyHash } = require('./api-client');
 
 test('classifies operational API providers without retaining query strings', () => {
   assert.equal(inferredService('https://api.x.com/2/users/123456789/tweets?max_results=20'), 'x');
@@ -52,4 +52,33 @@ test('records Discord SDK REST responses without retaining route identifiers or 
   assert.equal(events[0].responsePayloadSha256.length, 64);
   assert.equal(JSON.stringify(events[0]).includes('secret member message'), false);
   assert.equal(JSON.stringify(events[0]).includes('123456789'), false);
+});
+
+test('does not misclassify or retry a failed audit write after a successful provider response', async () => {
+  let auditAttempts = 0;
+  await assert.rejects(() => auditedFetch(
+    'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
+    {},
+    { service: 'espn' },
+    async () => new Response('{"events":[]}', { status: 200, headers: { 'content-type': 'application/json' } }),
+    async () => {
+      auditAttempts += 1;
+      throw new Error('audit unavailable');
+    }
+  ), /audit unavailable/);
+  assert.equal(auditAttempts, 1);
+});
+
+test('records a provider network failure exactly once', async () => {
+  const events = [];
+  await assert.rejects(() => auditedFetch(
+    'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
+    {},
+    { service: 'espn' },
+    async () => { throw new TypeError('network unavailable'); },
+    async (event) => events.push(event)
+  ), /network unavailable/);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].outcome, 'NETWORK_ERROR');
+  assert.equal(events[0].errorClass, 'TypeError');
 });

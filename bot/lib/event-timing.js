@@ -181,7 +181,7 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
   // source post.
   const events = [];
   try {
-    const responses = await Promise.all(Array.from({ length: 4 }, async (_, offset) => {
+    const fetchScoreboard = async (offset) => {
       const day = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
       const date = pacificDate(day).replaceAll('-', '');
       return auditedFetch(`${ESPN_BASE_URL}/${leaguePath}/scoreboard?dates=${date}&limit=100`, {
@@ -194,8 +194,18 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
         workflowId: packet.pick_id,
         pickId: packet.pick_id
       }, fetchImpl);
-    }));
-    for (const response of responses) {
+    };
+    const todayResponse = await fetchScoreboard(0);
+    if (todayResponse.ok) {
+      const scoreboard = await todayResponse.json();
+      events.push(...(scoreboard.events || []));
+    }
+    const todayMatchesEveryPlay = playPackets.every((playPacket) => events
+      .some((candidate) => matchesExtractedEvent(playPacket, candidate)));
+    const laterResponses = todayMatchesEveryPlay
+      ? []
+      : await Promise.all([1, 2, 3].map(fetchScoreboard));
+    for (const response of laterResponses) {
       if (!response.ok) continue;
       const scoreboard = await response.json();
       events.push(...(scoreboard.events || []));
@@ -254,7 +264,22 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
 }
 
 async function upcomingEventStatus(packet, options = {}) {
-  return upcomingEventStatuses(packet, options);
+  const configured = Number(options.timeoutMs ?? process.env.PICK_EVENT_VERIFICATION_TIMEOUT_MS ?? 25000);
+  const timeoutMs = Number.isFinite(configured) ? Math.max(3000, Math.min(configured, 45000)) : 25000;
+  let timer;
+  try {
+    return await Promise.race([
+      upcomingEventStatuses(packet, options),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve({
+          status: 'UNVERIFIABLE',
+          reason: `ESPN verification did not finish within ${Math.round(timeoutMs / 1000)} seconds.`
+        }), timeoutMs);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function isRecentSourcePost(packet, { now = new Date(), maximumAgeHours = Number(process.env.X_MONITOR_MAX_POST_AGE_HOURS || 24) } = {}) {
