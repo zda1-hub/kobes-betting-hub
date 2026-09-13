@@ -740,6 +740,15 @@ test('billing exception webhooks durably block entitlement while failed payments
   assert.equal(discordRoleCalls.at(-1).method, 'DELETE');
   assert.equal(webhookEvents.get('evt_failed_past_due').outcome, 'PAYMENT_FAILED_ROLE_REMOVED');
 
+  subscriptionFixtures.get('sub_failed_past_due').status = 'active';
+  assert.equal((await sendEvent({
+    id: 'evt_failed_recovered',
+    type: 'customer.subscription.updated',
+    data: { object: stripeSubscription('sub_failed_past_due') },
+  })).status, 200);
+  assert.equal(discordRoleCalls.at(-1).method, 'PUT');
+  assert.equal(webhookEvents.get('evt_failed_recovered').outcome, 'ROLE_GRANTED');
+
   assert.equal(membershipEvents.filter((event) => event.event_type === 'MEMBERSHIP_ENTITLEMENT_BLOCKED').length, 2);
   assert.equal(membershipEvents.filter((event) => event.event_type === 'MEMBERSHIP_PAYMENT_FAILED').length, 2);
 });

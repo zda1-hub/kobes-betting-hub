@@ -2,7 +2,7 @@
 
 **Status:** Active production system with unresolved operational and compliance risks
 
-**Last verified:** 2026-09-13 09:20 MST
+**Last verified:** 2026-09-13 09:40 MST
 
 **Production runtime change set:** repository/Render auto-deploy from `main`; Checkout Worker `ae9e52fb-c95b-46c5-8008-8ecaca8e2334`; Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365`; public-site Worker `0f79cda2-fc03-4382-8cf6-98a7acce08b6`
 
@@ -58,6 +58,7 @@ The system is not a single application. It currently spans GitHub, Cloudflare Wo
 - At 09:08 MST on 2026-09-13, private production `/hub-status` reported `Workflow: ready`, pick log configured, required database audit connected, ESPN automatic grading on, and recap email connected. It also correctly reported zero Free Picks and zero pending Free Pick results for the new day; the X monitor was outside its active window. The 09:04 MST production smoke passed 5/5.
 - The launch candidate includes a production-locked migration command for exactly `007`–`009`. It defaults to a read-only plan, accepts only Supabase project `mpajyubbnnsdpgdizvht` over encrypted transport, pins migration hashes, requires an exact project-bound confirmation for apply mode, uses one advisory-locked transaction, verifies schema/RLS/grants before commit, and sanitizes output. It has not connected to or changed production.
 - The customer-specific retention guard is deployed only to isolated Checkout staging as Worker version `aca4ebf3-410e-4a87-ab1a-80ffd00bcd73`. Staging health returned HTTP `200`; the dedicated test portal configuration and retention template IDs are bound as non-secret staging variables. A browser repeat-attempt acceptance is still pending. Production is unchanged.
+- At 09:40 MST, a read-only production promotion check confirmed Checkout Worker `ae9e52fb-c95b-46c5-8008-8ecaca8e2334` remains healthy and all seven expected encrypted secret names are present. The candidate production dry run compiled without deployment. Production retention configuration IDs, the database recovery checkpoint/migration apply, and the new Worker deployment remain intentionally absent pending final approval.
 - Discord `#daily-free-play` contains canonical record `20260912-148-X` (Bijan Robinson over 29.5 receiving yards, -140). A dedicated website-publication credential is now encrypted independently in Render and Cloudflare. The owner-approved text-only synchronization returned `201`, the KV current endpoint returned `200`, and the live public page rendered the same Bijan selection. No Discord or X action occurred during this repair.
 - A controlled manual audit checked one recent `@CappersUSA` X candidate through Luna with a one-candidate cap and `--no-discord`. It was held as `SOURCE_EXTRACTED`; no member or Discord publication occurred.
 - Commit `f9b2141` is deployed on Render. It contains the exact Bijan production formatting regression fixture and formatter corrections for duplicated `YDs`/`Yards` terms, a repeated shorthand selection bullet, and the dangling URL-dependent clause.
