@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   reconcile:
+    if: github.ref != 'refs/heads/codex/audit-membership-foundation'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -36,3 +37,84 @@ jobs:
         run: npm ci
       - name: Import audited OpenAI usage and cost snapshots
         run: node scripts/sync-openai-usage.mjs
+
+  one-time-production-backup:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/audit-membership-foundation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPECTED_PROJECT_REF: mpajyubbnnsdpgdizvht
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      BACKUP_KEY: ${{ secrets.PRODUCTION_BACKUP_KEY }}
+      PGCONNECT_TIMEOUT: "15"
+    steps:
+      - name: Validate required secrets and production target
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          test -n "${DATABASE_URL:-}" || { echo "DATABASE_URL is missing" >&2; exit 1; }
+          test -n "${BACKUP_KEY:-}" || { echo "PRODUCTION_BACKUP_KEY is missing" >&2; exit 1; }
+          case "$DATABASE_URL" in
+            *"$EXPECTED_PROJECT_REF"*) ;;
+            *) echo "Refusing backup: DATABASE_URL is not bound to the expected production project" >&2; exit 1 ;;
+          esac
+          case "$DATABASE_URL" in
+            *"sslmode=require"*) ;;
+            *) echo "Refusing backup: encrypted PostgreSQL transport is not required by DATABASE_URL" >&2; exit 1 ;;
+          esac
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Create, encrypt, and verify logical backup
+        id: backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          mkdir -p artifacts
+          created_at="$(date -u +%Y%m%dT%H%M%SZ)"
+          plain="$(mktemp --tmpdir kbh-production-${created_at}.XXXXXX.dump)"
+          encrypted="artifacts/kbh-production-${created_at}.dump.enc"
+          restored="$(mktemp --tmpdir kbh-production-restore-check-${created_at}.XXXXXX.dump)"
+          cleanup() {
+            if command -v shred >/dev/null 2>&1; then
+              shred -u "$plain" "$restored" 2>/dev/null || true
+            else
+              rm -f "$plain" "$restored"
+            fi
+          }
+          trap cleanup EXIT
+
+          pg_dump --dbname="$DATABASE_URL" --format=custom --no-owner --no-privileges --file="$plain"
+          pg_restore --list "$plain" >/dev/null
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 600000 -md sha256 \
+            -in "$plain" -out "$encrypted" -pass env:BACKUP_KEY
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 \
+            -in "$encrypted" -out "$restored" -pass env:BACKUP_KEY
+          pg_restore --list "$restored" >/dev/null
+
+          sha256sum "$encrypted" > "${encrypted}.sha256"
+          cat > artifacts/README.txt <<EOF
+          Kobe's Betting Hub encrypted production Supabase logical backup
+          Project: ${EXPECTED_PROJECT_REF}
+          Created (UTC): ${created_at}
+          Format before encryption: PostgreSQL custom archive
+          Encryption: AES-256-CBC, PBKDF2-HMAC-SHA256, 600000 iterations
+          Verification: decrypted archive passed pg_restore --list
+          Key location: GitHub Actions secret PRODUCTION_BACKUP_KEY and the operator's macOS Keychain
+          EOF
+          echo "created_at=$created_at" >> "$GITHUB_OUTPUT"
+
+      - name: Upload encrypted backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kbh-production-supabase-${{ steps.backup.outputs.created_at }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
