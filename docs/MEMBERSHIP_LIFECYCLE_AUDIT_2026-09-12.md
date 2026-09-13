@@ -2,7 +2,7 @@
 
 Audit opened: 2026-09-12 18:34 MST
 
-Latest staging verification: 2026-09-13 03:46 MST
+Latest staging verification: 2026-09-13 09:04 MST
 
 Scope: Stripe Checkout and Customer Portal, Discord OAuth and paid-role synchronization, Supabase membership persistence, webhook behavior, and scheduled reconciliation. All transaction and entitlement mutations in this audit used isolated test resources. Production was not changed, no real money moved, and nothing was published to Discord or X.
 
@@ -15,7 +15,7 @@ The intended authentication and billing split is now verified through terminal c
 - Supabase durably maps the Stripe customer/subscription to the Discord user and stores webhook, membership, and outbound API audit events.
 - Discord membership roles are derived entitlements. Stripe subscription state is authoritative.
 
-One dedicated test identity completed Checkout, Discord link and guild join, paid-role grant, Discord-authenticated portal access, and cancellation. The original test subscription subsequently reached terminal `canceled`; the webhook recorded `ROLE_REMOVED`, and the Discord DELETE returned HTTP `204`. A fresh Stripe test-clock subscription then recorded `ROLE_GRANTED` and a successful Discord PUT. Migration `009` plus the current staging Worker add durable refund/dispute blocks and failed-payment handling. The remaining simulated invoice sequence and repeat-retention check are tracked in `MEMBERSHIP_TEST_CLOCK_AUDIT_2026-09-13.md`. Legal and support policy remain release blockers.
+One dedicated test identity completed Checkout, Discord link and guild join, paid-role grant, Discord-authenticated portal access, and cancellation. The original test subscription subsequently reached terminal `canceled`; the webhook recorded `ROLE_REMOVED`, and the Discord DELETE returned HTTP `204`. A fresh Stripe test-clock subscription then proved a `$8.25` one-invoice renewal, return to `$32.99`, no-refund period-end cancellation, terminal Supabase `canceled`, webhook `PROCESSED/ROLE_REMOVED`, and Discord DELETE `204`. Migration `009` plus the current staging Worker add durable refund/dispute blocks and failed-payment handling. Per-customer repeat-retention acceptance, external adverse-billing fixtures, and legal/support policy remain release gates.
 
 ## Controlled staging lifecycle — 2026-09-13
 
@@ -70,7 +70,7 @@ All four fixes are present in exact source commit `e31e234966aae3b721bc75dc0c285
 
 1. **Terms and policy are not effective.** `terms.html` publicly says “DRAFT • NOT YET EFFECTIVE” while checkout is enabled. Legal entity, jurisdiction, renewal/cancellation language, refunds, taxes, and official contact details remain unresolved.
 2. **Billing exception policy still needs production approval.** Staging now has a dedicated `invoice.payment_failed` handler plus durable refund/dispute entitlement blocks, and the Stripe staging destination listens to all eight events. Automated tests verify active-versus-past-due handling and block persistence across later subscription updates. The failed-payment grace rule and any restoration/appeal procedure remain unapproved, and isolated external fixtures still need to be retained.
-3. **The normal terminal lifecycle is verified; the retention invoice sequence remains.** The original staging subscription reached terminal `canceled`, the webhook recorded `ROLE_REMOVED`, and the Discord DELETE returned HTTP `204`. The fresh test-clock subscription has a verified role grant; applying the coupon and advancing simulated invoices await action-time financial confirmation.
+3. **The retention invoice and terminal lifecycle passed; repeat-offer enforcement remains.** Fresh test invoice `in_1UFFj1E6p9BmPii37FBFrhWg` paid `$8.25`, the next preview returned to `$32.99`, and terminal event `evt_1UFFqTE6p9BmPii3UWYNvLwv` produced Supabase `canceled`, `PROCESSED/ROLE_REMOVED`, and Discord DELETE `204`. A later authenticated portal session must still prove the same member cannot accept the retention offer twice.
 
 ### High-priority operational gaps
 
@@ -84,7 +84,7 @@ All four fixes are present in exact source commit `e31e234966aae3b721bc75dc0c285
 - Legal/business name, address, jurisdiction, and legal-review owner.
 - Official support/privacy email, escalation path, and response target.
 - Failed-payment grace period and access behavior for legally required refunds/disputes. The owner selected all sales final except where law, card-network rules, or a written exception requires otherwise.
-- One-time cancellation retention offer: 75% off the next `$32.99` invoice, then return to `$32.99/month`; coupon `VJxmdXFz` and the test portal offer are configured, while invoice and repeat-attempt behavior remain to be verified.
+- One-time cancellation retention offer: 75% off the next `$32.99` invoice, then return to `$32.99/month`; coupon `VJxmdXFz` produced one `$8.25` invoice and returned to `$32.99`, while per-customer repeat-attempt behavior remains to be verified.
 - Approved renewal disclosure, cancellation effective time, taxes, and billing descriptor.
 - Discord-account relink authority and verification procedure.
 - Membership/audit retention and deletion policy.
@@ -94,7 +94,7 @@ All four fixes are present in exact source commit `e31e234966aae3b721bc75dc0c285
 
 1. **Complete:** isolated environment, encrypted credentials, Checkout, Discord OAuth/link, guild join, role grant, portal authentication, scheduled cancellation, Supabase persistence, and versioned API-call audit.
 2. **Complete:** terminal Stripe event `evt_1UFAQCE6p9BmPii3yw1gVYX1`, Supabase `canceled`, webhook `ROLE_REMOVED`, and Discord role DELETE HTTP `204` retained for the original test subscription.
-3. **Configured; financial confirmation pending:** apply coupon `VJxmdXFz`, advance the fresh test clock, verify one discounted invoice then `$32.99`, test a second cancellation attempt, decline, and prove terminal removal.
+3. **Complete except repeat acceptance:** coupon `VJxmdXFz` produced one `$8.25` invoice, returned to `$32.99`, and terminal cancellation removed the role; test the same member's second authenticated portal acceptance before production promotion.
 4. **Staged in code:** failed-payment plus durable refund/dispute controls. Retain isolated external scenario evidence and add external alerts after the owner approves the grace/restoration policy.
 5. Approve and publish effective Terms, Privacy, refund, renewal, cancellation, and support language.
 6. Only after production approval, deploy the staging fixes to production and perform any separately authorized production acceptance transaction.

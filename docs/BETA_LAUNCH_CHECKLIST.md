@@ -44,7 +44,8 @@ The beta should run at least **7–14 days** and long enough to observe one real
 
 ### Still open at this status date
 
-- [ ] Finish fresh test clock `clock_1UFAPBE6p9BmPii34X93rbeb`: apply the staged retention coupon, advance through one discounted invoice and the return to `$32.99`, attempt a second redemption, decline-and-cancel, and retain the terminal event, Supabase state, API audit, and Discord role-removal evidence. Final simulated financial controls await action-time confirmation.
+- [x] Finish fresh test clock `clock_1UFAPBE6p9BmPii34X93rbeb`: coupon `VJxmdXFz` produced paid invoice `in_1UFFj1E6p9BmPii37FBFrhWg` for `$8.25`, then Stripe returned to `$32.99`; period-end cancellation produced event `evt_1UFFqTE6p9BmPii3UWYNvLwv`, Supabase `canceled`, `PROCESSED/ROLE_REMOVED`, and Discord DELETE `204`.
+- [ ] Prove the same member cannot accept the 75%-off Customer Portal retention offer twice. The completed clock proves one application lasts one invoice, not a lifetime per-customer redemption limit.
 - [ ] Approve the failed-payment grace/restoration policy and retain isolated external failed-payment/refund/dispute scenario evidence. The dedicated handler and durable entitlement blocks are implemented, deployed to staging, and covered by automated tests. Explicitly test partial versus full refunds, dispute created/won/lost/closed states, payment recovery, and either audited restoration or an approved manual exception path.
 - [ ] Apply reviewed production migrations `007`, `008`, and `009`, then deploy the tested Checkout Worker source only after final production approval.
 - [ ] Add an external owner alert for paid-without-access and reconciliation failures, or approve the manual monitoring schedule below for the limited beta.
