@@ -484,6 +484,8 @@ test('verified subscription webhooks grant and remove roles exactly once per eve
     method: 'PUT',
   });
   assert.equal(apiCallEvents.at(-1).code_commit, 'worker-version-test');
+  assert.equal(apiCallEvents.at(-1).member_id, 'discord_member');
+  assert.equal(apiCallEvents.at(-1).trigger_type, 'membership_entitlement_sync');
   assert.equal(subscriptionWrites.at(-1).cancel_at, '2027-01-15T08:00:00.000Z');
   assert.equal(subscriptionWrites.at(-1).current_period_start, '2023-11-14T22:13:20.000Z');
   assert.equal(subscriptionWrites.at(-1).current_period_end, '2027-01-15T08:00:00.000Z');
@@ -497,6 +499,8 @@ test('verified subscription webhooks grant and remove roles exactly once per eve
     path: '/api/v10/guilds/guild_test/members/discord_member/roles/role_test',
     method: 'DELETE',
   });
+  assert.equal(apiCallEvents.at(-1).member_id, 'discord_member');
+  assert.equal(apiCallEvents.at(-1).trigger_type, 'membership_entitlement_sync');
   assert.equal(webhookEvents.get('evt_test_active').status, 'PROCESSED');
   assert.equal(webhookEvents.get('evt_test_canceled').status, 'PROCESSED');
 });

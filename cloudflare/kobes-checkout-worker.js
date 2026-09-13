@@ -786,12 +786,15 @@ async function confirmCancellation(request, env, origin) {
   } catch (error) { return json({ error: error.message }, 403, origin); }
 }
 
-async function discordRequest(path, options = {}, env) {
+async function discordRequest(path, options = {}, env, auditContext = {}) {
   const operationId = crypto.randomUUID();
   const startedAt = Date.now();
   const response = await fetch(`https://discord.com/api/v10${path}`, options);
   await auditExternalCall(env, {
     service: 'discord', endpointClass: `/api/v10${path}`, method: options.method || 'GET', operationId,
+    memberId: auditContext.memberId || null,
+    workflowId: auditContext.workflowId || null,
+    triggerType: auditContext.triggerType || 'membership_request',
     providerRequestId: response.headers.get('x-request-id'),
     requestPayloadSha256: await sha256Text(options.body), responseStatus: response.status,
     outcome: response.ok ? 'SUCCEEDED' : 'HTTP_ERROR', errorClass: response.ok ? null : 'HTTP_ERROR',
@@ -807,6 +810,7 @@ async function removeMemberRole(subscription, env) {
   await discordRequest(
     `/guilds/${env.DISCORD_GUILD_ID}/members/${memberId}/roles/${env.DISCORD_MEMBER_ROLE_ID}`,
     { method: 'DELETE', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }, env,
+    { memberId, triggerType: 'membership_entitlement_sync' },
   );
 }
 
@@ -815,6 +819,7 @@ async function grantMemberRole(memberId, env) {
   await discordRequest(
     `/guilds/${env.DISCORD_GUILD_ID}/members/${memberId}/roles/${env.DISCORD_MEMBER_ROLE_ID}`,
     { method: 'PUT', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }, env,
+    { memberId, triggerType: 'membership_entitlement_sync' },
   );
 }
 
@@ -1037,8 +1042,8 @@ async function finishDiscordConnection(request, env) {
       customerId,
       subscriptionId: subscription.id, discordUserId: user.id,
     });
-    await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) }, env);
-    await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, { method: 'PUT', headers: botHeaders }, env);
+    await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) }, env, { memberId: user.id, triggerType: 'discord_membership_link' });
+    await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, { method: 'PUT', headers: botHeaders }, env, { memberId: user.id, triggerType: 'discord_membership_link' });
     return redirect(`${siteOrigin(env)}${SITE_PATH}/membership.html?checkout=connected`);
   } catch (error) {
     return new Response(error.message || 'Discord connection failed.', { status: 400 });
