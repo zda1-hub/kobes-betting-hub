@@ -18,6 +18,7 @@ Scope: isolated Stripe test mode, Supabase staging `ctqmksvfqrysomvckqrm`, Disco
 | Retention offer | Coupon `VJxmdXFz`; portal config `bpc_1UF9gPE6p9BmPii3pI6NPPAn` | `KBH 75% Retention — One Invoice`, 75% off once; visible in the test Customer Portal cancellation configuration |
 | Discounted renewal | Invoice `in_1UFFj1E6p9BmPii37FBFrhWg`; invoice number `Q4HWODHY-0002` | Paid `$8.25` in Stripe test mode; the discount then disappeared and the following invoice preview returned to `$32.99` |
 | Fresh terminal cancellation | Subscription `sub_1UFATvE6p9BmPii3SBESa2O0`; event `evt_1UFFqTE6p9BmPii3UWYNvLwv` | Stripe and Supabase `canceled`; webhook `PROCESSED/ROLE_REMOVED`; Discord role DELETE HTTP `204` / `SUCCEEDED` |
+| Repeat-offer test subscription | Subscription `sub_1UFGmRE6p9BmPii35bC5Oteh`; invoice `in_1UFGmRE6p9BmPii3DqarxioC` | Created on the same isolated customer at 10:01 MST; Stripe status `Active`; first monthly invoice paid `$32.99` with test Visa ending `4242`; automatic tax disabled because the fixture has no billing address |
 | Production read-only smoke | `npm run smoke:production`, rerun 2026-09-13 09:04 MST | 5/5 passed: Checkout health, Publisher health, current Free Pick API, public Free Pick page, and client asset |
 | Automated regression | Full repository suite | 162 passed, 0 failed; `git diff --check` passed |
 | Non-public pick path | Controlled end-to-end test fixture | Luna-shaped extraction, ESPN validation, approval/public copy equality, canonical log, grade, recap, X copy, and Trends all passed without sending a public post |
@@ -35,7 +36,9 @@ With action-time authorization, the test coupon was applied to `sub_1UFATvE6p9Bm
 
 This proves the discount amount, one-invoice duration, return to full price, no-refund period-end cancellation, terminal persistence, and entitlement removal. It does **not** prove that the same member cannot accept the portal retention offer a second time in a later cancellation session. Coupon `duration=once` limits one application to one invoice; the remaining release control is an authenticated Customer Portal repeat-acceptance test or an independently persisted per-member redemption guard. The earlier Discord-authenticated Customer Portal path remains verified, but it could not be reopened unattended for this fresh Dashboard-created test subscription.
 
-The test fixtures remain isolated and canceled so the recorded evidence stays inspectable. Audit rows must be preserved; fixture deletion is optional cleanup and requires a separate destructive-action confirmation.
+At 10:01 MST, a new `$32.99` monthly test subscription (`sub_1UFGmRE6p9BmPii35bC5Oteh`) was created on the same isolated customer to support the remaining repeat-offer acceptance test. Stripe recorded invoice `in_1UFGmRE6p9BmPii3DqarxioC` as paid and the subscription as active. No production object or real payment was involved.
+
+The test fixtures remain isolated so the recorded evidence stays inspectable. The earlier lifecycle subscription is canceled; the new repeat-offer subscription is active in test mode. Audit rows must be preserved; cancellation or fixture deletion requires a separate destructive/financial action-time confirmation.
 
 ## Production promotion gate
 
