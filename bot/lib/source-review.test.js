@@ -1,6 +1,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickApprovalEmbed, buildSourcePickEmbed, sourceCapperName, sourceEvidence, sourceTerms } = require('./source-review');
+const {
+  approvalCopySha256,
+  assertApprovalCopyMatches,
+  assertCompleteWriteup,
+  assertFreePickEligible,
+  assertPublishableExtraction,
+  buildSourcePickApprovalEmbed,
+  buildSourcePickEmbed,
+  independentWriteupPacket,
+  sourceCapperName,
+  sourceEvidence,
+  sourceTerms,
+  writeupDescription
+} = require('./source-review');
 
 const packet = {
   source: { handle: 'ExampleSource', media_urls: ['https://example.com/pick.png'] },
@@ -537,4 +550,41 @@ test('formats a reversed player prop with the player first', () => {
     analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, plays: [{ selection: 'Over 17.5 Bryan Woo Outs', player_name: 'Bryan Woo', line: '17.5', odds_american: '-171', units: '' }] } }
   };
   assert.equal(buildSourcePickEmbed(reversed, 'PAID PICK').description.split('\n')[0], 'Bryan Woo Over 17.5 Outs (-171)');
+});
+
+test('does not duplicate structured odds already present in the selection', () => {
+  const withOdds = {
+    ...packet,
+    analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, selection: 'George Pickens over 59.5 receiving yards -115', player_name: 'George Pickens', line: '59.5', odds_american: '-115', plays: [] } }
+  };
+  assert.equal(buildSourcePickEmbed(withOdds, 'PAID PICK').description.split('\n')[0], 'George Pickens over 59.5 receiving yards -115');
+});
+
+test('locks a four-to-eight point writeup and detects approval drift', () => {
+  const researched = independentWriteupPacket({
+    ...packet,
+    approval: {},
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        source_claims: packet.analysis.extraction.source_claims.slice(0, 4)
+      }
+    }
+  });
+  assert.doesNotThrow(() => assertCompleteWriteup(researched));
+  const copy = writeupDescription(researched);
+  researched.approval.exact_final_copy = copy;
+  researched.approval.exact_final_copy_sha256 = approvalCopySha256(copy);
+  assert.equal(assertApprovalCopyMatches(researched), copy);
+  researched.analysis.extraction.source_claims[0] = 'Changed after approval';
+  assert.throws(() => assertApprovalCopyMatches(researched), /changed after approval/);
+});
+
+test('holds a thin writeup instead of padding or publishing it', () => {
+  const thin = independentWriteupPacket({
+    ...packet,
+    analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, source_claims: ['One verified fact'] } }
+  });
+  assert.throws(() => assertCompleteWriteup(thin), /4–8 verified/);
 });

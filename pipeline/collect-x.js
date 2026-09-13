@@ -12,7 +12,18 @@ const {
 const { auditedFetch } = require('./api-client');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { isSupportedSportPick, upcomingEventStatuses } = require('../bot/lib/event-timing');
-const { buildSourcePickApprovalEmbed, monitoredTermsPacket, reviewButtons, sourceCapperName, sourceEvidence, visiblePlays } = require('../bot/lib/source-review');
+const { fillMissingEvidence } = require('../bot/lib/espn-pick-research');
+const {
+  approvalCopySha256,
+  assertCompleteWriteup,
+  buildSourcePickApprovalEmbed,
+  independentWriteupPacket,
+  reviewButtons,
+  sourceCapperName,
+  sourceEvidence,
+  visiblePlays,
+  writeupDescription
+} = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
@@ -479,9 +490,6 @@ async function discordChannelLabel(channelId, fallback) {
 }
 
 async function approvalButtonLabels(packet) {
-  const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED'
-    && packet.source?.publish_mode !== 'terms_only'
-    && process.env.X_SOURCE_PUBLISHING_ENABLED !== 'true';
   const free = await discordChannelLabel(process.env.FREE_PICK_CHANNEL_ID, '#daily-free-play');
   const paidChannelId = packet.source?.publish_mode === 'terms_only'
     ? (process.env.EXCLUSIVES_CHANNEL_ID || '1539055850075852911')
@@ -489,9 +497,9 @@ async function approvalButtonLabels(packet) {
   const paidFallback = packet.source?.publish_mode === 'terms_only' ? '#exclusives' : '#paid-sport';
   const paid = await discordChannelLabel(paidChannelId, paidFallback);
   return {
-    freeDisabled: monitoringOnly,
-    freeLabel: monitoringOnly ? 'Free needs Kobe writeup' : `Post to ${free}`,
-    paidLabel: monitoringOnly ? `Post terms to ${paid}` : `Post to ${paid}`
+    freeDisabled: packet.source?.publish_mode === 'terms_only',
+    freeLabel: packet.source?.publish_mode === 'terms_only' ? 'Free unavailable for exclusives' : `Post to ${free}`,
+    paidLabel: `Post to ${paid}`
   };
 }
 
@@ -520,10 +528,15 @@ async function notifyApprovalChannel(packet) {
     const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED'
       && packet.source?.publish_mode !== 'terms_only'
       && process.env.X_SOURCE_PUBLISHING_ENABLED !== 'true';
-    if (!monitoringOnly && packet.source?.publish_mode !== 'terms_only' && sourceEvidence(packet).length < 3) {
-      throw new Error('A regular writeup must include at least three clean, relevant breakdown points before approval.');
+    const presentationPacket = monitoringOnly ? independentWriteupPacket(packet) : packet;
+    if (packet.source?.publish_mode !== 'terms_only') {
+      assertCompleteWriteup(presentationPacket);
+      const exactFinalCopy = writeupDescription(presentationPacket);
+      packet.approval.exact_final_copy = exactFinalCopy;
+      packet.approval.exact_final_copy_sha256 = approvalCopySha256(exactFinalCopy);
+      presentationPacket.approval = { ...packet.approval };
     }
-    embeds = [buildSourcePickApprovalEmbed(monitoringOnly ? monitoredTermsPacket(packet) : packet, monitoringOnly ? 'PAID PICK' : 'FREE PICK')];
+    embeds = [buildSourcePickApprovalEmbed(presentationPacket, 'APPROVED PICK')];
   } catch (error) {
     // Kobe's review room is for decisions, not diagnostics. Retain the held
     // packet in durable storage for audit, but do not send an unpublishable
@@ -658,7 +671,9 @@ async function queueSplitPlayPackets(packet, outputPath) {
       // removing them here would create the incomplete cards Kobe has been
       // seeing.
       source_claims: Array.isArray(extraction.source_claims) ? [...extraction.source_claims] : [],
-      supporting_notes: Array.isArray(extraction.supporting_notes) ? [...extraction.supporting_notes] : []
+      supporting_notes: Array.isArray(play.supporting_notes)
+        ? [...play.supporting_notes]
+        : (Array.isArray(extraction.supporting_notes) ? [...extraction.supporting_notes] : [])
     };
     const splitPath = path.join(path.dirname(outputPath), `${baseId}-${suffix}.json`);
     single.discord_review_message_id = await notifyApprovalChannel(single);
@@ -876,6 +891,17 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
         : [];
       if (packet.source?.publish_mode !== 'terms_only' && extractedPlays.length > 1 && validPlayStatuses.length > 0) {
         const validPlays = validPlayStatuses.map((result) => result.play);
+        for (let index = 0; index < validPlayStatuses.length; index += 1) {
+          const status = validPlayStatuses[index];
+          const single = structuredClone(packet);
+          single.analysis.extraction = { ...packet.analysis.extraction, ...status.play, plays: [status.play] };
+          await fillMissingEvidence(single, {
+            timing: { status: 'UPCOMING', playStatuses: [status], athlete: status.athlete }
+          });
+          status.play.supporting_notes = Array.isArray(single.analysis.extraction.supporting_notes)
+            ? single.analysis.extraction.supporting_notes
+            : [];
+        }
         packet.analysis.extraction.plays = validPlays;
         const validStarts = validPlayStatuses
           .map((result) => Date.parse(result.eventStart || ''))
@@ -921,6 +947,8 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
         handledPostIds.add(post.id);
         continue;
       }
+
+      await fillMissingEvidence(packet, { timing });
 
       await recordGateDecision(packet, { code: 'ELIGIBLE', reason: 'Source extraction and event gates passed.', status: 'ELIGIBLE' });
       acceptedPackets.push({ packet, postId: String(post.id), source, post });

@@ -1,4 +1,8 @@
 const { ButtonStyle, ComponentType } = require('discord.js');
+const crypto = require('node:crypto');
+
+const MIN_WRITEUP_EVIDENCE = 4;
+const MAX_WRITEUP_EVIDENCE = 8;
 
 function visible(value, fallback = 'Not shown') {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
@@ -100,9 +104,10 @@ function publicPlayTerm({ terms, selection, playerName, line, oddsAmerican, even
     : baseSelection;
   const cleanBase = base.replace(/\s{2,}/g, ' ').trim();
   const includesLine = line && normalizedText(cleanBase).includes(normalizedText(line));
+  const includesOdds = oddsAmerican && normalizedText(cleanBase).includes(normalizedText(oddsAmerican));
   const requiresEvent = /^(?:over|under|o\s*\/\s*u|nrfi|yrfi|btts|yes|no)\b/i.test(cleanBase);
   const eventContext = requiresEvent && event ? `— ${event}` : '';
-  return [cleanBase, includesLine ? '' : line, eventContext, oddsAmerican ? `(${oddsAmerican})` : '']
+  return [cleanBase, includesLine ? '' : line, eventContext, oddsAmerican && !includesOdds ? `(${oddsAmerican})` : '']
     .filter(Boolean)
     .join(' ');
 }
@@ -121,6 +126,18 @@ function monitoredTermsPacket(packet) {
     source: { ...packet.source, publish_mode: 'monitored_terms' },
     approval: { ...packet.approval, image_url: null }
   };
+}
+
+function independentWriteupPacket(packet) {
+  return {
+    ...packet,
+    source: { ...packet.source, publish_mode: 'independent_writeup' },
+    approval: { ...packet.approval, image_url: null }
+  };
+}
+
+function isIndependentWriteup(packet) {
+  return packet.source?.publish_mode === 'independent_writeup';
 }
 
 function isPlayerProp(play) {
@@ -265,7 +282,7 @@ function sourceEvidence(packet) {
     .filter(Boolean)
     .filter((claim) => !/https?:\/\//i.test(claim)))]
     .filter((claim) => isUsefulSupport(claim, pickTerms, packet))
-    .slice(0, 8);
+    .slice(0, MAX_WRITEUP_EVIDENCE);
 }
 
 function publicPickTerms(packet) {
@@ -296,6 +313,40 @@ function writeupDescription(packet) {
   ].join('\n');
 }
 
+function approvalCopySha256(copy) {
+  return crypto.createHash('sha256').update(String(copy || '')).digest('hex');
+}
+
+function lockApprovalCopy(packet) {
+  const copy = writeupDescription(packet);
+  packet.approval = {
+    ...(packet.approval || {}),
+    exact_final_copy: copy,
+    exact_final_copy_sha256: approvalCopySha256(copy)
+  };
+  return copy;
+}
+
+function assertApprovalCopyMatches(packet) {
+  const locked = packet.approval?.exact_final_copy;
+  const lockedHash = packet.approval?.exact_final_copy_sha256;
+  if (!locked || !lockedHash) {
+    throw new Error('This card predates the locked writeup format. Wait for the bot to refresh it before publishing.');
+  }
+  const rendered = writeupDescription(packet);
+  if (locked !== rendered || approvalCopySha256(locked) !== lockedHash) {
+    throw new Error('The pick changed after approval. A fresh approval card is required; nothing was published.');
+  }
+  return locked;
+}
+
+function assertCompleteWriteup(packet) {
+  const count = sourceEvidence(packet).length;
+  if (count < MIN_WRITEUP_EVIDENCE || count > MAX_WRITEUP_EVIDENCE) {
+    throw new Error(`A writeup must contain ${MIN_WRITEUP_EVIDENCE}–${MAX_WRITEUP_EVIDENCE} verified, relevant evidence points.`);
+  }
+}
+
 // A consistent display rating for writeups. It is a formatting score based on
 // the amount of visible support in the approved source, not a prediction or a
 // guarantee of the result.
@@ -312,7 +363,7 @@ function sourceCapperName(packet) {
   // Monitoring-only cards intentionally publish only wager terms. Even when
   // extraction found a signature, do not expose or imply attribution without
   // an explicit reuse decision for that source.
-  if (packet.source?.publish_mode === 'monitored_terms') return '';
+  if (packet.source?.publish_mode === 'monitored_terms' || isIndependentWriteup(packet)) return '';
   const extractedName = packet.analysis?.extraction?.source_capper_name;
   if (visible(extractedName, '')) {
     const name = extractedName.trim();
@@ -344,7 +395,7 @@ function assertPublishableExtraction(packet) {
   if (packet.analysis?.status !== 'SOURCE_EXTRACTED' || !extraction?.is_pick_candidate) {
     throw new Error('This source card is not a verified pick candidate. Reject it or finish manual review first.');
   }
-  if (!sourceCapperName(packet) && packet.source?.publish_mode !== 'monitored_terms') {
+  if (!sourceCapperName(packet) && packet.source?.publish_mode !== 'monitored_terms' && !isIndependentWriteup(packet)) {
     throw new Error('The original capper is not clearly visible, so this card cannot be published automatically.');
   }
   if (sourceTerms(packet).length === 0) {
@@ -396,7 +447,7 @@ function buildSourcePickEmbed(packet, destinationLabel) {
   } else {
     // Kobe's writeup layout: player prop, plain factual bullet points, and an
     // optional approved player image below it.
-    embed.description = writeupDescription(packet);
+    embed.description = packet.approval?.exact_final_copy || writeupDescription(packet);
     // Never republish a source post graphic. A player image is optional and
     // must be supplied specifically for this approved publication.
     const imageUrl = packet.approval?.image_url;
@@ -427,4 +478,29 @@ function reviewButtons(pickId, { testOnly = false, freeDisabled = false, freeLab
   }];
 }
 
-module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickApprovalEmbed, buildSourcePickEmbed, hasNamedPlayer, isPlayerProp, isTermsOnlyMode, monitoredTermsPacket, presentationConfidence, publicPickTerms, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays, writeupDescription };
+module.exports = {
+  MAX_WRITEUP_EVIDENCE,
+  MIN_WRITEUP_EVIDENCE,
+  approvalCopySha256,
+  assertApprovalCopyMatches,
+  assertCompleteWriteup,
+  assertFreePickEligible,
+  assertPublishableExtraction,
+  buildSourcePickApprovalEmbed,
+  buildSourcePickEmbed,
+  hasNamedPlayer,
+  independentWriteupPacket,
+  isIndependentWriteup,
+  isPlayerProp,
+  isTermsOnlyMode,
+  lockApprovalCopy,
+  monitoredTermsPacket,
+  presentationConfidence,
+  publicPickTerms,
+  reviewButtons,
+  sourceCapperName,
+  sourceEvidence,
+  sourceTerms,
+  visiblePlays,
+  writeupDescription
+};

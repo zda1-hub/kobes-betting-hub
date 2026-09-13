@@ -10,7 +10,22 @@ const { freePickRecapRows } = require('./lib/free-recap');
 const { gradePickFromEspn } = require('./lib/espn-grading');
 const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
-const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, isTermsOnlyMode, monitoredTermsPacket, sourceCapperName, sourceEvidence } = require('./lib/source-review');
+const {
+  assertApprovalCopyMatches,
+  assertCompleteWriteup,
+  assertFreePickEligible,
+  assertPublishableExtraction,
+  buildSourcePickApprovalEmbed,
+  buildSourcePickEmbed,
+  independentWriteupPacket,
+  isTermsOnlyMode,
+  reviewButtons,
+  sourceCapperName,
+  sourceEvidence,
+  writeupDescription,
+  approvalCopySha256
+} = require('./lib/source-review');
+const { fillMissingEvidence } = require('./lib/espn-pick-research');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { publishApprovedFreePickToSite } = require('./lib/free-pick-site');
 const { reviewQueuePath } = require('./lib/review-queue-path');
@@ -27,6 +42,7 @@ const {
   recordPublicationAttempt,
   recordPublicationResult,
   recordRecapRun,
+  recordWorkflowEvent,
   readAuditTimeline
 } = require('../pipeline/audit-store');
 
@@ -1219,7 +1235,11 @@ async function handleSourceReviewButton(interaction) {
     approval.decision = 'REJECTED';
     packet.status = 'REJECTED';
     packet.approval = approval;
-    await recordApprovalAction(packet, { action: 'reject', actorId: interaction.user.id, status: 'REJECTED' });
+    const claimed = await recordApprovalAction(packet, { action: 'reject', actorId: interaction.user.id, status: 'REJECTED' });
+    if (!claimed) {
+      await interaction.editReply('This approval was already handled. No new action was taken.');
+      return;
+    }
     await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
     await closeApprovalCard(interaction, { rejected: true });
     await interaction.editReply('Rejected. No member-facing post was made.');
@@ -1235,17 +1255,15 @@ async function handleSourceReviewButton(interaction) {
     const configuredTermsOnly = packet.source?.publish_mode === 'terms_only';
     const sourcePostingEnabled = process.env.X_SOURCE_PUBLISHING_ENABLED === 'true';
     const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED' && !configuredTermsOnly && !sourcePostingEnabled;
-    if (monitoringOnly && action === 'free') {
-      throw new Error('This source is approved for monitoring only. A Free Pick needs Kobe’s original writeup or independently verified breakdown; the paid button can publish the wager terms without copying source wording or media.');
-    }
-    const publicationPacket = monitoringOnly ? monitoredTermsPacket(packet) : packet;
+    const publicationPacket = monitoringOnly ? independentWriteupPacket(packet) : packet;
     const termsOnly = isTermsOnlyMode(publicationPacket);
     assertPublishableExtraction(publicationPacket);
     if (!isSupportedSportPick(publicationPacket)) {
       throw new Error('Only picks explicitly identified as a supported sport can be published.');
     }
-    if (!termsOnly && sourceEvidence(publicationPacket).length < 3) {
-      throw new Error('This regular card does not contain at least three clean, relevant breakdown points. Reject it and wait for a corrected card.');
+    if (!termsOnly) {
+      assertCompleteWriteup(publicationPacket);
+      assertApprovalCopyMatches(publicationPacket);
     }
     const timing = await upcomingEventStatus(publicationPacket);
     trace(`event verification ${timing.status}`);
@@ -1267,11 +1285,15 @@ async function handleSourceReviewButton(interaction) {
     const label = action === 'free' ? 'FREE PICK' : 'PAID PICK';
     const extraction = publicationPacket.analysis.extraction;
     const firstPlay = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;
-    await recordApprovalAction(publicationPacket, {
+    const claimed = await recordApprovalAction(publicationPacket, {
       action,
       actorId: interaction.user.id,
       status: 'APPROVED_PENDING_PUBLICATION'
     });
+    if (!claimed) {
+      await interaction.editReply('This approval was already handled. No duplicate post was made.');
+      return;
+    }
     trace('approval audit recorded');
     const publishedMessage = await postAndLogOfficialPick({
       channel,
@@ -1420,8 +1442,91 @@ async function destinationFor(interaction, fallbackChannelId, sport = null) {
   return channel;
 }
 
-client.once(Events.ClientReady, (readyClient) => {
+async function channelLabel(channelId, fallback) {
+  if (!channelId) return fallback;
+  try {
+    const channel = await client.channels.fetch(channelId);
+    return channel?.name ? `#${channel.name}` : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function refreshPendingResearchApprovals() {
+  if (!pickApprovalChannelId) return;
+  const date = pacificClock().date;
+  const directory = path.join(reviewQueueRoot, date);
+  let files;
+  try {
+    files = (await fs.readdir(directory)).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  const approvalChannel = await client.channels.fetch(pickApprovalChannelId);
+  if (!approvalChannel?.isTextBased() || !approvalChannel.messages) return;
+  let refreshed = 0;
+  for (const file of files) {
+    const packetPath = path.join(directory, file);
+    let packet;
+    try {
+      packet = JSON.parse(await fs.readFile(packetPath, 'utf8'));
+    } catch {
+      continue;
+    }
+    const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED'
+      && packet.source?.publish_mode !== 'terms_only'
+      && process.env.X_SOURCE_PUBLISHING_ENABLED !== 'true';
+    if (!monitoringOnly || !packet.discord_review_message_id || packet.approval?.decision) continue;
+    const research = await fillMissingEvidence(packet);
+    if (!research.complete) {
+      console.log(`Could not refresh ${packet.pick_id} into the locked writeup format: ${research.reason || 'insufficient verified evidence'}.`);
+      continue;
+    }
+    const presentationPacket = independentWriteupPacket(packet);
+    const exactFinalCopy = writeupDescription(presentationPacket);
+    packet.approval = {
+      ...(packet.approval || {}),
+      exact_final_copy: exactFinalCopy,
+      exact_final_copy_sha256: approvalCopySha256(exactFinalCopy)
+    };
+    presentationPacket.approval = { ...packet.approval };
+    const sport = normalizedSport(packet);
+    const paidChannelId = sport ? sportChannelMap.get(sport) : undefined;
+    const labels = {
+      freeLabel: `Post to ${await channelLabel(freePickChannelId, '#daily-free-play')}`,
+      paidLabel: `Post to ${await channelLabel(paidChannelId, '#paid-sport')}`
+    };
+    try {
+      const message = await approvalChannel.messages.fetch(packet.discord_review_message_id);
+      await message.edit({
+        embeds: [buildSourcePickApprovalEmbed(presentationPacket, 'APPROVED PICK')],
+        components: reviewButtons(packet.pick_id, labels)
+      });
+      packet.status = 'READY_FOR_APPROVAL';
+      packet.approval_ready = true;
+      await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+      await recordWorkflowEvent(packet, {
+        eventType: 'APPROVAL_CARD_RESEARCH_REFRESHED',
+        beforeState: 'PENDING_APPROVAL',
+        afterState: 'PENDING_APPROVAL',
+        details: { evidence_count: sourceEvidence(presentationPacket).length, espn_calls: research.espnCalls }
+      });
+      refreshed += 1;
+    } catch (error) {
+      console.error(`Could not edit approval card ${packet.pick_id}:`, error);
+    }
+  }
+  if (refreshed) console.log(`Refreshed ${refreshed} pending approval card(s) into the locked evidence format.`);
+}
+
+client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  try {
+    await refreshPendingResearchApprovals();
+  } catch (error) {
+    console.error('Unable to refresh pending approval research:', error);
+  }
   startXMonitor();
   startTrendsSchedule();
   startTrendInbox();

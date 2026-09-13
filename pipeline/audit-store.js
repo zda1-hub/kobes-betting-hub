@@ -278,9 +278,11 @@ async function recordApprovalCard(packet, { channelId, messageId, payload }) {
 
 async function recordApprovalAction(packet, { action, actorId, status }) {
   const candidateId = await candidateIdFor(packet);
-  if (!candidateId) return;
-  await query(`UPDATE approval_cards SET status=$2, action=$3, action_actor_id=$4, action_at=$5 WHERE candidate_id=$1 AND status='PENDING'`, [candidateId, status, action, actorId, nowIso()]);
+  if (!candidateId) return !auditConfigured();
+  const result = await query(`UPDATE approval_cards SET status=$2, action=$3, action_actor_id=$4, action_at=$5 WHERE candidate_id=$1 AND status='PENDING' RETURNING id`, [candidateId, status, action, actorId, nowIso()]);
+  if (!result?.rows?.length) return false;
   await recordWorkflowEvent(packet, { eventType: 'APPROVAL_ACTION', actorType: 'discord_user', actorId, beforeState: 'PENDING_APPROVAL', afterState: status, details: { action } });
+  return true;
 }
 
 async function recordPublicationAttempt(packet, { entry, payload }) {

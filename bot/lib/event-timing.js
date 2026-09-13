@@ -122,7 +122,7 @@ function athleteMatchesName(athlete, playerName) {
 
 async function verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl) {
   const playerNames = extractedPlayerNames(packet);
-  if (!playerNames.length) return null;
+  if (!playerNames.length) return { athletes: [] };
 
   const competitors = event.competitions?.[0]?.competitors || [];
   const teamIds = [...new Set(competitors.map((competitor) => competitor.team?.id).filter(Boolean))];
@@ -146,14 +146,16 @@ async function verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl) {
     const rosters = await Promise.all(responses.map((response) => response.json()));
     const athletes = rosters.flatMap(rosterAthletes);
 
-    const missing = playerNames.find((playerName) => !athletes.some((athlete) => athleteMatchesName(athlete, playerName)));
+    const matchedAthletes = playerNames.map((playerName) => athletes.find((athlete) => athleteMatchesName(athlete, playerName)));
+    const missingIndex = matchedAthletes.findIndex((athlete) => !athlete);
+    const missing = missingIndex >= 0 ? playerNames[missingIndex] : null;
     if (missing) {
       return {
         status: 'PLAYER_NOT_ON_EVENT_TEAM',
         reason: `${missing} is not listed on either team in the matched ESPN event.`
       };
     }
-    return null;
+    return { athletes: matchedAthletes, athlete: matchedAthletes[0] || null };
   } catch {
     return { status: 'UNVERIFIABLE', reason: 'ESPN roster verification was unavailable.' };
   }
@@ -218,7 +220,7 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
       continue;
     }
     const playerVerification = await verifyPlayersOnEventTeams(playPackets[index], event, leaguePath, fetchImpl);
-    if (playerVerification) {
+    if (playerVerification?.status) {
       playStatuses.push({
         play: plays[index],
         ...playerVerification,
@@ -231,14 +233,24 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
       play: plays[index],
       status: start.getTime() > now.getTime() ? 'UPCOMING' : 'STARTED_OR_FINISHED',
       eventStart: start.toISOString(),
-      source: 'ESPN schedule'
+      source: playerVerification?.athlete ? 'ESPN schedule and roster' : 'ESPN schedule',
+      seasonYear: Number(event.season?.year) || start.getUTCFullYear(),
+      athlete: playerVerification?.athlete || null,
+      athletes: playerVerification?.athletes || []
     });
   }
 
   const firstFailure = playStatuses.find((result) => result.status !== 'UPCOMING');
   if (firstFailure) return { ...firstFailure, playStatuses };
   const earliestStart = new Date(Math.min(...playStatuses.map((result) => Date.parse(result.eventStart))));
-  return { status: 'UPCOMING', eventStart: earliestStart.toISOString(), source: 'ESPN schedule', playStatuses };
+  return {
+    status: 'UPCOMING',
+    eventStart: earliestStart.toISOString(),
+    source: 'ESPN schedule',
+    seasonYear: playStatuses[0]?.seasonYear || earliestStart.getUTCFullYear(),
+    athlete: playStatuses[0]?.athlete || null,
+    playStatuses
+  };
 }
 
 async function upcomingEventStatus(packet, options = {}) {
