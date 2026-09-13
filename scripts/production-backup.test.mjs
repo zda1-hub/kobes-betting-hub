@@ -29,6 +29,7 @@ test('production backup is locked to the production project and encrypted before
   assert.match(workflow, /DATABASE_URL: \$\{\{ secrets\.DATABASE_URL \}\}/);
   assert.match(workflow, /PRODUCTION_BACKUP_KEY: \$\{\{ secrets\.PRODUCTION_BACKUP_KEY \}\}/);
   assert.match(workflow, /actions\/upload-artifact@v4/);
+  assert.match(workflow, /postgresql-client-17/);
   assert.match(workflow, /retention-days: 3/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
 });
