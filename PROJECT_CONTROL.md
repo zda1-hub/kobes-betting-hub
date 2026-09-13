@@ -2,7 +2,7 @@
 
 **Status:** Active production system with unresolved operational and compliance risks
 
-**Last verified:** 2026-09-12 19:04 MST
+**Last verified:** 2026-09-12 19:18 MST
 
 **Production runtime change set:** repository/Render auto-deploy from `main`; Checkout Worker `0cf0d235-aa26-432c-8478-df6239efed48`; Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365`; public-site Worker `5fcc4678-1b88-4b09-8616-2203db498b1b`
 
@@ -24,7 +24,7 @@ The owners do not need to read every repository document. The operating chat sho
 
 Kobe's Betting Hub is a paid sports-pick membership centered on Discord. It also has a public website, Stripe checkout, Discord entitlement automation, a monitored X-source pick pipeline, human approval in Discord, result grading through ESPN, recap email queues, a public Free Pick page, and optional X publishing.
 
-The system is not a single application. It currently spans GitHub, Cloudflare Workers/D1/KV, Render, Discord, Stripe, X, OpenAI, ESPN, Gmail Apps Script, and Supabase Postgres. Supabase is the shared membership and pick/API audit ledger. OpenAI provider reconciliation code is ready but requires an organization Admin API key; Apps Script and some SDK-internal calls still need equivalent records before the ledger is literally exhaustive.
+The system is not a single application. It currently spans GitHub, Cloudflare Workers/D1/KV, Render, Discord, Stripe, X, OpenAI, ESPN, Gmail Apps Script, and Supabase Postgres. Supabase is the shared membership and pick/API audit ledger. OpenAI provider reconciliation is live through a dedicated read-only organization Admin key; Apps Script and some SDK-internal calls still need equivalent records before the ledger is literally exhaustive.
 
 ### What is definitely live
 
@@ -35,10 +35,10 @@ The system is not a single application. It currently spans GitHub, Cloudflare Wo
 - Checkout hardening prevents an existing Stripe membership or Discord identity from being silently relinked through a replayed completion URL, accepts valid Stripe signatures during secret rotation, reduces portal OAuth to `identify`, and writes exact Cloudflare Worker version IDs into API audit events. Browser retries now reuse a validated UUID as Stripe's `Idempotency-Key`, preventing duplicate Checkout Sessions from ambiguous repeat submissions.
 - Stripe Checkout creates subscriptions. After payment/trial confirmation, the customer connects Discord through OAuth and receives the configured paid-member role.
 - Stripe subscription create/update/delete webhooks maintain the Supabase membership state and reconcile Discord access. The Stripe webhook endpoint is active and subscribed to all four required event classes, including Checkout completion.
-- A Render background worker runs the Discord bot and X collector from `f9b2141`, with a 1 GB persistent disk at `/var/data`.
+- A Render background worker runs the Discord bot and X collector from `main`, with a 1 GB persistent disk at `/var/data`.
 - The production X collector is enabled for 38 configured sources. Its effective interval is 15 minutes during the configured daily Arizona window.
 - The Render environment and repository are configured for `gpt-5.6-luna` with bounded output, no reasoning, versioned pricing metadata, and reusable audited extractions.
-- The free Supabase project `kobe betting hub` is healthy. Migrations `001`–`004` are live, including `api_call_events` and `provider_usage_snapshots`; production verification found eight durable API events immediately after cutover. The Checkout Worker uses a dedicated server secret; Render uses the encrypted session-pooler connection with fail-closed audit enforcement.
+- The free Supabase project `kobe betting hub` is healthy. Migrations `001`–`004` are live, including `api_call_events` and `provider_usage_snapshots`; production verification found eight durable API events immediately after cutover. The Checkout Worker uses a dedicated server secret; Render uses the encrypted session-pooler connection with fail-closed audit enforcement. A first 48-hour OpenAI import wrote 14 hourly usage rows and three daily cost rows. Migration `005` preserves those initial project-only cost rows under the explicit `openai_costs_api_unscoped` label before new project-and-key-scoped imports are stored.
 - The publisher Cloudflare Worker reports ready, connected to X, and configured with free-tier KV Free Pick media storage. All five outbound X media/post/token call paths now append redacted, immutable D1 audit rows with status, latency, provider request ID, hashes, trigger, and Worker version; no token, OAuth code, tweet text, media, or raw response is retained.
 - `node scripts/production-smoke.mjs` performs five credential-free read-only checks covering Checkout health, Publisher health, current Free Pick shape, public Free Pick HTML, and the client asset. The first post-deploy run correctly detected KV propagation lag; the retry passed all five checks and the live page visibly rendered the Bijan pick.
 - Discord `#daily-free-play` contains canonical record `20260912-148-X` (Bijan Robinson over 29.5 receiving yards, -140). A dedicated website-publication credential is now encrypted independently in Render and Cloudflare. The owner-approved text-only synchronization returned `201`, the KV current endpoint returned `200`, and the live public page rendered the same Bijan selection. No Discord or X action occurred during this repair.
@@ -56,6 +56,7 @@ Observed output-quality evidence: the 2026-09-12 Discord screenshot shows a publ
 - All 38 X sources are approved for monitoring only and are marked `PENDING_SOURCE_TERMS`; none is marked `CONFIRMED` for reuse/publication. `X_SOURCE_PUBLISHING_ENABLED=false` now enforces that owner decision in production.
 - Render has a pooled `DATABASE_URL` and `AUDIT_DATABASE_REQUIRED=true`. The audit-aware worker completed database initialization, registered Discord commands, and logged in as Kobe Bot after deployment.
 - Provider calls from the Node collector/bot and Checkout Worker are written to Supabase with endpoint class, payload hashes, outcome, latency, provider request ID where available, and workflow references. Apps Script and Discord SDK-internal traffic remain separate gaps.
+- The read-only OpenAI organization Admin key is currently installed on the long-lived Render service to support reconciliation. It does not grant model-write or billing-write access, but it should be moved to an isolated reconciliation runtime (or removed between manual runs) because every process on that service inherits its organization-wide read scope.
 - Marketing is intentionally a future workstream, not the current priority.
 
 ## System map
@@ -192,9 +193,12 @@ Do not store bearer tokens, API keys, card data, OAuth access tokens, full webho
 
 ### Evidence found
 
-- The OpenAI Usage dashboard showed approximately **3,046 Responses and Chat Completions requests on 2026-09-12**.
-- The screenshot was filtered to **All projects**, **All API keys**, and **Last 7 days**. It therefore does not yet prove all requests came from Kobe's Betting Hub.
-- The same screenshot showed 6,121 requests, 38,006,461 input tokens, and $76.91 total spend over the selected seven-day period, plus September spend of $79.71 against a $100 budget. These are account-level observations pending export/reconciliation.
+- The OpenAI dashboard screenshot showed **3,046 Responses and Chat Completions requests on 2026-09-12**, plus 6,121 requests, 38,006,461 input tokens, and $76.91 total spend for the selected seven-day account view.
+- The organization Usage API now confirms that all 3,046 requests were made between 10:00 and 16:00 Arizona time by project `proj_8DxPJSInvFUVEZgs8KMld4rz` (`Default project`), API key `key_TDES2zUP3W9UZaej` (`Kobe Pick Monitor`), and model `gpt-5-mini-2025-08-07`.
+- Those requests consumed 5,519,913 input tokens, including 1,650,176 cached input tokens, and 7,085,809 output tokens. That is about 1,812 input and 2,326 output tokens per request.
+- The first Costs API import attributes $16.10030665 to that project for the UTC 2026-09-12 daily bucket. That initial import was grouped by project/day; the hardened sync now filters and groups new cost snapshots by the expected project and API key. The Usage API shows no other project, key, or model usage in the imported incident hours.
+- The controlled post-cutover test is separate: one `gpt-5.6-luna` request at 18:00 Arizona used 1,846 input and 554 output tokens. Its internal extraction record estimates $0.001034; the provider's UTC 2026-09-13 project cost bucket currently reports $0.00112615.
+- The first 48-hour reconciliation imported 14 hourly usage rows and three daily cost rows into Supabase. The `/organization/usage/completions`, `/organization/costs`, project-list, and project-key-list requests were themselves durably audited with successful response metadata and no secret values.
 - There were **21 pushes to `main` on 2026-09-12**. Each push triggered both GitHub Pages deployment and Render auto-deployment/restart.
 - Production monitors 38 X sources.
 - The deployed collector stores `state.json` under the application checkout, not the Render persistent disk.
@@ -204,7 +208,7 @@ Do not store bearer tokens, API keys, card data, OAuth access tokens, full webho
 
 ### Working diagnosis
 
-Frequent production deploys combined with non-durable collector state can materially amplify X and OpenAI usage. The screenshot's roughly 6,200 average input tokens per request is also consistent with expensive image-bearing or otherwise large requests, but model/API-key filters are needed before attributing it to this worker. This is a credible mechanism for the anomaly, not yet a billing-grade conclusion.
+Billing attribution is now conclusive: the incident came from the Kobe Pick Monitor key on the Default project and used the old GPT-5 Mini configuration. The six hourly buckets rose from 123 and 240 requests to 1,143 at noon Arizona, then 854, 629, and 57. Because the durable per-call database audit was deployed after the incident, the provider export cannot retroactively identify each source post. The strongest code-and-deployment diagnosis is repeated full-day rediscovery after frequent Render restarts while cursor/dedupe state was non-durable: each restart immediately collected, state was not saved until all 38 sources completed, all media posts could reach extraction before event rejection, and the old candidate cap limited accepted review packets rather than model calls. The old OpenAI path had no retry loop, so retries are not supported as the primary cause. This causal diagnosis is evidence-supported but not provable per request. The unexpectedly high 7.09 million output tokens also made output length a major cost driver; the old request set no output-token limit and always used high image detail, whereas Luna now runs with bounded output and no reasoning.
 
 ### Containment deployed
 
@@ -214,18 +218,22 @@ Frequent production deploys combined with non-durable collector state can materi
 - The local Postgres audit implementation records OpenAI request ID, response ID, tokens, latency, prompt/model/pricing versions, status, error, payload hashes, and cost estimate.
 - Identical successful source/model/prompt/input extractions can be reused instead of billed again once the audit database is active.
 - Production hard stops are `50` OpenAI requests/day, `500`/month, `$1` estimated/day, and `$15` estimated/month. The pre-call guard stops before sending the next model request when any threshold is reached.
+- The X collector now reserves from a concurrency-safe limit immediately before each OpenAI call. Production is configured for at most two new model calls per 15-minute collection run; cache hits and deterministic rejections do not consume the cap, and deferred candidates retain their old cursor for the next interval.
 - Migration `004_api_call_ledger` is live and the ledger was verified with eight production ESPN calls immediately after cutover.
-- `scripts/sync-openai-usage.mjs` can import hourly provider usage grouped by project/API key/model and daily cost grouped by project. It requires a separately authorized organization Admin API key.
+- A dedicated OpenAI organization Admin key named `Kobe Betting Hub Usage Reconciliation` (non-secret ID `key_jtBdyNxNSPYbeNCZ`) is read-only, expires 2026-12-11 19:12 MST, and is stored only as encrypted Render secret `OPENAI_ADMIN_KEY`. Its value is not stored in this repository, Supabase, terminal output, or audit records.
+- `scripts/sync-openai-usage.mjs` imported the first 48-hour provider window into Supabase: 14 usage rows and three cost rows. The hardened sync preflights the expected project/key identity, filters and validates both datasets to that pair, fetches all provider data before database writes, and correlates every provider call under one operation ID. The reconciliation calls are recorded in `api_call_events`.
 
-The Checkout Worker, Supabase configuration, durable X cursor path, Luna extraction configuration, and Render audit-aware source are live. The next normal monitoring window must provide production ledger evidence before the incident is considered fully closed.
+The incident is **contained and billing-attributed**. Final causal closure requires one normal monitoring window proving bounded production behavior in the durable per-call ledger.
 
-### Evidence needed to close the incident
+### Closure record
 
-1. Export OpenAI usage by API key/project/model/endpoint and hourly bucket, with timezone/date range.
-2. Identify the production API key/project used by Render and compare it to the dashboard's project/key filters.
-3. Reconcile usage against deploy timestamps, collector windows, source count, candidate count, and retries.
-4. Separate request count from token spend and invoiced cost.
-5. Record the root cause, affected period, actual cost, containment, and regression test in this file.
+1. **Complete:** provider usage is imported by hourly project/API key/model bucket with explicit Arizona/UTC interpretation.
+2. **Complete:** the production pair is `Default project` / `Kobe Pick Monitor`; it accounts for the full 3,046-request dashboard anomaly.
+3. **Partial:** deploy count, monitoring window, source count, and old state placement support the restart/redelivery diagnosis, but pre-cutover per-call evidence cannot be reconstructed.
+4. **Complete:** request, token, and provider-billed project cost totals are separated above.
+5. **Pending acceptance test:** observe a normal monitoring window under Luna, durable state, and hard limits; verify that model requests reconcile to durable extraction/API events with no unexplained traffic.
+
+Detailed immutable reconciliation notes are in `docs/OPENAI_USAGE_RECONCILIATION_2026-09-12.md`.
 
 ## Data, privacy, and security inventory
 
@@ -240,7 +248,7 @@ The Checkout Worker, Supabase configuration, durable X cursor path, Luna extract
 | Free Pick image/current state | Cloudflare KV | Public/business | Cleanup/version policy missing |
 | Queue and delivery records | Cloudflare D1 | Operational, possibly email content | Retention policy missing |
 | Kobe recap/trends email content | Gmail/D1/JSON | Private business content | Retention policy missing |
-| Secrets | Render/Cloudflare/GitHub/Apps Script settings | Critical | Rotation owner/schedule missing |
+| Secrets | Render/Cloudflare/GitHub/Apps Script settings | Critical | OpenAI Admin reconciliation key has a 90-day expiry; comprehensive cross-provider rotation schedule still missing |
 
 Security rules:
 
@@ -261,8 +269,8 @@ Status meanings: **Complete** means the intended production control and its imme
 | 2 | Membership lifecycle | **Partial** | Stripe test Checkout creation, signed subscription webhooks, Supabase membership persistence, Discord OAuth identity linking, Stripe Customer Portal routing, cancellation handling, Discord role code, replay-safe link ownership, and retry-safe Checkout Session idempotency are live. Worker `0cf0d235-aa26-432c-8478-df6239efed48` passed health and CORS verification after deployment. | Run one dedicated test Discord identity through Checkout → link → portal → cancel → role removal and retain Stripe event IDs, Discord user/role evidence, Supabase rows, and timestamps. Add Turnstile/rate limiting after keys are authorized. Implement owner-approved failed-payment/refund/dispute rules. |
 | 3 | Luna/X monitoring proof | **Complete for the authorized smoke test** | `X_TEST_CANDIDATE_LIMIT=1 node pipeline/test-real-x-pick.js --no-discord` checked one recent `@CappersUSA` post through `gpt-5.6-luna`; outcome was `SOURCE_EXTRACTED`; no Discord, X, member, or public-site publication occurred. | Use the same no-publication harness for future model/prompt changes; the next normal window must still prove bounded production behavior in the durable ledger. |
 | 4 | Durable API trail | **Partial / operational** | Supabase migrations `001`–`004` are live; explicit Node and Checkout Worker calls write endpoint/outcome/latency/hash/workflow metadata; eight production ESPN events were observed immediately after cutover. Discord SDK REST responses are audited without route identifiers or bodies. Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365` routes all five outbound X calls through an append-only, redacted D1 ledger with Worker-version attribution. | Capture the first production Publisher X/OAuth audit row without generating an unauthorized post; add equivalent explicit Apps Script request records and Discord pre-response failure records; then reconcile zero unclassified provider traffic for a controlled window. |
-| 5 | Provider billing reconciliation | **Blocked on owner-authorized credential** | `scripts/sync-openai-usage.mjs` imports OpenAI hourly usage by project/API key/model and daily project costs into `provider_usage_snapshots`; it fails safely without `OPENAI_ADMIN_KEY`. | Create/store a dedicated OpenAI organization Admin API key only after action-time owner confirmation, run the import, and reconcile the September 12 anomaly to project/key/model. |
-| 6 | Cost containment | **Complete, monitoring required** | Luna is active; durable X cursor/dedupe uses `/var/data`; hard pre-call limits are 50 OpenAI requests/day, 500/month, $1 estimated/day, and $15 estimated/month; monitored-source publishing is disabled. | Review caps after provider reconciliation and verify that cutoff events are durably recorded rather than silently dropping work. |
+| 5 | Provider billing reconciliation | **Complete for first OpenAI reconciliation** | Dedicated read-only, 90-day Admin key is encrypted only in Render. The first 48-hour import wrote 14 usage and three cost rows; audited provider data attributes all 3,046 incident requests to `Default project` / `Kobe Pick Monitor` / `gpt-5-mini-2025-08-07`, with 5,519,913 input tokens, 7,085,809 output tokens, and $16.10030665 in the UTC September 12 project cost bucket. | Move the Admin key out of the long-lived bot into an isolated reconciliation runtime (or remove it between runs), pin expected org/project identity, schedule/operate imports before expiry, add equivalent X/Cloudflare billing exports where available, and prove one zero-unclassified controlled window. |
+| 6 | Cost containment | **Complete, monitoring required** | Luna is active; durable X cursor/dedupe uses `/var/data`; hard pre-call limits are 50 OpenAI requests/day, 500/month, $1 estimated/day, and $15 estimated/month; a concurrency-safe cap permits at most two new model calls per collection run and defers overflow without advancing its cursor; monitored-source publishing is disabled. | Verify the first production deferral/cutoff events and confirm deferred candidates drain across later intervals without unexplained provider traffic. |
 | 7 | Free Pick mismatch | **Complete for text-only production path** | A dedicated least-privilege credential was generated and stored encrypted in Cloudflare and Render; intermediate exposed rotation values were invalidated. Runtime verification compared only a non-secret hash prefix. The first authorized publish exposed a read-path defect for `objectKey: null`; a regression test was added, and Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365` is live. Canonical pick `20260912-148-X` returned `201`; after normal KV propagation, `/api/free-pick/current` returned `200`, the public page rendered the Bijan selection, and the new five-check production smoke passed with no Discord/X side effect. | Test the image-backed path separately before using it. |
 | 8 | Membership reconciliation | **Complete for scheduled control** | Checkout Worker `0cf0d235-aa26-432c-8478-df6239efed48` runs Stripe → Supabase → Discord reconciliation daily at `15 16 * * *` (09:15 Arizona) and records outcomes/failures. | Add an external alert destination for failed reconciliation and prove one mismatch repair in a controlled test. |
 | 9 | Legal/support operations | **Blocked on owner decisions** | Draft Terms, Privacy, support pages, and issue playbooks exist, but the public legal text is inconsistent with the live paid product and is not owner/counsel approved. | Supply the legal business identity/address, jurisdiction, support/privacy email, refund and failed-payment grace rules, retention policy, backup operator, and approval authority; then publish and timestamp effective policies. |
@@ -271,15 +279,17 @@ Status meanings: **Complete** means the intended production control and its imme
 
 ### P0 — contain cost and prevent untraceable production behavior
 
-- [ ] Export the exact OpenAI hourly usage/cost data grouped by project, API key, and model; separate Kobe's Betting Hub from other account usage.
+- [x] Export the exact OpenAI hourly usage/cost data grouped by project, API key, and model; the full September 12 anomaly is attributable to the Kobe Pick Monitor key.
 - [x] Deploy and verify the durable X cursor/dedupe path on the Render persistent disk.
 - [x] Provision free Supabase Postgres and apply audit/membership schema migrations.
 - [x] Securely connect pooled `DATABASE_URL` to Render and a dedicated Supabase server secret to the checkout Worker; verify fail-closed startup and database migration completion.
 - [x] Deploy the API/extraction audit path and prove one X candidate through Luna in `--no-discord` mode.
 - [ ] Prove a separate approved test fixture end to end through approval, publication, grade, and recap.
 - [x] Implement the OpenAI provider-usage reconciliation job for Usage grouped by project/key/model and Costs grouped by project.
-- [ ] After explicit owner confirmation, create/store the required organization Admin API key and run the first OpenAI reconciliation; add equivalent X/Cloudflare exports where available.
+- [x] After explicit owner confirmation, create/store a read-only 90-day organization Admin API key in Render and run the first OpenAI reconciliation.
+- [ ] Add equivalent X/Cloudflare billing exports where available and automate OpenAI imports before the reconciliation key expires.
 - [x] Set temporary OpenAI daily/monthly request and dollar hard stops; owner can revise the conservative caps after provider reconciliation.
+- [x] Move the collection-run cap to the actual pre-provider boundary; production permits two new model calls per run and defers overflow without losing its cursor.
 - [ ] Reduce production deploy churn: batch changes, use local tests/staging, and do not use `main` as the test loop.
 - [x] Enforce the owner decision that the 38 sources are approved for monitoring only by setting `X_SOURCE_PUBLISHING_ENABLED=false`.
 - [ ] Make public Terms/Privacy/support claims match the live paid product, with owner/legal approval.
@@ -395,6 +405,10 @@ Database direction: the existing free Supabase Postgres project is the first pro
 | 2026-09-12 | The authorized text-only Bijan sync returned `201` but initially remained unreadable because the Worker rejected persisted `objectKey: null`. The regression test and fix are now deployed as Publisher Worker `b0a60493-82c6-429a-b74d-7a4d8e24f9f9`; the current endpoint returns `200`, and the public page visibly renders the pick. | Zakai Martin | Complete |
 | 2026-09-12 | Deploy release `2075964`: Checkout Worker `0cf0d235-aa26-432c-8478-df6239efed48` validates/reuses browser request UUIDs as Stripe idempotency keys; Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365` audits every outbound X call path into append-only D1; public-site Worker `5fcc4678-1b88-4b09-8616-2203db498b1b` serves the matching client. | Zakai Martin | Live; 110/110 tests passed |
 | 2026-09-12 | The new credential-free production smoke detected the expected cross-location KV propagation window immediately after restoring the approved item, then passed all five checks. A browser reload visibly confirmed the canonical Bijan pick. | Zakai Martin | Complete |
+| 2026-09-12 | Owner confirmed a dedicated OpenAI organization Admin credential for billing reconciliation. `Kobe Betting Hub Usage Reconciliation` (non-secret ID `key_jtBdyNxNSPYbeNCZ`) was created read-only with expiry at 2026-12-11 19:12 MST, stored only as encrypted Render secret `OPENAI_ADMIN_KEY`, and verified through deployment `dep-daj0dcdg1s2s73900a9g`. | Zakai Martin | Complete |
+| 2026-09-12 | The first 48-hour OpenAI reconciliation imported 14 hourly usage and three daily cost rows. It attributed all 3,046 September 12 requests to `Default project` / `Kobe Pick Monitor` / `gpt-5-mini-2025-08-07`; the UTC September 12 project cost was $16.10030665. | Zakai Martin | Complete; next normal-window causal acceptance test remains |
+| 2026-09-12 | Harden OpenAI reconciliation to preflight, filter, and validate the expected production project/key; fetch usage and costs before writes; correlate calls with one operation ID; and preserve the initial project-only cost rows under an explicit unscoped label. | Zakai Martin | Prepared; production re-run pending |
+| 2026-09-12 | Replace the post-extraction approval-card cap with a concurrency-safe pre-provider reservation. Permit two new OpenAI extraction calls per 15-minute pass and retain deferred posts for the next interval. | Zakai Martin | Prepared; 121/121 tests passed |
 
 ## Owner answers still required
 
@@ -419,6 +433,7 @@ These cannot be learned safely from source code:
 - Responsible gambling draft: `docs/RESPONSIBLE_GAMBLING.md`
 - Runtime configuration template: `.env.example`
 - Deployment definitions: `render.yaml`, `.github/workflows/deploy-pages.yml`
+- September 12 OpenAI reconciliation: `docs/OPENAI_USAGE_RECONCILIATION_2026-09-12.md`
 - OpenAI organization Usage/Costs API: <https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/usage>
 - OpenAI request ID and debugging guidance: <https://developers.openai.com/api/reference/overview>
 - OpenAI GPT-5 Mini: <https://developers.openai.com/api/docs/models/gpt-5-mini>

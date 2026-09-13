@@ -164,7 +164,7 @@ function sourceClaims(extraction) {
     : [];
 }
 
-async function extractSourcePick(packet) {
+async function extractSourcePick(packet, { beforeOpenAIRequest, fetchImpl = fetch } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return analysisWaiting('WAITING_FOR_OPENAI_API_KEY', 'Add OPENAI_API_KEY locally before enabling source extraction.');
 
@@ -210,6 +210,18 @@ async function extractSourcePick(packet) {
     return analysisWaiting('BUDGET_EXCEEDED', `${budget.reason} No OpenAI request was sent.`);
   }
 
+  // The collector supplies a run-scoped reservation function here. Keep the
+  // boundary immediately before the audited provider request so cache hits,
+  // disabled enrichment, and budget rejections do not consume a model-call
+  // slot. The reservation is synchronous, making the check/increment atomic
+  // across the collector's concurrent source workers.
+  if (beforeOpenAIRequest && beforeOpenAIRequest() !== true) {
+    return analysisWaiting(
+      'MODEL_CALL_LIMIT_REACHED',
+      'The per-run OpenAI extraction-call limit was reached. No OpenAI request was sent.'
+    );
+  }
+
   const extractionRunId = await startExtractionRun({
     sourcePostId,
     provider: 'openai',
@@ -236,7 +248,7 @@ async function extractSourcePick(packet) {
       triggerType: 'source_extraction',
       workflowId: sourcePostId,
       pickId: packet.pick_id || null
-    });
+    }, fetchImpl);
   } catch (error) {
     await finishExtractionRun(extractionRunId, {
       status: 'FAILED',
@@ -333,11 +345,11 @@ async function extractSourcePick(packet) {
   };
 }
 
-async function enrichPacket(packet) {
+async function enrichPacket(packet, options = {}) {
   if (process.env.ENRICHMENT_ENABLED !== 'true') {
     return analysisWaiting('ENRICHMENT_OFF', 'Set ENRICHMENT_ENABLED=true only after the OpenAI API key is saved locally.');
   }
-  return extractSourcePick(packet);
+  return extractSourcePick(packet, options);
 }
 
 async function newestPacket() {

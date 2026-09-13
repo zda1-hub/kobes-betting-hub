@@ -77,7 +77,6 @@ attachDiscordRestAudit(client.rest, {
 });
 const welcomedMemberIds = new Set();
 let xCollectionInProgress = false;
-let xMonitorCreated = 0;
 let xMonitorIntervalTimer = null;
 let xMonitorStopTimer = null;
 let xMonitorDailyTimer = null;
@@ -627,12 +626,12 @@ function nextArizonaDailyStartMs(time, now = new Date()) {
   return now < today ? today.getTime() : today.getTime() + 24 * 60 * 60 * 1000;
 }
 
-function xMonitorCandidateLimit() {
-  const raw = process.env.X_MONITOR_MAX_CANDIDATES?.trim();
+function xMonitorModelCallLimit() {
+  const raw = (process.env.X_MONITOR_MAX_MODEL_CALLS_PER_RUN || process.env.X_MONITOR_MAX_CANDIDATES || '').trim();
   if (!raw) return null;
   const limit = Number(raw);
   if (!Number.isInteger(limit) || limit < 1) {
-    console.warn('Ignoring invalid X_MONITOR_MAX_CANDIDATES. Use a whole number of at least 1.');
+    console.warn('Ignoring invalid X monitor model-call limit. Use a whole number of at least 1.');
     return null;
   }
   return limit;
@@ -720,9 +719,6 @@ async function beginDailyXMonitor() {
     stopXMonitor(`today's daily cutoff of ${dailyStopAt} Arizona time has passed`);
     return;
   }
-  // Each daily window is a new search session. Reset yesterday's private-card
-  // count so reaching its cap cannot stop today's monitor at startup.
-  xMonitorCreated = 0;
   if (limit !== null && await publishedFreePickCount() >= limit) {
     stopXMonitor(`today's ${limit}-pick limit is already reached`);
     return;
@@ -760,16 +756,10 @@ async function collectXSafely() {
 
     // Collection is independent of review. New qualifying posts keep flowing
     // for the configured time window; Kobe's buttons control publication only.
-    const limit = xMonitorCandidateLimit();
-    const remaining = limit === null ? undefined : limit - xMonitorCreated;
-    if (remaining !== undefined && remaining <= 0) {
-      stopXMonitor(`candidate limit of ${limit} already reached`);
-      return;
-    }
-    const result = await runCollector({ maxCandidates: remaining });
-    xMonitorCreated += result.created;
-    if (limit !== null && xMonitorCreated >= limit) {
-      stopXMonitor(`created ${xMonitorCreated} private approval card(s); limit was ${limit}`);
+    const modelCallLimit = xMonitorModelCallLimit();
+    const result = await runCollector({ maxModelCalls: modelCallLimit ?? undefined });
+    if (modelCallLimit !== null && result.deferred > 0) {
+      console.log(`Deferred ${result.deferred} candidate(s) after using ${result.modelCalls}/${modelCallLimit} OpenAI extraction call(s); they remain eligible for the next interval.`);
     }
   } catch (error) {
     console.error(`X collection failed: ${error instanceof Error ? error.message : error}`);
@@ -797,11 +787,10 @@ function startXMonitor() {
     }
     const interval = xMonitorIntervalMs();
     const approvedFreePickLimit = dailyFreePickLimit();
-    const limit = xMonitorCandidateLimit();
-    xMonitorCreated = 0;
+    const modelCallLimit = xMonitorModelCallLimit();
     const stoppingRule = [
       approvedFreePickLimit !== null ? ` until ${approvedFreePickLimit} Kobe-approved free pick(s) are published` : '',
-      limit === null ? '' : ` (safety cap: ${limit} approval cards)`
+      modelCallLimit === null ? '' : ` (safety cap: ${modelCallLimit} OpenAI extraction calls per collection run)`
     ].join('');
     console.log(`X monitoring enabled: checking approved sources every ${Math.round(interval / 60000)} minute(s)${stoppingRule}.`);
     void collectXSafely();

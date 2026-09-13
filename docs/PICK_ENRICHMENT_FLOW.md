@@ -28,7 +28,9 @@ In the local hidden `.env` file, add these lines without sharing the key in chat
 
 ```text
 OPENAI_API_KEY=PASTE_YOUR_OPENAI_API_KEY_HERE
-OPENAI_PICK_ANALYSIS_MODEL=gpt-5-mini
+OPENAI_PICK_ANALYSIS_MODEL=gpt-5.6-luna
+OPENAI_PICK_REASONING_EFFORT=none
+OPENAI_PICK_MAX_OUTPUT_TOKENS=3000
 ENRICHMENT_ENABLED=true
 ```
 

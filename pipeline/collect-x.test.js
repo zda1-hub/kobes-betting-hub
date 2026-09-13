@@ -1,6 +1,18 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { footballGamesScheduledToday, footballPriority, isSinglePlayPacket, likelyWriteupOrTrend, nflGamesScheduledToday, shouldQueueForReview, shouldSplitPlayPackets } = require('./collect-x');
+const {
+  createModelCallBudget,
+  footballGamesScheduledToday,
+  footballPriority,
+  isSinglePlayPacket,
+  likelyWriteupOrTrend,
+  nflGamesScheduledToday,
+  recordModelCallDeferral,
+  shouldQueueForReview,
+  shouldSplitPlayPackets,
+  sourceStateAfterPass
+} = require('./collect-x');
+const { enrichPacket } = require('./enrich-pick');
 const { isSupportedSportPick } = require('../bot/lib/event-timing');
 
 test('requires exactly one visible play for each approval card', () => {
@@ -89,4 +101,121 @@ test('keeps multi-play exclusives grouped while splitting regular posts', () => 
     ...packet,
     source: { publish_mode: 'writeup_review' }
   }), true);
+});
+
+test('one collection run cannot start more OpenAI extraction calls than its model-call cap', async () => {
+  const original = {
+    enrichment: process.env.ENRICHMENT_ENABLED,
+    apiKey: process.env.OPENAI_API_KEY,
+    dailyRequests: process.env.OPENAI_DAILY_REQUEST_LIMIT,
+    monthlyRequests: process.env.OPENAI_MONTHLY_REQUEST_LIMIT,
+    dailyUsd: process.env.OPENAI_DAILY_BUDGET_USD,
+    monthlyUsd: process.env.OPENAI_MONTHLY_BUDGET_USD
+  };
+  process.env.ENRICHMENT_ENABLED = 'true';
+  process.env.OPENAI_API_KEY = 'test-only-key';
+  delete process.env.OPENAI_DAILY_REQUEST_LIMIT;
+  delete process.env.OPENAI_MONTHLY_REQUEST_LIMIT;
+  delete process.env.OPENAI_DAILY_BUDGET_USD;
+  delete process.env.OPENAI_MONTHLY_BUDGET_USD;
+
+  const budget = createModelCallBudget(2);
+  let providerCalls = 0;
+  const extraction = {
+    is_pick_candidate: false,
+    source_capper_name: '',
+    sport: '',
+    league: '',
+    event: '',
+    market: '',
+    selection: '',
+    player_name: '',
+    line: '',
+    odds_american: '',
+    units: '',
+    plays: [],
+    source_claims: [],
+    image_summary: '',
+    missing_or_ambiguous: []
+  };
+  const fetchImpl = async () => {
+    providerCalls += 1;
+    return new Response(JSON.stringify({
+      id: `response-${providerCalls}`,
+      output_text: JSON.stringify(extraction),
+      usage: { input_tokens: 20, output_tokens: 10, input_tokens_details: { cached_tokens: 0 } }
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'x-request-id': `request-${providerCalls}` }
+    });
+  };
+
+  try {
+    const results = await Promise.all(Array.from({ length: 5 }, (_, index) => enrichPacket({
+      pick_id: `TEST-${index}`,
+      source: {
+        handle: 'testsource',
+        post_id: String(index + 1),
+        post_url: `https://x.com/testsource/status/${index + 1}`,
+        posted_at: '2026-09-12T18:00:00.000Z',
+        text: 'NFL test pick over 1.5 yards',
+        media_urls: []
+      }
+    }, {
+      beforeOpenAIRequest: () => budget.tryStart(),
+      fetchImpl
+    })));
+
+    assert.equal(providerCalls, 2);
+    assert.equal(budget.started, 2);
+    assert.equal(results.filter((result) => result.status === 'SOURCE_EXTRACTED').length, 2);
+    assert.equal(results.filter((result) => result.status === 'MODEL_CALL_LIMIT_REACHED').length, 3);
+  } finally {
+    for (const [key, value] of [
+      ['ENRICHMENT_ENABLED', original.enrichment],
+      ['OPENAI_API_KEY', original.apiKey],
+      ['OPENAI_DAILY_REQUEST_LIMIT', original.dailyRequests],
+      ['OPENAI_MONTHLY_REQUEST_LIMIT', original.monthlyRequests],
+      ['OPENAI_DAILY_BUDGET_USD', original.dailyUsd],
+      ['OPENAI_MONTHLY_BUDGET_USD', original.monthlyUsd]
+    ]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('model-call deferrals are audited and logged without advancing the source cursor', async () => {
+  const decisions = [];
+  const logs = [];
+  const counts = await recordModelCallDeferral({ pick_id: 'DEFERRED-1' }, {
+    sourceHandle: 'prioritysource',
+    postId: '250',
+    recordDecision: async (_packet, decision) => decisions.push(decision),
+    logger: (message) => logs.push(message)
+  });
+  const nextState = sourceStateAfterPass({
+    sourceState: { since_id: '100', handled_post_ids: ['150'] },
+    userId: 'source-user',
+    date: '2026-09-12',
+    lastProcessedId: '300',
+    handledPostIds: new Set(['150', '200']),
+    completedSourcePass: false,
+    rescanImages: true,
+    rescanUpcomingSlate: true
+  });
+
+  assert.deepEqual(counts, { skipped: 1, deferred: 1 });
+  assert.deepEqual(decisions, [{
+    code: 'MODEL_CALL_LIMIT_REACHED',
+    reason: 'The per-run OpenAI extraction-call limit was reached before this candidate.',
+    status: 'DEFERRED'
+  }]);
+  assert.match(logs[0], /Deferred @prioritysource post 250/);
+  assert.equal(nextState.since_id, '100');
+  assert.deepEqual(nextState.handled_post_ids, ['150', '200']);
+  assert.equal(nextState.handled_post_ids.includes('250'), false);
+  assert.equal(nextState.catchup_date, undefined);
+  assert.equal(nextState.image_rescan_version, undefined);
+  assert.equal(nextState.upcoming_slate_rescan_version, undefined);
 });

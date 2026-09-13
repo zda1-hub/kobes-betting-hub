@@ -32,6 +32,14 @@ services:
         sync: false
       - key: AUDIT_DATABASE_REQUIRED
         sync: false
+      - key: OPENAI_ADMIN_KEY
+        sync: false
+      - key: OPENAI_EXPECTED_PROJECT_ID
+        value: proj_8DxPJSInvFUVEZgs8KMld4rz
+      - key: OPENAI_EXPECTED_API_KEY_ID
+        value: key_TDES2zUP3W9UZaej
+      - key: OPENAI_USAGE_LOOKBACK_HOURS
+        value: "48"
       - key: OPENAI_PICK_PROMPT_VERSION
         value: source-pick-extraction-v1
       - key: OPENAI_PICK_ANALYSIS_MODEL
@@ -70,6 +78,8 @@ services:
         sync: false
       - key: X_MONITOR_MAX_CANDIDATES
         sync: false
+      - key: X_MONITOR_MAX_MODEL_CALLS_PER_RUN
+        value: "2"
       - key: X_MONITOR_MAX_APPROVED_FREE_PICKS
         sync: false
       - key: AUTO_REGISTER_COMMANDS

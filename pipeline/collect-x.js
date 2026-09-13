@@ -112,6 +112,35 @@ function footballPriority(post) {
   return /\b(?:nfl|ncaaf|cfb|college football|football)\b/i.test(post?.text || '') ? 0 : 1;
 }
 
+function createModelCallBudget(maxModelCalls) {
+  const limit = Number.isFinite(maxModelCalls) && maxModelCalls > 0
+    ? Math.floor(maxModelCalls)
+    : Number.POSITIVE_INFINITY;
+  let started = 0;
+  return {
+    limit,
+    tryStart() {
+      if (started >= limit) return false;
+      started += 1;
+      return true;
+    },
+    get started() {
+      return started;
+    }
+  };
+}
+
+function configuredModelCallLimit(env = process.env) {
+  const raw = (env.X_MONITOR_MAX_MODEL_CALLS_PER_RUN || env.X_MONITOR_MAX_CANDIDATES || '').trim();
+  if (!raw) return undefined;
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1) {
+    console.warn('Ignoring invalid X monitor model-call limit. Use a whole number of at least 1.');
+    return undefined;
+  }
+  return limit;
+}
+
 function oddsFrom(text) {
   const match = (text || '').match(/\(([-+]\d{2,4})\)/);
   return match ? Number(match[1]) : null;
@@ -506,6 +535,38 @@ async function recordGateDecision(packet, { code, reason, status = 'REJECTED' })
   });
 }
 
+async function recordModelCallDeferral(packet, { sourceHandle, postId, recordDecision = recordGateDecision, logger = console.log } = {}) {
+  await recordDecision(packet, {
+    code: 'MODEL_CALL_LIMIT_REACHED',
+    reason: 'The per-run OpenAI extraction-call limit was reached before this candidate.',
+    status: 'DEFERRED'
+  });
+  logger(`Deferred @${sourceHandle} post ${postId}; per-run OpenAI extraction-call limit reached.`);
+  return { skipped: 1, deferred: 1 };
+}
+
+function sourceStateAfterPass({ sourceState, userId, date, lastProcessedId, handledPostIds, completedSourcePass, rescanImages, rescanUpcomingSlate }) {
+  const nextSourceState = {
+    user_id: userId,
+    // An incomplete pass must retain the previous cursor. Already handled
+    // posts remain in the bounded ID list, while model-cap deferrals are not
+    // added and therefore remain eligible on the next collection interval.
+    since_id: completedSourcePass ? (lastProcessedId || '') : (sourceState.since_id || ''),
+    handled_post_ids: [...handledPostIds].slice(-250),
+    ...(completedSourcePass ? { catchup_date: date } : {})
+  };
+  if (sourceState.image_rescan_version) {
+    nextSourceState.image_rescan_version = sourceState.image_rescan_version;
+  }
+  if (rescanImages && completedSourcePass) {
+    nextSourceState.image_rescan_version = IMAGE_RESCAN_VERSION;
+  }
+  if (rescanUpcomingSlate && completedSourcePass) {
+    nextSourceState.upcoming_slate_rescan_version = UPCOMING_SLATE_RESCAN_VERSION;
+  }
+  return nextSourceState;
+}
+
 async function queueSplitPlayPackets(packet, outputPath) {
   const extraction = packet.analysis?.extraction || {};
   const plays = Array.isArray(extraction.plays) ? extraction.plays.filter((play) => visiblePlays({ analysis: { extraction: { plays: [play] } } }).length) : [];
@@ -537,20 +598,22 @@ async function queueSplitPlayPackets(packet, outputPath) {
   return created;
 }
 
-async function runCollector({ maxCandidates } = {}) {
+async function runCollector({ maxCandidates, maxModelCalls } = {}) {
   if (await pickWorkflowPaused()) {
     console.log('Pick workflow is paused; no X posts will be collected or sent for approval.');
-    return { created: 0, skipped: 0, sourceCount: 0, paused: true };
+    return { created: 0, skipped: 0, deferred: 0, modelCalls: 0, sourceCount: 0, paused: true };
   }
   const sources = (await readJson(SOURCES_PATH, [])).filter((source) => source.enabled);
   if (sources.length === 0) {
     console.log('No X sources are enabled. Nothing to collect.');
-    return { created: 0, skipped: 0, sourceCount: 0 };
+    return { created: 0, skipped: 0, deferred: 0, modelCalls: 0, sourceCount: 0 };
   }
 
-  const candidateLimit = Number.isFinite(maxCandidates) && maxCandidates > 0
-    ? Math.floor(maxCandidates)
-    : Number.POSITIVE_INFINITY;
+  // maxCandidates remains as a compatibility alias for existing callers and
+  // Render environments. It now limits provider extraction calls, which is
+  // the spend-producing operation the setting is intended to control.
+  const requestedModelCallLimit = maxModelCalls ?? maxCandidates ?? configuredModelCallLimit();
+  const modelCallBudget = createModelCallBudget(requestedModelCallLimit);
 
   if (!process.env.X_BEARER_TOKEN) {
     throw new Error('Missing X_BEARER_TOKEN. Add it to a local .env file; do not commit or send it in chat.');
@@ -582,6 +645,7 @@ async function runCollector({ maxCandidates } = {}) {
   const claimedSourcePostIds = new Set(queuedSourcePostIds);
   let created = 0;
   let skipped = 0;
+  let deferred = 0;
 
   let nextSourceIndex = 0;
   let commitChain = Promise.resolve();
@@ -655,7 +719,25 @@ async function runCollector({ maxCandidates } = {}) {
       // until the cheap NFL, exact-event, and roster gates pass; otherwise a
       // rejected candidate can spend minutes on web search and block the rest
       // of the 38-account scan.
-      packet.analysis = await enrichPacket(packet, { research: false });
+      packet.analysis = await enrichPacket(packet, {
+        research: false,
+        beforeOpenAIRequest: () => modelCallBudget.tryStart()
+      });
+
+      if (packet.analysis.status === 'MODEL_CALL_LIMIT_REACHED') {
+        claimedSourcePostIds.delete(String(post.id));
+        const counts = await recordModelCallDeferral(packet, {
+          sourceHandle: source.handle,
+          postId: post.id
+        });
+        skipped += counts.skipped;
+        deferred += counts.deferred;
+        completedSourcePass = false;
+        // Do not advance lastProcessedId or add this post to handled_post_ids.
+        // Retaining the old source cursor makes this candidate eligible for
+        // the next interval without reprocessing earlier handled posts.
+        continue;
+      }
 
       if (!isSupportedSportPick(packet)) {
         await recordGateDecision(packet, { code: 'UNSUPPORTED_SPORT', reason: 'The extraction did not identify a supported sport.' });
@@ -755,34 +837,24 @@ async function runCollector({ maxCandidates } = {}) {
       handledPostIds.add(post.id);
     }
 
-    // Advance only through posts we actually examined. If the candidate limit
-    // stops the loop, leave later posts for the next collection cycle instead
-    // of silently discarding them behind a newer since_id.
-    const nextSourceState = {
-      user_id: userId,
-      // With priority ordering, an incomplete pass can leave an older
-      // non-football post unexamined. Keep the old cursor in that case so the
-      // next interval can revisit it; handled_post_ids prevents duplicates.
-      since_id: completedSourcePass ? (lastProcessedId || response.meta?.newest_id || '') : (sourceState.since_id || ''),
-      handled_post_ids: [...handledPostIds].slice(-250),
-      ...(completedSourcePass ? { catchup_date: date } : {})
-    };
-    if (sourceState.image_rescan_version) {
-      nextSourceState.image_rescan_version = sourceState.image_rescan_version;
-    }
-    if (rescanImages && completedSourcePass) {
-      nextSourceState.image_rescan_version = IMAGE_RESCAN_VERSION;
-    }
-    if (rescanUpcomingSlate && completedSourcePass) {
-      nextSourceState.upcoming_slate_rescan_version = UPCOMING_SLATE_RESCAN_VERSION;
-    }
+    // Advance only through posts we actually completed. A model-call deferral
+    // keeps the old cursor so it cannot be hidden behind a newer since_id.
+    const nextSourceState = sourceStateAfterPass({
+      sourceState,
+      userId,
+      date,
+      lastProcessedId: lastProcessedId || response.meta?.newest_id || '',
+      handledPostIds,
+      completedSourcePass,
+      rescanImages,
+      rescanUpcomingSlate
+    });
     return { source, nextSourceState, acceptedPackets };
   }
 
   async function commitSourceResult(result) {
     state.sources[result.source.handle] = result.nextSourceState;
     for (const candidate of result.acceptedPackets) {
-      if (created >= candidateLimit) break;
       sequence += 1;
       const packet = candidate.packet;
       packet.approval_number = sequence;
@@ -834,15 +906,20 @@ async function runCollector({ maxCandidates } = {}) {
   if (created) {
     console.log(`Created ${created} review packet(s).`);
   } else if (skipped) {
-    console.log(`Skipped ${skipped} non-pick post(s); no review packets created.`);
+    const rejected = skipped - deferred;
+    const parts = [
+      rejected > 0 ? `${rejected} rejected` : '',
+      deferred > 0 ? `${deferred} deferred by the model-call cap` : ''
+    ].filter(Boolean).join(', ');
+    console.log(`No review packets created (${parts}).`);
   } else {
     console.log('No new X posts found.');
   }
 
-  if (created >= candidateLimit && Number.isFinite(candidateLimit)) {
-    console.log(`Candidate limit reached: ${candidateLimit} review packet(s).`);
+  if (modelCallBudget.started >= modelCallBudget.limit && Number.isFinite(modelCallBudget.limit)) {
+    console.log(`Model-call limit reached: ${modelCallBudget.started} OpenAI extraction request(s); ${deferred} candidate(s) deferred.`);
   }
-  return { created, skipped, sourceCount: sources.length };
+  return { created, skipped, deferred, modelCalls: modelCallBudget.started, sourceCount: sources.length };
 }
 
 if (require.main === module) {
@@ -852,4 +929,17 @@ if (require.main === module) {
   });
 }
 
-module.exports = { footballGamesScheduledToday, footballPriority, isSinglePlayPacket, likelyWriteupOrTrend, nflGamesScheduledToday, runCollector, shouldQueueForReview, shouldSplitPlayPackets };
+module.exports = {
+  createModelCallBudget,
+  configuredModelCallLimit,
+  footballGamesScheduledToday,
+  footballPriority,
+  isSinglePlayPacket,
+  likelyWriteupOrTrend,
+  nflGamesScheduledToday,
+  recordModelCallDeferral,
+  runCollector,
+  shouldQueueForReview,
+  shouldSplitPlayPackets,
+  sourceStateAfterPass
+};
