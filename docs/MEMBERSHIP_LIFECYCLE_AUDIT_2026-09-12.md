@@ -18,7 +18,7 @@ The architecture is valid: Stripe is the payment and subscription authority; Dis
 - `customer.subscription.created`, `.updated`, and `.deleted` persist subscription state and grant or remove the Discord role based on `active`/`trialing` status.
 - The manage-membership page authenticates the linked Discord identity and then creates a Stripe Customer Portal session. Checkout-session cancellation endpoints are disabled.
 - Supabase membership tables have row-level security enabled and revoke `anon` and `authenticated` access.
-- The full local test suite passes: **98 tests passed, 0 failed**. Ten tests directly cover the checkout Worker; one additional regression test covers text-only public Free Pick persistence.
+- The full local test suite passes: **110 tests passed, 0 failed**. Checkout Worker coverage now includes malformed/omitted request IDs and CORS support; a browser-level fixture proves retry reuse and cleanup.
 
 ## Hardening release
 
@@ -36,6 +36,16 @@ Modified implementation files:
 - `cloudflare/kobes-checkout-worker.test.mjs`
 - `wrangler.jsonc`
 
+## Follow-on checkout idempotency release
+
+Release `2075964` is deployed as Checkout Worker `0cf0d235-aa26-432c-8478-df6239efed48` and public-site Worker `5fcc4678-1b88-4b09-8616-2203db498b1b`.
+
+- The membership client creates one UUID per offer attempt and keeps it through ambiguous network failures in session storage.
+- The Worker validates that UUID, sends it to Stripe as `Idempotency-Key`, and records it as the client request ID in the API audit event.
+- A successful Checkout URL or a definitive client error clears the browser value; a network/5xx ambiguity keeps it for the retry.
+- Legacy clients without the header remain compatible through a server-generated UUID.
+- Production health returned `200`; a real CORS preflight returned `204` and explicitly allowed `X-Checkout-Request-Id`. No live charge or Checkout Session was created for this verification.
+
 ## Open gaps, ordered by severity
 
 ### Release blockers
@@ -47,7 +57,7 @@ Modified implementation files:
 ### High-priority operational gaps
 
 4. **No paid-without-access alert.** If a customer pays but never completes Discord linking, reconciliation records `NO_DISCORD_LINK` but there is no external alert or owner queue.
-5. **Checkout abuse controls are absent.** `/create-checkout` has no server-side rate limiter or Turnstile verification, and Stripe session creation has no client idempotency key. This can inflate Stripe/API volume even without completing a payment.
+5. **Checkout abuse controls are partial.** Retry-safe Stripe idempotency is deployed, but `/create-checkout` still has no server-side rate limiter or Turnstile verification. An attacker can still generate fresh request UUIDs and inflate Stripe/API volume without completing a payment.
 6. **Webhook event registration is not independently evidenced.** The code expects Checkout and subscription events, but the Stripe Dashboard endpoint selection and Customer Portal configuration still need a dashboard check.
 7. **No staging environment is defined.** `wrangler.jsonc` targets one Worker and live-looking price IDs. Safe repeatable end-to-end testing should use a separate Worker, Stripe test keys/prices/webhook, test Discord server/role, and staging Supabase data.
 8. **Support relinking is undefined.** The new first-claim protection deliberately fails closed if a member needs to move access to another Discord identity. An owner-approved, audited support procedure is required.
