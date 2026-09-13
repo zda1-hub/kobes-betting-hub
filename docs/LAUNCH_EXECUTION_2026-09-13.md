@@ -8,6 +8,8 @@
 
 - [x] At 15:08 MST, live Stripe was inspected read-only before another owner acceptance payment. Two active `$32.99/month` memberships were found under the same known owner email, each with a paid `$32.99` invoice from 2026-08-31 and each linked to a different Discord identity. One shows a 2026-09-30 next invoice; the other has no upcoming invoice displayed. No new `$10` payment or subscription mutation occurred. This is a potential duplicate-subscription P1 and broad enrollment remains held until the intended membership is identified and reconciled.
 - [x] After the live membership inspection, the exact repository suite passed `181/181` and the credential-free production smoke passed `5/5`.
+- [x] A direct live-page review returned HTTP `200` for home, join, membership redirect, cancellation, support, Terms, Privacy, and responsible-gambling routes. The published pages contain the recurring-price/cancellation/refund-exception, support-email, California, and 21+ disclosures in their applicable flows, and no draft marker was found.
+- [ ] Publish a support response target and staffed hours. The live support route works and exposes `support@kobesbettinghub.com`, but it does not currently state hours or an expected response time.
 
 - [x] Production public smoke: 5/5 passing.
 - [x] Full current repository suite: 181/181 passing.
