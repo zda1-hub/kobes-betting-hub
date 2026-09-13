@@ -48,5 +48,7 @@ Never enter a real card, bank account, or live API key in this environment. Neve
 - [x] Created and configured the dedicated Discord staging OAuth application and callback.
 - [x] Applied `sandbox/referral-sandbox-schema.sql`; nine `referral_sandbox_*` tables now exist with RLS enabled.
 - [x] Deployed the isolated Cloudflare site and backend Workers.
-- [ ] Install and verify the restricted payouts key and Supabase server key on the sandbox Worker.
-- [ ] Redeploy after all six secrets are present, then run health and end-to-end referral acceptance checks.
+- [x] Installed and verified all six sandbox-only Worker secrets, including the restricted payouts key and Supabase server key.
+- [x] Granted `service_role` access only to the nine `referral_sandbox_*` tables; `anon` and `authenticated` remain revoked.
+- [x] Redeployed backend version `6a3307ad-f015-42ad-94fb-0d9fef0fbf65`; health, Discord redirect, database guard, unpaid Stripe Checkout creation, API audit persistence, and the one-minute cron all passed.
+- [ ] Complete the two-person browser acceptance flow using two user-created Discord accounts, then execute the paid-invoice, payout, refund, and dispute cases above with Stripe sandbox data only.
