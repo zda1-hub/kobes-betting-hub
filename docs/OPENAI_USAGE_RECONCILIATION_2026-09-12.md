@@ -30,6 +30,8 @@ The first sync imported OpenAI organization Usage data into `provider_usage_snap
 
 The hardened sync now requires the expected production project and API-key IDs, verifies that key through an audited preflight, sends both identifiers as Usage/Costs filters, groups new cost snapshots by project and API key, rejects any mismatched or missing scope, fetches both datasets before writing either, and uses one operation ID for the complete reconciliation. Migration `005_relabel_unscoped_openai_cost_snapshots.sql` preserves the three initial project-only cost rows while relabeling them as `openai_costs_api_unscoped`; it does not delete or rewrite their payloads.
 
+Production verification at 19:38 MST used commit `2d73527`, Render deployment `dep-daj0ogu7bikc73abcsdg`, and reconciliation operation `85814110-ae15-4ba9-8c7b-f62973360df1`. The guarded re-run returned 14 usage rows and three cost rows. Supabase contains the three preserved unscoped historical cost rows, three new rows scoped to `key_TDES2zUP3W9UZaej`, and 14 keyed usage rows. The preflight, Usage, and Costs calls all returned HTTP 200, were marked `SUCCEEDED`, and carry the same operation ID and commit. Across the complete 48-hour keyed usage window, the 14 current snapshots contain 3,611 model requests; the incident interval remains the 3,046-request subset documented below.
+
 ## Incident attribution
 
 | Dimension | Provider result |
