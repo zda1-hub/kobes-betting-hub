@@ -48,6 +48,7 @@ const SUPABASE_SCOPED_TABLES = new Set([
 ]);
 
 const siteOrigin = (env) => env.SITE_ORIGIN || SITE_ORIGIN;
+const membershipPage = (env) => `${siteOrigin(env)}${SITE_PATH}/${env.APP_ENV === 'staging' ? 'join.html' : 'membership.html'}`;
 
 function referralHoldMilliseconds(env) {
   if (env.APP_ENV !== 'staging') return REFERRAL_HOLD_DAYS * 24 * 60 * 60 * 1000;
@@ -906,7 +907,7 @@ async function finishDiscordConnection(request, env) {
       await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) }, env);
       await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, { method: 'PUT', headers: botHeaders }, env);
     }
-    return redirect(`${siteOrigin(env)}${SITE_PATH}/membership.html?checkout=connected`);
+    return redirect(`${membershipPage(env)}?checkout=connected`);
   } catch (error) {
     return new Response(error.message || 'Discord connection failed.', { status: 400 });
   } finally {
@@ -952,11 +953,11 @@ async function createCheckout(request, env, origin) {
     if (!referrerProfile || !await activeMembershipForDiscord(env, referrerProfile.discord_user_id)) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
   }
 
-  const membershipPage = `${siteOrigin(env)}${SITE_PATH}/membership.html`;
+  const checkoutReturnPage = membershipPage(env);
   const values = {
     mode: 'subscription',
-    success_url: `${membershipPage}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${membershipPage}?checkout=cancel`,
+    success_url: `${checkoutReturnPage}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${checkoutReturnPage}?checkout=cancel`,
     payment_method_collection: 'always',
     'payment_method_types[0]': 'card',
     billing_address_collection: 'auto',
@@ -1224,6 +1225,7 @@ export const __test = {
   processReferralPayouts,
   referralPayoutAmount,
   referralHoldMilliseconds,
+  membershipPage,
   scopedSupabasePath,
   readDiscordState,
   verifyStripeSignature,

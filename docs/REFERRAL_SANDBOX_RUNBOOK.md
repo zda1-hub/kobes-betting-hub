@@ -50,6 +50,6 @@ Never enter a real card, bank account, or live API key in this environment. Neve
 - [x] Deployed the isolated Cloudflare site and backend Workers.
 - [x] Installed and verified all six sandbox-only Worker secrets, including the restricted payouts key and Supabase server key.
 - [x] Granted `service_role` access only to the nine `referral_sandbox_*` tables; `anon` and `authenticated` remain revoked.
-- [x] Redeployed backend version `6a3307ad-f015-42ad-94fb-0d9fef0fbf65`; health, Discord redirect, database guard, unpaid Stripe Checkout creation, API audit persistence, and the one-minute cron all passed.
+- [x] Redeployed backend version `95a4976d-3ead-4b6d-a35e-b3b24ca190bc`; health, Discord redirect, database guard, unpaid Stripe Checkout creation, API audit persistence, correct sandbox return URLs, and the one-minute cron all passed.
 - [x] Redeployed site version `227a7656-27a4-4029-81f6-5282c9de5278`; the referral login, payout onboarding, and Checkout links all remain inside the sandbox.
 - [ ] Complete the two-person browser acceptance flow using two user-created Discord accounts, then execute the paid-invoice, payout, refund, and dispute cases above with Stripe sandbox data only.

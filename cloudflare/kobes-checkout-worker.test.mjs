@@ -64,6 +64,11 @@ test('referral hold is seven days in production and may be shortened only in sta
   assert.throws(() => workerTest.referralHoldMilliseconds({ APP_ENV: 'staging', REFERRAL_HOLD_SECONDS: '10' }), /between 60 seconds/);
 });
 
+test('sandbox checkout returns to the real join page instead of the redirect-only membership alias', () => {
+  assert.equal(workerTest.membershipPage({ APP_ENV: 'staging', SITE_ORIGIN: 'https://sandbox.example' }), 'https://sandbox.example/join.html');
+  assert.equal(workerTest.membershipPage({}), 'https://kobesbettinghub.com/membership.html');
+});
+
 test('staging checkout rejects non-referral offers before contacting Stripe', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
