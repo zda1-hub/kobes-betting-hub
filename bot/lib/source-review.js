@@ -111,6 +111,18 @@ function sourceTerms(packet) {
   return visiblePlays(packet).map(({ terms, units }) => `${terms}${units ? ` (${units})` : ''}`);
 }
 
+function isTermsOnlyMode(packet) {
+  return ['terms_only', 'monitored_terms'].includes(packet.source?.publish_mode);
+}
+
+function monitoredTermsPacket(packet) {
+  return {
+    ...packet,
+    source: { ...packet.source, publish_mode: 'monitored_terms' },
+    approval: { ...packet.approval, image_url: null }
+  };
+}
+
 function isPlayerProp(play) {
   // This deliberately looks at the published play itself rather than at a
   // source caption such as "MLB Play of the Day". A free post must be a
@@ -297,6 +309,10 @@ function presentationConfidence(packet) {
 }
 
 function sourceCapperName(packet) {
+  // Monitoring-only cards intentionally publish only wager terms. Even when
+  // extraction found a signature, do not expose or imply attribution without
+  // an explicit reuse decision for that source.
+  if (packet.source?.publish_mode === 'monitored_terms') return '';
   const extractedName = packet.analysis?.extraction?.source_capper_name;
   if (visible(extractedName, '')) {
     const name = extractedName.trim();
@@ -306,13 +322,13 @@ function sourceCapperName(packet) {
     // A terms-only monitor/repost account is never a valid substitute for the
     // individual capper. Treat an extraction that merely echoed that account
     // as unidentified rather than displaying misleading attribution.
-    if (packet.source?.publish_mode === 'terms_only' && sourceIdentities.includes(normalizedText(name))) return '';
+    if (isTermsOnlyMode(packet) && sourceIdentities.includes(normalizedText(name))) return '';
     return name;
   }
 
   // A leak/repost feed is not the original capper. Its cards must hold rather
   // than falsely crediting the account that surfaced the image.
-  if (packet.source?.publish_mode === 'terms_only') return '';
+  if (isTermsOnlyMode(packet)) return '';
 
   // Direct writeup sources are the original author, so their configured
   // display name remains an accurate fallback when no separate signature is
@@ -328,7 +344,7 @@ function assertPublishableExtraction(packet) {
   if (packet.analysis?.status !== 'SOURCE_EXTRACTED' || !extraction?.is_pick_candidate) {
     throw new Error('This source card is not a verified pick candidate. Reject it or finish manual review first.');
   }
-  if (!sourceCapperName(packet)) {
+  if (!sourceCapperName(packet) && packet.source?.publish_mode !== 'monitored_terms') {
     throw new Error('The original capper is not clearly visible, so this card cannot be published automatically.');
   }
   if (sourceTerms(packet).length === 0) {
@@ -350,8 +366,8 @@ function assertPublishableExtraction(packet) {
 }
 
 function assertFreePickEligible(packet) {
-  if (packet.source?.publish_mode === 'terms_only') {
-    throw new Error('Free picks are limited to writeup player props. Send leaked capper cards to #exclusives instead.');
+  if (isTermsOnlyMode(packet)) {
+    throw new Error('Free picks are limited to writeup player props and require Kobe’s original writeup or independently verified breakdown. Monitoring-only source text and media cannot be republished.');
   }
   const plays = visiblePlays(packet);
   if (plays.length === 0 || !plays.every(isPlayerProp)) {
@@ -365,7 +381,7 @@ function assertFreePickEligible(packet) {
 function buildSourcePickEmbed(packet, destinationLabel) {
   assertPublishableExtraction(packet);
   const terms = sourceTerms(packet);
-  const termsOnly = packet.source?.publish_mode === 'terms_only';
+  const termsOnly = isTermsOnlyMode(packet);
   const embed = {
     color: destinationLabel === 'FREE PICK' ? 0x2B90D9 : 0xD4AF37
   };
@@ -376,7 +392,7 @@ function buildSourcePickEmbed(packet, destinationLabel) {
     // Private exclusive cards deliberately mirror the eventual exclusive
     // post: capper name, then exact bets/stakes. No source image, analysis,
     // confidence score, or extra operational wording belongs here.
-    embed.description = [sourceCapperName(packet), ...terms.map((term) => `• ${term}`)].join('\n');
+    embed.description = [sourceCapperName(packet), ...terms.map((term) => `• ${term}`)].filter(Boolean).join('\n');
   } else {
     // Kobe's writeup layout: player prop, plain factual bullet points, and an
     // optional approved player image below it.
@@ -400,15 +416,15 @@ function buttonLabel(value, fallback) {
   return label.slice(0, 80);
 }
 
-function reviewButtons(pickId, { testOnly = false, freeLabel, paidLabel } = {}) {
+function reviewButtons(pickId, { testOnly = false, freeDisabled = false, freeLabel, paidLabel } = {}) {
   return [{
     type: ComponentType.ActionRow,
     components: [
-      { type: ComponentType.Button, style: ButtonStyle.Success, label: buttonLabel(freeLabel, 'Post to #daily-free-play'), custom_id: `source-review:${pickId}:free`, disabled: testOnly },
+      { type: ComponentType.Button, style: ButtonStyle.Success, label: buttonLabel(freeLabel, 'Post to #daily-free-play'), custom_id: `source-review:${pickId}:free`, disabled: testOnly || freeDisabled },
       { type: ComponentType.Button, style: ButtonStyle.Primary, label: buttonLabel(paidLabel, 'Post to paid channel'), custom_id: `source-review:${pickId}:paid`, disabled: testOnly },
       { type: ComponentType.Button, style: ButtonStyle.Danger, label: 'Reject', custom_id: `source-review:${pickId}:reject` }
     ]
   }];
 }
 
-module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickApprovalEmbed, buildSourcePickEmbed, hasNamedPlayer, isPlayerProp, presentationConfidence, publicPickTerms, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays, writeupDescription };
+module.exports = { assertFreePickEligible, assertPublishableExtraction, buildSourcePickApprovalEmbed, buildSourcePickEmbed, hasNamedPlayer, isPlayerProp, isTermsOnlyMode, monitoredTermsPacket, presentationConfidence, publicPickTerms, reviewButtons, sourceCapperName, sourceEvidence, sourceTerms, visiblePlays, writeupDescription };

@@ -10,7 +10,7 @@ const { freePickRecapRows } = require('./lib/free-recap');
 const { gradePickFromEspn } = require('./lib/espn-grading');
 const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
-const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, sourceCapperName, sourceEvidence } = require('./lib/source-review');
+const { assertFreePickEligible, assertPublishableExtraction, buildSourcePickEmbed, isTermsOnlyMode, monitoredTermsPacket, sourceCapperName, sourceEvidence } = require('./lib/source-review');
 const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { publishApprovedFreePickToSite } = require('./lib/free-pick-site');
 const { reviewQueuePath } = require('./lib/review-queue-path');
@@ -1232,19 +1232,22 @@ async function handleSourceReviewButton(interaction) {
   }
 
   try {
-    const termsOnly = packet.source?.publish_mode === 'terms_only';
+    const configuredTermsOnly = packet.source?.publish_mode === 'terms_only';
     const sourcePostingEnabled = process.env.X_SOURCE_PUBLISHING_ENABLED === 'true';
-    if (packet.source?.reuse_permission !== 'CONFIRMED' && !termsOnly && !sourcePostingEnabled) {
-      throw new Error('This source is approved for monitoring only. Use Kobe’s original wording and approved media with /publish-pick until source reuse permission is confirmed.');
+    const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED' && !configuredTermsOnly && !sourcePostingEnabled;
+    if (monitoringOnly && action === 'free') {
+      throw new Error('This source is approved for monitoring only. A Free Pick needs Kobe’s original writeup or independently verified breakdown; the paid button can publish the wager terms without copying source wording or media.');
     }
-    assertPublishableExtraction(packet);
-    if (!isSupportedSportPick(packet)) {
+    const publicationPacket = monitoringOnly ? monitoredTermsPacket(packet) : packet;
+    const termsOnly = isTermsOnlyMode(publicationPacket);
+    assertPublishableExtraction(publicationPacket);
+    if (!isSupportedSportPick(publicationPacket)) {
       throw new Error('Only picks explicitly identified as a supported sport can be published.');
     }
-    if (packet.source?.publish_mode !== 'terms_only' && sourceEvidence(packet).length < 3) {
+    if (!termsOnly && sourceEvidence(publicationPacket).length < 3) {
       throw new Error('This regular card does not contain at least three clean, relevant breakdown points. Reject it and wait for a corrected card.');
     }
-    const timing = await upcomingEventStatus(packet);
+    const timing = await upcomingEventStatus(publicationPacket);
     trace(`event verification ${timing.status}`);
     if (timing.status !== 'UPCOMING') {
       throw new Error(timing.status === 'STARTED_OR_FINISHED'
@@ -1253,18 +1256,18 @@ async function handleSourceReviewButton(interaction) {
           ? timing.reason
           : 'This pick is not verified for an upcoming game scheduled today. Reject it and use a current card.');
     }
-    const sport = normalizedSport(packet);
+    const sport = normalizedSport(publicationPacket);
     if (action === 'free') {
-      assertFreePickEligible(packet);
+      assertFreePickEligible(publicationPacket);
       await enforceDailyFreePickLimit();
     }
     const channel = action === 'free'
       ? await approvedTextChannel(freePickChannelId)
-      : await approvedTextChannel(termsOnly ? exclusivesChannelId : (sport ? sportChannelMap.get(sport) : undefined));
+      : await approvedTextChannel(configuredTermsOnly ? exclusivesChannelId : (sport ? sportChannelMap.get(sport) : undefined));
     const label = action === 'free' ? 'FREE PICK' : 'PAID PICK';
-    const extraction = packet.analysis.extraction;
+    const extraction = publicationPacket.analysis.extraction;
     const firstPlay = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;
-    await recordApprovalAction(packet, {
+    await recordApprovalAction(publicationPacket, {
       action,
       actorId: interaction.user.id,
       status: 'APPROVED_PENDING_PUBLICATION'
@@ -1272,8 +1275,8 @@ async function handleSourceReviewButton(interaction) {
     trace('approval audit recorded');
     const publishedMessage = await postAndLogOfficialPick({
       channel,
-      payload: { embeds: [buildSourcePickEmbed(packet, label)] },
-      packet,
+      payload: { embeds: [buildSourcePickEmbed(publicationPacket, label)] },
+      packet: publicationPacket,
       entry: {
         pick_id: packet.pick_id,
         operating_date: pacificOperatingDate(),
@@ -1284,8 +1287,8 @@ async function handleSourceReviewButton(interaction) {
         selection: firstPlay.selection || extraction.selection || '',
         published_line: firstPlay.line || extraction.line || '',
         published_odds_american: firstPlay.odds_american || extraction.odds_american || '',
-        units_risked: firstExtractedUnits(packet),
-        source_name: sourceCapperName(packet),
+        units_risked: firstExtractedUnits(publicationPacket),
+        source_name: sourceCapperName(publicationPacket),
         credit_text: packet.source.credit_line || '',
         approver: interaction.user.id,
         approved_at: approval.decided_at,

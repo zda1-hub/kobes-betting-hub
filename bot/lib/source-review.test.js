@@ -287,6 +287,14 @@ test('formats leaked-capper picks as terms only, without the source image', () =
   assert.equal(embed.image, undefined);
 });
 
+test('publishes monitoring-only candidates as wager terms without source identity, evidence, or media', () => {
+  const monitored = require('./source-review').monitoredTermsPacket(packet);
+  const embed = buildSourcePickEmbed(monitored, 'PAID PICK');
+  assert.equal(embed.description, '• Jacob Misiorowski OVER 6.5 strikeouts -115 (1u)\n• Team ML +120');
+  assert.equal(embed.image, undefined);
+  assert.throws(() => assertFreePickEligible(monitored), /Kobe’s original writeup/);
+});
+
 test('formats an exclusive approval card as capper, bet, and stated stake only', () => {
   const embed = buildSourcePickEmbed({
     ...packet,
@@ -310,6 +318,14 @@ test('uses destination names directly on approval buttons', () => {
   });
   assert.equal(buttons[0].components[0].label, 'Post to #daily-free-play');
   assert.equal(buttons[0].components[1].label, 'Post to #mlb-writeups');
+
+  const monitoringOnly = require('./source-review').reviewButtons('20260907-002-X', {
+    freeDisabled: true,
+    freeLabel: 'Free needs Kobe writeup',
+    paidLabel: 'Post terms to #nfl-writeups'
+  });
+  assert.equal(monitoringOnly[0].components[0].disabled, true);
+  assert.equal(monitoringOnly[0].components[1].disabled, false);
 });
 
 test('does not treat a leaked-source account as the original capper', () => {
