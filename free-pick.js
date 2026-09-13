@@ -23,6 +23,7 @@ document.addEventListener('click', (event) => {
 const dateNode = document.querySelector('[data-free-pick-date]');
 const captionNode = document.querySelector('[data-free-pick-caption]');
 const statusNode = document.querySelector('[data-free-pick-status]');
+const cardNode = document.querySelector('[data-free-pick-card]');
 const imageNode = document.querySelector('[data-free-pick-image]');
 const textCardNode = document.querySelector('[data-free-pick-text-card]');
 const selectionNode = document.querySelector('[data-free-pick-selection]');
@@ -40,8 +41,12 @@ async function loadFreePick() {
   try {
     const response = await fetch(`${PUBLISHER_URL}/api/free-pick/current`, { cache: 'no-store' });
     if (response.status === 404) {
-      statusNode.textContent = 'NOT POSTED';
-      captionNode.textContent = 'Today’s free pick has not been posted yet.';
+      cardNode.hidden = true;
+      imageNode.hidden = true;
+      imageNode.removeAttribute('src');
+      textCardNode.hidden = true;
+      placeholderNode.hidden = true;
+      captionNode.textContent = 'No free pick is posted right now.';
       return;
     }
     if (!response.ok) throw new Error(`Free pick request failed: ${response.status}`);
@@ -51,6 +56,7 @@ async function loadFreePick() {
     dateNode.textContent = formatDate(pick.publishedDate);
     captionNode.textContent = pick.caption || 'Today’s free pick is live.';
     statusNode.textContent = 'LIVE';
+    cardNode.hidden = false;
     if (pick.imageUrl) {
       imageNode.src = pick.imageUrl;
       imageNode.hidden = false;
@@ -64,7 +70,7 @@ async function loadFreePick() {
     }
     placeholderNode.hidden = true;
   } catch (error) {
-    statusNode.textContent = 'UPDATING';
+    cardNode.hidden = true;
     captionNode.textContent = 'The free-pick service is temporarily updating. Please check back shortly.';
     console.warn('Unable to load today’s free pick.', error);
   }
