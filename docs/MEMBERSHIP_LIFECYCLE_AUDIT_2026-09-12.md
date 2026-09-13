@@ -18,7 +18,7 @@ The architecture is valid: Stripe is the payment and subscription authority; Dis
 - `customer.subscription.created`, `.updated`, and `.deleted` persist subscription state and grant or remove the Discord role based on `active`/`trialing` status.
 - The manage-membership page authenticates the linked Discord identity and then creates a Stripe Customer Portal session. Checkout-session cancellation endpoints are disabled.
 - Supabase membership tables have row-level security enabled and revoke `anon` and `authenticated` access.
-- The full local test suite passes: **97 tests passed, 0 failed**. Ten tests now directly cover the checkout Worker.
+- The full local test suite passes: **98 tests passed, 0 failed**. Ten tests directly cover the checkout Worker; one additional regression test covers text-only public Free Pick persistence.
 
 ## Hardening release
 

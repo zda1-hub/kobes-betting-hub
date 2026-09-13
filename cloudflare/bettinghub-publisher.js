@@ -402,7 +402,8 @@ async function readFreePick(env) {
   if (!stored) return null;
   try {
     const pick = JSON.parse(stored);
-    return validDate(pick?.publishedDate) && typeof pick?.objectKey === "string" && typeof pick?.caption === "string" ? pick : null;
+    const validObjectKey = pick?.objectKey === null || typeof pick?.objectKey === "string";
+    return validDate(pick?.publishedDate) && validObjectKey && typeof pick?.caption === "string" ? pick : null;
   } catch {
     return null;
   }

@@ -2,9 +2,9 @@
 
 **Status:** Active production system with unresolved operational and compliance risks
 
-**Last verified:** 2026-09-12 18:36 MST
+**Last verified:** 2026-09-12 18:53 MST
 
-**Production runtime change set:** repository/Render `main` (audit-hardening release); Checkout Worker `4b66c8f4-d5b0-4b7b-888e-f85584423f9a`; Publisher Worker `047bd71c-f7c5-4ea5-b624-af6615550213`; public-site Worker `d5d3cd32-182e-4e6c-aa7d-968c81af1b28`
+**Production runtime change set:** repository/Render `main` at `e68d368`; Checkout Worker `4b66c8f4-d5b0-4b7b-888e-f85584423f9a`; Publisher Worker `b0a60493-82c6-429a-b74d-7a4d8e24f9f9`; public-site Worker `d5d3cd32-182e-4e6c-aa7d-968c81af1b28`
 
 **Control-file owner:** Zakai Martin
 
@@ -40,7 +40,7 @@ The system is not a single application. It currently spans GitHub, Cloudflare Wo
 - The Render environment and repository are configured for `gpt-5.6-luna` with bounded output, no reasoning, versioned pricing metadata, and reusable audited extractions.
 - The free Supabase project `kobe betting hub` is healthy. Migrations `001`–`004` are live, including `api_call_events` and `provider_usage_snapshots`; production verification found eight durable API events immediately after cutover. The Checkout Worker uses a dedicated server secret; Render uses the encrypted session-pooler connection with fail-closed audit enforcement.
 - The publisher Cloudflare Worker reports ready, connected to X, and configured with free-tier KV Free Pick media storage. The custom-domain client now points to the correct Worker.
-- Discord `#daily-free-play` contains a canonical published record for `20260912-148-X` (Bijan Robinson over 29.5 receiving yards, -140). After explicit owner confirmation, a public-site synchronization was attempted, but the Publisher Worker returned HTTP `401`. No public Free Pick was created; the website still has no current item.
+- Discord `#daily-free-play` contains canonical record `20260912-148-X` (Bijan Robinson over 29.5 receiving yards, -140). A dedicated website-publication credential is now encrypted independently in Render and Cloudflare. The owner-approved text-only synchronization returned `201`, the KV current endpoint returned `200`, and the live public page rendered the same Bijan selection. No Discord or X action occurred during this repair.
 - A controlled manual audit checked one recent `@CappersUSA` X candidate through Luna with a one-candidate cap and `--no-discord`. It was held as `SOURCE_EXTRACTED`; no member or Discord publication occurred.
 - Commit `f9b2141` is deployed on Render. It contains the exact Bijan production formatting regression fixture and formatter corrections for duplicated `YDs`/`Yards` terms, a repeated shorthand selection bullet, and the dangling URL-dependent clause.
 
@@ -98,7 +98,7 @@ Kobe Trends email
 | Pick log | Render persistent disk | `bot/lib/pick-log.js` | `/var/data/pick-log.csv` | Live, single-host CSV |
 | Pick/member audit DB | Supabase Postgres | `pipeline/audit-store.js`, `pipeline/migrations/` | Supabase Postgres | Migrations `001`–`004` live; Worker and Render connected |
 | Event/result verification | ESPN public APIs | `bot/lib/event-timing.js`, `bot/lib/espn-grading.js`, `bot/lib/espn-trends.js` | stored response snapshot/reference after audit cutover | Live, partial market coverage |
-| Public Free Pick | Publisher Worker + KV | `cloudflare/bettinghub-publisher.js`, `free-pick.js` | KV `free-picks/current.json` | Storage/client repaired; confirmed sync attempt returned `401`; no public item was written |
+| Public Free Pick | Publisher Worker + KV | `cloudflare/bettinghub-publisher.js`, `free-pick.js` | KV `free-picks/current.json` | Live with canonical Bijan text-only item; dedicated cross-service credential verified by hash only |
 | X publishing | Publisher Worker + D1 | `cloudflare/bettinghub-publisher.js` | D1 queue/delivery log + X post ID | Connected |
 | Trends inbox | Gmail Apps Script + D1 + Render | `cloudflare/kobe-trends-inbox.gs`, publisher Worker, bot | D1 queue + approval packet | Configuration status needs verification |
 | Recap email | Render + D1 + Gmail Apps Script | `bot/index.js`, Apps Script | CSV grades + D1 notification status | Live configuration reported; end-to-end proof needed |
@@ -262,7 +262,7 @@ Status meanings: **Complete** means the intended production control and its imme
 | 4 | Durable API trail | **Partial / operational** | Supabase migrations `001`–`004` are live; `api_call_events` and `provider_usage_snapshots` exist with RLS and revoked public roles. Explicit Node and Checkout Worker calls write endpoint/outcome/latency/hash/workflow metadata; eight production ESPN events were observed immediately after cutover. Discord SDK REST response auditing is implemented and regression-tested without retaining route identifiers or message bodies. | Wrap Apps Script calls and Publisher Worker X calls; cover Discord REST failures that happen before a response; then reconcile zero unclassified provider traffic for a controlled window. |
 | 5 | Provider billing reconciliation | **Blocked on owner-authorized credential** | `scripts/sync-openai-usage.mjs` imports OpenAI hourly usage by project/API key/model and daily project costs into `provider_usage_snapshots`; it fails safely without `OPENAI_ADMIN_KEY`. | Create/store a dedicated OpenAI organization Admin API key only after action-time owner confirmation, run the import, and reconcile the September 12 anomaly to project/key/model. |
 | 6 | Cost containment | **Complete, monitoring required** | Luna is active; durable X cursor/dedupe uses `/var/data`; hard pre-call limits are 50 OpenAI requests/day, 500/month, $1 estimated/day, and $15 estimated/month; monitored-source publishing is disabled. | Review caps after provider reconciliation and verify that cutoff events are durably recorded rather than silently dropping work. |
-| 7 | Free Pick mismatch | **Partial — publication failed safely** | Publisher Worker `047bd71c-f7c5-4ea5-b624-af6615550213` reports KV-backed Free Pick storage ready and the browser client uses the correct Worker domain. Commit `f9b2141` deployed the exact Bijan formatting regression. After explicit public-post confirmation, the sync attempt returned HTTP `401`; therefore no new public item was published. The endpoint now supports a dedicated least-privilege website-publish secret without rotating the broader queue credential. | Align the dedicated secret in Cloudflare and Render after action-time credential confirmation; repeat a text-only sync of canonical pick `20260912-148-X`; verify `200`, durable KV current state, the public page, and no Discord/X side effect. |
+| 7 | Free Pick mismatch | **Complete for text-only production path** | A dedicated least-privilege credential was generated and stored encrypted in Cloudflare and Render; intermediate exposed rotation values were invalidated. Runtime verification compared only a non-secret hash prefix. The first authorized publish exposed a read-path defect for `objectKey: null`; a regression test was added, the suite passed 98/98, and Publisher Worker `b0a60493-82c6-429a-b74d-7a4d8e24f9f9` was deployed. Canonical pick `20260912-148-X` then returned `201`, `/api/free-pick/current` returned `200`, and the public page rendered the Bijan selection with no Discord/X side effect. | Test the image-backed path separately before using it; add a public-page smoke check to deployment monitoring. |
 | 8 | Membership reconciliation | **Complete for scheduled control** | Checkout Worker `8cf8e360-6403-4588-b850-cb65357cf9ca` runs Stripe → Supabase → Discord reconciliation daily at `15 16 * * *` (09:15 Arizona) and records outcomes/failures. | Add an external alert destination for failed reconciliation and prove one mismatch repair in a controlled test. |
 | 9 | Legal/support operations | **Blocked on owner decisions** | Draft Terms, Privacy, support pages, and issue playbooks exist, but the public legal text is inconsistent with the live paid product and is not owner/counsel approved. | Supply the legal business identity/address, jurisdiction, support/privacy email, refund and failed-payment grace rules, retention policy, backup operator, and approval authority; then publish and timestamp effective policies. |
 
@@ -292,7 +292,7 @@ Status meanings: **Complete** means the intended production control and its imme
 - [ ] Define and implement refund, past-due/grace, dispute, access restoration, and support escalation policy.
 - [ ] Establish a shared support ticket system with named owner and response targets.
 - [ ] Add API audit events to both Cloudflare Workers and Apps Script queues, not only the Node pick pipeline.
-- [ ] Verify end-to-end recap email, Trends email approval, public Free Pick update, and X delivery with test evidence.
+- [ ] Verify end-to-end recap email, Trends email approval, and X delivery with test evidence. The text-only public Free Pick update is verified.
 - [ ] Establish a staging environment with separate Stripe test mode, Discord test server/channel, API keys, databases, and domain.
 - [ ] Add production smoke tests and alerts for website, checkout health, publisher health, bot heartbeat, stale queues, and database failures.
 
@@ -389,6 +389,8 @@ Database direction: the existing free Supabase Postgres project is the first pro
 | 2026-09-12 | Deploy checkout replay protection, Stripe signature-rotation support, least-privilege portal OAuth, and exact Worker-version attribution. Checkout Worker `4b66c8f4-d5b0-4b7b-888e-f85584423f9a` returned health `200` after deployment. | Zakai Martin | Live |
 | 2026-09-12 | Add durable Discord SDK REST response auditing with identifier/token redaction and payload hashes only; the combined suite passed 97/97. | Zakai Martin | Prepared for Render deployment |
 | 2026-09-12 | Split Free Pick website publication from the broader queue credential. Publisher Worker `047bd71c-f7c5-4ea5-b624-af6615550213` is live; the new dedicated secret still requires action-time owner confirmation and cross-service alignment. | Zakai Martin | Code live; credential pending |
+| 2026-09-12 | Owner confirmed creation and installation of the dedicated Free Pick website credential. It was stored encrypted in Cloudflare and Render; intermediate values surfaced by browser accessibility were immediately invalidated, and the final runtime match was verified only by a short hash. | Zakai Martin | Complete |
+| 2026-09-12 | The authorized text-only Bijan sync returned `201` but initially remained unreadable because the Worker rejected persisted `objectKey: null`. The regression test and fix are now deployed as Publisher Worker `b0a60493-82c6-429a-b74d-7a4d8e24f9f9`; the current endpoint returns `200`, and the public page visibly renders the pick. | Zakai Martin | Complete |
 
 ## Owner answers still required
 
