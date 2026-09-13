@@ -15,7 +15,7 @@ The intended authentication and billing split is now verified through scheduled 
 - Supabase durably maps the Stripe customer/subscription to the Discord user and stores webhook, membership, and outbound API audit events.
 - Discord membership roles are derived entitlements. Stripe subscription state is authoritative.
 
-One dedicated test identity completed Checkout, Discord link and guild join, paid-role grant, Discord-authenticated portal access, and cancellation at the end of its trial. The role correctly remains present while the subscription is still `trialing`; the remaining time-dependent proof is role removal after the terminal cancellation event on 2026-09-20. Failed renewal/recovery, refund, and dispute behavior also remains to be tested. Legal and support policy remain release blockers.
+One dedicated test identity completed Checkout, Discord link and guild join, paid-role grant, Discord-authenticated portal access, and cancellation at the end of its trial. The role correctly remains present while the subscription is still `trialing`; the remaining time-dependent proof is role removal after the terminal cancellation event on 2026-09-20. Failed renewal/recovery, legally required refund exceptions, and dispute behavior also remain to be tested. Legal and support policy remain release blockers.
 
 ## Controlled staging lifecycle — 2026-09-13
 
@@ -40,7 +40,7 @@ The raw Stripe field `cancel_at_period_end` is `false` because current Stripe be
 2. Supabase initially returned HTTP `403` for `referral_rewards` because the server credential lacked explicit REST table grants. Migration `007_service_role_rest_access` grants only the backend operations required by `service_role`, retains RLS, and leaves `anon` and `authenticated` with zero table grants.
 3. Stripe's Basil API moved subscription period fields from the subscription root to subscription items. The initial cancellation webhooks therefore stored a null period end. Migration `008_subscription_cancellation_fields` adds `cancel_at`; the Worker now persists explicit cancellation time and falls back to item-level period fields.
 
-All three fixes are present in staging source deployment `30cea51e-5ef2-4d24-baae-f36565152726`. Secret-only Discord client rotation deployment `5c878920-d8c8-449d-9922-ce4cfc849e77` preceded it. The final health endpoint returned HTTP `200` and the local suite passes **151 tests, 0 failures**.
+All three fixes are present in staging source deployment `30cea51e-5ef2-4d24-baae-f36565152726`. Secret-only Discord client rotation deployment `5c878920-d8c8-449d-9922-ce4cfc849e77` preceded it. The final health endpoint returned HTTP `200`; the expanded repository suite now passes **160 tests, 0 failures**.
 
 ## Credential and isolation evidence
 
@@ -67,8 +67,8 @@ All three fixes are present in staging source deployment `30cea51e-5ef2-4d24-baa
 ### Release blockers
 
 1. **Terms and policy are not effective.** `terms.html` publicly says “DRAFT • NOT YET EFFECTIVE” while checkout is enabled. Legal entity, jurisdiction, renewal/cancellation language, refunds, taxes, and official contact details remain unresolved.
-2. **Billing exceptions do not yet drive final entitlement policy.** The webhook records `invoice.payment_failed`, `invoice.paid`, refunds, and disputes, but the owner has not approved grace, removal, or restoration rules for every case.
-3. **The normal lifecycle is complete only through scheduled cancellation.** Observe the terminal event and role removal on 2026-09-20. Separately exercise failed renewal/recovery, refund, and dispute scenarios.
+2. **Billing exceptions do not yet drive final entitlement policy.** Refund and dispute events currently affect referral rewards only; they do not cancel membership or remove the Discord role. `invoice.payment_failed` has no dedicated handler and is not in the documented seven-event webhook configuration. A subsequent subscription status change away from `active`/`trialing` removes access, but failed-payment grace and restoration behavior are unapproved and untested.
+3. **The normal lifecycle is complete only through scheduled cancellation.** Observe the terminal event and role removal on 2026-09-20. Separately exercise failed renewal/recovery, legally required refund exceptions, and dispute scenarios.
 
 ### High-priority operational gaps
 
@@ -81,7 +81,8 @@ All three fixes are present in staging source deployment `30cea51e-5ef2-4d24-baa
 
 - Legal/business name, address, jurisdiction, and legal-review owner.
 - Official support/privacy email, escalation path, and response target.
-- Refund policy, failed-payment grace period, and access behavior for refunds/disputes.
+- Failed-payment grace period and access behavior for legally required refunds/disputes. The owner selected all sales final except where law, card-network rules, or a written exception requires otherwise.
+- One-time cancellation retention offer: 75% off the next `$32.99` invoice, then return to `$32.99/month`; Stripe test configuration and repeat-attempt behavior remain to be verified.
 - Approved renewal disclosure, cancellation effective time, taxes, and billing descriptor.
 - Discord-account relink authority and verification procedure.
 - Membership/audit retention and deletion policy.
@@ -91,6 +92,7 @@ All three fixes are present in staging source deployment `30cea51e-5ef2-4d24-baa
 
 1. **Complete:** isolated environment, encrypted credentials, Checkout, Discord OAuth/link, guild join, role grant, portal authentication, scheduled cancellation, Supabase persistence, and versioned API-call audit.
 2. **Time-dependent:** after `2026-09-20T08:14:02Z`, retain the terminal Stripe event, Supabase subscription/event rows, and Discord role-removal evidence.
-3. Implement and test approved failed-payment, recovery, refund, and dispute rules plus external alerts.
-4. Approve and publish effective Terms, Privacy, refund, renewal, cancellation, and support language.
-5. Only after production approval, deploy the staging fixes to production and perform any separately authorized production acceptance transaction.
+3. Configure and test the one-invoice 75% Stripe retention coupon, including repeat cancellation attempts and interaction with introductory offers.
+4. Implement and test approved failed-payment, recovery, mandatory refund-exception, and dispute rules plus external alerts.
+5. Approve and publish effective Terms, Privacy, refund, renewal, cancellation, and support language.
+6. Only after production approval, deploy the staging fixes to production and perform any separately authorized production acceptance transaction.

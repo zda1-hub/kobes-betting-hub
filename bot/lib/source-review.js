@@ -100,9 +100,10 @@ function publicPlayTerm({ terms, selection, playerName, line, oddsAmerican, even
     : baseSelection;
   const cleanBase = base.replace(/\s{2,}/g, ' ').trim();
   const includesLine = line && normalizedText(cleanBase).includes(normalizedText(line));
+  const includesOdds = oddsAmerican && cleanBase.toLowerCase().includes(oddsAmerican.toLowerCase());
   const requiresEvent = /^(?:over|under|o\s*\/\s*u|nrfi|yrfi|btts|yes|no)\b/i.test(cleanBase);
   const eventContext = requiresEvent && event ? `— ${event}` : '';
-  return [cleanBase, includesLine ? '' : line, eventContext, oddsAmerican ? `(${oddsAmerican})` : '']
+  return [cleanBase, includesLine ? '' : line, eventContext, oddsAmerican && !includesOdds ? `(${oddsAmerican})` : '']
     .filter(Boolean)
     .join(' ');
 }

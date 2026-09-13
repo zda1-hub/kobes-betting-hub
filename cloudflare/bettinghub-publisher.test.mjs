@@ -42,14 +42,22 @@ function memoryKv() {
   const values = new Map();
   return {
     async put(key, value, options = {}) {
-      values.set(key, { value: String(value), metadata: options.metadata || null });
+      values.set(key, {
+        value: value instanceof ArrayBuffer ? value.slice(0) : String(value),
+        metadata: options.metadata || null,
+      });
     },
     async get(key) {
-      return values.get(key)?.value || null;
+      const value = values.get(key)?.value;
+      return typeof value === 'string' ? value : null;
     },
     async getWithMetadata(key) {
       const stored = values.get(key);
-      return stored ? { value: new TextEncoder().encode(stored.value).buffer, metadata: stored.metadata } : { value: null, metadata: null };
+      if (!stored) return { value: null, metadata: null };
+      return {
+        value: stored.value instanceof ArrayBuffer ? stored.value.slice(0) : new TextEncoder().encode(stored.value).buffer,
+        metadata: stored.metadata,
+      };
     },
   };
 }
@@ -79,6 +87,66 @@ test('text-only Free Pick remains readable after publication', async () => {
   assert.equal(current.publishedDate, '2026-09-12');
   assert.equal(current.details.selection, 'Bijan Robinson over 29.5 receiving yards');
   assert.equal(current.imageUrl, null);
+});
+
+test('image-backed Free Pick remains readable and serves the exact stored media when X needs attention', async (t) => {
+  const env = {
+    FREE_PICK_KV: memoryKv(),
+    FREE_PICK_SITE_PUBLISH_SECRET: 'test-publisher-secret',
+  };
+  const form = new FormData();
+  form.set('date', '2026-09-13');
+  form.set('caption', 'FREE PLAY\nBijan Robinson over 29.5 receiving yards (-140)');
+  form.set('selection', 'Bijan Robinson over');
+  form.set('line', '29.5 receiving yards');
+  form.set('odds', '-140');
+  form.set('image', new File([Uint8Array.of(137, 80, 78, 71)], 'approved.png', { type: 'image/png' }));
+
+  const originalError = console.error;
+  console.error = () => {};
+  t.after(() => { console.error = originalError; });
+  const publishResponse = await worker.fetch(new Request('https://publisher.test/api/free-pick/publish', {
+    method: 'POST',
+    headers: { authorization: 'Bearer test-publisher-secret' },
+    body: form,
+  }), env);
+  assert.equal(publishResponse.status, 202);
+  const publication = await publishResponse.json();
+  assert.equal(publication.xPosted, false);
+  assert.match(publication.imageUrl, /^https:\/\/publisher\.test\/media\/free-pick\/current\?v=/);
+
+  const currentResponse = await worker.fetch(new Request('https://publisher.test/api/free-pick/current'), env);
+  assert.equal(currentResponse.status, 200);
+  const current = await currentResponse.json();
+  assert.equal(current.publishedDate, '2026-09-13');
+  assert.equal(current.details.selection, 'Bijan Robinson over');
+  assert.equal(current.imageUrl, publication.imageUrl);
+
+  const imageResponse = await worker.fetch(new Request(current.imageUrl), env);
+  assert.equal(imageResponse.status, 200);
+  assert.equal(imageResponse.headers.get('content-type'), 'image/png');
+  assert.deepEqual([...new Uint8Array(await imageResponse.arrayBuffer())], [137, 80, 78, 71]);
+});
+
+test('image-backed Free Pick rejects unsupported media without changing current state', async () => {
+  const env = {
+    FREE_PICK_KV: memoryKv(),
+    FREE_PICK_SITE_PUBLISH_SECRET: 'test-publisher-secret',
+  };
+  const form = new FormData();
+  form.set('date', '2026-09-13');
+  form.set('caption', 'FREE PLAY');
+  form.set('selection', 'Test selection');
+  form.set('image', new File([Uint8Array.of(71, 73, 70)], 'not-supported.gif', { type: 'image/gif' }));
+
+  const response = await worker.fetch(new Request('https://publisher.test/api/free-pick/publish', {
+    method: 'POST',
+    headers: { authorization: 'Bearer test-publisher-secret' },
+    body: form,
+  }), env);
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /JPG, PNG, or WebP/);
+  assert.equal((await worker.fetch(new Request('https://publisher.test/api/free-pick/current'), env)).status, 404);
 });
 
 test('audited X fetch writes a durable redacted D1 record with Worker attribution', async () => {
