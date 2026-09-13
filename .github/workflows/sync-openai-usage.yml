@@ -45,6 +45,7 @@ jobs:
     env:
       EXPECTED_PROJECT_REF: mpajyubbnnsdpgdizvht
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      PRODUCTION_DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BACKUP_KEY: ${{ secrets.PRODUCTION_BACKUP_KEY }}
       PGCONNECT_TIMEOUT: "15"
     steps:
@@ -122,3 +123,18 @@ jobs:
           path: artifacts/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Check out the reviewed source
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run the production migration plan without writes
+        run: node pipeline/migrate-production.js --plan

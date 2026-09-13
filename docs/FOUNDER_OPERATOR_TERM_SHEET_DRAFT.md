@@ -76,8 +76,10 @@ If Zakai's assigned work later expands materially—including marketing manageme
 ### Zakai
 
 - Operates the website, checkout integration, membership persistence, Discord entitlement workflow, API controls, monitoring, audit trail, and agreed launch operations.
-- Handles only the support and marketing work expressly listed in the final scope.
+- Handles only the support and marketing work expressly listed in the final scope. If Zakai owns the public support inbox, frontline billing triage, response-time commitment, after-hours coverage, or member escalation queue, those duties count as continuing operating scope for the compensation floor and growth tiers.
 - May pause automation when necessary to prevent unauthorized publishing, security exposure, runaway API cost, duplicate billing, or incorrect access; Zakai must notify Kobe promptly.
+
+The final scope should distinguish frontline support from technical escalation. If Kobe owns frontline support, Zakai handles only documented platform/billing escalations. If Zakai owns both, the agreement should include staffed hours, an after-hours exception rule, a ticket-volume review point, and either the continuing-operator percentage floor or a separate monthly support fee.
 
 Neither party may expand the other's duties by text message or verbal request without a written change order that states the scope, timeline, and compensation.
 
