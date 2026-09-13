@@ -17,10 +17,24 @@ document.addEventListener('click', (event) => {
   }
 });
 
-const checkoutEndpoint = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev/create-checkout';
+const productionMembershipWorkerOrigin = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
+const membershipConfig = (() => {
+  const config = window.__KBH_MEMBERSHIP_CONFIG__;
+  if (!config || !['production', 'staging'].includes(config.environment)) return null;
+  try {
+    const origin = new URL(config.workerOrigin);
+    if (origin.protocol !== 'https:' || origin.origin !== config.workerOrigin || origin.username || origin.password) return null;
+    if (config.environment === 'production' && config.workerOrigin !== productionMembershipWorkerOrigin) return null;
+    if (config.environment === 'staging' && config.workerOrigin === productionMembershipWorkerOrigin) return null;
+    return { environment: config.environment, workerOrigin: config.workerOrigin };
+  } catch {
+    return null;
+  }
+})();
+const checkoutEndpoint = membershipConfig ? `${membershipConfig.workerOrigin}/create-checkout` : null;
 // Live Stripe checkout is enabled. Discord access is granted only after the
 // customer completes Stripe Checkout and explicitly connects their account.
-const checkoutEnabled = true;
+const checkoutEnabled = Boolean(checkoutEndpoint);
 const checkoutMessage = document.querySelector('[data-checkout-message]');
 const discordConnect = document.querySelector('[data-discord-connect]');
 const setCheckoutMessage = (message) => { if (checkoutMessage) checkoutMessage.textContent = message; };
@@ -68,10 +82,10 @@ if (referralCode && !checkoutState) {
 
 if (checkoutState === 'success') {
   setCheckoutMessage('Your membership is confirmed. Connect Discord now to receive member access.');
-  if (discordConnect && checkoutSession) {
+  if (discordConnect && checkoutSession && membershipConfig) {
     discordConnect.hidden = false;
     discordConnect.setAttribute('aria-hidden', 'false');
-    discordConnect.href = `${checkoutEndpoint.replace('/create-checkout', '')}/discord/connect?session_id=${encodeURIComponent(checkoutSession)}`;
+    discordConnect.href = `${membershipConfig.workerOrigin}/discord/connect?session_id=${encodeURIComponent(checkoutSession)}`;
     window.setTimeout(() => discordConnect.classList.add('is-ready'), 150);
   }
 }
@@ -80,7 +94,7 @@ if (checkoutState === 'cancel') setCheckoutMessage('Checkout was canceled. Your 
 
 document.querySelectorAll('[data-checkout]').forEach((button) => button.addEventListener('click', async () => {
   if (!checkoutEnabled) {
-    setCheckoutMessage('Checkout is being finalized. No payments are being accepted yet.');
+    setCheckoutMessage('Checkout is unavailable because this site is not configured for a valid membership environment.');
     return;
   }
   const buttons = [...document.querySelectorAll('[data-checkout]')];

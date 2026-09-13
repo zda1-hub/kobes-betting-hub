@@ -1,9 +1,13 @@
-import { cp, mkdir, rm } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputRoot = path.join(projectRoot, '.public-site');
+export const productionMembershipWorkerOrigin = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
+
+const membershipConfigFiles = ['join.html', 'membership.html', 'cancel.html'];
+const membershipConfigPattern = /window\.__KBH_MEMBERSHIP_CONFIG__ = Object\.freeze\(\{[^\n]*\}\);/g;
 
 const publicFiles = [
   'index.html',
@@ -41,18 +45,77 @@ const publicFiles = [
   'app.js'
 ];
 
-await rm(outputRoot, { recursive: true, force: true });
-await mkdir(path.join(outputRoot, 'guides'), { recursive: true });
+export function resolveMembershipConfig(env = process.env) {
+  const environment = env.KBH_SITE_ENV || 'production';
+  if (!['production', 'staging'].includes(environment)) {
+    throw new Error('KBH_SITE_ENV must be either "production" or "staging".');
+  }
 
-await Promise.all(publicFiles.map((file) => cp(
-  path.join(projectRoot, file),
-  path.join(outputRoot, file)
-)));
+  const configuredOrigin = env.KBH_MEMBERSHIP_WORKER_ORIGIN || '';
+  if (environment === 'production' && configuredOrigin && configuredOrigin !== productionMembershipWorkerOrigin) {
+    throw new Error('Production builds cannot override KBH_MEMBERSHIP_WORKER_ORIGIN.');
+  }
+  if (environment === 'staging' && !configuredOrigin) {
+    throw new Error('Staging builds require KBH_MEMBERSHIP_WORKER_ORIGIN.');
+  }
 
-await cp(
-  path.join(projectRoot, 'guides', 'how-to-choose-a-sports-betting-discord.html'),
-  path.join(outputRoot, 'guides', 'how-to-choose-a-sports-betting-discord.html')
-);
-await cp(path.join(projectRoot, 'assets'), path.join(outputRoot, 'assets'), { recursive: true });
+  const workerOrigin = configuredOrigin || productionMembershipWorkerOrigin;
+  let parsedOrigin;
+  try {
+    parsedOrigin = new URL(workerOrigin);
+  } catch {
+    throw new Error('KBH_MEMBERSHIP_WORKER_ORIGIN must be a valid HTTPS origin.');
+  }
+  if (
+    parsedOrigin.protocol !== 'https:'
+    || parsedOrigin.origin !== workerOrigin
+    || parsedOrigin.username
+    || parsedOrigin.password
+  ) {
+    throw new Error('KBH_MEMBERSHIP_WORKER_ORIGIN must be a valid HTTPS origin without a path, query, or credentials.');
+  }
+  if (environment === 'staging' && workerOrigin === productionMembershipWorkerOrigin) {
+    throw new Error('Staging builds cannot use the production membership Worker origin.');
+  }
 
-console.log(`Prepared ${publicFiles.length + 2} public site entries in ${outputRoot}.`);
+  return { environment, workerOrigin };
+}
+
+export function injectMembershipConfig(source, config, fileName = 'HTML file') {
+  const replacement = `window.__KBH_MEMBERSHIP_CONFIG__ = Object.freeze(${JSON.stringify(config)});`;
+  const matches = source.match(membershipConfigPattern) || [];
+  if (matches.length !== 1) {
+    throw new Error(`${fileName} must contain exactly one membership configuration block.`);
+  }
+  return source.replace(membershipConfigPattern, replacement);
+}
+
+export async function preparePublicSite({ env = process.env } = {}) {
+  const membershipConfig = resolveMembershipConfig(env);
+
+  await rm(outputRoot, { recursive: true, force: true });
+  await mkdir(path.join(outputRoot, 'guides'), { recursive: true });
+
+  await Promise.all(publicFiles.map((file) => cp(
+    path.join(projectRoot, file),
+    path.join(outputRoot, file)
+  )));
+
+  await Promise.all(membershipConfigFiles.map(async (file) => {
+    const outputPath = path.join(outputRoot, file);
+    const source = await readFile(outputPath, 'utf8');
+    await writeFile(outputPath, injectMembershipConfig(source, membershipConfig, file));
+  }));
+
+  await cp(
+    path.join(projectRoot, 'guides', 'how-to-choose-a-sports-betting-discord.html'),
+    path.join(outputRoot, 'guides', 'how-to-choose-a-sports-betting-discord.html')
+  );
+  await cp(path.join(projectRoot, 'assets'), path.join(outputRoot, 'assets'), { recursive: true });
+
+  console.log(`Prepared ${publicFiles.length + 2} public site entries in ${outputRoot} for ${membershipConfig.environment}.`);
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await preparePublicSite();
+}
