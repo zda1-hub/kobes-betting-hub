@@ -13,7 +13,7 @@ Governing jurisdiction approved by owner: California
 - Release commit: `0a54485b82aab6a6d4b4bd1d31254dfde2d22c4e`
 - Pick-system base: `3104e382d1e679afb363431261f8181436682c35`
 - Membership candidate: `5420caeba9daaeba218b2a3be2f66f5b0832cd98`
-- Verification: 169 tests passed, zero failed.
+- Verification: 170 tests passed, zero failed after the public-beta legal identity update.
 - Production-site build: 35 public entries prepared successfully.
 - The release branch contains the hardened Checkout Worker, production migration runner, migrations 007–009, recurring-billing disclosures, cancellation/retention behavior, billing-exception entitlement blocks, referral assets, and the current pick workflow.
 
@@ -56,6 +56,7 @@ The public-beta label does not waive the customer-facing acceptance gate. Before
 - [ ] Confirm the one-time 75%-off retention coupon is configured for production and can be redeemed only once per customer.
 - [ ] Enable and record the `invoice.payment_failed` webhook only after the new Worker is healthy.
 - [ ] Deploy the matching public membership/referral pages and run read-only production smoke checks.
+- [x] Publish effective Terms and Privacy pages identifying Kobe Irwin, California, `support@kobesbettinghub.com`, the public-beta status, recurring billing, cancellation, refund exceptions, and payment-dispute access behavior.
 - [ ] Run the single production acceptance lifecycle above; do not use an unrelated real customer.
 - [ ] Reconcile every Stripe event received during promotion with Supabase and Discord.
 - [ ] Record the public-beta GO time, exact versions, operator, monitoring window, and rollback reference.
