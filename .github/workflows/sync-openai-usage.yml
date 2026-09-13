@@ -68,7 +68,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client-17
       - name: Create and verify encrypted production backup
-        run: PRODUCTION_BACKUP_DIR="$GITHUB_WORKSPACE/.production-backup" ./scripts/backup-production-supabase-ci.sh
+        run: |
+          export PATH="/usr/lib/postgresql/17/bin:$PATH"
+          pg_dump --version | grep -E '^pg_dump \(PostgreSQL\) 17\.'
+          PRODUCTION_BACKUP_DIR="$GITHUB_WORKSPACE/.production-backup" ./scripts/backup-production-supabase-ci.sh
       - name: Store encrypted backup temporarily
         uses: actions/upload-artifact@v4
         with:

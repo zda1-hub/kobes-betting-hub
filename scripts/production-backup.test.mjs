@@ -30,6 +30,8 @@ test('production backup is locked to the production project and encrypted before
   assert.match(workflow, /PRODUCTION_BACKUP_KEY: \$\{\{ secrets\.PRODUCTION_BACKUP_KEY \}\}/);
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.match(workflow, /postgresql-client-17/);
+  assert.match(workflow, /\/usr\/lib\/postgresql\/17\/bin/);
+  assert.match(workflow, /pg_dump --version.*17\\\./);
   assert.match(workflow, /https:\/\/www\.postgresql\.org\/media\/keys\/ACCC4CF8\.asc/);
   assert.match(workflow, /https:\/\/apt\.postgresql\.org\/pub\/repos\/apt/);
   assert.match(workflow, /retention-days: 3/);
