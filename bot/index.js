@@ -108,7 +108,10 @@ let freeRecapInProgress = false;
 // manual /publish-pick posts during a pause.
 async function pickWorkflowPaused() {
   try {
-    const setting = JSON.parse(await fs.readFile(pickWorkflowPath, 'utf8'));
+    const setting = JSON.parse(await fs.readFile(pickWorkflowPath, {
+      encoding: 'utf8',
+      signal: AbortSignal.timeout(2000)
+    }));
     return setting.paused === true;
   } catch (error) {
     if (error.code === 'ENOENT') return false;
@@ -1246,10 +1249,13 @@ async function handleSourceReviewButton(interaction) {
     return;
   }
 
+  trace('workflow pause check started');
   if (await pickWorkflowPaused()) {
+    trace('workflow paused or pause check unavailable');
     await interaction.editReply('The pick workflow is paused. No member-facing post was made.');
     return;
   }
+  trace('workflow pause check passed');
 
   try {
     const configuredTermsOnly = packet.source?.publish_mode === 'terms_only';
