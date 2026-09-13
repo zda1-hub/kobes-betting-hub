@@ -223,7 +223,7 @@ function looksLikeSelection(note) {
 function isUsefulSupport(note, pickTerms, packet) {
   const normalized = normalizedText(note);
   if (!normalized) return false;
-  if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|banger|bang bang|two leg|2 leg|parlay|lets catch|let s catch|lets go|let s go|winner|profit|payout|refund|power play|ladder|make \d+\s*x|\d+\s*\$?\s*to\s+(?:win|one person)|you(?:'|’)ll love|you gonna love|like the demons|link on post|slide for)\b/.test(normalized)) return false;
+  if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|banger|bang bang|two leg|2 leg|parlay|lets catch|let s catch|lets go|let s go|winner|profit|payout|refund|power play|ladder|make \d+\s*x|\d+\s*\$?\s*to\s+(?:win|one person)|you(?:'|’)ll love|you gonna love|like the demons|link on post|slide for|nfl is back|football is back|baseball is back|nba is back|nhl is back)\b/.test(normalized)) return false;
   if (/^\d{1,2}\s\d{2}\s*(?:am|pm)?\b/.test(normalized)) return false;
   // A source post can mix a genuine bet graphic with timeline chatter,
   // promotional tooling, or a general sports rant. None of that is pick

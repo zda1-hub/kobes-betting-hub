@@ -152,6 +152,26 @@ test('does not include promotional banger wording in a writeup', () => {
   assert.equal(embed.description, 'Cooper Kupp Over 2.5 Receptions (-132)\n\n- Kupp has cleared 2+ receptions in 9 of his last 10 games');
 });
 
+test('does not count generic season hype as writeup evidence', () => {
+  const malformed = {
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'George Pickens over 59.5 receiving yards', player_name: 'George Pickens', line: '59.5', odds_american: '-150', units: '' }],
+        source_claims: ['NFL IS BACK', 'Football is back'],
+        supporting_notes: [
+          { text: 'George Pickens averaged 84.1 receiving yards per game in the 2025 regular season' }
+        ]
+      }
+    }
+  };
+  assert.deepEqual(sourceEvidence(malformed), [
+    'George Pickens averaged 84.1 receiving yards per game in the 2025 regular season'
+  ]);
+});
+
 test('does not count promotional copy as regular writeup breakdowns', () => {
   const malformed = {
     ...packet,
