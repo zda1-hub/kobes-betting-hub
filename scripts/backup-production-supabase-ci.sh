@@ -77,7 +77,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-PGDATABASE="${pg_database_url}" pg_dump \
+pg_dump \
+  --dbname "${pg_database_url}" \
   --format custom \
   --no-owner \
   --no-acl \
