@@ -10,7 +10,7 @@ Governing jurisdiction approved by owner: California
 ## Integrated release candidate
 
 - Branch: `codex/public-beta-release`
-- Release commit: `0a54485b82aab6a6d4b4bd1d31254dfde2d22c4e`
+- Release commit: `3bd9945976758eb8efc287779a3bf2b5ffce7e01`
 - Pick-system base: `3104e382d1e679afb363431261f8181436682c35`
 - Membership candidate: `5420caeba9daaeba218b2a3be2f66f5b0832cd98`
 - Verification: 172 tests passed, zero failed after the production retention and webhook-size hardening update.
@@ -34,6 +34,8 @@ Governing jurisdiction approved by owner: California
 - Encrypted production backup run `34783539955` completed successfully from release commit `e267fbb4cf704ced77c30901423388b6125cca47`. The PostgreSQL 17.11 custom-format dump was encrypted with AES-256-CBC/PBKDF2 at 200,000 iterations, decrypted in-stream for `pg_restore --list` verification, and uploaded as a private three-day GitHub artifact. It was downloaded to owner-controlled local storage under `/Users/z/Library/Application Support/KobesBettingHub/backups/github-run-34783539955`; its manifest and local SHA-256 both equal `265130003678b5641b3f38e567c1aa576f17ec0f2d2e3fe3aa6736edc769dbb7`.
 - Production migration run `34783634199` completed successfully. The locked runner applied only `007_service_role_rest_access.sql`, `008_subscription_cancellation_fields.sql`, and `009_membership_entitlement_blocks.sql`, then verified the production ledger, RLS/browser grant restrictions, service-role access, cancellation fields, and entitlement-block fields.
 - The live Stripe account has Customer Portal cancellation enabled. Live coupon `kEPvsD5Y` is active, applies 75% off once, and is reserved as the retention-offer template; the Worker creates a customer-specific coupon capped to one redemption before presenting the offer.
+- Cloudflare Checkout Worker version `00cdf542-4592-4204-b0b2-ab5c6b2e536c` deployed successfully from release commit `3bd9945976758eb8efc287779a3bf2b5ffce7e01`. Health returned that exact version; all seven secret names remained installed; production CORS, Discord portal redirect, invalid-checkout rejection, legacy-cancellation rejection, bad-signature rejection, and headerless oversized-webhook rejection passed.
+- Cloudflare site version `9a0f5b1b-edf8-46c2-b91c-ffa0b83b2bf2` deployed successfully. `kobesbettinghub.com` serves the production membership Worker origin, effective Terms/Privacy pages, and 75%-retention disclosure. The five-endpoint read-only production smoke suite passed.
 - Stripe remains the payment/subscription authority. Discord OAuth identifies the member; Discord is not a payment method. Supabase persists the Stripe-to-Discord mapping and event/audit trail.
 
 ## Public-beta decision
@@ -55,11 +57,11 @@ The public-beta label does not waive the customer-facing acceptance gate. Before
 - [x] Confirm referral migrations 005 and 006 already appear in the production ledger.
 - [x] Apply only migrations 007, 008, and 009 with the locked migration runner.
 - [x] Verify RLS, revoked browser grants, service-role privileges, cancellation fields, and entitlement-block fields.
-- [ ] Deploy the integrated Checkout Worker and record its Cloudflare version ID.
-- [ ] Verify production health, bindings, secret names, allowed origins, Stripe live price, and Customer Portal configuration.
-- [ ] Confirm the one-time 75%-off retention coupon is configured for production and can be redeemed only once per customer.
+- [x] Deploy the integrated Checkout Worker and record its Cloudflare version ID.
+- [x] Verify production health, bindings, secret names, allowed origins, Stripe live price, and Customer Portal configuration.
+- [x] Confirm the one-time 75%-off retention coupon is configured for production and can be redeemed only once per customer.
 - [ ] Enable and record the `invoice.payment_failed` webhook only after the new Worker is healthy.
-- [ ] Deploy the matching public membership/referral pages and run read-only production smoke checks.
+- [x] Deploy the matching public membership/referral pages and run read-only production smoke checks.
 - [x] Publish effective Terms and Privacy pages identifying Kobe Irwin, California, `support@kobesbettinghub.com`, the public-beta status, recurring billing, cancellation, refund exceptions, and payment-dispute access behavior.
 - [ ] Run the single production acceptance lifecycle above; do not use an unrelated real customer.
 - [ ] Reconcile every Stripe event received during promotion with Supabase and Discord.
