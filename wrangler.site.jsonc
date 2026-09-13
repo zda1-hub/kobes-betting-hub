@@ -9,5 +9,15 @@
     "directory": "./.public-site",
     "not_found_handling": "404-page",
     "html_handling": "drop-trailing-slash"
+  },
+  "env": {
+    "referral-sandbox": {
+      "name": "kobes-betting-hub-referral-sandbox",
+      "assets": {
+        "directory": "./.public-referral-sandbox",
+        "not_found_handling": "404-page",
+        "html_handling": "drop-trailing-slash"
+      }
+    }
   }
 }

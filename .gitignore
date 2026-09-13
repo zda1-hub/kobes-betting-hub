@@ -3,6 +3,7 @@ tmp/
 .env
 node_modules/
 .public-site/
+.public-referral-sandbox/
 trackers/x-monitoring/
 .env.*
 !.env.example

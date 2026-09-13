@@ -21,9 +21,11 @@
  */
 
 const SITE_ORIGIN = 'https://kobesbettinghub.com';
+const REFERRAL_SANDBOX_SITE_ORIGIN = 'https://kobes-betting-hub-referral-sandbox.kobedirwin.workers.dev';
 const SITE_PATH = '';
 const ALLOWED_SITE_ORIGINS = new Set([
   SITE_ORIGIN,
+  REFERRAL_SANDBOX_SITE_ORIGIN,
   'https://www.kobesbettinghub.com',
   'https://zda1-hub.github.io',
 ]);
@@ -33,6 +35,41 @@ const STRIPE_V2_VERSION = '2026-08-26.preview';
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing']);
 const REFERRAL_REWARD_CENTS = 1000;
 const REFERRAL_HOLD_DAYS = 7;
+const SUPABASE_SCOPED_TABLES = new Set([
+  'api_call_events',
+  'membership_customers',
+  'membership_subscriptions',
+  'stripe_webhook_events',
+  'membership_events',
+  'referral_profiles',
+  'referral_rewards',
+  'referral_events',
+  'referral_auth_sessions',
+]);
+
+const siteOrigin = (env) => env.SITE_ORIGIN || SITE_ORIGIN;
+
+function referralHoldMilliseconds(env) {
+  if (env.APP_ENV !== 'staging') return REFERRAL_HOLD_DAYS * 24 * 60 * 60 * 1000;
+  const seconds = Number(env.REFERRAL_HOLD_SECONDS || 60);
+  if (!Number.isInteger(seconds) || seconds < 60 || seconds > 86_400) throw new Error('Sandbox referral hold must be between 60 seconds and 24 hours.');
+  return seconds * 1000;
+}
+
+function supabaseTablePrefix(env) {
+  if (env.APP_ENV !== 'staging') return '';
+  const prefix = String(env.SUPABASE_TABLE_PREFIX || '');
+  if (!/^[a-z][a-z0-9_]{1,39}_$/.test(prefix)) throw new Error('Staging Supabase table prefix is missing or invalid.');
+  return prefix;
+}
+
+function scopedSupabasePath(env, path) {
+  const separator = path.indexOf('?');
+  const table = separator === -1 ? path : path.slice(0, separator);
+  if (!SUPABASE_SCOPED_TABLES.has(table)) return path;
+  const suffix = separator === -1 ? '' : path.slice(separator);
+  return `${supabaseTablePrefix(env)}${table}${suffix}`;
+}
 
 const headers = (origin) => ({
   'Access-Control-Allow-Origin': ALLOWED_SITE_ORIGINS.has(origin) ? origin : SITE_ORIGIN,
@@ -58,7 +95,7 @@ async function auditExternalCall(env, values) {
   if (!supabaseReady(env)) return;
   const key = supabaseKey(env);
   try {
-    await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/api_call_events`, {
+    await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${scopedSupabasePath(env, 'api_call_events')}`, {
       method: 'POST',
       headers: {
         apikey: key,
@@ -183,7 +220,7 @@ function supabaseReady(env) {
 async function supabase(env, path, { method = 'GET', body, prefer } = {}) {
   if (!supabaseReady(env)) throw new Error('Membership persistence is not configured.');
   const key = supabaseKey(env);
-  const response = await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${path}`, {
+  const response = await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${scopedSupabasePath(env, path)}`, {
     method,
     headers: {
       apikey: key,
@@ -521,7 +558,11 @@ async function sign(value, secret) {
 }
 
 function discordReady(env) {
-  return Boolean(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET && env.DISCORD_BOT_TOKEN && env.DISCORD_OAUTH_STATE_SECRET && env.DISCORD_GUILD_ID && env.DISCORD_MEMBER_ROLE_ID && env.DISCORD_REDIRECT_URI);
+  return Boolean(discordOAuthReady(env) && env.DISCORD_BOT_TOKEN && env.DISCORD_GUILD_ID && env.DISCORD_MEMBER_ROLE_ID);
+}
+
+function discordOAuthReady(env) {
+  return Boolean(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET && env.DISCORD_OAUTH_STATE_SECRET && env.DISCORD_REDIRECT_URI);
 }
 
 async function createDiscordState({ sessionId = null, intent = 'connect' }, env) {
@@ -654,6 +695,7 @@ async function grantMemberRole(memberId, env) {
 async function syncMemberRole(subscription, env) {
   const memberId = await discordUserForSubscription(env, subscription);
   if (!memberId) return 'NO_DISCORD_LINK';
+  if (env.APP_ENV === 'staging') return 'STAGING_ROLE_SKIPPED';
   if (ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status)) {
     await grantMemberRole(memberId, env);
     return 'ROLE_GRANTED';
@@ -706,7 +748,7 @@ function redirect(url) {
 }
 
 async function startDiscordConnection(request, env) {
-  if (!discordReady(env)) return new Response('Discord connection is being configured. Please check back shortly.', { status: 503 });
+  if (!(env.APP_ENV === 'staging' ? discordOAuthReady(env) : discordReady(env))) return new Response('Discord connection is being configured. Please check back shortly.', { status: 503 });
   const sessionId = new URL(request.url).searchParams.get('session_id') || '';
   try { await activeSubscription(sessionId, env); }
   catch (error) { return new Response(error.message, { status: 403 }); }
@@ -729,7 +771,7 @@ function discordAuthorizationUrl(state, env, intent) {
 }
 
 async function startReferralLogin(request, env) {
-  if (!discordReady(env) || !supabaseReady(env)) return new Response('Member referrals are being configured. Please check back shortly.', { status: 503 });
+  if (!discordOAuthReady(env) || !supabaseReady(env)) return new Response('Member referrals are being configured. Please check back shortly.', { status: 503 });
   const state = await createDiscordState({ intent: 'referral' }, env);
   return redirect(discordAuthorizationUrl(state, env, 'referral'));
 }
@@ -763,8 +805,8 @@ async function startPayoutOnboarding(request, env) {
       });
       await recordReferralEvent(env, { eventType: 'PAYOUT_RECIPIENT_CREATED', actorType: 'discord_user', actorId: session.discord_user_id, details: { referral_code: profile.referral_code } });
     }
-    const completeUrl = `${SITE_ORIGIN}${SITE_PATH}/refer.html?setup=complete&code=${encodeURIComponent(profile.referral_code)}`;
-    const refreshUrl = `${SITE_ORIGIN}${SITE_PATH}/refer.html?setup=refresh&code=${encodeURIComponent(profile.referral_code)}`;
+    const completeUrl = `${siteOrigin(env)}${SITE_PATH}/refer.html?setup=complete&code=${encodeURIComponent(profile.referral_code)}`;
+    const refreshUrl = `${siteOrigin(env)}${SITE_PATH}/refer.html?setup=refresh&code=${encodeURIComponent(profile.referral_code)}`;
     const accountLink = await stripeV2(env, '/core/account_links', {
       method: 'POST',
       idempotencyKey: crypto.randomUUID(),
@@ -792,7 +834,7 @@ async function startPortalLogin(request, env) {
 }
 
 async function finishDiscordConnection(request, env) {
-  if (!discordReady(env)) return new Response('Discord connection is being configured. Please check back shortly.', { status: 503 });
+  if (!discordOAuthReady(env)) return new Response('Discord connection is being configured. Please check back shortly.', { status: 503 });
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
   const returnedState = url.searchParams.get('state');
@@ -825,14 +867,14 @@ async function finishDiscordConnection(request, env) {
       const profile = await ensureReferralProfile(env, user.id);
       const auth = await createReferralAuthSession(env, user);
       await recordReferralEvent(env, { eventType: 'REFERRAL_LINK_ACCESSED', actorType: 'discord_user', actorId: user.id, details: { referral_code: profile.referral_code } });
-      return redirect(`${SITE_ORIGIN}${SITE_PATH}/refer.html#code=${encodeURIComponent(profile.referral_code)}&auth=${encodeURIComponent(auth)}`);
+      return redirect(`${siteOrigin(env)}${SITE_PATH}/refer.html#code=${encodeURIComponent(profile.referral_code)}&auth=${encodeURIComponent(auth)}`);
     }
     if (state.intent === 'portal') {
       const membership = await membershipCustomerForDiscord(env, user.id);
       if (!membership?.stripe_customer_id) throw new Error('No paid membership is linked to this Discord account. Connect Discord from the checkout confirmation first.');
       const portal = await stripe(env, '/billing_portal/sessions', {
         customer: membership.stripe_customer_id,
-        return_url: `${SITE_ORIGIN}${SITE_PATH}/cancel.html?portal=returned`,
+        return_url: `${siteOrigin(env)}${SITE_PATH}/cancel.html?portal=returned`,
       });
       await recordMembershipEvent(env, {
         eventType: 'BILLING_PORTAL_OPENED', actorType: 'discord_user', actorId: user.id,
@@ -845,6 +887,7 @@ async function finishDiscordConnection(request, env) {
     const subscription = await activeSubscription(state.sessionId, env);
     const session = await stripeGet(env, `/checkout/sessions/${encodeURIComponent(state.sessionId)}`);
     const customerId = stripeId(session.customer) || stripeId(subscription.customer);
+    if (env.APP_ENV !== 'staging' && !discordReady(env)) throw new Error('Discord role delivery is not configured.');
     const botHeaders = { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' };
     if (!supabaseReady(env)) throw new Error('Membership persistence is not configured.');
     await finalizeReferralIdentity(env, subscription.id, customerId, user.id);
@@ -859,9 +902,11 @@ async function finishDiscordConnection(request, env) {
       customerId,
       subscriptionId: subscription.id, discordUserId: user.id,
     });
-    await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) }, env);
-    await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, { method: 'PUT', headers: botHeaders }, env);
-    return redirect(`${SITE_ORIGIN}${SITE_PATH}/membership.html?checkout=connected`);
+    if (env.APP_ENV !== 'staging') {
+      await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) }, env);
+      await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, { method: 'PUT', headers: botHeaders }, env);
+    }
+    return redirect(`${siteOrigin(env)}${SITE_PATH}/membership.html?checkout=connected`);
   } catch (error) {
     return new Response(error.message || 'Discord connection failed.', { status: 400 });
   } finally {
@@ -889,6 +934,7 @@ async function createCheckout(request, env, origin) {
   let data;
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
   if (!['starter', 'trial_2_day', 'referral_trial'].includes(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
+  if (env.APP_ENV === 'staging' && data.offer !== 'referral_trial') return json({ error: 'The sandbox accepts referral tests only.' }, 400, origin);
   const suppliedRequestId = request.headers.get('X-Checkout-Request-Id');
   if (suppliedRequestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(suppliedRequestId)) {
     return json({ error: 'Invalid checkout request ID.' }, 400, origin);
@@ -906,7 +952,7 @@ async function createCheckout(request, env, origin) {
     if (!referrerProfile || !await activeMembershipForDiscord(env, referrerProfile.discord_user_id)) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
   }
 
-  const membershipPage = `${SITE_ORIGIN}${SITE_PATH}/membership.html`;
+  const membershipPage = `${siteOrigin(env)}${SITE_PATH}/membership.html`;
   const values = {
     mode: 'subscription',
     success_url: `${membershipPage}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
@@ -971,7 +1017,7 @@ async function processReferralInvoicePaid(env, invoice, eventId) {
   if (reward.first_paid_invoice_id && reward.first_paid_invoice_id !== invoice.id) return 'REFERRAL_ALREADY_QUALIFIED';
   const paidAtSeconds = Number(invoice?.status_transitions?.paid_at || invoice?.created || Math.floor(Date.now() / 1000));
   const paidAt = new Date(paidAtSeconds * 1000);
-  const eligibleAt = new Date(paidAt.getTime() + REFERRAL_HOLD_DAYS * 24 * 60 * 60 * 1000);
+  const eligibleAt = new Date(paidAt.getTime() + referralHoldMilliseconds(env));
   await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(reward.id)}&first_paid_invoice_id=is.null`, {
     method: 'PATCH',
     prefer: 'return=minimal',
@@ -1162,7 +1208,9 @@ export default {
     return json({ error: 'Not found.' }, 404, origin);
   },
   scheduled(controller, env, ctx) {
-    ctx.waitUntil(Promise.all([reconcileMemberships(env), processReferralPayouts(env)]));
+    ctx.waitUntil(env.APP_ENV === 'staging'
+      ? processReferralPayouts(env)
+      : Promise.all([reconcileMemberships(env), processReferralPayouts(env)]));
   },
 };
 
@@ -1175,6 +1223,8 @@ export const __test = {
   processReferralInvoicePaid,
   processReferralPayouts,
   referralPayoutAmount,
+  referralHoldMilliseconds,
+  scopedSupabasePath,
   readDiscordState,
   verifyStripeSignature,
 };

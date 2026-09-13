@@ -28,5 +28,31 @@
     "STRIPE_MONTHLY_PRICE_ID": "price_1U7mwnE6p9BmPii3ge8dmJw2",
     "STRIPE_STARTER_PRICE_ID": "price_1U8sr9E6p9BmPii3C2r5jTb4",
     "SUPABASE_URL": "https://mpajyubbnnsdpgdizvht.supabase.co"
+  },
+  "env": {
+    "referral-sandbox": {
+      "name": "kobes-betting-hub-checkout-referral-sandbox",
+      "version_metadata": {
+        "binding": "CF_VERSION_METADATA"
+      },
+      "triggers": {
+        "crons": ["*/1 * * * *"]
+      },
+      "vars": {
+        "APP_ENV": "staging",
+        "SITE_ORIGIN": "https://kobes-betting-hub-referral-sandbox.kobedirwin.workers.dev",
+        "REFERRAL_HOLD_SECONDS": "60",
+        "SUPABASE_TABLE_PREFIX": "referral_sandbox_",
+        "DISCORD_CLIENT_ID": "1548556799513333770",
+        "DISCORD_GUILD_ID": "",
+        "DISCORD_MEMBER_ROLE_ID": "",
+        "DISCORD_REDIRECT_URI": "https://kobes-betting-hub-checkout-referral-sandbox.kobedirwin.workers.dev/discord/callback",
+        "STRIPE_FIRST_MONTH_COUPON": "",
+        "STRIPE_GLOBAL_PAYOUTS_VERSION": "2026-08-26.preview",
+        "STRIPE_MONTHLY_PRICE_ID": "price_1UF5BDCiPGuWM4jqQXC6IAEr",
+        "STRIPE_STARTER_PRICE_ID": "",
+        "SUPABASE_URL": "https://ctqmksvfqrysomvckqrm.supabase.co"
+      }
+    }
   }
 }

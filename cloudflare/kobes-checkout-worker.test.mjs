@@ -57,6 +57,35 @@ test('cash payouts use the amount stored on each immutable reward', () => {
   assert.throws(() => workerTest.referralPayoutAmount({ reward_amount_cents: 9999 }), /amount is invalid/);
 });
 
+test('referral hold is seven days in production and may be shortened only in staging', () => {
+  assert.equal(workerTest.referralHoldMilliseconds({}), 7 * 24 * 60 * 60 * 1000);
+  assert.equal(workerTest.referralHoldMilliseconds({ APP_ENV: 'production', REFERRAL_HOLD_SECONDS: '60' }), 7 * 24 * 60 * 60 * 1000);
+  assert.equal(workerTest.referralHoldMilliseconds({ APP_ENV: 'staging', REFERRAL_HOLD_SECONDS: '60' }), 60 * 1000);
+  assert.throws(() => workerTest.referralHoldMilliseconds({ APP_ENV: 'staging', REFERRAL_HOLD_SECONDS: '10' }), /between 60 seconds/);
+});
+
+test('staging checkout rejects non-referral offers before contacting Stripe', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return Response.json({}); };
+  const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ offer: 'trial_2_day' }),
+  }), { APP_ENV: 'staging' });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /referral tests only/);
+  assert.equal(calls, 0);
+});
+
+test('staging database calls are forced into isolated prefixed tables', () => {
+  const staging = { APP_ENV: 'staging', SUPABASE_TABLE_PREFIX: 'referral_sandbox_' };
+  assert.equal(workerTest.scopedSupabasePath(staging, 'referral_rewards?status=eq.HOLDING'), 'referral_sandbox_referral_rewards?status=eq.HOLDING');
+  assert.equal(workerTest.scopedSupabasePath({}, 'referral_rewards?status=eq.HOLDING'), 'referral_rewards?status=eq.HOLDING');
+  assert.throws(() => workerTest.scopedSupabasePath({ APP_ENV: 'staging' }, 'membership_customers'), /prefix is missing/);
+});
+
 test('Stripe signature verification accepts any valid v1 signature during secret rotation', async () => {
   const payload = JSON.stringify({ id: 'evt_test_rotation' });
   const secret = 'whsec_test_rotation';

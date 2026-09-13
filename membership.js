@@ -17,7 +17,10 @@ document.addEventListener('click', (event) => {
   }
 });
 
-const checkoutEndpoint = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev/create-checkout';
+const sandboxSite = window.location.hostname === 'kobes-betting-hub-referral-sandbox.kobedirwin.workers.dev';
+const checkoutEndpoint = sandboxSite
+  ? 'https://kobes-betting-hub-checkout-referral-sandbox.kobedirwin.workers.dev/create-checkout'
+  : 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev/create-checkout';
 // Live Stripe checkout is enabled. Discord access is granted only after the
 // customer completes Stripe Checkout and explicitly connects their account.
 const checkoutEnabled = true;
