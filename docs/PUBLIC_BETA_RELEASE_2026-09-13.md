@@ -36,6 +36,7 @@ Governing jurisdiction approved by owner: California
 - The live Stripe account has Customer Portal cancellation enabled. Live coupon `kEPvsD5Y` is active, applies 75% off once, and is reserved as the retention-offer template; the Worker creates a customer-specific coupon capped to one redemption before presenting the offer.
 - Cloudflare Checkout Worker version `00cdf542-4592-4204-b0b2-ab5c6b2e536c` deployed successfully from release commit `3bd9945976758eb8efc287779a3bf2b5ffce7e01`. Health returned that exact version; all seven secret names remained installed; production CORS, Discord portal redirect, invalid-checkout rejection, legacy-cancellation rejection, bad-signature rejection, and headerless oversized-webhook rejection passed.
 - Cloudflare site version `9a0f5b1b-edf8-46c2-b91c-ffa0b83b2bf2` deployed successfully. `kobesbettinghub.com` serves the production membership Worker origin, effective Terms/Privacy pages, and 75%-retention disclosure. The five-endpoint read-only production smoke suite passed.
+- Stripe live event destination `we_1U7p1cE6p9BmPii3meFaIjH4` is active and listens to eight events. `invoice.payment_failed` was added after Checkout Worker health verification; future failed-payment deliveries are signature-verified, persisted to the production audit trail, and reconciled with membership access.
 - Stripe remains the payment/subscription authority. Discord OAuth identifies the member; Discord is not a payment method. Supabase persists the Stripe-to-Discord mapping and event/audit trail.
 
 ## Public-beta decision
@@ -60,7 +61,7 @@ The public-beta label does not waive the customer-facing acceptance gate. Before
 - [x] Deploy the integrated Checkout Worker and record its Cloudflare version ID.
 - [x] Verify production health, bindings, secret names, allowed origins, Stripe live price, and Customer Portal configuration.
 - [x] Confirm the one-time 75%-off retention coupon is configured for production and can be redeemed only once per customer.
-- [ ] Enable and record the `invoice.payment_failed` webhook only after the new Worker is healthy.
+- [x] Enable and record the `invoice.payment_failed` webhook only after the new Worker is healthy.
 - [x] Deploy the matching public membership/referral pages and run read-only production smoke checks.
 - [x] Publish effective Terms and Privacy pages identifying Kobe Irwin, California, `support@kobesbettinghub.com`, the public-beta status, recurring billing, cancellation, refund exceptions, and payment-dispute access behavior.
 - [ ] Run the single production acceptance lifecycle above; do not use an unrelated real customer.
