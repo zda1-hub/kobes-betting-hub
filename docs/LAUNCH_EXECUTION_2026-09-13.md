@@ -12,6 +12,7 @@
 - [x] The first remediated X startup created one private review packet; the six-call acceptance run reduced deferred candidates from 476 to 85.
 - [x] Stripe test-clock cancellation, one-time 75%-off invoice, return to `$32.99`, terminal Supabase cancellation, and Discord role removal passed in isolated staging.
 - [x] The same-member repeat retention-offer guard passed in isolated staging.
+- [x] The repeat-test subscription completed authenticated cancellation and terminal clock advancement: Stripe/Supabase `canceled`, event `evt_1UFHpPE6p9BmPii39F5ZuPiF` `PROCESSED/ROLE_REMOVED`, and member-attributed Discord DELETE `204`.
 
 ## Work Zakai and Codex can finish today
 

@@ -68,20 +68,20 @@ Record each answer and approval date before beta payments open:
 - [ ] Official support/privacy email. `themartinventures@gmail.com` is recorded as the technical/billing account email; it is **not automatically the public support address**.
 - [ ] Staffed support hours and timezone.
 - [ ] Backup operator when Zakai is unavailable.
-- [ ] Failed-payment grace period. Current code grants access only for `active` and `trialing`; do not promise a grace period until behavior is approved and implemented.
+- [x] Failed-payment rule: suspend access when Stripe reports `past_due`; automatically restore only when Stripe returns to `active` or `trialing`. Automated coverage passes; isolated external evidence remains below.
 - [ ] Mandatory refund/dispute access effect and exception authority. Standard policy is no voluntary refunds, except where law, card-network rules, or a written owner exception requires otherwise.
 - [ ] Discord-account relink verification and who may authorize it.
-- [ ] Membership, audit, and support-ticket retention/deletion periods.
+- [x] Provisional retention selected: membership/API audit records 24 months and ordinary support tickets 12 months, subject to legal/privacy review. Support-ticket storage is not yet implemented.
 - [ ] Alert destination for paid-without-access and reconciliation failures.
-- [ ] Pick-operation assignments: reviewer, approver, publisher, grader, and closeout/checker. Kobe is the content approver, but the other shifts are not recorded here.
+- [x] Pick-operation assignments: Kobe approves and publishes; deterministic ESPN automation grades supported markets; Zakai performs daily closeout and owns exceptions. Unsupported/ambiguous markets remain pending for manual grading.
 
 ## Gate 1 — Required before the first paid beta invitation
 
 ### Billing and cancellation
 
-- [ ] Fresh Stripe test-clock lifecycle passes from new simulated customer through terminal role removal.
-- [ ] The cancellation offer is optional: accepting it discounts exactly one eligible next monthly invoice; declining it completes cancellation without obstruction.
-- [ ] Cancellation is effective at the paid-through date, and the Customer Portal clearly displays the end date and future-charge state.
+- [x] Fresh Stripe test-clock lifecycle passes from new simulated customer through terminal role removal. Repeat subscription `sub_1UFGmRE6p9BmPii35bC5Oteh` ended in event `evt_1UFHpPE6p9BmPii39F5ZuPiF`, Supabase `canceled`, and Discord DELETE `204` / `SUCCEEDED`.
+- [x] The cancellation offer is optional: accepting it discounts exactly one eligible next monthly invoice; declining it completes cancellation without obstruction. A same-customer fresh portal session recorded `retention_offer_included=false` and completed cancellation.
+- [x] Cancellation is effective at the paid-through date, and the Customer Portal clearly displays the end date and future-charge state. The repeat fixture displayed December 13, no further invoice, then ended after clock advancement to December 14.
 - [ ] Price and cadence match everywhere: join page, Stripe Checkout, portal, receipt, FAQ, Terms, and support replies.
 - [ ] The `$10 / 7 days` and `2 days free` offers each produce the intended `$32.99/month` recurring subscription. No ambiguous “$10 per week” representation remains.
 - [ ] Abandoned, declined, pending, replayed, and duplicate Checkout submissions grant no access and create no duplicate charge/subscription.
@@ -89,7 +89,7 @@ Record each answer and approval date before beta payments open:
 - [ ] Partial and full refunds each have an approved entitlement rule and external test evidence; current staging code blocks access on any `charge.refunded` event until policy says otherwise.
 - [ ] Dispute creation and won/lost/closed outcomes have an approved entitlement/restoration rule and external test evidence; current staging automation blocks on `charge.dispute.created` but does not auto-restore.
 - [ ] An audited owner-approved manual restore/exception path is drilled without affecting any other member.
-- [ ] Stripe test-mode evidence is attached to the launch record: test customer, subscription, event IDs, expected/actual result, timestamp, Worker version, Supabase rows, and Discord role result. Never record test card data or secret values.
+- [x] Stripe test-mode lifecycle evidence is attached to `MEMBERSHIP_TEST_CLOCK_AUDIT_2026-09-13.md`: test customer, subscriptions, event IDs, expected/actual results, timestamps, Worker version, Supabase rows, and Discord role results. No card data or secret value is recorded.
 
 ### Production change approval
 

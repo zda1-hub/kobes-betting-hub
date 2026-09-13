@@ -1,6 +1,6 @@
 # Membership test-clock audit — 2026-09-13
 
-Status: staging retention renewal, terminal cancellation, authenticated repeat-offer guard, and member-attributed Discord API audit passed. The new repeat-test subscription remains active until a separately confirmed cancellation simulation.
+Status: staging retention renewal, both terminal cancellation runs, authenticated repeat-offer guard, and member-attributed Discord API audit passed. No test-clock subscription remains active.
 
 Scope: isolated Stripe test mode, Supabase staging `ctqmksvfqrysomvckqrm`, Discord staging guild `1548568770123927562`, and Checkout Worker staging. Production project `mpajyubbnnsdpgdizvht`, live Stripe data, real customers, real money, public Discord/X, and email were not changed.
 
@@ -20,6 +20,7 @@ Scope: isolated Stripe test mode, Supabase staging `ctqmksvfqrysomvckqrm`, Disco
 | Fresh terminal cancellation | Subscription `sub_1UFATvE6p9BmPii3SBESa2O0`; event `evt_1UFFqTE6p9BmPii3UWYNvLwv` | Stripe and Supabase `canceled`; webhook `PROCESSED/ROLE_REMOVED`; Discord role DELETE HTTP `204` / `SUCCEEDED` |
 | Repeat-offer test subscription | Subscription `sub_1UFGmRE6p9BmPii35bC5Oteh`; invoice `in_1UFGmRE6p9BmPii3DqarxioC` | Created on the same isolated customer at 10:01 MST; Stripe status `Active`; first monthly invoice paid `$32.99` with test Visa ending `4242`; automatic tax disabled because the fixture has no billing address |
 | Authenticated repeat-offer guard | Discord-authenticated test Customer Portal on the repeat-test customer | The first review exposed the legacy offer because its redemption predated the guarded Worker. After backfilling the test-only customer marker `kbh_retention_offer_used=true`, a fresh authenticated portal session showed cancellation without a second 75%-off offer. No cancellation was submitted. |
+| Repeat-test terminal cancellation | Subscription `sub_1UFGmRE6p9BmPii35bC5Oteh`; event `evt_1UFHpPE6p9BmPii39F5ZuPiF` | A fresh Discord-authenticated portal session recorded `retention_offer_included=false`, scheduled no-refund cancellation for `2026-12-13T13:12:00Z`, and clock advancement to December 14 produced Stripe/Supabase `canceled`, webhook `PROCESSED/ROLE_REMOVED`, and Discord DELETE HTTP `204` / `SUCCEEDED` for member `832944927884312606` |
 | Attributed outbound Discord audit | Test member `832944927884312606`; endpoint class `/api/v10/guilds/{id}/members/{id}/roles/{id}` | Post-deploy entitlement synchronization wrote a member-attributed Discord `PUT` audit row with trigger `membership_entitlement_sync` and HTTP `204`. |
 | Current staging Worker | Checkout Worker version `4fe6301a-307c-446b-87ee-7a772c38bbfb` | Health returned `200`; deployment was staging-only. Discord role grant/removal calls now carry the affected member and workflow context into the API ledger. |
 | Production read-only smoke | `npm run smoke:production`, rerun 2026-09-13 09:04 MST | 5/5 passed: Checkout health, Publisher health, current Free Pick API, public Free Pick page, and client asset |
@@ -39,9 +40,11 @@ With action-time authorization, the test coupon was applied to `sub_1UFATvE6p9Bm
 
 This proves the discount amount, one-invoice duration, return to full price, no-refund period-end cancellation, terminal persistence, entitlement removal, and the authenticated second-attempt guard. Coupon `duration=once` limits one application to one invoice; the Worker additionally persists and checks a customer-specific redemption marker before choosing the retention-enabled portal configuration.
 
-At 10:01 MST, a new `$32.99` monthly test subscription (`sub_1UFGmRE6p9BmPii35bC5Oteh`) was created on the same isolated customer. Stripe recorded invoice `in_1UFGmRE6p9BmPii3DqarxioC` as paid and the subscription as active. Because the original discount redemption occurred before the guarded Worker existed, the legacy test customer initially lacked the marker and still saw the offer. Backfilling only that isolated test fixture to match post-deployment customer state allowed an authenticated second portal review to prove the offer is suppressed. No production object or real payment was involved.
+At 10:01 MST, a new `$32.99` monthly test subscription (`sub_1UFGmRE6p9BmPii35bC5Oteh`) was created on the same isolated customer. Stripe recorded invoice `in_1UFGmRE6p9BmPii3DqarxioC` as paid. Because the original discount redemption occurred before the guarded Worker existed, the legacy test customer initially lacked the marker and still saw the offer. Backfilling only that isolated test fixture to match post-deployment customer state allowed an authenticated second portal review to prove the offer is suppressed.
 
-The test fixtures remain isolated so the recorded evidence stays inspectable. The earlier lifecycle subscription is canceled; the new repeat-offer subscription is active in test mode. Audit rows must be preserved; cancellation or fixture deletion requires a separate destructive/financial action-time confirmation.
+The owner then authorized the remaining isolated cancellation. A new authenticated portal session again recorded `retention_offer_included=false`, displayed the December 13 paid-through date, and scheduled cancellation without a refund or further invoice. Clock advancement to December 14 produced terminal event `evt_1UFHpPE6p9BmPii39F5ZuPiF`. Supabase stores status `canceled`, the matching `cancel_at` and current-period end, and the terminal event ID; the webhook is `PROCESSED/ROLE_REMOVED`; and the member-attributed Discord DELETE returned `204` / `SUCCEEDED`. Discord's member profile no longer displayed the staging paid-member role. No production object, real payment, public post, or customer was involved.
+
+The test fixtures remain isolated so the recorded evidence stays inspectable. Both test-clock subscriptions are canceled and their audit rows are preserved. Fixture deletion would require a separate destructive action-time confirmation.
 
 ## Production promotion gate
 
