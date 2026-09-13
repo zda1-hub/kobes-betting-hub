@@ -32,6 +32,7 @@
   "env": {
     "staging": {
       "name": "kobes-betting-hub-checkout-staging",
+      "workers_dev": true,
       "version_metadata": {
         "binding": "CF_VERSION_METADATA"
       },
@@ -51,6 +52,7 @@
         "STRIPE_GLOBAL_PAYOUTS_VERSION": "2026-08-26.preview",
         "STRIPE_MONTHLY_PRICE_ID": "price_1U8UpxE6p9BmPii3GoBjAXII",
         "STRIPE_STARTER_PRICE_ID": "price_1U8UpLE6p9BmPii3ErYC4FPr",
+        "SITE_ORIGIN": "https://kobes-betting-hub-staging.kobedirwin.workers.dev",
         "SUPABASE_URL": "https://ctqmksvfqrysomvckqrm.supabase.co"
       }
     }

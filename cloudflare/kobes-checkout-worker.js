@@ -18,12 +18,15 @@
  *   DISCORD_MEMBER_ROLE_ID     Paid-member role ID
  *   DISCORD_REDIRECT_URI       Worker callback URL registered in Discord
  *   SUPABASE_URL               Existing Kobe's Betting Hub Supabase project URL
+ *   SITE_ORIGIN                Required non-production site origin when APP_ENV=staging
  */
 
 const SITE_ORIGIN = 'https://kobesbettinghub.com';
 const SITE_PATH = '';
+const STAGING_SITE_ORIGIN = 'https://kobes-betting-hub-staging.kobedirwin.workers.dev';
 const ALLOWED_SITE_ORIGINS = new Set([
   SITE_ORIGIN,
+  STAGING_SITE_ORIGIN,
   'https://www.kobesbettinghub.com',
   'https://zda1-hub.github.io',
 ]);
@@ -44,6 +47,20 @@ const headers = (origin) => ({
 
 const json = (body, status = 200, origin) => new Response(JSON.stringify(body), { status, headers: headers(origin) });
 const form = (data) => new URLSearchParams(Object.entries(data).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)]));
+
+function siteOrigin(env) {
+  if (env?.APP_ENV !== 'staging') return SITE_ORIGIN;
+  const configured = String(env?.SITE_ORIGIN || '').replace(/\/$/, '');
+  try {
+    const parsed = new URL(configured);
+    if (parsed.protocol !== 'https:' || parsed.origin !== configured || !ALLOWED_SITE_ORIGINS.has(configured) || configured === SITE_ORIGIN) {
+      throw new Error('invalid');
+    }
+    return configured;
+  } catch {
+    throw new Error('Staging site origin is not configured safely.');
+  }
+}
 
 const sanitizedEndpoint = (path) => String(path || '/')
   .replace(/\/(?:cs|sub|cus|bps|in|evt)_(?:live|test_)?[A-Za-z0-9_]+/g, '/{id}')
@@ -249,8 +266,9 @@ async function persistSubscription(env, subscription, eventId = null) {
       price_id: stripeId(item?.price),
       offer: subscription.metadata?.offer || null,
       cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
-      current_period_start: stripeTimestamp(subscription.current_period_start),
-      current_period_end: stripeTimestamp(subscription.current_period_end),
+      cancel_at: stripeTimestamp(subscription.cancel_at),
+      current_period_start: stripeTimestamp(subscription.current_period_start ?? item?.current_period_start),
+      current_period_end: stripeTimestamp(subscription.current_period_end ?? item?.current_period_end),
       trial_end: stripeTimestamp(subscription.trial_end),
       last_stripe_event_id: eventId,
       raw_metadata: subscription.metadata || {},
@@ -528,8 +546,28 @@ async function sign(value, secret) {
   return toHex(digest);
 }
 
+const DISCORD_CONFIG_KEYS = [
+  'DISCORD_CLIENT_ID',
+  'DISCORD_CLIENT_SECRET',
+  'DISCORD_BOT_TOKEN',
+  'DISCORD_OAUTH_STATE_SECRET',
+  'DISCORD_GUILD_ID',
+  'DISCORD_MEMBER_ROLE_ID',
+  'DISCORD_REDIRECT_URI',
+];
+
+function missingDiscordConfig(env) {
+  return DISCORD_CONFIG_KEYS.filter((key) => !env?.[key]);
+}
+
 function discordReady(env) {
-  return Boolean(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET && env.DISCORD_BOT_TOKEN && env.DISCORD_OAUTH_STATE_SECRET && env.DISCORD_GUILD_ID && env.DISCORD_MEMBER_ROLE_ID && env.DISCORD_REDIRECT_URI);
+  return missingDiscordConfig(env).length === 0;
+}
+
+function discordNotReadyResponse(env) {
+  const missing = missingDiscordConfig(env);
+  console.warn('Discord connection configuration is incomplete.', { missing });
+  return new Response('Discord connection is being configured. Please check back shortly.', { status: 503 });
 }
 
 async function createDiscordState({ sessionId = null, intent = 'connect' }, env) {
@@ -586,8 +624,17 @@ async function activeSubscription(sessionId, env) {
 
 async function subscriptionForCancellation(sessionId, env) {
   const subscription = await activeSubscription(sessionId, env);
-  if (subscription.cancel_at_period_end) throw new Error('This membership is already scheduled to cancel.');
+  if (subscription.cancel_at_period_end || subscription.cancel_at) throw new Error('This membership is already scheduled to cancel.');
   return subscription;
+}
+
+function subscriptionCancellationEnd(subscription) {
+  const item = subscription?.items?.data?.[0];
+  return subscription?.cancel_at
+    ?? subscription?.current_period_end
+    ?? item?.current_period_end
+    ?? subscription?.trial_end
+    ?? null;
 }
 
 async function cancellationOffer(request, env, origin) {
@@ -623,7 +670,7 @@ async function confirmCancellation(request, env, origin) {
   try {
     const subscription = await subscriptionForCancellation(data.session_id || '', env);
     const updated = await stripe(env, `/subscriptions/${encodeURIComponent(subscription.id)}`, { cancel_at_period_end: 'true' });
-    return json({ ok: true, ends_at: updated.current_period_end }, 200, origin);
+    return json({ ok: true, ends_at: subscriptionCancellationEnd(updated) }, 200, origin);
   } catch (error) { return json({ error: error.message }, 403, origin); }
 }
 
@@ -714,7 +761,7 @@ function redirect(url) {
 }
 
 async function startDiscordConnection(request, env) {
-  if (!discordReady(env)) return new Response('Discord connection is being configured. Please check back shortly.', { status: 503 });
+  if (!discordReady(env)) return discordNotReadyResponse(env);
   const sessionId = new URL(request.url).searchParams.get('session_id') || '';
   try { await activeSubscription(sessionId, env); }
   catch (error) { return new Response(error.message, { status: 403 }); }
@@ -771,8 +818,8 @@ async function startPayoutOnboarding(request, env) {
       });
       await recordReferralEvent(env, { eventType: 'PAYOUT_RECIPIENT_CREATED', actorType: 'discord_user', actorId: session.discord_user_id, details: { referral_code: profile.referral_code } });
     }
-    const completeUrl = `${SITE_ORIGIN}${SITE_PATH}/refer.html?setup=complete&code=${encodeURIComponent(profile.referral_code)}`;
-    const refreshUrl = `${SITE_ORIGIN}${SITE_PATH}/refer.html?setup=refresh&code=${encodeURIComponent(profile.referral_code)}`;
+    const completeUrl = `${siteOrigin(env)}${SITE_PATH}/refer.html?setup=complete&code=${encodeURIComponent(profile.referral_code)}`;
+    const refreshUrl = `${siteOrigin(env)}${SITE_PATH}/refer.html?setup=refresh&code=${encodeURIComponent(profile.referral_code)}`;
     const accountLink = await stripeV2(env, '/core/account_links', {
       method: 'POST',
       idempotencyKey: crypto.randomUUID(),
@@ -800,7 +847,7 @@ async function startPortalLogin(request, env) {
 }
 
 async function finishDiscordConnection(request, env) {
-  if (!discordReady(env)) return new Response('Discord connection is being configured. Please check back shortly.', { status: 503 });
+  if (!discordReady(env)) return discordNotReadyResponse(env);
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
   const returnedState = url.searchParams.get('state');
@@ -833,14 +880,14 @@ async function finishDiscordConnection(request, env) {
       const profile = await ensureReferralProfile(env, user.id);
       const auth = await createReferralAuthSession(env, user);
       await recordReferralEvent(env, { eventType: 'REFERRAL_LINK_ACCESSED', actorType: 'discord_user', actorId: user.id, details: { referral_code: profile.referral_code } });
-      return redirect(`${SITE_ORIGIN}${SITE_PATH}/refer.html#code=${encodeURIComponent(profile.referral_code)}&auth=${encodeURIComponent(auth)}`);
+      return redirect(`${siteOrigin(env)}${SITE_PATH}/refer.html#code=${encodeURIComponent(profile.referral_code)}&auth=${encodeURIComponent(auth)}`);
     }
     if (state.intent === 'portal') {
       const membership = await membershipCustomerForDiscord(env, user.id);
       if (!membership?.stripe_customer_id) throw new Error('No paid membership is linked to this Discord account. Connect Discord from the checkout confirmation first.');
       const portal = await stripe(env, '/billing_portal/sessions', {
         customer: membership.stripe_customer_id,
-        return_url: `${SITE_ORIGIN}${SITE_PATH}/cancel.html?portal=returned`,
+        return_url: `${siteOrigin(env)}${SITE_PATH}/cancel.html?portal=returned`,
       });
       await recordMembershipEvent(env, {
         eventType: 'BILLING_PORTAL_OPENED', actorType: 'discord_user', actorId: user.id,
@@ -869,7 +916,7 @@ async function finishDiscordConnection(request, env) {
     });
     await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) }, env);
     await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, { method: 'PUT', headers: botHeaders }, env);
-    return redirect(`${SITE_ORIGIN}${SITE_PATH}/membership.html?checkout=connected`);
+    return redirect(`${siteOrigin(env)}${SITE_PATH}/membership.html?checkout=connected`);
   } catch (error) {
     return new Response(error.message || 'Discord connection failed.', { status: 400 });
   } finally {
@@ -914,7 +961,7 @@ async function createCheckout(request, env, origin) {
     if (!referrerProfile || !await activeMembershipForDiscord(env, referrerProfile.discord_user_id)) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
   }
 
-  const membershipPage = `${SITE_ORIGIN}${SITE_PATH}/membership.html`;
+  const membershipPage = `${siteOrigin(env)}${SITE_PATH}/membership.html`;
   const values = {
     mode: 'subscription',
     success_url: `${membershipPage}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
@@ -1165,7 +1212,9 @@ export default {
     const origin = request.headers.get('Origin');
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: headers(origin) });
-    if (request.method === 'GET' && url.pathname === '/health') return json({ ok: true }, 200, origin);
+    if (request.method === 'GET' && url.pathname === '/health') {
+      return json({ ok: true, version: env.CF_VERSION_METADATA?.id || null }, 200, origin);
+    }
     if (request.method === 'GET' && url.pathname === '/cancel/offer') return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'GET' && url.pathname === '/discord/connect') return startDiscordConnection(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/login') return startPortalLogin(request, env);
@@ -1192,6 +1241,8 @@ export const __test = {
   processReferralPayouts,
   referralPayoutAmount,
   referralRecipientIsReady,
+  siteOrigin,
+  subscriptionCancellationEnd,
   stripeV2IncludeQuery,
   readDiscordState,
   verifyStripeSignature,

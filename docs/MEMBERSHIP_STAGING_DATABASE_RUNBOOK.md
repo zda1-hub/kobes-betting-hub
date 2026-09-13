@@ -56,8 +56,10 @@ All pending migrations run inside one PostgreSQL transaction under an advisory l
 Successful acceptance evidence ends with:
 
 ```text
-Acceptance checks passed: all migrations recorded, 19 tables present with RLS, no anon/authenticated grants.
+Acceptance checks passed: all migrations recorded, 19 tables present with RLS, no anon/authenticated grants, service_role backend grants complete.
 ```
+
+Migration `007_service_role_rest_access` supplies the explicit server-only REST grants required by the Checkout Worker while keeping browser roles revoked. Migration `008_subscription_cancellation_fields` adds durable `cancel_at` persistence for current Stripe subscription shapes. Both must appear in the recorded migration set after an up-to-date staging apply.
 
 Save the sanitized command output with the membership staging acceptance evidence. Do not save `.env.staging.local` or the connection URL in the evidence bundle.
 

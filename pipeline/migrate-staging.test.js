@@ -7,6 +7,8 @@ const {
   projectRefFromDatabaseUrl,
   readRepositoryProductionProjectRef,
   REQUIRED_SECURED_TABLES,
+  SERVICE_ROLE_READ_ONLY_TABLES,
+  SERVICE_ROLE_REQUIRED_PRIVILEGES,
   run,
   validateConfiguration,
 } = require('./migrate-staging');
@@ -89,7 +91,8 @@ test('failed acceptance evidence is explicit', () => {
     missingTables: ['membership_customers'],
     rlsDisabled: ['membership_events'],
     unsafeGrants: [{ table_name: 'membership_subscriptions', grantee: 'anon' }],
-  }), /missing migrations: 002_membership_persistence.*missing tables: membership_customers.*RLS disabled: membership_events.*grants remain/);
+    missingServiceRoleGrants: [{ table: 'referral_rewards', privilege: 'SELECT' }],
+  }), /missing migrations: 002_membership_persistence.*missing tables: membership_customers.*RLS disabled: membership_events.*grants remain.*service_role backend grants are incomplete/);
 });
 
 test('apply runs pending migrations in one transaction and verifies the secured schema', async () => {
@@ -121,7 +124,17 @@ test('apply runs pending migrations in one transaction and verifies the secured 
       if (normalized.includes('FROM pg_class c')) {
         return { rows: REQUIRED_SECURED_TABLES.map((table_name) => ({ table_name, rls_enabled: true })) };
       }
-      if (normalized.includes('FROM information_schema.role_table_grants')) return { rows: [] };
+      if (normalized.includes("grantee IN ('anon', 'authenticated')")) return { rows: [] };
+      if (normalized.includes("grantee = 'service_role'")) {
+        return {
+          rows: REQUIRED_SECURED_TABLES.flatMap((table_name) => {
+            const privileges = SERVICE_ROLE_READ_ONLY_TABLES.has(table_name)
+              ? ['SELECT']
+              : SERVICE_ROLE_REQUIRED_PRIVILEGES;
+            return privileges.map((privilege_type) => ({ table_name, privilege_type }));
+          }),
+        };
+      }
 
       const version = normalized.match(
         /INSERT INTO pick_operations_schema_migrations \(version, applied_at\) VALUES \('([^']+)'/i,

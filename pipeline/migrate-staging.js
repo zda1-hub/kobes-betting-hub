@@ -26,6 +26,8 @@ const REQUIRED_SECURED_TABLES = [
   'stripe_webhook_events',
   'workflow_events',
 ];
+const SERVICE_ROLE_READ_ONLY_TABLES = new Set(['pick_operations_schema_migrations']);
+const SERVICE_ROLE_REQUIRED_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE'];
 
 function projectRefFromDatabaseUrl(value) {
   let url;
@@ -144,7 +146,7 @@ async function readAppliedVersions(client) {
 }
 
 async function verifySchema(client, expectedVersions) {
-  const [versions, tables, grants] = await Promise.all([
+  const [versions, tables, grants, serviceRoleGrants] = await Promise.all([
     client.query('SELECT version FROM public.pick_operations_schema_migrations ORDER BY version'),
     client.query(
       `SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
@@ -161,6 +163,14 @@ async function verifySchema(client, expectedVersions) {
          AND grantee IN ('anon', 'authenticated')`,
       [REQUIRED_SECURED_TABLES],
     ),
+    client.query(
+      `SELECT table_name, privilege_type
+       FROM information_schema.role_table_grants
+       WHERE table_schema = 'public'
+         AND table_name = ANY($1::text[])
+         AND grantee = 'service_role'`,
+      [REQUIRED_SECURED_TABLES],
+    ),
   ]);
 
   const applied = new Set(versions.rows.map((row) => row.version));
@@ -169,8 +179,23 @@ async function verifySchema(client, expectedVersions) {
   const missingTables = REQUIRED_SECURED_TABLES.filter((name) => !tableState.has(name));
   const rlsDisabled = REQUIRED_SECURED_TABLES.filter((name) => tableState.get(name) === false);
   const unsafeGrants = grants.rows;
-  const ok = !missingVersions.length && !missingTables.length && !rlsDisabled.length && !unsafeGrants.length;
-  return { ok, missingVersions, missingTables, rlsDisabled, unsafeGrants };
+  const serviceRolePrivilegeSet = new Set(
+    serviceRoleGrants.rows.map((row) => `${row.table_name}:${row.privilege_type}`),
+  );
+  const missingServiceRoleGrants = REQUIRED_SECURED_TABLES.flatMap((table) => {
+    const privileges = SERVICE_ROLE_READ_ONLY_TABLES.has(table)
+      ? ['SELECT']
+      : SERVICE_ROLE_REQUIRED_PRIVILEGES;
+    return privileges
+      .filter((privilege) => !serviceRolePrivilegeSet.has(`${table}:${privilege}`))
+      .map((privilege) => ({ table, privilege }));
+  });
+  const ok = !missingVersions.length
+    && !missingTables.length
+    && !rlsDisabled.length
+    && !unsafeGrants.length
+    && !missingServiceRoleGrants.length;
+  return { ok, missingVersions, missingTables, rlsDisabled, unsafeGrants, missingServiceRoleGrants };
 }
 
 function printVerification(result, log = console.log) {
@@ -180,10 +205,11 @@ function printVerification(result, log = console.log) {
       result.missingTables.length && `missing tables: ${result.missingTables.join(', ')}`,
       result.rlsDisabled.length && `RLS disabled: ${result.rlsDisabled.join(', ')}`,
       result.unsafeGrants.length && 'anon/authenticated table grants remain',
+      result.missingServiceRoleGrants.length && 'service_role backend grants are incomplete',
     ].filter(Boolean).join('; ');
     throw new Error(`Staging schema verification failed: ${details}.`);
   }
-  log(`Acceptance checks passed: all migrations recorded, ${REQUIRED_SECURED_TABLES.length} tables present with RLS, no anon/authenticated grants.`);
+  log(`Acceptance checks passed: all migrations recorded, ${REQUIRED_SECURED_TABLES.length} tables present with RLS, no anon/authenticated grants, service_role backend grants complete.`);
 }
 
 async function run({
@@ -297,6 +323,8 @@ if (require.main === module) {
 module.exports = {
   MIGRATION_DIRECTORY,
   REQUIRED_SECURED_TABLES,
+  SERVICE_ROLE_READ_ONLY_TABLES,
+  SERVICE_ROLE_REQUIRED_PRIVILEGES,
   loadMigrations,
   printVerification,
   projectRefFromDatabaseUrl,

@@ -19,7 +19,7 @@ async function stripeSignature(payload, secret, timestamp = Math.floor(Date.now(
 test('checkout worker health endpoint responds without credentials', async () => {
   const response = await worker.fetch(new Request('https://worker.test/health'), {});
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true });
+  assert.deepEqual(await response.json(), { ok: true, version: null });
 });
 
 test('legacy checkout-session cancellation endpoints are disabled', async () => {
@@ -68,6 +68,25 @@ test('referral recipient readiness requires an active capability and payout meth
   assert.equal(workerTest.referralRecipientIsReady({ status: 'pending' }, 'pm_test_bank'), false);
   assert.equal(workerTest.referralRecipientIsReady({ status: 'active' }, ''), false);
 });
+
+test('staging return URLs fail closed instead of falling back to production', () => {
+  const stagingOrigin = 'https://kobes-betting-hub-staging.kobedirwin.workers.dev';
+  assert.equal(workerTest.siteOrigin({ APP_ENV: 'staging', SITE_ORIGIN: stagingOrigin }), stagingOrigin);
+  assert.equal(workerTest.siteOrigin({ APP_ENV: 'production', SITE_ORIGIN: stagingOrigin }), 'https://kobesbettinghub.com');
+  assert.throws(() => workerTest.siteOrigin({ APP_ENV: 'staging' }), /not configured safely/);
+  assert.throws(() => workerTest.siteOrigin({ APP_ENV: 'staging', SITE_ORIGIN: 'https://kobesbettinghub.com' }), /not configured safely/);
+});
+
+test('current Stripe subscription shapes retain item periods and explicit cancellation time', () => {
+  assert.equal(workerTest.subscriptionCancellationEnd({
+    cancel_at: 1_800_000_000,
+    items: { data: [{ current_period_end: 1_900_000_000 }] },
+  }), 1_800_000_000);
+  assert.equal(workerTest.subscriptionCancellationEnd({
+    items: { data: [{ current_period_end: 1_900_000_000 }] },
+  }), 1_900_000_000);
+  assert.equal(workerTest.subscriptionCancellationEnd({ trial_end: 2_000_000_000 }), 2_000_000_000);
+});
 test('Stripe signature verification accepts any valid v1 signature during secret rotation', async () => {
   const payload = JSON.stringify({ id: 'evt_test_rotation' });
   const secret = 'whsec_test_rotation';
@@ -108,6 +127,8 @@ test('checkout offer composition matches the published intro pricing without cha
     return Response.json({ url: 'https://checkout.stripe.test/session' }, { headers: { 'request-id': 'req_test' } });
   };
   const env = {
+    APP_ENV: 'staging',
+    SITE_ORIGIN: 'https://kobes-betting-hub-staging.kobedirwin.workers.dev',
     STRIPE_SECRET_KEY: 'sk_test_local_only',
     STRIPE_MONTHLY_PRICE_ID: 'price_monthly',
     STRIPE_STARTER_PRICE_ID: 'price_starter',
@@ -128,6 +149,8 @@ test('checkout offer composition matches the published intro pricing without cha
   assert.equal(starterForm.get('line_items[0][price]'), 'price_monthly');
   assert.equal(starterForm.get('line_items[1][price]'), 'price_starter');
   assert.equal(starterForm.get('subscription_data[trial_period_days]'), '7');
+  assert.equal(starterForm.get('success_url'), 'https://kobes-betting-hub-staging.kobedirwin.workers.dev/membership.html?checkout=success&session_id={CHECKOUT_SESSION_ID}');
+  assert.equal(starterForm.get('cancel_url'), 'https://kobes-betting-hub-staging.kobedirwin.workers.dev/membership.html?checkout=cancel');
   assert.equal(trialForm.get('line_items[0][price]'), 'price_monthly');
   assert.equal(trialForm.has('line_items[1][price]'), false);
   assert.equal(trialForm.get('subscription_data[trial_period_days]'), '2');
@@ -232,6 +255,16 @@ test('checkout CORS preflight permits the request ID header', async () => {
   assert.match(response.headers.get('Access-Control-Allow-Headers'), /X-Checkout-Request-Id/);
 });
 
+test('checkout CORS permits the isolated staging site origin', async () => {
+  const stagingOrigin = 'https://kobes-betting-hub-staging.kobedirwin.workers.dev';
+  const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
+    method: 'OPTIONS',
+    headers: { Origin: stagingOrigin },
+  }), {});
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), stagingOrigin);
+});
+
 test('a checkout customer can claim only one Discord identity', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
@@ -288,6 +321,7 @@ test('verified subscription webhooks grant and remove roles exactly once per eve
   const webhookEvents = new Map();
   const discordRoleCalls = [];
   const apiCallEvents = [];
+  const subscriptionWrites = [];
   globalThis.fetch = async (url, options = {}) => {
     const requestUrl = new URL(url);
     const method = options.method || 'GET';
@@ -314,7 +348,11 @@ test('verified subscription webhooks grant and remove roles exactly once per eve
       apiCallEvents.push(JSON.parse(options.body));
       return new Response(null, { status: 204 });
     }
-    if (['membership_customers', 'membership_subscriptions'].includes(table) && method === 'POST') {
+    if (table === 'membership_subscriptions' && method === 'POST') {
+      subscriptionWrites.push(JSON.parse(options.body));
+      return new Response(null, { status: 204 });
+    }
+    if (table === 'membership_customers' && method === 'POST') {
       return new Response(null, { status: 204 });
     }
     throw new Error(`Unexpected external request: ${method} ${requestUrl}`);
@@ -341,8 +379,13 @@ test('verified subscription webhooks grant and remove roles exactly once per eve
         status,
         created: Math.floor(Date.now() / 1000),
         cancel_at_period_end: false,
+        cancel_at: 1_800_000_000,
         metadata: { discord_user_id: 'discord_member' },
-        items: { data: [{ price: { id: 'price_test_monthly' } }] },
+        items: { data: [{
+          price: { id: 'price_test_monthly' },
+          current_period_start: 1_700_000_000,
+          current_period_end: 1_800_000_000,
+        }] },
       },
     },
   });
@@ -363,6 +406,9 @@ test('verified subscription webhooks grant and remove roles exactly once per eve
     method: 'PUT',
   });
   assert.equal(apiCallEvents.at(-1).code_commit, 'worker-version-test');
+  assert.equal(subscriptionWrites.at(-1).cancel_at, '2027-01-15T08:00:00.000Z');
+  assert.equal(subscriptionWrites.at(-1).current_period_start, '2023-11-14T22:13:20.000Z');
+  assert.equal(subscriptionWrites.at(-1).current_period_end, '2027-01-15T08:00:00.000Z');
   const callsAfterFirstDelivery = discordRoleCalls.length;
   assert.match(await (await sendEvent(activeEvent)).text(), /duplicate/);
   assert.equal(discordRoleCalls.length, callsAfterFirstDelivery);
