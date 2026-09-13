@@ -53,4 +53,6 @@ test('membership operations check is one read-only transaction with no identifie
   assert.deepEqual(calls.map(({ sql }) => sql.trim().split(/\s+/, 1)[0]), ['BEGIN', 'WITH', 'COMMIT']);
   assert.deepEqual(calls[1].parameters, [26, 30]);
   assert.doesNotMatch(JSON.stringify(report), /(?:sub|cus)_[A-Za-z0-9_]+|\d{15,}/i);
+  assert.match(calls[1].sql, /NOT EXISTS/);
+  assert.match(calls[1].sql, /recovered\.occurred_at > failed\.occurred_at/);
 });

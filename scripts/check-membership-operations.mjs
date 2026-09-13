@@ -52,9 +52,16 @@ export async function checkMembershipOperations(client, { lookbackHours, linkGra
               AND c.discord_user_id IS NULL
               AND s.created_at < NOW() - make_interval(mins => $2::int)) AS active_without_discord,
           (SELECT COUNT(*)::int
-             FROM membership_events
-            WHERE event_type = 'MEMBERSHIP_RECONCILIATION_FAILED'
-              AND occurred_at >= NOW() - make_interval(hours => $1::int)) AS reconciliation_failures,
+             FROM membership_events failed
+            WHERE failed.event_type = 'MEMBERSHIP_RECONCILIATION_FAILED'
+              AND failed.occurred_at >= NOW() - make_interval(hours => $1::int)
+              AND NOT EXISTS (
+                SELECT 1
+                  FROM membership_events recovered
+                 WHERE recovered.event_type = 'MEMBERSHIP_RECONCILED'
+                   AND recovered.stripe_subscription_id = failed.stripe_subscription_id
+                   AND recovered.occurred_at > failed.occurred_at
+              )) AS reconciliation_failures,
           (SELECT COUNT(*)::int
              FROM stripe_webhook_events
             WHERE status = 'FAILED'

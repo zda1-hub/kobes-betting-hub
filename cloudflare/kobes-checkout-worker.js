@@ -9,6 +9,7 @@
  *   DISCORD_BOT_TOKEN          Discord bot token (Manage Roles permission required)
  *   DISCORD_OAUTH_STATE_SECRET Random secret used to secure OAuth state
  *   SUPABASE_SECRET_KEY        Server-only sb_secret key; never expose it to the website
+ *   MEMBERSHIP_OPERATIONS_SECRET Dedicated bearer secret for manual reconciliation
  *
  * Required Worker variables:
  *   STRIPE_MONTHLY_PRICE_ID    $32.99/month recurring Stripe Price ID
@@ -89,7 +90,7 @@ function siteOrigin(env) {
   }
 }
 
-const sanitizedEndpoint = (path) => String(path || '/')
+const sanitizedEndpoint = (path) => String(path || '/').split('?', 1)[0]
   .replace(/\/(?:cs|sub|cus|bps|in|evt)_(?:live|test_)?[A-Za-z0-9_]+/g, '/{id}')
   .replace(/\/\d{6,}(?=\/|$)/g, '/{id}');
 
@@ -282,6 +283,7 @@ async function persistSubscription(env, subscription, eventId = null) {
   if (!subscription?.id || !customerId) return;
   const now = new Date().toISOString();
   const item = subscription.items?.data?.[0];
+  const metadataDiscordUserId = String(subscription.metadata?.discord_user_id || '').trim();
   const body = {
     stripe_subscription_id: subscription.id,
     stripe_customer_id: customerId,
@@ -298,7 +300,13 @@ async function persistSubscription(env, subscription, eventId = null) {
     created_at: stripeTimestamp(subscription.created) || now,
     updated_at: now,
   };
-  await persistCustomer(env, customerId, { subscriptionId: subscription.id });
+  // Checkout completion stores the verified Discord identity on the Stripe
+  // subscription. Copy it during reconciliation so subscriptions that predate
+  // database persistence are imported as linked memberships, not orphan rows.
+  await persistCustomer(env, customerId, {
+    subscriptionId: subscription.id,
+    discordUserId: metadataDiscordUserId || undefined,
+  });
   // Insert if absent, then update only Stripe-owned fields. This deliberately
   // never writes entitlement_blocked so an ordinary subscription event cannot
   // clear a concurrent or existing refund/dispute block.
@@ -577,6 +585,13 @@ async function secureEqual(left, right) {
   return difference === 0;
 }
 
+async function authorizedOperationsRequest(request, env) {
+  const expected = String(env.MEMBERSHIP_OPERATIONS_SECRET || '');
+  const authorization = request.headers.get('authorization') || '';
+  if (!expected || !authorization.startsWith('Bearer ')) return false;
+  return secureEqual(authorization, `Bearer ${expected}`);
+}
+
 async function verifyStripeSignature(payload, signature, secret) {
   if (!signature || !secret) return false;
   const parts = signature.split(',').map((piece) => {
@@ -826,7 +841,7 @@ async function discordRequest(path, options = {}, env, auditContext = {}) {
   const startedAt = Date.now();
   const response = await fetch(`https://discord.com/api/v10${path}`, options);
   await auditExternalCall(env, {
-    service: 'discord', endpointClass: `/api/v10${path}`, method: options.method || 'GET', operationId,
+    service: 'discord', endpointClass: sanitizedEndpoint(`/api/v10${path}`), method: options.method || 'GET', operationId,
     memberId: auditContext.memberId || null,
     workflowId: auditContext.workflowId || null,
     triggerType: auditContext.triggerType || 'membership_request',
@@ -835,7 +850,7 @@ async function discordRequest(path, options = {}, env, auditContext = {}) {
     outcome: response.ok ? 'SUCCEEDED' : 'HTTP_ERROR', errorClass: response.ok ? null : 'HTTP_ERROR',
     latencyMs: Date.now() - startedAt,
   });
-  if (!response.ok) throw new Error('Discord could not complete the connection.');
+  if (!response.ok) throw new Error(`Discord role synchronization failed (${response.status}).`);
   return response.status === 204 ? null : response.json();
 }
 
@@ -870,18 +885,35 @@ async function syncMemberRole(subscription, env) {
   return entitlementBlock ? 'ROLE_REMOVED_ENTITLEMENT_BLOCKED' : 'ROLE_REMOVED';
 }
 
+async function listStripeSubscriptions(env) {
+  const subscriptions = [];
+  let startingAfter = '';
+  for (let page = 0; page < 5; page += 1) {
+    const query = new URLSearchParams({ status: 'all', limit: '100' });
+    if (startingAfter) query.set('starting_after', startingAfter);
+    const response = await stripeGet(env, `/subscriptions?${query}`);
+    const current = Array.isArray(response?.data) ? response.data.filter((subscription) => subscription?.id) : [];
+    subscriptions.push(...current);
+    if (!response?.has_more) return subscriptions;
+    startingAfter = current.at(-1)?.id || '';
+    if (!startingAfter) throw new Error('Stripe subscription pagination did not provide a cursor.');
+  }
+  throw new Error('Stripe subscription reconciliation exceeded the 500-record safety bound.');
+}
+
 async function reconcileMemberships(env) {
   if (!supabaseReady(env) || !env.STRIPE_SECRET_KEY) {
     throw new Error('Membership reconciliation requires Supabase and Stripe configuration.');
   }
-  const rows = await supabase(env, 'membership_subscriptions?select=stripe_subscription_id&order=updated_at.asc&limit=500');
+  // Stripe is authoritative. Discovering from Stripe first also imports legacy
+  // subscriptions created before Supabase persistence/webhooks were enabled.
+  const subscriptions = await listStripeSubscriptions(env);
   const summary = { checked: 0, rolesGranted: 0, rolesRemoved: 0, noDiscordLink: 0, failed: 0 };
-  for (const row of rows || []) {
-    const subscriptionId = row?.stripe_subscription_id || '';
+  for (const subscription of subscriptions) {
+    const subscriptionId = subscription?.id || '';
     if (!subscriptionId) continue;
     summary.checked += 1;
     try {
-      const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
       await persistSubscription(env, subscription);
       const outcome = await syncMemberRole(subscription, env);
       if (outcome === 'ROLE_GRANTED') summary.rolesGranted += 1;
@@ -1473,6 +1505,14 @@ export default {
     if (request.method === 'GET' && url.pathname === '/health') {
       return json({ ok: true, version: env.CF_VERSION_METADATA?.id || null }, 200, origin);
     }
+    if (request.method === 'POST' && url.pathname === '/ops/reconcile-memberships') {
+      if (!await authorizedOperationsRequest(request, env)) return json({ error: 'Unauthorized.' }, 401, origin);
+      try { return json(await reconcileMemberships(env), 200, origin); }
+      catch (error) {
+        console.error('Manual membership reconciliation failed.', error?.message || error);
+        return json({ error: 'Membership reconciliation failed safely.' }, 500, origin);
+      }
+    }
     if (request.method === 'GET' && url.pathname === '/cancel/offer') return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'GET' && url.pathname === '/discord/connect') return startDiscordConnection(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/login') return startPortalLogin(request, env);
@@ -1494,12 +1534,14 @@ export default {
 
 export const __test = {
   REFERRAL_REWARD_CENTS,
+  authorizedOperationsRequest,
   claimDiscordLink,
   checkoutRateLimitResponse,
   createDiscordState,
   discordAuthorizationUrl,
   ensurePerMemberRetentionCoupon,
   invoiceSubscriptionId,
+  listStripeSubscriptions,
   processReferralInvoicePaid,
   processReferralPayouts,
   portalSessionValues,
@@ -1507,6 +1549,7 @@ export const __test = {
   referralRecipientIsReady,
   retentionOfferUsed,
   siteOrigin,
+  sanitizedEndpoint,
   subscriptionHasCoupon,
   subscriptionCancellationEnd,
   stripeV2IncludeQuery,

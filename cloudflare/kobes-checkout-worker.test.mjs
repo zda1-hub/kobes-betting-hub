@@ -22,6 +22,19 @@ test('checkout worker health endpoint responds without credentials', async () =>
   assert.deepEqual(await response.json(), { ok: true, version: null });
 });
 
+test('manual reconciliation endpoint requires its dedicated operations secret', async () => {
+  const env = { MEMBERSHIP_OPERATIONS_SECRET: 'operations-test-secret' };
+  const missing = await worker.fetch(new Request('https://worker.test/ops/reconcile-memberships', { method: 'POST' }), env);
+  const wrong = await worker.fetch(new Request('https://worker.test/ops/reconcile-memberships', {
+    method: 'POST', headers: { authorization: 'Bearer wrong-secret' },
+  }), env);
+  assert.equal(missing.status, 401);
+  assert.equal(wrong.status, 401);
+  assert.equal(await workerTest.authorizedOperationsRequest(new Request('https://worker.test', {
+    headers: { authorization: 'Bearer operations-test-secret' },
+  }), env), true);
+});
+
 test('legacy checkout-session cancellation endpoints are disabled', async () => {
   const response = await worker.fetch(new Request('https://worker.test/cancel/offer?session_id=cs_test_leaked'), {});
   assert.equal(response.status, 410);
@@ -366,6 +379,33 @@ test('checkout rate limiting blocks excess attempts before Stripe is called', as
   assert.equal(seenKeys[0].includes('203.0.113.42'), false);
 });
 
+test('membership reconciliation discovers Stripe subscriptions with bounded pagination', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    const requestUrl = new URL(url);
+    assert.equal(requestUrl.pathname, '/v1/subscriptions');
+    assert.equal(requestUrl.searchParams.get('status'), 'all');
+    assert.equal(requestUrl.searchParams.get('limit'), '100');
+    if (calls.length === 1) {
+      assert.equal(requestUrl.searchParams.has('starting_after'), false);
+      return Response.json({ data: [{ id: 'sub_page_one' }], has_more: true });
+    }
+    assert.equal(requestUrl.searchParams.get('starting_after'), 'sub_page_one');
+    return Response.json({ data: [{ id: 'sub_page_two' }], has_more: false });
+  };
+
+  const subscriptions = await workerTest.listStripeSubscriptions({ STRIPE_SECRET_KEY: 'sk_test_local_only' });
+  assert.deepEqual(subscriptions.map(({ id }) => id), ['sub_page_one', 'sub_page_two']);
+  assert.equal(calls.length, 2);
+});
+
+test('API audit endpoint classes remove query strings and identifiers', () => {
+  assert.equal(workerTest.sanitizedEndpoint('/subscriptions?status=all&starting_after=sub_private'), '/subscriptions');
+});
+
 test('checkout CORS preflight permits the request ID header', async () => {
   const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
     method: 'OPTIONS',
@@ -442,6 +482,7 @@ test('verified subscription webhooks grant and remove roles exactly once per eve
   const discordRoleCalls = [];
   const apiCallEvents = [];
   const subscriptionWrites = [];
+  const customerWrites = [];
   globalThis.fetch = async (url, options = {}) => {
     const requestUrl = new URL(url);
     const method = options.method || 'GET';
@@ -480,6 +521,7 @@ test('verified subscription webhooks grant and remove roles exactly once per eve
       if (method === 'GET') return Response.json([{ entitlement_blocked: false, entitlement_block_reason: null }]);
     }
     if (table === 'membership_customers' && method === 'POST') {
+      customerWrites.push(JSON.parse(options.body));
       return new Response(null, { status: 204 });
     }
     throw new Error(`Unexpected external request: ${method} ${requestUrl}`);
@@ -528,6 +570,7 @@ test('verified subscription webhooks grant and remove roles exactly once per eve
 
   const activeEvent = makeEvent('evt_test_active', 'customer.subscription.updated', 'active');
   assert.equal((await sendEvent(activeEvent)).status, 200);
+  assert.equal(customerWrites[0].discord_user_id, 'discord_member');
   assert.deepEqual(discordRoleCalls.at(-1), {
     path: '/api/v10/guilds/guild_test/members/discord_member/roles/role_test',
     method: 'PUT',
