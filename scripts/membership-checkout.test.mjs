@@ -5,7 +5,12 @@ import vm from 'node:vm';
 
 const source = await fs.readFile(new URL('../membership.js', import.meta.url), 'utf8');
 
-function checkoutPage(fetchImpl) {
+const productionConfig = {
+  environment: 'production',
+  workerOrigin: 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev',
+};
+
+function checkoutPage(fetchImpl, { config = productionConfig, search = '' } = {}) {
   const storage = new Map();
   const assignedUrls = [];
   const buttons = ['starter', 'trial_2_day'].map((offer) => ({
@@ -34,8 +39,9 @@ function checkoutPage(fetchImpl) {
     addEventListener() {},
   };
   const window = {
+    __KBH_MEMBERSHIP_CONFIG__: config,
     crypto: globalThis.crypto,
-    location: { search: '', assign: (url) => assignedUrls.push(url) },
+    location: { search, assign: (url) => assignedUrls.push(url) },
     sessionStorage: {
       getItem: (key) => storage.get(key) || null,
       setItem: (key, value) => storage.set(key, value),
@@ -46,10 +52,11 @@ function checkoutPage(fetchImpl) {
     console,
     document,
     fetch: fetchImpl,
+    URL,
     URLSearchParams,
     window,
   });
-  return { buttons, storage, assignedUrls };
+  return { buttons, storage, assignedUrls, checkoutMessage };
 }
 
 test('checkout retries reuse an in-flight request ID and clear it after Stripe returns a URL', async () => {
@@ -71,4 +78,37 @@ test('checkout retries reuse an in-flight request ID and clear it after Stripe r
 
   await page.buttons[0].click();
   assert.notEqual(requestIds[2], requestIds[1]);
+});
+
+test('staging checkout only calls the configured staging Worker', async () => {
+  const requests = [];
+  const page = checkoutPage(async (url) => {
+    requests.push(url);
+    return Response.json({ url: 'https://checkout.stripe.test/staging-session' });
+  }, {
+    config: {
+      environment: 'staging',
+      workerOrigin: 'https://kobes-betting-hub-checkout-staging.example.workers.dev',
+    },
+  });
+
+  await page.buttons[0].click();
+  assert.deepEqual(requests, ['https://kobes-betting-hub-checkout-staging.example.workers.dev/create-checkout']);
+});
+
+test('staging checkout fails closed when configured with the production Worker', async () => {
+  let fetchCalls = 0;
+  const page = checkoutPage(async () => {
+    fetchCalls += 1;
+    return Response.json({ url: 'https://checkout.stripe.test/should-not-open' });
+  }, {
+    config: {
+      environment: 'staging',
+      workerOrigin: productionConfig.workerOrigin,
+    },
+  });
+
+  await page.buttons[0].click();
+  assert.equal(fetchCalls, 0);
+  assert.match(page.checkoutMessage.textContent, /not configured for a valid membership environment/i);
 });
