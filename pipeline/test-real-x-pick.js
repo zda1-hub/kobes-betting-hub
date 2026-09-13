@@ -3,6 +3,7 @@ require('dotenv').config();
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
+const { recordWorkflowEvent, upsertPickCandidate } = require('./audit-store');
 const { assertPublishableExtraction, reviewButtons } = require('../bot/lib/source-review');
 
 const ROOT = path.join(__dirname, '..');
@@ -161,7 +162,9 @@ async function main() {
     throw new Error('X monitoring or OpenAI enrichment is not fully configured.');
   }
   const sources = JSON.parse(await fs.readFile(SOURCES_PATH, 'utf8'));
-  const requestedHandle = process.argv[2];
+  const argumentsList = process.argv.slice(2);
+  const noDiscord = argumentsList.includes('--no-discord');
+  const requestedHandle = argumentsList.find((argument) => !argument.startsWith('--'));
   const candidates = await findRecentCandidates(sources, requestedHandle);
   if (candidates.length === 0) {
     throw new Error(requestedHandle
@@ -177,6 +180,32 @@ async function main() {
     } catch {
       console.log(`Skipped @${packet.source.handle} post ${packet.source.post_id}: ${packet.analysis.status}.`);
       continue;
+    }
+    if (noDiscord) {
+      await upsertPickCandidate(packet, { status: 'TEST_VALIDATED' });
+      await recordWorkflowEvent(packet, {
+        eventType: 'X_EXTRACTION_TEST_COMPLETED',
+        beforeState: 'TEST_ONLY',
+        afterState: 'TEST_VALIDATED',
+        details: {
+          discord_sent: false,
+          publish_attempted: false,
+          model: packet.analysis.model || null,
+          extraction_status: packet.analysis.status
+        }
+      });
+      console.log(JSON.stringify({
+        ok: true,
+        test_only: true,
+        discord_sent: false,
+        publish_attempted: false,
+        source_handle: packet.source.handle,
+        source_post_id: packet.source.post_id,
+        analysis_status: packet.analysis.status,
+        model: packet.analysis.model || null,
+        extraction_run_id: packet.analysis.extraction_run_id || null
+      }));
+      return;
     }
     await saveButtonTestPacket(packet);
     await sendTestCard(packet);

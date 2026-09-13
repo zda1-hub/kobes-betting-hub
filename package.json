@@ -4,6 +4,7 @@
   "private": true,
   "description": "Approval-first Discord publisher for Kobe's Betting Hub",
   "scripts": {
+    "build:site": "node scripts/prepare-public-site.mjs",
     "bot": "node bot/index.js",
     "register:commands": "node bot/register-commands.js",
     "collect:x": "node pipeline/collect-x.js",

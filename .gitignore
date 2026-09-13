@@ -2,6 +2,7 @@
 tmp/
 .env
 node_modules/
+.public-site/
 trackers/x-monitoring/
 .env.*
 !.env.example
