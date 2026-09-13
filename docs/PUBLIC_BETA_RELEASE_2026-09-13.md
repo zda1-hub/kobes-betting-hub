@@ -13,7 +13,7 @@ Governing jurisdiction approved by owner: California
 - Release commit: `0a54485b82aab6a6d4b4bd1d31254dfde2d22c4e`
 - Pick-system base: `3104e382d1e679afb363431261f8181436682c35`
 - Membership candidate: `5420caeba9daaeba218b2a3be2f66f5b0832cd98`
-- Verification: 170 tests passed, zero failed after the public-beta legal identity update.
+- Verification: 172 tests passed, zero failed after the production retention and webhook-size hardening update.
 - Production-site build: 35 public entries prepared successfully.
 - The release branch contains the hardened Checkout Worker, production migration runner, migrations 007–009, recurring-billing disclosures, cancellation/retention behavior, billing-exception entitlement blocks, referral assets, and the current pick workflow.
 
@@ -29,9 +29,11 @@ Governing jurisdiction approved by owner: California
 - `support@kobesbettinghub.com` is active and forwards to the verified destination `themartinventures@gmail.com`.
 - The production migration ledger was checked read-only on 2026-09-13 and contains referral migrations `005_referral_cash_rewards` and `006_referral_reward_ten_dollars`.
 - The production Supabase project is on the free plan and explicitly reports that provider-managed project backups are unavailable. An encrypted logical dump is therefore required immediately before migrations 007–009.
-- Backup preparation was checked again from the authenticated production dashboard. Supabase exposes the IPv4 session-pooler endpoint `aws-0-us-east-2.pooler.supabase.com:5432`, database `postgres`, and user `postgres.mpajyubbnnsdpgdizvht`. The database password is intentionally absent from the repository, process environment, and macOS Keychain, so no logical dump has been attempted and no password has been rotated. The operator must supply the existing password through the hidden local prompt in `scripts/backup-production-supabase.sh`, or personally reset it, before the encrypted dump can be created. The script streams the dump directly into AES-256 encryption, verifies it with `pg_restore --list`, stores the encrypted artifact outside the repository, and stores the encryption key separately in macOS Keychain.
+- Backup preparation confirmed the production IPv4 session-pooler target without exposing or rotating the database password. The guarded GitHub Actions job used the existing masked credentials and streamed the dump directly into encryption.
 - The GitHub repository already contains masked `DATABASE_URL` and `PRODUCTION_BACKUP_KEY` Actions secrets. The guarded `encrypted-backup` operation in `.github/workflows/sync-openai-usage.yml` can therefore create and verify the logical dump without exposing or rotating the database password. Its encrypted artifact is retained in GitHub Actions for three days so it can be downloaded into owner-controlled storage before expiration.
 - Encrypted production backup run `34783539955` completed successfully from release commit `e267fbb4cf704ced77c30901423388b6125cca47`. The PostgreSQL 17.11 custom-format dump was encrypted with AES-256-CBC/PBKDF2 at 200,000 iterations, decrypted in-stream for `pg_restore --list` verification, and uploaded as a private three-day GitHub artifact. It was downloaded to owner-controlled local storage under `/Users/z/Library/Application Support/KobesBettingHub/backups/github-run-34783539955`; its manifest and local SHA-256 both equal `265130003678b5641b3f38e567c1aa576f17ec0f2d2e3fe3aa6736edc769dbb7`.
+- Production migration run `34783634199` completed successfully. The locked runner applied only `007_service_role_rest_access.sql`, `008_subscription_cancellation_fields.sql`, and `009_membership_entitlement_blocks.sql`, then verified the production ledger, RLS/browser grant restrictions, service-role access, cancellation fields, and entitlement-block fields.
+- The live Stripe account has Customer Portal cancellation enabled. Live coupon `kEPvsD5Y` is active, applies 75% off once, and is reserved as the retention-offer template; the Worker creates a customer-specific coupon capped to one redemption before presenting the offer.
 - Stripe remains the payment/subscription authority. Discord OAuth identifies the member; Discord is not a payment method. Supabase persists the Stripe-to-Discord mapping and event/audit trail.
 
 ## Public-beta decision
@@ -51,8 +53,8 @@ The public-beta label does not waive the customer-facing acceptance gate. Before
 
 - [x] Create and verify a fresh encrypted production logical backup; store its encryption key separately.
 - [x] Confirm referral migrations 005 and 006 already appear in the production ledger.
-- [ ] Apply only migrations 007, 008, and 009 with the locked migration runner.
-- [ ] Verify RLS, revoked browser grants, service-role privileges, cancellation fields, and entitlement-block fields.
+- [x] Apply only migrations 007, 008, and 009 with the locked migration runner.
+- [x] Verify RLS, revoked browser grants, service-role privileges, cancellation fields, and entitlement-block fields.
 - [ ] Deploy the integrated Checkout Worker and record its Cloudflare version ID.
 - [ ] Verify production health, bindings, secret names, allowed origins, Stripe live price, and Customer Portal configuration.
 - [ ] Confirm the one-time 75%-off retention coupon is configured for production and can be redeemed only once per customer.
@@ -72,7 +74,6 @@ These can be improved during public beta without blocking invitations once accep
 - broader team/game evidence enrichment for non-player sides and totals;
 - an explicit payment-recovered membership event;
 - support-ticket automation and published support hours;
-- stronger webhook body-size enforcement when `Content-Length` is absent;
 - marketing and referral promotion.
 
 ## Unaccepted risks

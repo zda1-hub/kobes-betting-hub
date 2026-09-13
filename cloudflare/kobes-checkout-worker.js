@@ -537,10 +537,18 @@ function fromBase64Url(value) {
   return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
 }
 
-function secureEqual(left, right) {
-  if (left.length !== right.length) return false;
+async function secureEqual(left, right) {
+  const [leftHash, rightHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encode.encode(String(left))),
+    crypto.subtle.digest('SHA-256', encode.encode(String(right))),
+  ]);
+  if (typeof crypto.subtle.timingSafeEqual === 'function') {
+    return crypto.subtle.timingSafeEqual(leftHash, rightHash);
+  }
+  const leftBytes = new Uint8Array(leftHash);
+  const rightBytes = new Uint8Array(rightHash);
   let difference = 0;
-  for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  for (let index = 0; index < leftBytes.length; index += 1) difference |= leftBytes[index] ^ rightBytes[index];
   return difference === 0;
 }
 
@@ -555,7 +563,10 @@ async function verifyStripeSignature(payload, signature, secret) {
   if (!timestamp || !signatures.length || Math.abs(Date.now() / 1000 - timestamp) > 300) return false;
   const digest = await crypto.subtle.sign('HMAC', await signingKey(secret), new TextEncoder().encode(`${timestamp}.${payload}`));
   const expected = toHex(digest);
-  return signatures.some((candidate) => secureEqual(expected, candidate));
+  for (const candidate of signatures) {
+    if (await secureEqual(expected, candidate)) return true;
+  }
+  return false;
 }
 
 async function sign(value, secret) {
@@ -595,7 +606,7 @@ async function createDiscordState({ sessionId = null, intent = 'connect' }, env)
 
 async function readDiscordState(state, env) {
   const [body, signature, ...extra] = state.split('.');
-  if (!body || !signature || extra.length || !secureEqual(await sign(body, env.DISCORD_OAUTH_STATE_SECRET), signature)) throw new Error('Invalid Discord connection request.');
+  if (!body || !signature || extra.length || !await secureEqual(await sign(body, env.DISCORD_OAUTH_STATE_SECRET), signature)) throw new Error('Invalid Discord connection request.');
   const value = JSON.parse(decode.decode(fromBase64Url(body)));
   if (!['connect', 'portal', 'referral'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
   if (value.intent === 'connect' && !value.sessionId) throw new Error('That Discord connection request is incomplete.');
@@ -700,7 +711,6 @@ function portalSessionValues(membership, customer, subscription, env, memberCoup
 
 async function ensurePerMemberRetentionCoupon(env, customer) {
   if (!env.STRIPE_RETENTION_COUPON_ID || !customer?.id || customer.metadata?.[RETENTION_USED_METADATA_KEY] === 'true') return '';
-  if (!env.STRIPE_PORTAL_CONFIGURATION_ID) throw new Error('The guarded retention portal configuration is not set.');
   const existingCouponId = customer.metadata?.[RETENTION_COUPON_METADATA_KEY];
   if (existingCouponId) return existingCouponId;
   const coupon = await stripe(env, '/coupons', {
@@ -1340,10 +1350,40 @@ async function processReferralPayouts(env) {
   return summary;
 }
 
-async function handleWebhook(request, env) {
+async function readTextWithLimit(request, maximumBytes) {
   const contentLength = Number(request.headers.get('Content-Length') || 0);
-  if (contentLength > 1_000_000) return new Response('Webhook payload is too large.', { status: 413 });
-  const payload = await request.text();
+  if (Number.isFinite(contentLength) && contentLength > maximumBytes) throw new RangeError('Payload too large.');
+  if (!request.body) return '';
+  const reader = request.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maximumBytes) throw new RangeError('Payload too large.');
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const payload = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    payload.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return decode.decode(payload);
+}
+
+async function handleWebhook(request, env) {
+  let payload;
+  try { payload = await readTextWithLimit(request, 1_000_000); }
+  catch (error) {
+    if (error instanceof RangeError) return new Response('Webhook payload is too large.', { status: 413 });
+    throw error;
+  }
   const valid = await verifyStripeSignature(payload, request.headers.get('Stripe-Signature'), env.STRIPE_WEBHOOK_SECRET);
   if (!valid) return new Response('Invalid Stripe signature.', { status: 400 });
   if (!supabaseReady(env)) return new Response('Membership persistence is not configured.', { status: 503 });

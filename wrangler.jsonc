@@ -26,6 +26,7 @@
     "STRIPE_FIRST_MONTH_COUPON": "O9RCPLIa",
     "STRIPE_GLOBAL_PAYOUTS_VERSION": "2026-08-26.preview",
     "STRIPE_MONTHLY_PRICE_ID": "price_1U7mwnE6p9BmPii3ge8dmJw2",
+    "STRIPE_RETENTION_COUPON_ID": "kEPvsD5Y",
     "STRIPE_STARTER_PRICE_ID": "price_1U8sr9E6p9BmPii3C2r5jTb4",
     "SUPABASE_URL": "https://mpajyubbnnsdpgdizvht.supabase.co"
   },

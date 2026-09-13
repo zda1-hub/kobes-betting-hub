@@ -43,6 +43,14 @@ test('oversized Stripe webhooks are rejected before buffering', async () => {
   assert.equal(response.status, 413);
 });
 
+test('oversized chunked Stripe webhooks are rejected without a Content-Length header', async () => {
+  const response = await worker.fetch(new Request('https://worker.test/stripe-webhook', {
+    method: 'POST',
+    body: 'x'.repeat(1_000_001),
+  }), {});
+  assert.equal(response.status, 413);
+});
+
 test('checkout worker exposes a scheduled membership reconciliation handler', () => {
   assert.equal(typeof worker.scheduled, 'function');
 });
@@ -129,7 +137,9 @@ test('retention provisioning creates one 75-percent once coupon capped to one re
     const requestUrl = new URL(url);
     requests.push({ path: requestUrl.pathname, body: new URLSearchParams(options.body), idempotencyKey: new Headers(options.headers).get('Idempotency-Key') });
     if (requestUrl.pathname === '/v1/coupons') return Response.json({ id: 'coupon_member' });
-    if (requestUrl.pathname === '/v1/customers/cus_member') return Response.json({ id: 'cus_member', metadata: { kbh_retention_offer_coupon: 'coupon_member' } });
+    if (requestUrl.pathname.startsWith('/v1/customers/')) {
+      return Response.json({ id: requestUrl.pathname.split('/').at(-1), metadata: { kbh_retention_offer_coupon: 'coupon_member' } });
+    }
     throw new Error(`Unexpected request: ${requestUrl}`);
   };
   const env = {
@@ -153,10 +163,12 @@ test('retention provisioning creates one 75-percent once coupon capped to one re
   }), 'coupon_member');
   assert.equal(requests.length, 0);
 
-  await assert.rejects(
-    () => workerTest.ensurePerMemberRetentionCoupon({ ...env, STRIPE_PORTAL_CONFIGURATION_ID: '' }, { id: 'cus_other', metadata: {} }),
-    /guarded retention portal configuration is not set/,
-  );
+  requests.length = 0;
+  assert.equal(await workerTest.ensurePerMemberRetentionCoupon(
+    { ...env, STRIPE_PORTAL_CONFIGURATION_ID: '' },
+    { id: 'cus_other', metadata: {} },
+  ), 'coupon_member');
+  assert.equal(requests.length, 2);
 });
 test('Stripe signature verification accepts any valid v1 signature during secret rotation', async () => {
   const payload = JSON.stringify({ id: 'evt_test_rotation' });
