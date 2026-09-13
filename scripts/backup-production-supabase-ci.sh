@@ -21,15 +21,28 @@ if [[ "${database_url}" != *"sslmode=require"* && "${database_url}" != *"sslmode
   exit 1
 fi
 
-case "${database_url}" in
-  *"postgres.${expected_project_ref}@"*".pooler.supabase.com"*|*"db.${expected_project_ref}.supabase.co"*) ;;
-  *)
-    printf 'Refusing database target: expected production project %s.\n' "${expected_project_ref}" >&2
-    exit 1
-    ;;
-esac
+actual_project_ref="$(python3 - <<'PY'
+import os
+import re
+from urllib.parse import unquote, urlparse
 
-for command_name in pg_dump pg_restore openssl shasum; do
+parsed = urlparse(os.environ['DATABASE_URL'])
+hostname = (parsed.hostname or '').lower()
+username = unquote(parsed.username or '').lower()
+direct = re.fullmatch(r'db\.([a-z0-9]{20})\.supabase\.co', hostname)
+pooler = re.fullmatch(r'postgres\.([a-z0-9]{20})', username)
+if direct:
+    print(direct.group(1))
+elif pooler and hostname.endswith('.pooler.supabase.com'):
+    print(pooler.group(1))
+PY
+)"
+if [[ "${actual_project_ref}" != "${expected_project_ref}" ]]; then
+  printf 'Refusing database target: expected production project %s.\n' "${expected_project_ref}" >&2
+  exit 1
+fi
+
+for command_name in python3 pg_dump pg_restore openssl shasum; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     printf 'Required command is unavailable: %s\n' "${command_name}" >&2
     exit 1
