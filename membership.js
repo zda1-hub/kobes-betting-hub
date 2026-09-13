@@ -48,6 +48,23 @@ const clearCheckoutRequestId = (offer) => {
 };
 const checkoutState = new URLSearchParams(window.location.search).get('checkout');
 const checkoutSession = new URLSearchParams(window.location.search).get('session_id');
+const requestedReferralCode = (new URLSearchParams(window.location.search).get('ref') || '').toUpperCase();
+const referralCode = /^KBH-[A-Z0-9]{10}$/.test(requestedReferralCode) ? requestedReferralCode : '';
+
+if (referralCode && !checkoutState) {
+  const starterButton = document.querySelector('[data-checkout="starter"]');
+  const trialButton = document.querySelector('[data-checkout="trial_2_day"]');
+  const offerBadge = document.querySelector('.offer-badge');
+  const priceDescription = document.querySelector('.membership-price span');
+  if (starterButton) starterButton.hidden = true;
+  if (trialButton) {
+    trialButton.dataset.checkout = 'referral_trial';
+    trialButton.innerHTML = 'Start with 2 days free <span aria-hidden="true">→</span>';
+  }
+  if (offerBadge) offerBadge.innerHTML = '<strong>MEMBER REFERRAL</strong><span>Exclusive two-day free trial</span>';
+  if (priceDescription) priceDescription.textContent = 'per month after your 2-day free trial';
+  setCheckoutMessage('Referral offer: 2 days free, then $32.99/month until canceled. The $10 starter option is not available with referrals.');
+}
 
 if (checkoutState === 'success') {
   setCheckoutMessage('Your membership is confirmed. Connect Discord now to receive member access.');
@@ -77,7 +94,7 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
     const response = await fetch(checkoutEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Checkout-Request-Id': requestId },
-      body: JSON.stringify({ offer }),
+      body: JSON.stringify({ offer, ...(offer === 'referral_trial' ? { referral_code: referralCode } : {}) }),
     });
     const result = await response.json();
     if (!response.ok || !result.url) {

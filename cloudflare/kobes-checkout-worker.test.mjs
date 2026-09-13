@@ -47,6 +47,16 @@ test('checkout worker exposes a scheduled membership reconciliation handler', ()
   assert.equal(typeof worker.scheduled, 'function');
 });
 
+test('new referral rewards are configured for ten dollars', () => {
+  assert.equal(workerTest.REFERRAL_REWARD_CENTS, 1000);
+});
+
+test('cash payouts use the amount stored on each immutable reward', () => {
+  assert.equal(workerTest.referralPayoutAmount({ reward_amount_cents: 1000 }), 1000);
+  assert.equal(workerTest.referralPayoutAmount({ reward_amount_cents: 2000 }), 2000);
+  assert.throws(() => workerTest.referralPayoutAmount({ reward_amount_cents: 9999 }), /amount is invalid/);
+});
+
 test('Stripe signature verification accepts any valid v1 signature during secret rotation', async () => {
   const payload = JSON.stringify({ id: 'evt_test_rotation' });
   const secret = 'whsec_test_rotation';
@@ -75,6 +85,7 @@ test('Discord OAuth state is signed, scoped, and rejects tampering', async () =>
   const oauthEnv = { DISCORD_CLIENT_ID: 'client_test', DISCORD_REDIRECT_URI: 'https://worker.test/discord/callback' };
   assert.equal(new URL(workerTest.discordAuthorizationUrl(state, oauthEnv, 'portal')).searchParams.get('scope'), 'identify');
   assert.equal(new URL(workerTest.discordAuthorizationUrl(state, oauthEnv, 'connect')).searchParams.get('scope'), 'identify guilds.join');
+  assert.equal(new URL(workerTest.discordAuthorizationUrl(state, oauthEnv, 'referral')).searchParams.get('scope'), 'identify email');
 });
 
 test('checkout offer composition matches the published intro pricing without charging in the test', async (t) => {
@@ -112,6 +123,49 @@ test('checkout offer composition matches the published intro pricing without cha
   assert.equal(trialForm.get('payment_method_collection'), 'always');
   assert.equal(requests[0].headers.get('Idempotency-Key'), 'fa8b14dd-1c67-4cbe-8308-52a750d0e534');
   assert.equal(requests[1].headers.get('Idempotency-Key'), 'f054a06e-a74b-439f-a56d-b0be5f6cc613');
+});
+
+test('referral checkout is locked to the two-day monthly offer and records the stable Discord referrer ID', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const stripeRequests = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const requestUrl = new URL(url);
+    if (requestUrl.hostname === 'project.supabase.test') {
+      const table = requestUrl.pathname.replace('/rest/v1/', '');
+      if (table === 'referral_profiles') return Response.json([{ discord_user_id: 'discord_referrer', referral_code: 'KBH-ABCDEF1234', stripe_recipient_account_id: null, payout_status: 'NOT_CONNECTED' }]);
+      if (table === 'membership_customers') return Response.json([{ stripe_customer_id: 'cus_referrer', current_subscription_id: 'sub_referrer' }]);
+      if (table === 'membership_subscriptions') return Response.json([{ stripe_subscription_id: 'sub_referrer', stripe_customer_id: 'cus_referrer', status: 'active' }]);
+      if (table === 'api_call_events') return new Response(null, { status: 204 });
+    }
+    assert.equal(requestUrl.hostname, 'api.stripe.com');
+    stripeRequests.push({ url: String(url), body: String(options.body || '') });
+    return Response.json({ url: 'https://checkout.stripe.test/referral-session' }, { headers: { 'request-id': 'req_referral_test' } });
+  };
+  const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Checkout-Request-Id': 'f054a06e-a74b-439f-a56d-b0be5f6cc613' },
+    body: JSON.stringify({ offer: 'referral_trial', referral_code: 'KBH-ABCDEF1234' }),
+  }), {
+    STRIPE_SECRET_KEY: 'sk_test_local_only',
+    STRIPE_MONTHLY_PRICE_ID: 'price_monthly',
+    SUPABASE_URL: 'https://project.supabase.test',
+    SUPABASE_SECRET_KEY: 'sb_secret_test',
+  });
+
+  assert.equal(response.status, 200);
+  const checkout = new URLSearchParams(stripeRequests[0].body);
+  assert.equal(checkout.get('line_items[0][price]'), 'price_monthly');
+  assert.equal(checkout.has('line_items[1][price]'), false);
+  assert.equal(checkout.get('subscription_data[trial_period_days]'), '2');
+  assert.equal(checkout.get('metadata[offer]'), 'referral_trial');
+  assert.equal(checkout.get('metadata[referral_code]'), 'KBH-ABCDEF1234');
+  assert.equal(checkout.get('subscription_data[metadata][referrer_discord_user_id]'), 'discord_referrer');
+});
+
+test('invoice subscription extraction supports current and legacy Stripe invoice shapes', () => {
+  assert.equal(workerTest.invoiceSubscriptionId({ subscription: 'sub_legacy' }), 'sub_legacy');
+  assert.equal(workerTest.invoiceSubscriptionId({ parent: { subscription_details: { subscription: 'sub_current' } } }), 'sub_current');
 });
 
 test('checkout rejects malformed client request IDs before contacting Stripe', async (t) => {

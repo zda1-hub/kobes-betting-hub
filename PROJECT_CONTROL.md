@@ -2,9 +2,9 @@
 
 **Status:** Active production system with unresolved operational and compliance risks
 
-**Last verified:** 2026-09-12 19:38 MST
+**Last verified:** 2026-09-12 21:12 MST
 
-**Production runtime change set:** repository/Render auto-deploy from `main`; Checkout Worker `0cf0d235-aa26-432c-8478-df6239efed48`; Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365`; public-site Worker `5fcc4678-1b88-4b09-8616-2203db498b1b`
+**Production runtime change set:** repository/Render auto-deploy from `main`; Checkout Worker `ae9e52fb-c95b-46c5-8008-8ecaca8e2334`; Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365`; public-site Worker `0f79cda2-fc03-4382-8cf6-98a7acce08b6`
 
 **Control-file owner:** Zakai Martin
 
@@ -22,7 +22,7 @@ The owners do not need to read every repository document. The operating chat sho
 
 ## Executive state
 
-Kobe's Betting Hub is a paid sports-pick membership centered on Discord. It also has a public website, Stripe checkout, Discord entitlement automation, a monitored X-source pick pipeline, human approval in Discord, result grading through ESPN, recap email queues, a public Free Pick page, and optional X publishing.
+Kobe's Betting Hub is a paid sports-pick membership centered on Discord. It also has a public website, Stripe checkout, Discord entitlement automation, a cash referral program, a monitored X-source pick pipeline, human approval in Discord, result grading through ESPN, recap email queues, a public Free Pick page, and optional X publishing.
 
 The system is not a single application. It currently spans GitHub, Cloudflare Workers/D1/KV, Render, Discord, Stripe, X, OpenAI, ESPN, Gmail Apps Script, and Supabase Postgres. Supabase is the shared membership and pick/API audit ledger. OpenAI provider reconciliation is live through a dedicated read-only organization Admin key; Apps Script and some SDK-internal calls still need equivalent records before the ledger is literally exhaustive.
 
@@ -35,10 +35,12 @@ The system is not a single application. It currently spans GitHub, Cloudflare Wo
 - Checkout hardening prevents an existing Stripe membership or Discord identity from being silently relinked through a replayed completion URL, accepts valid Stripe signatures during secret rotation, reduces portal OAuth to `identify`, and writes exact Cloudflare Worker version IDs into API audit events. Browser retries now reuse a validated UUID as Stripe's `Idempotency-Key`, preventing duplicate Checkout Sessions from ambiguous repeat submissions.
 - Stripe Checkout creates subscriptions. After payment/trial confirmation, the customer connects Discord through OAuth and receives the configured paid-member role.
 - Stripe subscription create/update/delete webhooks maintain the Supabase membership state and reconcile Discord access. The Stripe webhook endpoint is active and subscribed to all four required event classes, including Checkout completion.
+- The US-only member referral flow is live at `https://kobesbettinghub.com/refer`. Discord OAuth provides the stable member identity; Stripe remains the payment and payout authority. Referral links expose only the two-day trial followed by `$32.99/month`. A qualifying first `$32.99` invoice starts a seven-day hold, after which the scheduled Worker can send the stored `$10` cash reward through Stripe Global Payouts. Self-referrals, refunds, disputes, missing referred-member identity, and incomplete payout onboarding are held or blocked. No live reward has been sent as part of deployment testing.
+- Stripe restricted key `Kobe Referral Payouts` is stored only as encrypted Cloudflare secret `STRIPE_GLOBAL_PAYOUTS_KEY`. The existing webhook destination now listens to seven events, adding `invoice.paid`, `charge.refunded`, and `charge.dispute.created` for referral qualification and reversal controls.
 - A Render background worker runs the Discord bot and X collector from `main`, with a 1 GB persistent disk at `/var/data`.
 - The production X collector is enabled for 38 configured sources. Its effective interval is 15 minutes during the configured daily Arizona window.
 - The Render environment and repository are configured for `gpt-5.6-luna` with bounded output, no reasoning, versioned pricing metadata, and reusable audited extractions.
-- The free Supabase project `kobe betting hub` is healthy. Migrations `001`–`005` are live, including `api_call_events` and `provider_usage_snapshots`; production verification found eight durable API events immediately after cutover. The Checkout Worker uses a dedicated server secret; Render uses the encrypted session-pooler connection with fail-closed audit enforcement. A first 48-hour OpenAI import wrote 14 hourly usage rows and three daily cost rows. Migration `005` preserves those initial project-only cost rows under the explicit `openai_costs_api_unscoped` label before new project-and-key-scoped imports are stored.
+- The free Supabase project `kobe betting hub` is healthy. Migrations `001`–`006` are live, including the API ledger, normalized membership state, referral profiles/rewards/events/auth sessions, and the `$10` default for new referral rewards. Production verification found eight durable API events immediately after the original cutover. The Checkout Worker uses a dedicated server secret; Render uses the encrypted session-pooler connection with fail-closed audit enforcement. A first 48-hour OpenAI import wrote 14 hourly usage rows and three daily cost rows. The migration sequence preserves the initial project-only cost rows under the explicit `openai_costs_api_unscoped` label and preserves any already-recorded `$20` referral obligation while new rewards use `$10`.
 - The publisher Cloudflare Worker reports ready, connected to X, and configured with free-tier KV Free Pick media storage. All five outbound X media/post/token call paths now append redacted, immutable D1 audit rows with status, latency, provider request ID, hashes, trigger, and Worker version; no token, OAuth code, tweet text, media, or raw response is retained.
 - `node scripts/production-smoke.mjs` performs five credential-free read-only checks covering Checkout health, Publisher health, current Free Pick shape, public Free Pick HTML, and the client asset. The first post-deploy run correctly detected KV propagation lag; the retry passed all five checks and the live page visibly rendered the Bijan pick.
 - Discord `#daily-free-play` contains canonical record `20260912-148-X` (Bijan Robinson over 29.5 receiving yards, -140). A dedicated website-publication credential is now encrypted independently in Render and Cloudflare. The owner-approved text-only synchronization returned `201`, the KV current endpoint returned `200`, and the live public page rendered the same Bijan selection. No Discord or X action occurred during this repair.
@@ -49,7 +51,7 @@ Observed output-quality evidence: the 2026-09-12 Discord screenshot shows a publ
 
 ### What is not production-ready even though parts are live
 
-- The public Terms and Privacy pages still say they are drafts/not effective and describe a pre-checkout site with no payment or member account integration. That is factually inconsistent with the live product.
+- The public Terms and Privacy drafts now describe the paid membership, Discord identity, Stripe billing, and referral data flow, but they are still explicitly drafts and are not owner/counsel approved.
 - No owner-supplied proof of legal entity, jurisdiction, official support/privacy contact, refund policy, or counsel approval exists in the repository.
 - Membership persistence now uses Supabase for normalized customer/subscription state and signed webhook event idempotency. Stripe remains the payment and subscription source of truth; Discord role state is the derived entitlement.
 - The Checkout Worker now authenticates returning members with Discord OAuth and then creates a Stripe Customer Portal session. Discord proves which linked member is acting; Stripe authenticates and performs billing, recurring subscription, invoices, payment-method changes, and cancellation.
@@ -66,6 +68,9 @@ Visitor
   └─> kobesbettinghub.com (Cloudflare static Worker built from the repository)
        ├─> Checkout Worker ─> Stripe Checkout / subscriptions
        │                     └─> Discord OAuth + paid-member role
+       ├─> Referral page ─> Discord OAuth identity
+       │                  ├─> Stripe recipient onboarding / cash payout
+       │                  └─> Supabase referral reward and event ledger
        └─> Publisher Worker ─> current Free Pick from KV
 
 38 approved-for-monitoring X accounts
@@ -91,6 +96,7 @@ Kobe Trends email
 | Public website | Cloudflare static Worker + GitHub mirror | root HTML/CSS/JS; `scripts/prepare-public-site.mjs` | shared generated manifest from `main` | Live |
 | Checkout | Cloudflare Worker | `cloudflare/kobes-checkout-worker.js` | Stripe + Supabase | Secure Discord-authenticated portal and webhook persistence live |
 | Payments | Stripe | called by Checkout Worker | Stripe subscription and invoice records | Live |
+| Referral cash rewards | Checkout Worker + Stripe Global Payouts | `refer.html`, `referral.js`, `cloudflare/kobes-checkout-worker.js` | Supabase reward/event ledger + Stripe recipient/outbound-payment records | Live; no-money smoke only, first controlled full lifecycle still required |
 | Member access | Discord | Checkout Worker OAuth/role calls | Stripe status governs Discord role | Live with daily reconciliation; full test-identity lifecycle still required |
 | Discord operations | Render Node worker | `bot/index.js`, `bot/commands.js` | Discord messages + Supabase workflow events + local logs | Live on `f9b2141` |
 | X monitoring | Render Node worker | `pipeline/collect-x.js`, `data/twitter-sources.json` | source roster + persistent cursor | Live; cursor/dedupe root is on `/var/data` |
@@ -98,7 +104,7 @@ Kobe Trends email
 | Pick approval | private Discord channel | `bot/lib/source-review.js`, `bot/index.js` | Kobe button action | Live |
 | Pick publication | Discord | `bot/index.js` | Discord message ID + audit event | Live |
 | Pick log | Render persistent disk | `bot/lib/pick-log.js` | `/var/data/pick-log.csv` | Live, single-host CSV |
-| Pick/member audit DB | Supabase Postgres | `pipeline/audit-store.js`, `pipeline/migrations/` | Supabase Postgres | Migrations `001`–`004` live; Worker and Render connected |
+| Pick/member/referral audit DB | Supabase Postgres | `pipeline/audit-store.js`, `pipeline/migrations/` | Supabase Postgres | Migrations `001`–`006` live; Worker and Render connected |
 | Event/result verification | ESPN public APIs | `bot/lib/event-timing.js`, `bot/lib/espn-grading.js`, `bot/lib/espn-trends.js` | stored response snapshot/reference after audit cutover | Live, partial market coverage |
 | Public Free Pick | Publisher Worker + KV | `cloudflare/bettinghub-publisher.js`, `free-pick.js` | KV `free-picks/current.json` | Live with canonical Bijan text-only item; dedicated cross-service credential verified by hash only |
 | X publishing | Publisher Worker + D1 | `cloudflare/bettinghub-publisher.js` | D1 queue/delivery log + X post ID | Connected |
@@ -121,6 +127,18 @@ Kobe Trends email
 8. Returning members authenticate with their linked Discord account and are redirected to Stripe Customer Portal for payment methods, invoices, and cancellation. Stripe remains the subscription authority.
 
 Remaining controls after the production cutover: unmatched-account recovery, an external alert path for reconciliation/role failures, support tickets, refund implementation, a full test-identity lifecycle, and an approved public policy. Daily Stripe-to-Supabase-to-Discord reconciliation is deployed.
+
+### Cash referrals
+
+1. An active US member opens `refer.html` and signs in with the Discord account linked to membership; Discord's stable user ID is the identity, not the editable username.
+2. The Worker creates or retrieves a Supabase referral profile and returns a personal `KBH-...` link.
+3. The referrer completes Stripe-hosted recipient and payout-method onboarding; bank details are entered directly into Stripe and are not stored by the website or Supabase.
+4. A new customer using that link can choose only the two-day trial followed by the `$32.99/month` subscription. Stripe metadata retains the referral code and referrer's Discord user ID.
+5. A successful first `$32.99` invoice creates or advances one immutable reward and sets eligibility seven days later.
+6. Refund and dispute webhooks void an unpaid reward or flag an already-sent reward for review. The scheduled Worker rechecks the invoice, member identities, recipient capability, and payout method before sending.
+7. Stripe creates the outbound payment with a reward-specific idempotency key; Supabase stores status changes and the non-secret outbound-payment identifier. New rewards are `$10`; any previously stored `$20` obligation remains payable at its recorded amount.
+
+Acceptance still required: a controlled Stripe/Discord test identity must complete attribution, first paid invoice, hold expiry, recipient onboarding, one test-mode payout, refund/dispute reversal behavior, and ledger reconciliation. Production smoke deliberately sent no money.
 
 ### Pick operations
 
@@ -151,10 +169,12 @@ This table lists network/API paths found in the repository. “Audited” means 
 | Caller | Provider / path | Trigger | Cost or quota exposure | Current durable trail | Kill switch / limit |
 |---|---|---|---|---|---|
 | Browser | Checkout Worker `/create-checkout` | Join button | Cloudflare request; downstream Stripe | Cloudflare logs + downstream Supabase events | Disable checkout in code/Worker |
+| Browser | Checkout Worker `/referrals/login` and `/referrals/onboard` | Member requests a referral link or payout setup | Cloudflare/Discord/Stripe API quota | Supabase `api_call_events`, `referral_profiles`, `referral_auth_sessions`, and `referral_events` | Remove payout key or disable referral routes in Worker |
 | Checkout Worker | Stripe `/v1/checkout/sessions` | New checkout | Stripe fees after payment | Supabase `api_call_events` + Stripe | Remove/disable prices or Worker route |
 | Checkout Worker | Stripe session/subscription GET | Discord connect, membership management, daily reconciliation | Stripe API quota | Supabase `api_call_events` + Stripe | Disable routes/cron |
 | Checkout Worker | Stripe subscription update | retention/cancel | Business revenue impact | Supabase `api_call_events` + Stripe | Disable retention/cancel routes |
-| Stripe | Checkout Worker `/stripe-webhook` | subscription events | Cloudflare requests | Stripe delivery log only | Stripe webhook setting |
+| Checkout Worker | Stripe v2 recipient/account-link/payout-method/outbound-payment APIs | Referral onboarding and eligible scheduled reward | Cash outflow plus Stripe quota/fees | Supabase API audit + referral event/reward rows + Stripe | Remove `STRIPE_GLOBAL_PAYOUTS_KEY`; pause cron/code; policy limits still required |
+| Stripe | Checkout Worker `/stripe-webhook` | checkout, subscription, invoice, refund, and dispute events | Cloudflare requests | Stripe delivery log + idempotent Supabase webhook/referral events | Stripe webhook setting |
 | Checkout Worker | Discord OAuth token/user/join/role/revoke | Member connects Discord or daily reconciliation | Discord rate limits | Supabase API + membership events | Remove Worker Discord credentials |
 | Render collector | X user lookup | missing source cursor, notably after state loss | X API plan/quota | Supabase `api_call_events`; source ID in cursor | `X_MONITOR_ENABLED`, source `enabled` |
 | Render collector | X user timeline | every source each collector pass; pagination on catch-up | Major X call-volume driver | Supabase `api_call_events` + source/candidate audit | daily window, interval, candidate cap |
@@ -265,15 +285,15 @@ Status meanings: **Complete** means the intended production control and its imme
 
 | # | Workstream | Status | Durable evidence / verified outcome | What remains / acceptance test |
 |---:|---|---|---|---|
-| 1 | Cloudflare stale site | **Complete** | Full cache purge completed; custom-domain static Worker `5fcc4678-1b88-4b09-8616-2203db498b1b` and shared site manifest deployed; `cancel`, `cancel.html`, and `cancel.js` returned `200`; the production smoke verified the public Free Pick HTML and client asset. | Recheck after future public-site deployments and record the deployed Worker version. |
-| 2 | Membership lifecycle | **Partial** | Stripe test Checkout creation, signed subscription webhooks, Supabase membership persistence, Discord OAuth identity linking, Stripe Customer Portal routing, cancellation handling, Discord role code, replay-safe link ownership, and retry-safe Checkout Session idempotency are live. Worker `0cf0d235-aa26-432c-8478-df6239efed48` passed health and CORS verification after deployment. | Run one dedicated test Discord identity through Checkout → link → portal → cancel → role removal and retain Stripe event IDs, Discord user/role evidence, Supabase rows, and timestamps. Add Turnstile/rate limiting after keys are authorized. Implement owner-approved failed-payment/refund/dispute rules. |
+| 1 | Cloudflare stale site | **Complete** | Full cache purge completed; custom-domain static Worker `0f79cda2-fc03-4382-8cf6-98a7acce08b6` and shared site manifest deployed; the live `/refer` page renders the `$10` offer and the production smoke passed all five credential-free checks. | Recheck after future public-site deployments and record the deployed Worker version. |
+| 2 | Membership lifecycle | **Partial** | Stripe test Checkout creation, signed subscription webhooks, Supabase membership persistence, Discord OAuth identity linking, Stripe Customer Portal routing, cancellation handling, Discord role code, replay-safe link ownership, retry-safe Checkout Session idempotency, and the Discord-authenticated referral flow are live. Worker `ae9e52fb-c95b-46c5-8008-8ecaca8e2334` passed health after deployment; 125/125 tests passed. | Run one dedicated test Discord identity through Checkout → link → portal → cancel → role removal and retain Stripe event IDs, Discord user/role evidence, Supabase rows, and timestamps. Separately run the referral lifecycle in Stripe test mode, including the seven-day eligibility transition and a test payout. Add Turnstile/rate limiting after keys are authorized. Implement owner-approved failed-payment/refund/dispute rules. |
 | 3 | Luna/X monitoring proof | **Complete for the authorized smoke test** | `X_TEST_CANDIDATE_LIMIT=1 node pipeline/test-real-x-pick.js --no-discord` checked one recent `@CappersUSA` post through `gpt-5.6-luna`; outcome was `SOURCE_EXTRACTED`; no Discord, X, member, or public-site publication occurred. | Use the same no-publication harness for future model/prompt changes; the next normal window must still prove bounded production behavior in the durable ledger. |
 | 4 | Durable API trail | **Partial / operational** | Supabase migrations `001`–`005` are live; explicit Node and Checkout Worker calls write endpoint/outcome/latency/hash/workflow metadata; eight production ESPN events were observed immediately after cutover. Discord SDK REST responses are audited without route identifiers or bodies. Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365` routes all five outbound X calls through an append-only, redacted D1 ledger with Worker-version attribution. | Capture the first production Publisher X/OAuth audit row without generating an unauthorized post; add equivalent explicit Apps Script request records and Discord pre-response failure records; then reconcile zero unclassified provider traffic for a controlled window. |
 | 5 | Provider billing reconciliation | **Complete for isolated OpenAI automation** | The daily/manual GitHub Actions workflow has encrypted `DATABASE_URL` and final read-only key `key_Y50uH3VCo3mzNJM5`, pinned expected project/key IDs, and no Admin credential on Render. Run `34736914218` imported 14 usage and three cost rows. Supabase operation `39eb92c5-f391-47c5-ba4a-93b7f1bcf805` contains successful HTTP 200 key-preflight, Costs, and Usage calls. Original key `key_jtBdyNxNSPYbeNCZ` and exposed attempts `key_06qVlp80Cm0NUp9Z` / `key_toaVGldRCO1HXxOT` are inactive. | Add equivalent X/Cloudflare billing exports where available, address the GitHub Node 20 deprecation warning, and prove one zero-unclassified controlled window. |
 | 6 | Cost containment | **Complete, monitoring required** | Luna is active; durable X cursor/dedupe uses `/var/data`; hard pre-call limits are 50 OpenAI requests/day, 500/month, $1 estimated/day, and $15 estimated/month; a concurrency-safe cap permits at most two new model calls per collection run and defers overflow without advancing its cursor; monitored-source publishing is disabled. | Verify the first production deferral/cutoff events and confirm deferred candidates drain across later intervals without unexplained provider traffic. |
 | 7 | Free Pick mismatch | **Complete for text-only production path** | A dedicated least-privilege credential was generated and stored encrypted in Cloudflare and Render; intermediate exposed rotation values were invalidated. Runtime verification compared only a non-secret hash prefix. The first authorized publish exposed a read-path defect for `objectKey: null`; a regression test was added, and Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365` is live. Canonical pick `20260912-148-X` returned `201`; after normal KV propagation, `/api/free-pick/current` returned `200`, the public page rendered the Bijan selection, and the new five-check production smoke passed with no Discord/X side effect. | Test the image-backed path separately before using it. |
-| 8 | Membership reconciliation | **Complete for scheduled control** | Checkout Worker `0cf0d235-aa26-432c-8478-df6239efed48` runs Stripe → Supabase → Discord reconciliation daily at `15 16 * * *` (09:15 Arizona) and records outcomes/failures. | Add an external alert destination for failed reconciliation and prove one mismatch repair in a controlled test. |
-| 9 | Legal/support operations | **Blocked on owner decisions** | Draft Terms, Privacy, support pages, and issue playbooks exist, but the public legal text is inconsistent with the live paid product and is not owner/counsel approved. | Supply the legal business identity/address, jurisdiction, support/privacy email, refund and failed-payment grace rules, retention policy, backup operator, and approval authority; then publish and timestamp effective policies. |
+| 8 | Membership reconciliation | **Complete for scheduled control** | Checkout Worker `ae9e52fb-c95b-46c5-8008-8ecaca8e2334` runs Stripe → Supabase → Discord reconciliation plus eligible referral payout processing daily at `15 16 * * *` (09:15 Arizona) and records outcomes/failures. The payout processor uses the amount stored on each reward and a reward-specific Stripe idempotency key. | Add an external alert destination for failed reconciliation/payouts and prove one mismatch repair plus one test-mode referral payout in controlled tests. |
+| 9 | Legal/support operations | **Blocked on owner decisions** | Draft Terms, Privacy, support pages, and issue playbooks exist. Terms and Privacy now factually describe the live paid/referral product, but they remain drafts and are not owner/counsel approved. | Supply the legal business identity/address, jurisdiction, support/privacy email, refund and failed-payment grace rules, referral-program authority/termination language, tax reporting process, retention policy, backup operator, and approval authority; then publish and timestamp effective policies. |
 
 ## Current backlog
 
@@ -300,6 +320,8 @@ Status meanings: **Complete** means the intended production control and its imme
 - [x] Verify test-mode checkout creation and deploy daily Stripe-to-Discord entitlement reconciliation.
 - [x] Make ambiguous browser retries reuse a validated Stripe Checkout idempotency key and retain that request ID in the audit event.
 - [ ] Complete a live test-identity lifecycle: Checkout, Discord link, portal, cancel, and role removal.
+- [ ] Complete one referral test-mode lifecycle: referrer Discord login, personal link, referred checkout, first paid invoice, seven-day hold, recipient onboarding, test outbound payment, refund/dispute path, and Supabase/Stripe audit reconciliation.
+- [ ] Define the production referral cash reserve, maximum rewards per member/day/month, manual review threshold, fraud escalation, tax-information threshold/process, and pause switch before meaningful volume.
 - [ ] Alert on failed webhook processing, Discord role grant/removal, unmatched payment, and duplicate access.
 - [ ] Define and implement refund, past-due/grace, dispute, access restoration, and support escalation policy.
 - [ ] Establish a shared support ticket system with named owner and response targets.
@@ -359,7 +381,7 @@ Current official list prices recorded on 2026-09-12 are $0.25/M input and $2.00/
 
 DeepSeek's current `deepseek-v4-flash-vision-exp` is another benchmark candidate because its official API supports image input, Responses-format requests, low-detail images, and JSON schema output. It is marked experimental, so it must not replace production extraction without fixture-based accuracy, availability, privacy, and malformed-output testing. Kimi K2.5 advertises multimodal support, but current price/compatibility evidence has not yet been established for this exact schema workflow.
 
-Database direction: the existing free Supabase Postgres project is the first production audit and membership ledger because the implemented Node client already uses PostgreSQL. Migrations `001`–`004` are live. Render connects through Supabase's free IPv4 session pooler. The checkout Worker uses a new-format Supabase server secret (`sb_secret_...`), with legacy service-role compatibility only; it must never expose either key to the public site. Cloudflare D1 remains appropriate for the existing Worker queues.
+Database direction: the existing free Supabase Postgres project is the first production audit, membership, and referral ledger because the implemented Node client already uses PostgreSQL. Migrations `001`–`006` are live. Render connects through Supabase's free IPv4 session pooler. The checkout Worker uses a new-format Supabase server secret (`sb_secret_...`), with legacy service-role compatibility only; it must never expose either key to the public site. Cloudflare D1 remains appropriate for the existing Worker queues.
 
 ## Operating rules for this chat and future agents
 
@@ -411,6 +433,8 @@ Database direction: the existing free Supabase Postgres project is the first pro
 | 2026-09-12 | Replace the post-extraction approval-card cap with a concurrency-safe pre-provider reservation. Production now permits two new OpenAI extraction calls per 15-minute pass and retains deferred posts for the next interval. The worker restarted after the daily cutoff, so no X scan or Discord publication occurred during this rollout. | Zakai Martin | Live; 121/121 tests passed |
 | 2026-09-12 | Credential-free post-deploy smoke passed Checkout health, Publisher health, current Free Pick API, public Free Pick page, and Free Pick client asset. | Zakai Martin | Complete |
 | 2026-09-12 | Isolate OpenAI reconciliation in a daily/manual GitHub Actions workflow and install production `DATABASE_URL` plus final read-only Admin key `key_Y50uH3VCo3mzNJM5` as encrypted repository secrets. Original key `key_jtBdyNxNSPYbeNCZ` and exposed attempts `key_06qVlp80Cm0NUp9Z` / `key_toaVGldRCO1HXxOT` were revoked; the final value never entered Git or application output. Render no longer has `OPENAI_ADMIN_KEY`, and cleanup deploy `dep-daj22t3m8hqs73elspv0` is live. GitHub run `34736914218` returned 14 usage rows and three cost rows; Supabase operation `39eb92c5-f391-47c5-ba4a-93b7f1bcf805` recorded all three provider calls as HTTP 200 `SUCCEEDED`. | Zakai Martin | Complete |
+| 2026-09-12 | Launch a US-only `$10` cash referral program for the `$32.99/month` membership: referred customers receive only the two-day trial; rewards require the first successful `$32.99` invoice plus a seven-day hold. Discord user ID is the stable member identity, Stripe Checkout remains the subscription authority, Stripe Global Payouts handles recipient onboarding and cash delivery, and Supabase stores the reward/event trail. Refunds, disputes, duplicates, fraud, and self-referrals do not qualify. | Zakai Martin | Adopted and deployed; controlled full-lifecycle acceptance test remains |
+| 2026-09-12 | Apply Supabase migrations `005_referral_cash_rewards` and `006_referral_reward_ten_dollars`; create the restricted Stripe key `Kobe Referral Payouts` and store it only as encrypted Cloudflare secret `STRIPE_GLOBAL_PAYOUTS_KEY`; expand Stripe webhook destination `we_1U7p1cE6p9BmPii3meFaIjH4` from four to seven events; deploy Checkout Worker `ae9e52fb-c95b-46c5-8008-8ecaca8e2334` and public-site Worker `0f79cda2-fc03-4382-8cf6-98a7acce08b6`. The suite passed 125/125, Worker health passed, the five-check production smoke passed, and `/refer` visibly serves the `$10` program. No live payout was sent. | Zakai Martin | Live; first test-mode payout and legal approval remain |
 
 ## Owner answers still required
 
@@ -422,6 +446,8 @@ These cannot be learned safely from source code:
 4. Which Stripe account/mode, Discord server, Cloudflare account, Render workspace, GitHub account, X project, OpenAI organization/project, and Gmail account are the official production accounts? Record identifiers, never secrets.
 5. What refund policy, grace period, supported jurisdictions, age rule, official business entity/address, and support/privacy email are approved?
 6. What retention period is required for API logs, source content, model inputs/outputs, member identifiers, payment references, and incidents?
+7. What monthly cash reserve and per-member reward limits are approved for referrals, and who may pause payouts or approve suspicious/manual-review cases?
+8. Who will handle referral tax reporting and requests for taxpayer information if annual payments approach the applicable reporting threshold?
 
 ## Detailed references
 

@@ -4,6 +4,7 @@
  * Required Cloudflare Worker secrets:
  *   STRIPE_SECRET_KEY          Stripe restricted key (rk_live_...)
  *   STRIPE_WEBHOOK_SECRET      Stripe webhook signing secret (whsec_...)
+ *   STRIPE_GLOBAL_PAYOUTS_KEY  Restricted key for Global Payouts API v2
  *   DISCORD_CLIENT_SECRET      Discord OAuth application client secret
  *   DISCORD_BOT_TOKEN          Discord bot token (Manage Roles permission required)
  *   DISCORD_OAUTH_STATE_SECRET Random secret used to secure OAuth state
@@ -27,7 +28,11 @@ const ALLOWED_SITE_ORIGINS = new Set([
   'https://zda1-hub.github.io',
 ]);
 const STRIPE_API = 'https://api.stripe.com/v1';
+const STRIPE_API_V2 = 'https://api.stripe.com/v2';
+const STRIPE_V2_VERSION = '2026-08-26.preview';
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing']);
+const REFERRAL_REWARD_CENTS = 1000;
+const REFERRAL_HOLD_DAYS = 7;
 
 const headers = (origin) => ({
   'Access-Control-Allow-Origin': ALLOWED_SITE_ORIGINS.has(origin) ? origin : SITE_ORIGIN,
@@ -136,6 +141,37 @@ async function stripeGet(env, path) {
   return result;
 }
 
+async function stripeV2(env, path, { method = 'GET', body, idempotencyKey, stripeContext } = {}) {
+  if (!env.STRIPE_GLOBAL_PAYOUTS_KEY) throw new Error('Cash payout processing is not configured yet.');
+  const operationId = crypto.randomUUID();
+  const startedAt = Date.now();
+  const payload = body === undefined ? undefined : JSON.stringify(body);
+  const response = await fetch(`${STRIPE_API_V2}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${env.STRIPE_GLOBAL_PAYOUTS_KEY}`,
+      'Stripe-Version': env.STRIPE_GLOBAL_PAYOUTS_VERSION || STRIPE_V2_VERSION,
+      ...(payload ? { 'Content-Type': 'application/json' } : {}),
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+      ...(stripeContext ? { 'Stripe-Context': stripeContext } : {}),
+    },
+    body: payload,
+  });
+  const responseText = await response.text();
+  let result = {};
+  try { result = responseText ? JSON.parse(responseText) : {}; } catch { result = {}; }
+  await auditExternalCall(env, {
+    service: 'stripe_global_payouts', endpointClass: `/v2${path}`, method, operationId,
+    providerRequestId: response.headers.get('request-id'),
+    requestPayloadSha256: await sha256Text(payload),
+    responsePayloadSha256: await sha256Text(responseText), responseStatus: response.status,
+    outcome: response.ok ? 'SUCCEEDED' : 'HTTP_ERROR', errorClass: response.ok ? null : 'HTTP_ERROR',
+    latencyMs: Date.now() - startedAt,
+  });
+  if (!response.ok) throw new Error(result.error?.message || result.message || 'Stripe payout request failed.');
+  return result;
+}
+
 function supabaseKey(env) {
   return env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '';
 }
@@ -224,6 +260,114 @@ async function membershipCustomerForDiscord(env, discordUserId) {
 async function membershipCustomerForStripe(env, customerId) {
   const rows = await supabase(env, `membership_customers?stripe_customer_id=eq.${encodeURIComponent(customerId)}&select=stripe_customer_id,discord_user_id,current_subscription_id&limit=1`);
   return rows?.[0] || null;
+}
+
+async function activeMembershipForDiscord(env, discordUserId) {
+  const customer = await membershipCustomerForDiscord(env, discordUserId);
+  if (!customer?.current_subscription_id) return null;
+  const rows = await supabase(env, `membership_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(customer.current_subscription_id)}&status=in.(active,trialing)&select=stripe_subscription_id,stripe_customer_id,status&limit=1`);
+  return rows?.[0] || null;
+}
+
+async function referralProfileForDiscord(env, discordUserId) {
+  const rows = await supabase(env, `referral_profiles?discord_user_id=eq.${encodeURIComponent(discordUserId)}&select=discord_user_id,referral_code,stripe_recipient_account_id,payout_status&limit=1`);
+  return rows?.[0] || null;
+}
+
+async function referralProfileForCode(env, referralCode) {
+  const rows = await supabase(env, `referral_profiles?referral_code=eq.${encodeURIComponent(referralCode)}&select=discord_user_id,referral_code,stripe_recipient_account_id,payout_status&limit=1`);
+  return rows?.[0] || null;
+}
+
+async function ensureReferralProfile(env, discordUserId) {
+  const existing = await referralProfileForDiscord(env, discordUserId);
+  if (existing) return existing;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const code = `KBH-${crypto.randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`;
+    try {
+      const created = await supabase(env, 'referral_profiles', {
+        method: 'POST',
+        prefer: 'return=representation',
+        body: { discord_user_id: discordUserId, referral_code: code, payout_status: 'NOT_CONNECTED' },
+      });
+      if (created?.[0]) return created[0];
+    } catch (error) {
+      const concurrent = await referralProfileForDiscord(env, discordUserId);
+      if (concurrent) return concurrent;
+      if (attempt === 2) throw error;
+    }
+  }
+  throw new Error('Unable to create a referral profile.');
+}
+
+async function recordReferralEvent(env, values) {
+  if (!supabaseReady(env)) return;
+  await supabase(env, 'referral_events', {
+    method: 'POST',
+    prefer: 'return=minimal',
+    body: {
+      id: crypto.randomUUID(),
+      referral_reward_id: values.rewardId || null,
+      event_type: values.eventType,
+      actor_type: values.actorType || 'system',
+      actor_id: values.actorId || null,
+      details: values.details || {},
+      occurred_at: new Date().toISOString(),
+    },
+  });
+}
+
+async function createReferralAttribution(env, values) {
+  if (!values.referralCode || !values.customerId || !values.subscriptionId) return null;
+  const profile = await referralProfileForCode(env, values.referralCode);
+  if (!profile || profile.discord_user_id !== values.referrerDiscordUserId) throw new Error('Referral attribution is invalid.');
+  try {
+    const created = await supabase(env, 'referral_rewards?on_conflict=referred_subscription_id', {
+      method: 'POST',
+      prefer: 'resolution=ignore-duplicates,return=representation',
+      body: {
+        referral_code: profile.referral_code,
+        referrer_discord_user_id: profile.discord_user_id,
+        referred_stripe_customer_id: values.customerId,
+        referred_subscription_id: values.subscriptionId,
+        reward_amount_cents: REFERRAL_REWARD_CENTS,
+        currency: 'usd',
+        status: 'PENDING_PAYMENT',
+      },
+    });
+    const reward = created?.[0];
+    if (reward) await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_ATTRIBUTED', details: { referral_code: profile.referral_code } });
+    return reward || null;
+  } catch (error) {
+    const rows = await supabase(env, `referral_rewards?referred_subscription_id=eq.${encodeURIComponent(values.subscriptionId)}&select=*&limit=1`);
+    if (rows?.[0]) return rows[0];
+    throw error;
+  }
+}
+
+async function finalizeReferralIdentity(env, subscriptionId, customerId, referredDiscordUserId) {
+  const rows = await supabase(env, `referral_rewards?referred_subscription_id=eq.${encodeURIComponent(subscriptionId)}&select=id,referrer_discord_user_id,status&limit=1`);
+  const reward = rows?.[0];
+  if (!reward) return;
+  const selfReferral = reward.referrer_discord_user_id === referredDiscordUserId;
+  const existingMembership = await membershipCustomerForDiscord(env, referredDiscordUserId);
+  const duplicateMember = Boolean(existingMembership?.stripe_customer_id && existingMembership.stripe_customer_id !== customerId);
+  const voidReason = selfReferral ? 'SELF_REFERRAL' : duplicateMember ? 'EXISTING_MEMBER' : null;
+  await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(reward.id)}`, {
+    method: 'PATCH',
+    prefer: 'return=minimal',
+    body: {
+      referred_discord_user_id: referredDiscordUserId,
+      ...(voidReason ? { status: 'VOID', status_reason: voidReason } : {}),
+      updated_at: new Date().toISOString(),
+    },
+  });
+  await recordReferralEvent(env, {
+    rewardId: reward.id,
+    eventType: voidReason ? 'REFERRAL_VOIDED' : 'REFERRED_DISCORD_LINKED',
+    actorType: 'discord_user', actorId: referredDiscordUserId,
+    details: voidReason ? { reason: voidReason } : {},
+  });
 }
 
 async function claimDiscordLink(env, customerId, subscriptionId, discordUserId) {
@@ -390,9 +534,37 @@ async function readDiscordState(state, env) {
   const [body, signature, ...extra] = state.split('.');
   if (!body || !signature || extra.length || !secureEqual(await sign(body, env.DISCORD_OAUTH_STATE_SECRET), signature)) throw new Error('Invalid Discord connection request.');
   const value = JSON.parse(decode.decode(fromBase64Url(body)));
-  if (!['connect', 'portal'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
+  if (!['connect', 'portal', 'referral'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
   if (value.intent === 'connect' && !value.sessionId) throw new Error('That Discord connection request is incomplete.');
   return value;
+}
+
+async function createReferralAuthSession(env, user) {
+  if (!user?.id || !user?.email || user.verified === false) throw new Error('A verified Discord email is required to set up cash payouts.');
+  const token = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  await supabase(env, 'referral_auth_sessions', {
+    method: 'POST',
+    prefer: 'return=minimal',
+    body: {
+      token_hash: await sha256Text(token),
+      discord_user_id: user.id,
+      contact_email: user.email,
+      display_name: String(user.global_name || user.username || 'Kobe’s Betting Hub member').slice(0, 100),
+      expires_at: expiresAt,
+    },
+  });
+  return token;
+}
+
+async function readReferralAuthSession(env, token) {
+  if (!token || token.length > 100) throw new Error('Reconnect Discord to continue.');
+  const tokenHash = await sha256Text(token);
+  const rows = await supabase(env, `referral_auth_sessions?token_hash=eq.${encodeURIComponent(tokenHash)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=discord_user_id,contact_email,display_name&limit=1`);
+  const session = rows?.[0];
+  if (!session) throw new Error('That referral session expired. Reconnect Discord to continue.');
+  if (!await activeMembershipForDiscord(env, session.discord_user_id)) throw new Error('An active membership is required for referral payouts.');
+  return session;
 }
 
 async function activeSubscription(sessionId, env) {
@@ -549,11 +721,66 @@ function discordAuthorizationUrl(state, env, intent) {
     client_id: env.DISCORD_CLIENT_ID,
     response_type: 'code',
     redirect_uri: env.DISCORD_REDIRECT_URI,
-    scope: intent === 'portal' ? 'identify' : 'identify guilds.join',
+    scope: intent === 'connect' ? 'identify guilds.join' : intent === 'referral' ? 'identify email' : 'identify',
     state,
     prompt: 'consent',
   }).toString();
   return authorization.toString();
+}
+
+async function startReferralLogin(request, env) {
+  if (!discordReady(env) || !supabaseReady(env)) return new Response('Member referrals are being configured. Please check back shortly.', { status: 503 });
+  const state = await createDiscordState({ intent: 'referral' }, env);
+  return redirect(discordAuthorizationUrl(state, env, 'referral'));
+}
+
+async function startPayoutOnboarding(request, env) {
+  if (!supabaseReady(env) || !env.STRIPE_GLOBAL_PAYOUTS_KEY) return new Response('Cash payout setup is being configured. Please check back shortly.', { status: 503 });
+  try {
+    const auth = new URL(request.url).searchParams.get('auth') || '';
+    const session = await readReferralAuthSession(env, auth);
+    const profile = await ensureReferralProfile(env, session.discord_user_id);
+    let recipientId = profile.stripe_recipient_account_id;
+    if (!recipientId) {
+      const recipient = await stripeV2(env, '/core/accounts', {
+        method: 'POST',
+        idempotencyKey: `kbh-referrer-${session.discord_user_id}`,
+        body: {
+          contact_email: session.contact_email,
+          display_name: session.display_name,
+          identity: { country: 'us', entity_type: 'individual' },
+          configuration: { recipient: { capabilities: { bank_accounts: { local: { requested: true } } } } },
+          metadata: { kbh_discord_user_id: session.discord_user_id, kbh_referral_code: profile.referral_code },
+          include: ['identity', 'configuration.recipient', 'requirements'],
+        },
+      });
+      recipientId = recipient.id;
+      if (!recipientId) throw new Error('Stripe did not create the payout recipient.');
+      await supabase(env, `referral_profiles?discord_user_id=eq.${encodeURIComponent(session.discord_user_id)}&stripe_recipient_account_id=is.null`, {
+        method: 'PATCH',
+        prefer: 'return=minimal',
+        body: { stripe_recipient_account_id: recipientId, payout_status: 'ONBOARDING', updated_at: new Date().toISOString() },
+      });
+      await recordReferralEvent(env, { eventType: 'PAYOUT_RECIPIENT_CREATED', actorType: 'discord_user', actorId: session.discord_user_id, details: { referral_code: profile.referral_code } });
+    }
+    const completeUrl = `${SITE_ORIGIN}${SITE_PATH}/refer.html?setup=complete&code=${encodeURIComponent(profile.referral_code)}`;
+    const refreshUrl = `${SITE_ORIGIN}${SITE_PATH}/refer.html?setup=refresh&code=${encodeURIComponent(profile.referral_code)}`;
+    const accountLink = await stripeV2(env, '/core/account_links', {
+      method: 'POST',
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        account: recipientId,
+        use_case: {
+          type: 'account_onboarding',
+          account_onboarding: { configurations: ['recipient'], return_url: completeUrl, refresh_url: refreshUrl },
+        },
+      },
+    });
+    if (!accountLink.url) throw new Error('Stripe did not return a payout setup link.');
+    return redirect(accountLink.url);
+  } catch (error) {
+    return new Response(error.message || 'Cash payout setup failed.', { status: 400 });
+  }
 }
 
 async function startPortalLogin(request, env) {
@@ -593,6 +820,13 @@ async function finishDiscordConnection(request, env) {
     if (!tokenResponse.ok || !token.access_token) throw new Error('Discord authorization failed.');
     discordAccessToken = token.access_token;
     const user = await discordRequest('/users/@me', { headers: { Authorization: `Bearer ${token.access_token}` } }, env);
+    if (state.intent === 'referral') {
+      if (!await activeMembershipForDiscord(env, user.id)) throw new Error('Connect the Discord account tied to an active Kobe’s Betting Hub membership.');
+      const profile = await ensureReferralProfile(env, user.id);
+      const auth = await createReferralAuthSession(env, user);
+      await recordReferralEvent(env, { eventType: 'REFERRAL_LINK_ACCESSED', actorType: 'discord_user', actorId: user.id, details: { referral_code: profile.referral_code } });
+      return redirect(`${SITE_ORIGIN}${SITE_PATH}/refer.html#code=${encodeURIComponent(profile.referral_code)}&auth=${encodeURIComponent(auth)}`);
+    }
     if (state.intent === 'portal') {
       const membership = await membershipCustomerForDiscord(env, user.id);
       if (!membership?.stripe_customer_id) throw new Error('No paid membership is linked to this Discord account. Connect Discord from the checkout confirmation first.');
@@ -613,6 +847,7 @@ async function finishDiscordConnection(request, env) {
     const customerId = stripeId(session.customer) || stripeId(subscription.customer);
     const botHeaders = { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' };
     if (!supabaseReady(env)) throw new Error('Membership persistence is not configured.');
+    await finalizeReferralIdentity(env, subscription.id, customerId, user.id);
     await claimDiscordLink(env, customerId, subscription.id, user.id);
     await stripe(env, `/subscriptions/${encodeURIComponent(subscription.id)}`, {
       'metadata[discord_user_id]': user.id,
@@ -653,7 +888,7 @@ async function finishDiscordConnection(request, env) {
 async function createCheckout(request, env, origin) {
   let data;
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
-  if (!['starter', 'trial_2_day'].includes(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
+  if (!['starter', 'trial_2_day', 'referral_trial'].includes(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
   const suppliedRequestId = request.headers.get('X-Checkout-Request-Id');
   if (suppliedRequestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(suppliedRequestId)) {
     return json({ error: 'Invalid checkout request ID.' }, 400, origin);
@@ -661,6 +896,14 @@ async function createCheckout(request, env, origin) {
   const requestId = suppliedRequestId?.toLowerCase() || crypto.randomUUID();
   if (!env.STRIPE_SECRET_KEY || !env.STRIPE_MONTHLY_PRICE_ID || (data.offer === 'starter' && !env.STRIPE_STARTER_PRICE_ID)) {
     return json({ error: 'Checkout is being finalized. Please try again shortly.' }, 503, origin);
+  }
+
+  let referrerProfile = null;
+  if (data.offer === 'referral_trial') {
+    const referralCode = String(data.referral_code || '').toUpperCase();
+    if (!/^KBH-[A-Z0-9]{10}$/.test(referralCode) || !supabaseReady(env)) return json({ error: 'That referral link is invalid or expired.' }, 400, origin);
+    referrerProfile = await referralProfileForCode(env, referralCode);
+    if (!referrerProfile || !await activeMembershipForDiscord(env, referrerProfile.discord_user_id)) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
   }
 
   const membershipPage = `${SITE_ORIGIN}${SITE_PATH}/membership.html`;
@@ -678,6 +921,12 @@ async function createCheckout(request, env, origin) {
     'subscription_data[trial_period_days]': data.offer === 'starter' ? 7 : 2,
     'subscription_data[trial_settings][end_behavior][missing_payment_method]': 'cancel',
   };
+  if (referrerProfile) {
+    values['metadata[referral_code]'] = referrerProfile.referral_code;
+    values['metadata[referrer_discord_user_id]'] = referrerProfile.discord_user_id;
+    values['subscription_data[metadata][referral_code]'] = referrerProfile.referral_code;
+    values['subscription_data[metadata][referrer_discord_user_id]'] = referrerProfile.discord_user_id;
+  }
   if (data.offer === 'starter') {
     values['line_items[1][price]'] = env.STRIPE_STARTER_PRICE_ID;
     values['line_items[1][quantity]'] = 1;
@@ -693,6 +942,157 @@ async function createCheckout(request, env, origin) {
   }
 }
 
+const invoiceSubscriptionId = (invoice) => stripeId(invoice?.subscription)
+  || stripeId(invoice?.parent?.subscription_details?.subscription);
+
+async function referralRewardForSubscription(env, subscriptionId) {
+  const rows = await supabase(env, `referral_rewards?referred_subscription_id=eq.${encodeURIComponent(subscriptionId)}&select=*&limit=1`);
+  return rows?.[0] || null;
+}
+
+async function processReferralInvoicePaid(env, invoice, eventId) {
+  const subscriptionId = invoiceSubscriptionId(invoice);
+  if (!subscriptionId || String(invoice?.currency || '').toLowerCase() !== 'usd' || Number(invoice?.amount_paid || 0) < 3299) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
+  const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+  const metadata = subscription.metadata || {};
+  if (metadata.offer !== 'referral_trial' || !metadata.referral_code || !metadata.referrer_discord_user_id) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
+  if (stripeId(subscription.items?.data?.[0]?.price) !== env.STRIPE_MONTHLY_PRICE_ID) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
+  let reward = await referralRewardForSubscription(env, subscriptionId);
+  if (!reward) {
+    reward = await createReferralAttribution(env, {
+      referralCode: metadata.referral_code,
+      referrerDiscordUserId: metadata.referrer_discord_user_id,
+      customerId: stripeId(invoice.customer) || stripeId(subscription.customer),
+      subscriptionId,
+    });
+    reward = reward || await referralRewardForSubscription(env, subscriptionId);
+  }
+  if (!reward || ['VOID', 'PAYOUT_SENT'].includes(reward.status)) return reward?.status || 'REFERRAL_NOT_FOUND';
+  if (reward.first_paid_invoice_id && reward.first_paid_invoice_id !== invoice.id) return 'REFERRAL_ALREADY_QUALIFIED';
+  const paidAtSeconds = Number(invoice?.status_transitions?.paid_at || invoice?.created || Math.floor(Date.now() / 1000));
+  const paidAt = new Date(paidAtSeconds * 1000);
+  const eligibleAt = new Date(paidAt.getTime() + REFERRAL_HOLD_DAYS * 24 * 60 * 60 * 1000);
+  await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(reward.id)}&first_paid_invoice_id=is.null`, {
+    method: 'PATCH',
+    prefer: 'return=minimal',
+    body: {
+      first_paid_invoice_id: invoice.id,
+      first_paid_at: paidAt.toISOString(),
+      eligible_at: eligibleAt.toISOString(),
+      status: 'HOLDING',
+      status_reason: null,
+      updated_at: new Date().toISOString(),
+    },
+  });
+  await recordReferralEvent(env, {
+    rewardId: reward.id,
+    eventType: 'FIRST_MEMBERSHIP_PAYMENT_CONFIRMED',
+    details: { stripe_event_id: eventId, eligible_at: eligibleAt.toISOString(), amount_paid: Number(invoice.amount_paid) },
+  });
+  return 'REFERRAL_HOLD_STARTED';
+}
+
+async function voidReferralForInvoice(env, invoiceId, reason) {
+  if (!invoiceId) return 'NO_REFERRAL_INVOICE';
+  const rows = await supabase(env, `referral_rewards?first_paid_invoice_id=eq.${encodeURIComponent(invoiceId)}&select=id,status&limit=1`);
+  const reward = rows?.[0];
+  if (!reward) return 'NO_REFERRAL_INVOICE';
+  const status = reward.status === 'PAYOUT_SENT' ? 'REVIEW_REQUIRED' : 'VOID';
+  await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(reward.id)}`, {
+    method: 'PATCH', prefer: 'return=minimal',
+    body: { status, status_reason: reason, updated_at: new Date().toISOString() },
+  });
+  await recordReferralEvent(env, { rewardId: reward.id, eventType: status === 'VOID' ? 'REFERRAL_VOIDED' : 'REFERRAL_REVIEW_REQUIRED', details: { reason } });
+  return status;
+}
+
+async function updateReferralReward(env, rewardId, values, statuses = null) {
+  const statusFilter = statuses?.length ? `&status=in.(${statuses.join(',')})` : '';
+  await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(rewardId)}${statusFilter}`, {
+    method: 'PATCH', prefer: 'return=minimal', body: { ...values, updated_at: new Date().toISOString() },
+  });
+}
+
+function referralPayoutAmount(reward) {
+  const amount = Number(reward?.reward_amount_cents);
+  if (![1000, 2000].includes(amount)) throw new Error('Referral reward amount is invalid.');
+  return amount;
+}
+
+async function processReferralPayouts(env) {
+  if (!supabaseReady(env) || !env.STRIPE_GLOBAL_PAYOUTS_KEY) return { skipped: 'not_configured', checked: 0, paid: 0 };
+  const now = new Date().toISOString();
+  const rewards = await supabase(env, `referral_rewards?status=in.(HOLDING,AWAITING_PAYOUT_SETUP,AWAITING_MEMBER_IDENTITY,PAYOUT_FAILED)&eligible_at=lte.${encodeURIComponent(now)}&stripe_outbound_payment_id=is.null&select=*&order=eligible_at.asc&limit=50`);
+  const summary = { checked: 0, paid: 0, awaitingSetup: 0, awaitingIdentity: 0, failed: 0, voided: 0 };
+  if (!rewards?.length) return summary;
+  const financialAccounts = await stripeV2(env, '/money_management/financial_accounts');
+  const financialAccountId = financialAccounts?.data?.[0]?.id;
+  if (!financialAccountId) throw new Error('Stripe Global Payouts financial account was not found.');
+
+  for (const reward of rewards) {
+    summary.checked += 1;
+    try {
+      const payoutAmount = referralPayoutAmount(reward);
+      if (!reward.referred_discord_user_id) {
+        summary.awaitingIdentity += 1;
+        await updateReferralReward(env, reward.id, { status: 'AWAITING_MEMBER_IDENTITY', status_reason: 'REFERRED_DISCORD_NOT_CONNECTED' });
+        continue;
+      }
+      if (reward.referred_discord_user_id === reward.referrer_discord_user_id) {
+        summary.voided += 1;
+        await updateReferralReward(env, reward.id, { status: 'VOID', status_reason: 'SELF_REFERRAL' });
+        await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_VOIDED', details: { reason: 'SELF_REFERRAL' } });
+        continue;
+      }
+      const invoice = await stripeGet(env, `/invoices/${encodeURIComponent(reward.first_paid_invoice_id)}`);
+      if (invoice.status !== 'paid' || Number(invoice.amount_paid || 0) < 3299) {
+        summary.voided += 1;
+        await updateReferralReward(env, reward.id, { status: 'VOID', status_reason: 'PAYMENT_NO_LONGER_QUALIFIES' });
+        await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_VOIDED', details: { reason: 'PAYMENT_NO_LONGER_QUALIFIES' } });
+        continue;
+      }
+      const profile = await referralProfileForDiscord(env, reward.referrer_discord_user_id);
+      if (!profile?.stripe_recipient_account_id) {
+        summary.awaitingSetup += 1;
+        await updateReferralReward(env, reward.id, { status: 'AWAITING_PAYOUT_SETUP', status_reason: 'RECIPIENT_NOT_CONNECTED' });
+        continue;
+      }
+      const includes = new URLSearchParams([['include[]', 'configuration.recipient'], ['include[]', 'requirements']]);
+      const recipient = await stripeV2(env, `/core/accounts/${encodeURIComponent(profile.stripe_recipient_account_id)}?${includes}`);
+      const capability = recipient?.configuration?.recipient?.capabilities?.bank_accounts?.local;
+      const payoutMethods = await stripeV2(env, '/money_management/payout_methods', { stripeContext: profile.stripe_recipient_account_id });
+      const payoutMethodId = payoutMethods?.data?.[0]?.id;
+      if (capability?.status !== 'active' || !payoutMethodId) {
+        summary.awaitingSetup += 1;
+        await updateReferralReward(env, reward.id, { status: 'AWAITING_PAYOUT_SETUP', status_reason: 'RECIPIENT_VERIFICATION_PENDING' });
+        continue;
+      }
+      await updateReferralReward(env, reward.id, { status: 'READY', status_reason: null }, ['HOLDING', 'AWAITING_PAYOUT_SETUP', 'AWAITING_MEMBER_IDENTITY', 'PAYOUT_FAILED']);
+      const payout = await stripeV2(env, '/money_management/outbound_payments', {
+        method: 'POST',
+        idempotencyKey: `kbh-referral-${reward.id}`,
+        body: {
+          from: { financial_account: financialAccountId, currency: 'usd' },
+          to: { recipient: profile.stripe_recipient_account_id, payout_method: payoutMethodId },
+          amount: { value: payoutAmount, currency: 'usd' },
+          description: 'Kobe’s Betting Hub referral reward',
+          metadata: { referral_reward_id: reward.id, referral_code: reward.referral_code },
+        },
+      });
+      if (!payout?.id) throw new Error('Stripe did not return a payout ID.');
+      await updateReferralReward(env, reward.id, { status: 'PAYOUT_SENT', status_reason: null, stripe_outbound_payment_id: payout.id }, ['READY']);
+      await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_PAYOUT_SENT', details: { outbound_payment_id: payout.id, amount_cents: payoutAmount } });
+      summary.paid += 1;
+    } catch (error) {
+      summary.failed += 1;
+      await updateReferralReward(env, reward.id, { status: 'PAYOUT_FAILED', status_reason: String(error?.message || error).slice(0, 300) });
+      try { await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_PAYOUT_FAILED', details: { error: String(error?.message || error).slice(0, 300) } }); } catch { /* Keep the payout failure primary. */ }
+    }
+  }
+  console.log('Referral payout processing completed.', summary);
+  return summary;
+}
+
 async function handleWebhook(request, env) {
   const contentLength = Number(request.headers.get('Content-Length') || 0);
   if (contentLength > 1_000_000) return new Response('Webhook payload is too large.', { status: 413 });
@@ -706,12 +1106,33 @@ async function handleWebhook(request, env) {
     let outcome = 'RECORDED';
     if (event.type === 'checkout.session.completed') {
       const session = event.data?.object;
-      await persistCustomer(env, stripeId(session?.customer), { subscriptionId: stripeId(session?.subscription) });
-      outcome = 'CHECKOUT_RECORDED';
+      const customerId = stripeId(session?.customer);
+      const subscriptionId = stripeId(session?.subscription);
+      await persistCustomer(env, customerId, { subscriptionId });
+      if (session?.metadata?.offer === 'referral_trial') {
+        await createReferralAttribution(env, {
+          referralCode: session.metadata.referral_code,
+          referrerDiscordUserId: session.metadata.referrer_discord_user_id,
+          customerId,
+          subscriptionId,
+        });
+        outcome = 'REFERRAL_CHECKOUT_RECORDED';
+      } else outcome = 'CHECKOUT_RECORDED';
     } else if (['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
       const subscription = event.data?.object;
       await persistSubscription(env, subscription, event.id);
       outcome = await syncMemberRole(subscription, env);
+    } else if (event.type === 'invoice.paid') {
+      outcome = await processReferralInvoicePaid(env, event.data?.object, event.id);
+    } else if (event.type === 'charge.refunded') {
+      outcome = await voidReferralForInvoice(env, stripeId(event.data?.object?.invoice), 'QUALIFYING_CHARGE_REFUNDED');
+    } else if (event.type === 'charge.dispute.created') {
+      const chargeId = stripeId(event.data?.object?.charge);
+      if (!chargeId) outcome = 'DISPUTE_WITHOUT_CHARGE';
+      else {
+        const charge = await stripeGet(env, `/charges/${encodeURIComponent(chargeId)}`);
+        outcome = await voidReferralForInvoice(env, stripeId(charge?.invoice), 'QUALIFYING_CHARGE_DISPUTED');
+      }
     }
     await finishWebhookEvent(env, event.id, 'PROCESSED', outcome);
     return new Response('ok', { status: 200 });
@@ -732,6 +1153,8 @@ export default {
     if (request.method === 'GET' && url.pathname === '/cancel/offer') return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'GET' && url.pathname === '/discord/connect') return startDiscordConnection(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/login') return startPortalLogin(request, env);
+    if (request.method === 'GET' && url.pathname === '/referrals/login') return startReferralLogin(request, env);
+    if (request.method === 'GET' && url.pathname === '/referrals/onboard') return startPayoutOnboarding(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/callback') return finishDiscordConnection(request, env);
     if (request.method === 'POST' && url.pathname === '/create-checkout') return createCheckout(request, env, origin);
     if (request.method === 'POST' && ['/cancel/retain', '/cancel/confirm'].includes(url.pathname)) return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
@@ -739,14 +1162,19 @@ export default {
     return json({ error: 'Not found.' }, 404, origin);
   },
   scheduled(controller, env, ctx) {
-    ctx.waitUntil(reconcileMemberships(env));
+    ctx.waitUntil(Promise.all([reconcileMemberships(env), processReferralPayouts(env)]));
   },
 };
 
 export const __test = {
+  REFERRAL_REWARD_CENTS,
   claimDiscordLink,
   createDiscordState,
   discordAuthorizationUrl,
+  invoiceSubscriptionId,
+  processReferralInvoicePaid,
+  processReferralPayouts,
+  referralPayoutAmount,
   readDiscordState,
   verifyStripeSignature,
 };
