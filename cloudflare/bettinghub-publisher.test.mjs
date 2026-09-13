@@ -10,9 +10,11 @@ const workerTest = workerModule.__test;
 function auditDb() {
   const prepared = [];
   const records = [];
+  const appsScriptRecords = [];
   return {
     prepared,
     records,
+    appsScriptRecords,
     prepare(sql) {
       const statement = {
         sql,
@@ -23,6 +25,7 @@ function auditDb() {
         },
         async run() {
           if (/INSERT INTO x_api_call_audit/.test(sql)) records.push([...this.bindings]);
+          if (/INSERT INTO apps_script_api_call_audit/.test(sql)) appsScriptRecords.push([...this.bindings]);
           return { meta: { changes: 1 } };
         },
       };
@@ -183,4 +186,71 @@ test('every X media, post, refresh, and exchange call is routed through the audi
   assert.equal((source.match(/auditedXFetch\(env, CREATE_POST_ENDPOINT/g) || []).length, 2);
   assert.equal((source.match(/auditedXFetch\(env, TOKEN_ENDPOINT/g) || []).length, 2);
   assert.equal(/\bfetch\((?:MEDIA_UPLOAD_ENDPOINT|CREATE_POST_ENDPOINT|TOKEN_ENDPOINT)/.test(source), false);
+});
+
+test('authenticated Apps Script queue calls write redacted append-only D1 audit records', async () => {
+  const db = auditDb();
+  const env = {
+    DB: db,
+    TRENDS_QUEUE_SECRET: 'private-queue-secret',
+    TREND_INBOX_ALLOWED_SENDER: 'kobedirwin@gmail.com',
+    CF_VERSION_METADATA: { id: 'apps-script-worker-version' },
+  };
+  const clientRequestId = '123e4567-e89b-12d3-a456-426614174000';
+  const response = await worker.fetch(new Request('https://publisher.test/api/queue/trends', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer private-queue-secret',
+      'content-type': 'application/json',
+      'x-kbh-caller': 'gmail-apps-script',
+      'x-kbh-client-request-id': clientRequestId,
+    },
+    body: JSON.stringify({
+      id: 'gmail-private-message-id',
+      sender: 'kobedirwin@gmail.com',
+      league: 'nfl',
+      subject: 'private trends subject',
+      body: 'private trends body',
+      receivedAt: '2026-09-12T12:00:00.000Z',
+    }),
+  }), env);
+
+  assert.equal(response.status, 201);
+  assert.equal(db.appsScriptRecords.length, 1);
+  const [id, occurredAt, endpointClass, method, outcome, responseStatus, latencyMs, recordedClientRequestId, requestHash, errorClass, workerVersion] = db.appsScriptRecords[0];
+  assert.match(id, /^[0-9a-f-]{36}$/i);
+  assert.ok(Number.isFinite(Date.parse(occurredAt)));
+  assert.equal(endpointClass, '/api/queue/trends');
+  assert.equal(method, 'POST');
+  assert.equal(outcome, 'SUCCEEDED');
+  assert.equal(responseStatus, 201);
+  assert.ok(Number.isInteger(latencyMs) && latencyMs >= 0);
+  assert.equal(recordedClientRequestId, clientRequestId);
+  assert.match(requestHash, /^[0-9a-f]{64}$/);
+  assert.equal(errorClass, null);
+  assert.equal(workerVersion, 'apps-script-worker-version');
+
+  const auditPersisted = JSON.stringify(db.appsScriptRecords);
+  for (const forbidden of ['private-queue-secret', 'gmail-private-message-id', 'private trends subject', 'private trends body']) {
+    assert.equal(auditPersisted.includes(forbidden), false);
+  }
+  assert.ok(db.prepared.some((item) => item.sql.includes('CREATE TABLE IF NOT EXISTS apps_script_api_call_audit')));
+  assert.ok(db.prepared.some((item) => item.sql.includes('BEFORE UPDATE ON apps_script_api_call_audit')));
+  assert.ok(db.prepared.some((item) => item.sql.includes('BEFORE DELETE ON apps_script_api_call_audit')));
+});
+
+test('spoofed Apps Script markers do not create audit records without queue authorization', async () => {
+  const db = auditDb();
+  const response = await worker.fetch(new Request('https://publisher.test/api/queue/trends', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer wrong-secret',
+      'x-kbh-caller': 'gmail-apps-script',
+      'x-kbh-client-request-id': '123e4567-e89b-12d3-a456-426614174000',
+    },
+    body: '{}',
+  }), { DB: db, TRENDS_QUEUE_SECRET: 'private-queue-secret' });
+
+  assert.equal(response.status, 401);
+  assert.equal(db.appsScriptRecords.length, 0);
 });
