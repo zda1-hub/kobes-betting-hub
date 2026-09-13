@@ -41,11 +41,12 @@ The beta should run at least **7–14 days** and long enough to observe one real
 - [x] The Free Pick path validates JPEG/PNG/WebP, enforces a 5 MB limit, preserves exact bytes/MIME, and avoids duplicate X text/image posts in automated tests.
 - [x] Production exposes read-only health/current-pick checks through `npm run smoke:production`; its previously recorded smoke run passed all five checks.
 - [x] Production X monitoring is approval-first, and source-derived public publishing is disabled with `X_SOURCE_PUBLISHING_ENABLED=false`.
+- [x] Private production `/hub-status` at 09:08 MST on 2026-09-13 reported workflow ready, canonical pick log configured, required database audit connected, ESPN grading on, and recap email connected. Zero Free Picks and zero pending Free Pick results were expected before today's first publication.
 
 ### Still open at this status date
 
 - [x] Finish fresh test clock `clock_1UFAPBE6p9BmPii34X93rbeb`: coupon `VJxmdXFz` produced paid invoice `in_1UFFj1E6p9BmPii37FBFrhWg` for `$8.25`, then Stripe returned to `$32.99`; period-end cancellation produced event `evt_1UFFqTE6p9BmPii3UWYNvLwv`, Supabase `canceled`, `PROCESSED/ROLE_REMOVED`, and Discord DELETE `204`.
-- [ ] Prove the same member cannot accept the 75%-off Customer Portal retention offer twice. The completed clock proves one application lasts one invoice, not a lifetime per-customer redemption limit.
+- [ ] Deploy the local customer-specific single-redemption retention guard to isolated staging and prove the same member cannot accept the 75%-off Customer Portal offer twice. Automated tests prove unique `max_redemptions=1` coupons, durable customer metadata, and fresh portal sessions; the completed clock proves only the first discounted invoice and return to full price.
 - [ ] Approve the failed-payment grace/restoration policy and retain isolated external failed-payment/refund/dispute scenario evidence. The dedicated handler and durable entitlement blocks are implemented, deployed to staging, and covered by automated tests. Explicitly test partial versus full refunds, dispute created/won/lost/closed states, payment recovery, and either audited restoration or an approved manual exception path.
 - [ ] Apply reviewed production migrations `007`, `008`, and `009`, then deploy the tested Checkout Worker source only after final production approval.
 - [ ] Add an external owner alert for paid-without-access and reconciliation failures, or approve the manual monitoring schedule below for the limited beta.
@@ -54,6 +55,7 @@ The beta should run at least **7–14 days** and long enough to observe one real
 - [ ] Complete one real approval-to-Discord pick, ESPN final grade, recap email, Trends intake/approval, and X acceptance after deliberate deployment.
 - [ ] Approve effective Terms, Privacy, recurring-billing, refund/cancellation, age/location, and responsible-gambling language. The public legal documents are still drafts.
 - [ ] Define the official public support/privacy address, staffed hours/timezone, backup operator, ticket location, and data-retention/deletion period.
+- [x] Add a credential-free read-only production-health workflow for the existing five public smoke checks and repository tests that prevent billing-disclosure drift. The workflow becomes active only after the candidate reaches the default branch; direct owner alerting remains open.
 
 ## Owner decisions that cannot be invented
 
@@ -92,6 +94,7 @@ Record each answer and approval date before beta payments open:
 
 - [ ] Zakai reviews the exact source commit, schema plan, Worker variables, secret names, and rollback version IDs.
 - [ ] Production Supabase migration plan includes reviewed additive migrations `007`, `008`, and `009` in order. The sanitized target reference is the production project `mpajyubbnnsdpgdizvht`.
+- [x] A production-locked migration tool now defaults to a read-only plan, pins only `007`–`009`, hard-checks project `mpajyubbnnsdpgdizvht`, requires encrypted transport and a project-bound apply confirmation, uses one advisory-locked transaction, and verifies the result before commit. It has not been run against production.
 - [ ] A current encrypted backup or point-in-time recovery method is verified for the production database. Record how restoration was tested; do not put credentials in the launch record.
 - [ ] Production Discord bot role remains above the paid-member role and has only the permissions needed for join/role operations.
 - [ ] Stripe production webhook destination and subscribed event set are reviewed. Add any newly required billing event only as part of the approved deployment.

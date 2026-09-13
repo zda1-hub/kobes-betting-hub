@@ -36,6 +36,8 @@ const STRIPE_V2_VERSION = '2026-08-26.preview';
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing']);
 const REFERRAL_REWARD_CENTS = 1000;
 const REFERRAL_HOLD_DAYS = 7;
+const RETENTION_USED_METADATA_KEY = 'kbh_retention_offer_used';
+const RETENTION_COUPON_METADATA_KEY = 'kbh_retention_offer_coupon';
 
 const headers = (origin) => ({
   'Access-Control-Allow-Origin': ALLOWED_SITE_ORIGINS.has(origin) ? origin : SITE_ORIGIN,
@@ -652,6 +654,101 @@ function subscriptionCancellationEnd(subscription) {
     ?? null;
 }
 
+function subscriptionDiscounts(subscription) {
+  const current = Array.isArray(subscription?.discounts)
+    ? subscription.discounts
+    : Array.isArray(subscription?.discounts?.data) ? subscription.discounts.data : [];
+  return subscription?.discount ? [...current, subscription.discount] : current;
+}
+
+function discountCouponId(discount) {
+  if (!discount || typeof discount === 'string') return '';
+  return stripeId(discount.source?.coupon) || stripeId(discount.coupon);
+}
+
+function subscriptionHasCoupon(subscription, couponId) {
+  return Boolean(couponId) && subscriptionDiscounts(subscription).some((discount) => discountCouponId(discount) === couponId);
+}
+
+function retentionOfferUsed(customer, subscription, legacyCouponId = '') {
+  const memberCouponId = customer?.metadata?.[RETENTION_COUPON_METADATA_KEY] || '';
+  return customer?.metadata?.[RETENTION_USED_METADATA_KEY] === 'true'
+    || subscription?.metadata?.retention_offer_used === 'true'
+    || subscriptionHasCoupon(subscription, memberCouponId)
+    || subscriptionHasCoupon(subscription, legacyCouponId);
+}
+
+function portalSessionValues(membership, customer, subscription, env, memberCouponId = '') {
+  const returnUrl = `${siteOrigin(env)}${SITE_PATH}/cancel.html?portal=returned`;
+  const values = {
+    customer: membership.stripe_customer_id,
+    return_url: returnUrl,
+  };
+  if (env.STRIPE_PORTAL_CONFIGURATION_ID) values.configuration = env.STRIPE_PORTAL_CONFIGURATION_ID;
+  if (!subscription?.id || !ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) || subscription.cancel_at_period_end || subscription.cancel_at) return values;
+
+  values['flow_data[type]'] = 'subscription_cancel';
+  values['flow_data[subscription_cancel][subscription]'] = subscription.id;
+  values['flow_data[after_completion][type]'] = 'redirect';
+  values['flow_data[after_completion][redirect][return_url]'] = returnUrl;
+  if (memberCouponId && !retentionOfferUsed(customer, subscription, env.STRIPE_RETENTION_COUPON_ID)) {
+    values['flow_data[subscription_cancel][retention][type]'] = 'coupon_offer';
+    values['flow_data[subscription_cancel][retention][coupon_offer][coupon]'] = memberCouponId;
+  }
+  return values;
+}
+
+async function ensurePerMemberRetentionCoupon(env, customer) {
+  if (!env.STRIPE_RETENTION_COUPON_ID || !customer?.id || customer.metadata?.[RETENTION_USED_METADATA_KEY] === 'true') return '';
+  if (!env.STRIPE_PORTAL_CONFIGURATION_ID) throw new Error('The guarded retention portal configuration is not set.');
+  const existingCouponId = customer.metadata?.[RETENTION_COUPON_METADATA_KEY];
+  if (existingCouponId) return existingCouponId;
+  const coupon = await stripe(env, '/coupons', {
+    percent_off: 75,
+    duration: 'once',
+    max_redemptions: 1,
+    name: '75% off next membership invoice',
+    'metadata[kbh_retention_customer]': customer.id,
+    'metadata[kbh_retention_template]': env.STRIPE_RETENTION_COUPON_ID,
+  }, { idempotencyKey: `kbh-retention-coupon-${customer.id}` });
+  if (!coupon?.id) throw new Error('Stripe did not create the member retention coupon.');
+  await stripe(env, `/customers/${encodeURIComponent(customer.id)}`, {
+    [`metadata[${RETENTION_COUPON_METADATA_KEY}]`]: coupon.id,
+  }, { idempotencyKey: `kbh-retention-coupon-link-${customer.id}` });
+  return coupon.id;
+}
+
+async function recordRetentionRedemption(env, subscription, eventId = null, knownCustomer = null) {
+  if (!env.STRIPE_RETENTION_COUPON_ID || !subscription?.id) return false;
+  const customerId = stripeId(subscription.customer);
+  if (!customerId) return false;
+  const customer = knownCustomer || await stripeGet(env, `/customers/${encodeURIComponent(customerId)}`);
+  const couponIds = [customer?.metadata?.[RETENTION_COUPON_METADATA_KEY], env.STRIPE_RETENTION_COUPON_ID].filter(Boolean);
+  let observedSubscription = subscription;
+  let couponId = couponIds.find((candidate) => subscriptionHasCoupon(observedSubscription, candidate)) || '';
+  if (!couponId && subscriptionDiscounts(observedSubscription).some((discount) => typeof discount === 'string')) {
+    observedSubscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(subscription.id)}?expand[]=discounts`);
+    couponId = couponIds.find((candidate) => subscriptionHasCoupon(observedSubscription, candidate)) || '';
+  }
+  if (!couponId) return false;
+  if (customer?.metadata?.[RETENTION_USED_METADATA_KEY] === 'true') return true;
+  await stripe(env, `/customers/${encodeURIComponent(customerId)}`, {
+    [`metadata[${RETENTION_USED_METADATA_KEY}]`]: 'true',
+    [`metadata[${RETENTION_COUPON_METADATA_KEY}]`]: couponId,
+    'metadata[kbh_retention_offer_event]': eventId || 'portal_observation',
+  }, { idempotencyKey: `kbh-retention-redemption-${customerId}-${couponId}` });
+  await recordMembershipEvent(env, {
+    eventType: 'RETENTION_OFFER_REDEEMED',
+    actorType: eventId ? 'stripe_webhook' : 'system',
+    actorId: eventId,
+    customerId,
+    subscriptionId: subscription.id,
+    discordUserId: await discordUserForSubscription(env, subscription),
+    details: { coupon_id: couponId },
+  });
+  return true;
+}
+
 async function cancellationOffer(request, env, origin) {
   const sessionId = new URL(request.url).searchParams.get('session_id') || '';
   try {
@@ -901,14 +998,24 @@ async function finishDiscordConnection(request, env) {
     if (state.intent === 'portal') {
       const membership = await membershipCustomerForDiscord(env, user.id);
       if (!membership?.stripe_customer_id) throw new Error('No paid membership is linked to this Discord account. Connect Discord from the checkout confirmation first.');
-      const portal = await stripe(env, '/billing_portal/sessions', {
-        customer: membership.stripe_customer_id,
-        return_url: `${siteOrigin(env)}${SITE_PATH}/cancel.html?portal=returned`,
+      const customer = await stripeGet(env, `/customers/${encodeURIComponent(membership.stripe_customer_id)}`);
+      const subscription = membership.current_subscription_id
+        ? await stripeGet(env, `/subscriptions/${encodeURIComponent(membership.current_subscription_id)}?expand[]=discounts`)
+        : null;
+      const redemptionRecorded = subscription ? await recordRetentionRedemption(env, subscription, null, customer) : false;
+      const memberCouponId = redemptionRecorded || retentionOfferUsed(customer, subscription, env.STRIPE_RETENTION_COUPON_ID)
+        ? ''
+        : await ensurePerMemberRetentionCoupon(env, customer);
+      const portalValues = portalSessionValues(membership, customer, subscription, env, memberCouponId);
+      const offersRetention = Boolean(portalValues['flow_data[subscription_cancel][retention][coupon_offer][coupon]']);
+      const portal = await stripe(env, '/billing_portal/sessions', portalValues, {
+        idempotencyKey: crypto.randomUUID(),
       });
       await recordMembershipEvent(env, {
         eventType: 'BILLING_PORTAL_OPENED', actorType: 'discord_user', actorId: user.id,
         customerId: membership.stripe_customer_id, subscriptionId: membership.current_subscription_id,
         discordUserId: user.id,
+        details: { retention_offer_included: offersRetention },
       });
       return redirect(portal.url);
     }
@@ -1256,6 +1363,7 @@ async function handleWebhook(request, env) {
     } else if (['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
       const subscription = event.data?.object;
       await persistSubscription(env, subscription, event.id);
+      if (event.type === 'customer.subscription.updated') await recordRetentionRedemption(env, subscription, event.id);
       outcome = await syncMemberRole(subscription, env);
     } else if (event.type === 'invoice.paid') {
       outcome = await processReferralInvoicePaid(env, event.data?.object, event.id);
@@ -1316,12 +1424,16 @@ export const __test = {
   claimDiscordLink,
   createDiscordState,
   discordAuthorizationUrl,
+  ensurePerMemberRetentionCoupon,
   invoiceSubscriptionId,
   processReferralInvoicePaid,
   processReferralPayouts,
+  portalSessionValues,
   referralPayoutAmount,
   referralRecipientIsReady,
+  retentionOfferUsed,
   siteOrigin,
+  subscriptionHasCoupon,
   subscriptionCancellationEnd,
   stripeV2IncludeQuery,
   readDiscordState,
