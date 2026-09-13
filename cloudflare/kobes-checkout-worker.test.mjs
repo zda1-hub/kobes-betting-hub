@@ -57,6 +57,17 @@ test('cash payouts use the amount stored on each immutable reward', () => {
   assert.throws(() => workerTest.referralPayoutAmount({ reward_amount_cents: 9999 }), /amount is invalid/);
 });
 
+test('Stripe v2 account retrieval uses indexed include parameters', () => {
+  const query = new URLSearchParams(workerTest.stripeV2IncludeQuery(['configuration.recipient']));
+  assert.equal(query.get('include[0]'), 'configuration.recipient');
+  assert.equal(query.has('include[]'), false);
+});
+
+test('referral recipient readiness requires an active capability and payout method', () => {
+  assert.equal(workerTest.referralRecipientIsReady({ status: 'active' }, 'pm_test_bank'), true);
+  assert.equal(workerTest.referralRecipientIsReady({ status: 'pending' }, 'pm_test_bank'), false);
+  assert.equal(workerTest.referralRecipientIsReady({ status: 'active' }, ''), false);
+});
 test('Stripe signature verification accepts any valid v1 signature during secret rotation', async () => {
   const payload = JSON.stringify({ id: 'evt_test_rotation' });
   const secret = 'whsec_test_rotation';

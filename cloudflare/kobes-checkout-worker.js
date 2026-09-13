@@ -172,6 +172,14 @@ async function stripeV2(env, path, { method = 'GET', body, idempotencyKey, strip
   return result;
 }
 
+function stripeV2IncludeQuery(values) {
+  return new URLSearchParams(values.map((value, index) => [`include[${index}]`, value])).toString();
+}
+
+function referralRecipientIsReady(capability, payoutMethodId) {
+  return capability?.status === 'active' && Boolean(payoutMethodId);
+}
+
 function supabaseKey(env) {
   return env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '';
 }
@@ -1057,15 +1065,23 @@ async function processReferralPayouts(env) {
         await updateReferralReward(env, reward.id, { status: 'AWAITING_PAYOUT_SETUP', status_reason: 'RECIPIENT_NOT_CONNECTED' });
         continue;
       }
-      const includes = new URLSearchParams([['include[]', 'configuration.recipient'], ['include[]', 'requirements']]);
+      const includes = stripeV2IncludeQuery(['configuration.recipient']);
       const recipient = await stripeV2(env, `/core/accounts/${encodeURIComponent(profile.stripe_recipient_account_id)}?${includes}`);
       const capability = recipient?.configuration?.recipient?.capabilities?.bank_accounts?.local;
       const payoutMethods = await stripeV2(env, '/money_management/payout_methods', { stripeContext: profile.stripe_recipient_account_id });
       const payoutMethodId = payoutMethods?.data?.[0]?.id;
-      if (capability?.status !== 'active' || !payoutMethodId) {
+      if (!referralRecipientIsReady(capability, payoutMethodId)) {
         summary.awaitingSetup += 1;
         await updateReferralReward(env, reward.id, { status: 'AWAITING_PAYOUT_SETUP', status_reason: 'RECIPIENT_VERIFICATION_PENDING' });
         continue;
+      }
+      if (profile.payout_status !== 'READY') {
+        await supabase(env, `referral_profiles?discord_user_id=eq.${encodeURIComponent(profile.discord_user_id)}`, {
+          method: 'PATCH',
+          prefer: 'return=minimal',
+          body: { payout_status: 'READY', updated_at: new Date().toISOString() },
+        });
+        await recordReferralEvent(env, { rewardId: reward.id, eventType: 'PAYOUT_RECIPIENT_READY', actorType: 'system', actorId: profile.discord_user_id });
       }
       await updateReferralReward(env, reward.id, { status: 'READY', status_reason: null }, ['HOLDING', 'AWAITING_PAYOUT_SETUP', 'AWAITING_MEMBER_IDENTITY', 'PAYOUT_FAILED']);
       const payout = await stripeV2(env, '/money_management/outbound_payments', {
@@ -1175,6 +1191,8 @@ export const __test = {
   processReferralInvoicePaid,
   processReferralPayouts,
   referralPayoutAmount,
+  referralRecipientIsReady,
+  stripeV2IncludeQuery,
   readDiscordState,
   verifyStripeSignature,
 };
