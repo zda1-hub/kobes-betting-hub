@@ -6,6 +6,9 @@
 
 ## Verified today
 
+- [x] At 15:08 MST, live Stripe was inspected read-only before another owner acceptance payment. Two active `$32.99/month` memberships were found under the same known owner email, each with a paid `$32.99` invoice from 2026-08-31 and each linked to a different Discord identity. One shows a 2026-09-30 next invoice; the other has no upcoming invoice displayed. No new `$10` payment or subscription mutation occurred. This is a potential duplicate-subscription P1 and broad enrollment remains held until the intended membership is identified and reconciled.
+- [x] After the live membership inspection, the exact repository suite passed `181/181` and the credential-free production smoke passed `5/5`.
+
 - [x] Production public smoke: 5/5 passing.
 - [x] Full current repository suite: 181/181 passing.
 - [x] Production X collector is Live with 38 sources, 12 workers, a six-call Luna cap, unchanged daily/monthly cost stops, and public source publishing disabled.

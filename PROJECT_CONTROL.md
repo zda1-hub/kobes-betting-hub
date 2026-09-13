@@ -26,6 +26,14 @@ The owners do not need to read every repository document. The operating chat sho
 
 Kobe's Betting Hub is a paid sports-pick membership centered on Discord. It also has a public website, Stripe checkout, Discord entitlement automation, a cash referral program, a monitored X-source pick pipeline, human approval in Discord, result grading through ESPN, recap email queues, a public Free Pick page, and optional X publishing.
 
+### Live membership launch hold — 2026-09-13
+
+- At 15:08 MST, a read-only review of live Stripe found two `active` `$32.99/month` memberships using the same known owner email but linked to different Discord identities. Each membership has a paid `$32.99` invoice dated 2026-08-31. One shows a next invoice for 2026-09-30; the other shows no upcoming invoice in the subscription detail view and may already be scheduled to end.
+- No additional `$10` production Checkout payment was submitted during this review. Do not create another owner acceptance subscription.
+- Treat the pair as a potential duplicate-subscription P1 until Kobe identifies the intended Discord membership and the operator explains whether both memberships are legitimate. Keep broad enrollment/promotion on hold; the existing pick workflow may continue under its normal approval controls.
+- The next authorized step is member-driven Customer Portal cancellation through the exact linked Discord identity, followed by read-only Stripe ↔ Supabase ↔ Discord reconciliation. Cancellation stops renewal and does not itself issue a refund. No live subscription was changed during the review.
+- The same checkpoint reran the repository suite (`181/181`) and the five credential-free production smoke checks (`5/5`); both passed.
+
 The system is not a single application. It currently spans GitHub, Cloudflare Workers/D1/KV, Render, Discord, Stripe, X, OpenAI, ESPN, Gmail Apps Script, and Supabase Postgres. Supabase is the shared membership and pick/API audit ledger. OpenAI provider reconciliation is live through a dedicated read-only organization Admin key; Apps Script and some SDK-internal calls still need equivalent records before the ledger is literally exhaustive.
 
 ### Current controlled-test checkpoint
