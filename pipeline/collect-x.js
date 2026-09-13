@@ -90,6 +90,15 @@ function mediaCaptionHasBetSignal(text) {
   return /\b(?:pick|play|bet|card|slip|ladder|prop|parlay|odds?|units?|over|under|moneyline|spread|run line|puck line|anytime|to score)\b/i.test(text || '');
 }
 
+function sourceSupportSignalCount(text) {
+  const lines = String(text || '')
+    .split(/\r?\n|[•·]/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const supportSignal = /\b(?:last\s+\d+|\d+\s+of\s+\d+|\d+(?:\.\d+)?%|average(?:d|s)?|median|rate|rank(?:ed|s)?|allowed|against|versus|vs\.?|home|away|road|season|games?|starts?|attempts?|targets?|catches|yards?|points?|rebounds?|assists?|hits?|strikeouts?|walks?|innings?|minutes?|snap(?:s| rate)?|usage)\b/i;
+  return lines.filter((line) => supportSignal.test(line) && /\d/.test(line)).length;
+}
+
 function shouldQueueForReview(source, post, postMediaUrls) {
   if (likelyPick(post.text)) return true;
   if (postMediaUrls.length === 0) return false;
@@ -102,10 +111,28 @@ function shouldQueueForReview(source, post, postMediaUrls) {
 }
 
 function intakePriority(source, post) {
-  if (likelyPick(post?.text)) return footballPriority(post) === 0 ? 0 : 1;
-  if (mediaCaptionHasBetSignal(post?.text)) return footballPriority(post) === 0 ? 2 : 3;
-  if (source?.monitoring_mode === 'photo_review' && post?.attachments?.media_keys?.length) return 4;
-  return 5;
+  const football = footballPriority(post) === 0;
+  // A complete post normally contributes one signal from the selection line
+  // plus at least three separate statistical/support lines.
+  const supportedWriteup = sourceSupportSignalCount(post?.text) >= 4;
+  // A complete, source-supported writeup is more likely to survive the final
+  // three-bullet approval-card gate. Put those posts ahead of bare terms so a
+  // small model-call budget produces more cards Kobe can actually publish.
+  if (likelyPick(post?.text)) {
+    if (football && supportedWriteup) return 0;
+    if (football) return 1;
+    if (supportedWriteup) return 2;
+    return 3;
+  }
+  if (mediaCaptionHasBetSignal(post?.text)) return football ? 4 : 5;
+  if (source?.monitoring_mode === 'photo_review' && post?.attachments?.media_keys?.length) return 6;
+  return 7;
+}
+
+function rotateSources(sources, offset = 0) {
+  if (!Array.isArray(sources) || sources.length === 0) return [];
+  const normalized = ((Number(offset) || 0) % sources.length + sources.length) % sources.length;
+  return [...sources.slice(normalized), ...sources.slice(0, normalized)];
 }
 
 function configuredMediaOnlyLimit(env = process.env) {
@@ -136,6 +163,22 @@ function createModelCallBudget(maxModelCalls) {
   };
 }
 
+function createSourceModelCallReservation(runBudget, perSourceLimit = 1) {
+  const limit = Number.isInteger(perSourceLimit) && perSourceLimit >= 1 ? perSourceLimit : 1;
+  let started = 0;
+  return {
+    tryStart() {
+      if (started >= limit) return false;
+      if (!runBudget.tryStart()) return false;
+      started += 1;
+      return true;
+    },
+    get started() {
+      return started;
+    }
+  };
+}
+
 function configuredModelCallLimit(env = process.env) {
   const raw = (env.X_MONITOR_MAX_MODEL_CALLS_PER_RUN || env.X_MONITOR_MAX_CANDIDATES || '').trim();
   if (!raw) return undefined;
@@ -145,6 +188,12 @@ function configuredModelCallLimit(env = process.env) {
     return undefined;
   }
   return limit;
+}
+
+function configuredPerSourceModelCallLimit(env = process.env) {
+  const raw = (env.X_MONITOR_MAX_MODEL_CALLS_PER_SOURCE_PER_RUN || '1').trim();
+  const limit = Number(raw);
+  return Number.isInteger(limit) && limit >= 1 ? limit : 1;
 }
 
 function oddsFrom(text) {
@@ -652,7 +701,10 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
   const concurrency = Number.isInteger(configuredConcurrency) && configuredConcurrency >= 1
     ? Math.min(configuredConcurrency, 12)
     : 12;
-  console.log(`Scanning ${sources.length} enabled X sources with ${Math.min(concurrency, sources.length)} bounded intake worker(s).`);
+  const sourceOffset = Number.isInteger(state.next_source_offset) ? state.next_source_offset : 0;
+  const orderedSources = rotateSources(sources, sourceOffset);
+  const perSourceModelCallLimit = configuredPerSourceModelCallLimit();
+  console.log(`Scanning ${sources.length} enabled X sources with ${Math.min(concurrency, sources.length)} bounded intake worker(s), starting at roster offset ${sourceOffset % sources.length}.`);
   const claimedSourcePostIds = new Set(queuedSourcePostIds);
   let created = 0;
   let skipped = 0;
@@ -699,6 +751,7 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
     let mediaOnlyCandidates = 0;
     const mediaOnlyLimit = configuredMediaOnlyLimit();
     const acceptedPackets = [];
+    const sourceModelReservation = createSourceModelCallReservation(modelCallBudget, perSourceModelCallLimit);
     for (const post of posts) {
       const postMediaUrls = (post.attachments?.media_keys || []).map((key) => media[key]).filter(Boolean);
       const packet = createPacket({ date, sequence: 0, source, post, media });
@@ -749,7 +802,7 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
       // of the 38-account scan.
       packet.analysis = await enrichPacket(packet, {
         research: false,
-        beforeOpenAIRequest: () => modelCallBudget.tryStart()
+        beforeOpenAIRequest: () => sourceModelReservation.tryStart()
       });
 
       if (packet.analysis.status === 'MODEL_CALL_LIMIT_REACHED') {
@@ -911,7 +964,7 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
       const sourceIndex = nextSourceIndex;
       nextSourceIndex += 1;
       if (sourceIndex >= sources.length) return;
-      const source = sources[sourceIndex];
+      const source = orderedSources[sourceIndex];
       try {
         const result = await inspectSource(source);
         // Discord/file writes remain serialized, while source fetching,
@@ -928,6 +981,11 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
 
   await Promise.all(Array.from({ length: Math.min(concurrency, sources.length) }, () => sourceWorker()));
   await commitChain;
+
+  // Rotate the first wave on every pass. With a six-call global cap and 38
+  // sources, this prevents the same early/high-volume accounts from winning
+  // every race while still retaining each deferred post for a later interval.
+  state.next_source_offset = (sourceOffset + Math.min(concurrency, sources.length)) % sources.length;
 
   await fs.mkdir(X_MONITORING_ROOT, { recursive: true });
   await fs.writeFile(STATE_PATH, `${JSON.stringify(state, null, 2)}\n`);
@@ -959,8 +1017,10 @@ if (require.main === module) {
 
 module.exports = {
   createModelCallBudget,
+  createSourceModelCallReservation,
   configuredMediaOnlyLimit,
   configuredModelCallLimit,
+  configuredPerSourceModelCallLimit,
   footballGamesScheduledToday,
   footballPriority,
   intakePriority,
@@ -968,8 +1028,10 @@ module.exports = {
   mediaCaptionHasBetSignal,
   nflGamesScheduledToday,
   recordModelCallDeferral,
+  rotateSources,
   runCollector,
   shouldQueueForReview,
   shouldSplitPlayPackets,
+  sourceSupportSignalCount,
   sourceStateAfterPass
 };

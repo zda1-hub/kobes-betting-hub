@@ -2,6 +2,8 @@
 
 Status: **completed and structurally verified**. This was a read-only production database operation; no production schema, row, credential, or configuration was changed.
 
+Latest verified backup: GitHub Actions run `34775096023`, artifact `kbh-production-supabase-20260913T183537Z`, encrypted SHA-256 `eddd2515922b60e61f83ce85c1faa2c16f20e859c53ccf7cd54275239d89807e`, with a checksum-verified local copy at `/Users/z/Documents/Kobe Betting Hub Backups/34775096023/`. That run also completed the separate migration plan-only check and made no database writes.
+
 ## Evidence
 
 - Production project: `mpajyubbnnsdpgdizvht`.

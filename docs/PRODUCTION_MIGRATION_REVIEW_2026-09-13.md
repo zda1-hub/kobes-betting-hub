@@ -1,6 +1,6 @@
 # Production membership migration review — 2026-09-13
 
-Status: source and safety review complete; live read-only plan and production apply remain separate steps. No migration has been applied by this review.
+Status: source/safety review and live read-only plan complete; production apply remains a separate explicitly approved step. No migration has been applied by this review.
 
 Target: Supabase production project `mpajyubbnnsdpgdizvht` only.
 
@@ -28,9 +28,10 @@ If the application deployment fails, roll back the Worker/application version fi
 
 ## Remaining gates before apply
 
-1. Run the production migrator in live plan-only mode and retain its sanitized pending/skipped output.
-2. Complete the isolated failed-payment/refund/dispute evidence.
-3. Complete the real pick-day acceptance trail.
-4. Confirm seller/support identity, public policy status, backup operator, and controlled launch roster.
-5. Review production Stripe event configuration, Discord role hierarchy, Worker bindings/secret names, and prior rollback version.
-6. Obtain Zakai's action-time final approval for the exact apply and deployment sequence.
+GitHub Actions run `34775096023` executed `node pipeline/migrate-production.js --plan` against the production secret. Sanitized output verified target `mpajyubbnnsdpgdizvht`, listed exactly `007_service_role_rest_access.sql`, `008_subscription_cancellation_fields.sql`, and `009_membership_entitlement_blocks.sql` as pending, and confirmed that no database writes were made.
+
+1. Complete the isolated failed-payment/refund/dispute evidence.
+2. Complete the real pick-day acceptance trail.
+3. Confirm seller/support identity, public policy status, backup operator, and controlled launch roster.
+4. Review production Stripe event configuration, Discord role hierarchy, Worker bindings/secret names, and prior rollback version.
+5. Obtain Zakai's action-time final approval for the exact apply and deployment sequence.

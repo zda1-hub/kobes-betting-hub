@@ -7,24 +7,26 @@
 ## Verified today
 
 - [x] Production public smoke: 5/5 passing.
-- [x] Full launch-candidate repository suite: 177/177 passing.
+- [x] Full current repository suite: 181/181 passing.
 - [x] Production X collector is Live with 38 sources, 12 workers, a six-call Luna cap, unchanged daily/monthly cost stops, and public source publishing disabled.
 - [x] The first remediated X startup created one private review packet; the six-call acceptance run reduced deferred candidates from 476 to 85.
 - [x] Stripe test-clock cancellation, one-time 75%-off invoice, return to `$32.99`, terminal Supabase cancellation, and Discord role removal passed in isolated staging.
 - [x] The same-member repeat retention-offer guard passed in isolated staging.
 - [x] The repeat-test subscription completed authenticated cancellation and terminal clock advancement: Stripe/Supabase `canceled`, event `evt_1UFHpPE6p9BmPii39F5ZuPiF` `PROCESSED/ROLE_REMOVED`, and member-attributed Discord DELETE `204`.
 - [x] Today's production X-to-private-approval path delivered a real current candidate at 10:36 Arizona: Jaxson Dart over 204.5 passing yards (-115). It remains pending in `#pick-approvals`; no member-facing post was made. Kobe must choose the destination or reject it before the publication/log/grade/recap acceptance can continue.
+- [x] X throughput was re-audited against the 11:36 Arizona production cycle. Two unanswered cards do not block intake. The cycle used 6/6 Luna calls, deferred 388 candidates, rejected 186, created zero cards, and separately held 14 valid terms because they lacked three clean breakdown bullets. A six-call-preserving fairness patch now rotates the 38-source roster, limits one extraction per source per run, and prioritizes source-supported posts; 16/16 focused and 181/181 full tests pass locally. It is not deployed.
 
 ## Work Zakai and Codex can finish today
 
 1. **Production membership candidate — complete.** Branch `codex/membership-production-candidate`, commit `5420cae`, is frozen from production `main` base `0c35e46`. Its focused exact-main suite passes 154/154, production smoke passes 5/5, and no production state was changed.
 2. **Verify production database recovery — encrypted logical backup complete.** GitHub run `34774738544` created and encrypted the production PostgreSQL archive, decrypted a temporary copy, verified it with `pg_restore --list`, uploaded a 14-day encrypted artifact, and downloaded a checksum-verified local copy. The recovery key exists only in GitHub Secrets and macOS Keychain. A later disposable-database restore remains the full recovery drill.
-3. **Review the production migration plan — source review complete.** `PRODUCTION_MIGRATION_REVIEW_2026-09-13.md` records exact hashes, SQL effects, compatibility, verification, and rollback posture for only migrations `007`, `008`, and `009`. A live plan-only run remains before apply.
+3. **Review the production migration plan — complete, not applied.** `PRODUCTION_MIGRATION_REVIEW_2026-09-13.md` records exact hashes, SQL effects, compatibility, verification, and rollback posture for only migrations `007`, `008`, and `009`. GitHub run `34775096023` verified the production target and listed exactly those three migrations as pending in plan-only mode; no database writes were made.
 4. **Finish adverse billing staging evidence.** Test failed payment/recovery, partial refund, full refund, dispute creation/resolution, and a single-member audited restoration. These remain isolated from real customers and production.
 5. **Prepare production Stripe retention configuration.** Create or select the live-mode Customer Portal configuration and 75%-off template only after action-time approval; record identifiers, never secrets.
 6. **Prepare production promotion.** Review the candidate commit, migration plan, Worker bindings/secret names, Stripe webhook events, Discord role hierarchy, and rollback points. Production mutation requires Zakai's action-time approval.
 7. **Run today's real pick acceptance — waiting on Kobe's pick decision.** The Jaxson Dart candidate reached private approval at 10:36 Arizona. Kobe must inspect the source/evidence and either choose the Free Pick or NFL destination or reject it. If approved, verify the member post, canonical log, final grading, and recap trail. Do not republish monitored-source material without confirmed rights.
 8. **Set up the beta desk.** Confirm support address/hours, backup operator, Discord support warning, roster, incident owner, and the first five trusted testers.
+9. **Deploy the X fairness patch only after owner approval.** Observe one 30–60 minute private window, then compare distinct sources selected, eligible cards, held cards, model calls, and cost per ready approval. Do not raise the six-call cap during this test.
 
 ## Decisions Zakai must provide before paid beta opens
 

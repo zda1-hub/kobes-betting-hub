@@ -78,6 +78,8 @@ services:
         sync: false
       - key: X_MONITOR_MAX_MODEL_CALLS_PER_RUN
         value: "6"
+      - key: X_MONITOR_MAX_MODEL_CALLS_PER_SOURCE_PER_RUN
+        value: "1"
       - key: X_MONITOR_MAX_MEDIA_ONLY_PER_SOURCE_PER_RUN
         value: "1"
       - key: X_MONITOR_MAX_APPROVED_FREE_PICKS
