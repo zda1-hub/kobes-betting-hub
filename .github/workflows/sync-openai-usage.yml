@@ -58,7 +58,15 @@ jobs:
       - name: Check out the approved release source
         uses: actions/checkout@v4
       - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install --yes postgresql-client-17
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          printf 'Types: deb\nURIs: https://apt.postgresql.org/pub/repos/apt\nSuites: %s-pgdg\nComponents: main\nSigned-By: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc\n' "$VERSION_CODENAME" | sudo tee /etc/apt/sources.list.d/pgdg.sources >/dev/null
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
       - name: Create and verify encrypted production backup
         run: PRODUCTION_BACKUP_DIR="$GITHUB_WORKSPACE/.production-backup" ./scripts/backup-production-supabase-ci.sh
       - name: Store encrypted backup temporarily
