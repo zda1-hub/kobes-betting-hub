@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pickLogPath } = require('./pick-log');
+const { auditedFetch } = require('../../pipeline/api-client');
 
 const LEAGUES = {
   mlb: {
@@ -44,10 +45,14 @@ function espnUrls({ league, date }) {
 }
 
 async function getJson(url, fetchImpl = fetch) {
-  const response = await fetchImpl(url, {
+  const response = await auditedFetch(url, {
     headers: { Accept: 'application/json' },
     signal: AbortSignal.timeout(15000)
-  });
+  }, {
+    service: 'espn',
+    callerComponent: 'bot/lib/espn-trends',
+    triggerType: 'trend_generation'
+  }, fetchImpl);
   if (!response.ok) throw new Error(`ESPN request failed (${response.status}) for ${url}`);
   return response.json();
 }

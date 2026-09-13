@@ -1,6 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { estimateOpenAICost, initializeAuditStore, sha256, usageFromResponse } = require('./audit-store');
+const {
+  estimateOpenAICost,
+  evaluateOpenAIBudget,
+  initializeAuditStore,
+  openAIBudgetLimits,
+  sha256,
+  usageFromResponse
+} = require('./audit-store');
 
 test('captures Responses usage including cached and image token details', () => {
   assert.deepEqual(usageFromResponse({ usage: {
@@ -41,4 +48,22 @@ test('fails closed when production requires an audit database without a URL', as
     if (previousRequired === undefined) delete process.env.AUDIT_DATABASE_REQUIRED;
     else process.env.AUDIT_DATABASE_REQUIRED = previousRequired;
   }
+});
+
+test('parses only positive OpenAI budget limits', () => {
+  assert.deepEqual(openAIBudgetLimits({
+    OPENAI_DAILY_REQUEST_LIMIT: '50',
+    OPENAI_MONTHLY_REQUEST_LIMIT: '0',
+    OPENAI_DAILY_BUDGET_USD: '1',
+    OPENAI_MONTHLY_BUDGET_USD: '15'
+  }), { dailyRequests: 50, monthlyRequests: null, dailyUsd: 1, monthlyUsd: 15 });
+});
+
+test('blocks OpenAI before a call when any configured limit is reached', () => {
+  const result = evaluateOpenAIBudget(
+    { dailyRequests: 50, monthlyRequests: 100, dailyUsd: 0.2, monthlyUsd: 2 },
+    { dailyRequests: 50, monthlyRequests: 500, dailyUsd: 1, monthlyUsd: 15 }
+  );
+  assert.equal(result.allowed, false);
+  assert.match(result.reason, /daily request limit reached/);
 });

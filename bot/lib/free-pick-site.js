@@ -1,5 +1,6 @@
 const DEFAULT_PUBLISHER_URL = 'https://bettinghub-publisher.kobesbettinghub-publisher.workers.dev';
 const { publicPickTerms, sourceEvidence } = require('./source-review');
+const { auditedFetch } = require('../../pipeline/api-client');
 
 function phoenixOperatingDate() {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
@@ -35,13 +36,27 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
 
   if (imageUrl) {
     try {
-      const imageResponse = await fetchImpl(imageUrl);
+      const imageResponse = await auditedFetch(imageUrl, {}, {
+        service: 'source-media',
+        endpointClass: '/source-media',
+        callerComponent: 'bot/lib/free-pick-site',
+        triggerType: 'approved_pick_sync',
+        workflowId: packet.pick_id,
+        pickId: packet.pick_id
+      }, fetchImpl);
       if (imageResponse.ok) {
         const type = imageResponse.headers.get('content-type') || 'image/png';
         const form = new FormData();
         form.append('image', new Blob([await imageResponse.arrayBuffer()], { type }), 'free-pick.png');
         Object.entries({ date: phoenixOperatingDate(), caption, ...details }).forEach(([key, value]) => form.append(key, String(value || '')));
-        response = await fetchImpl(`${config.url}/api/free-pick/publish`, { method: 'POST', headers: { authorization: `Bearer ${config.secret}` }, body: form });
+        response = await auditedFetch(`${config.url}/api/free-pick/publish`, { method: 'POST', headers: { authorization: `Bearer ${config.secret}` }, body: form }, {
+          service: 'cloudflare-worker',
+          endpointClass: '/api/free-pick/publish',
+          callerComponent: 'bot/lib/free-pick-site',
+          triggerType: 'approved_pick_sync',
+          workflowId: packet.pick_id,
+          pickId: packet.pick_id
+        }, fetchImpl);
       }
     } catch (error) {
       console.error('Approved free-pick image could not be copied to the website; falling back to text.', error);
@@ -49,11 +64,18 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
   }
 
   if (!response) {
-    response = await fetchImpl(`${config.url}/api/free-pick/publish`, {
+    response = await auditedFetch(`${config.url}/api/free-pick/publish`, {
       method: 'POST',
       headers: { authorization: `Bearer ${config.secret}`, 'content-type': 'application/json' },
       body: JSON.stringify({ date: phoenixOperatingDate(), caption, details }),
-    });
+    }, {
+      service: 'cloudflare-worker',
+      endpointClass: '/api/free-pick/publish',
+      callerComponent: 'bot/lib/free-pick-site',
+      triggerType: 'approved_pick_sync',
+      workflowId: packet.pick_id,
+      pickId: packet.pick_id
+    }, fetchImpl);
   }
   const payload = await response.json().catch(() => ({}));
   if (response.status === 201 || response.status === 202 || response.status === 409) {

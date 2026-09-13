@@ -312,6 +312,91 @@ async function recordRecapRun({ operatingDate, recapType = 'official_email', inc
   await query(`INSERT INTO recap_runs (id, operating_date, recap_type, included_pick_ids, status, recipient, provider_message_id, content_sha256, error_detail, details, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11)`, [crypto.randomUUID(), operatingDate, recapType, includedPickIds, status, recipient, providerMessageId, content ? sha256(content) : null, errorDetail, JSON.stringify(details), nowIso()]);
 }
 
+async function recordApiCall({
+  service,
+  endpointClass,
+  method = 'GET',
+  callerComponent = 'unknown',
+  triggerType = 'runtime',
+  operationId = null,
+  workflowId = null,
+  pickId = null,
+  memberId = null,
+  providerRequestId = null,
+  clientRequestId = null,
+  requestPayloadSha256 = null,
+  responsePayloadSha256 = null,
+  responseStatus = null,
+  outcome,
+  errorClass = null,
+  retryCount = 0,
+  latencyMs = null
+}) {
+  if (!service || !endpointClass || !outcome) return;
+  await query(`INSERT INTO api_call_events (
+    id, environment, operation_id, workflow_id, pick_id, member_id,
+    service, endpoint_class, method, caller_component, trigger_type,
+    provider_request_id, client_request_id, request_payload_sha256,
+    response_payload_sha256, response_status, outcome, error_class,
+    retry_count, latency_ms, code_commit, occurred_at
+  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`, [
+    crypto.randomUUID(), process.env.APP_ENV || process.env.NODE_ENV || 'production',
+    operationId, workflowId, pickId, memberId, service, endpointClass,
+    method, callerComponent, triggerType, providerRequestId, clientRequestId,
+    requestPayloadSha256, responsePayloadSha256, responseStatus, outcome,
+    errorClass, retryCount, latencyMs, codeCommit(), nowIso()
+  ]);
+}
+
+function openAIBudgetLimits(env = process.env) {
+  const positive = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+  return {
+    dailyRequests: positive(env.OPENAI_DAILY_REQUEST_LIMIT),
+    monthlyRequests: positive(env.OPENAI_MONTHLY_REQUEST_LIMIT),
+    dailyUsd: positive(env.OPENAI_DAILY_BUDGET_USD),
+    monthlyUsd: positive(env.OPENAI_MONTHLY_BUDGET_USD)
+  };
+}
+
+function evaluateOpenAIBudget(usage, limits) {
+  const checks = [
+    ['dailyRequests', 'daily request limit'],
+    ['monthlyRequests', 'monthly request limit'],
+    ['dailyUsd', 'daily dollar budget'],
+    ['monthlyUsd', 'monthly dollar budget']
+  ];
+  for (const [field, label] of checks) {
+    if (limits[field] !== null && Number(usage[field] || 0) >= limits[field]) {
+      return { allowed: false, reason: `OpenAI ${label} reached (${usage[field]} / ${limits[field]}).`, usage, limits };
+    }
+  }
+  return { allowed: true, reason: null, usage, limits };
+}
+
+async function openAIBudgetStatus(env = process.env) {
+  const limits = openAIBudgetLimits(env);
+  if (Object.values(limits).every((value) => value === null)) {
+    return { allowed: true, reason: null, usage: {}, limits };
+  }
+  const result = await query(`SELECT
+    COUNT(*) FILTER (WHERE started_at >= date_trunc('day', NOW() AT TIME ZONE 'America/Phoenix') AT TIME ZONE 'America/Phoenix')::int AS daily_requests,
+    COUNT(*) FILTER (WHERE started_at >= date_trunc('month', NOW() AT TIME ZONE 'America/Phoenix') AT TIME ZONE 'America/Phoenix')::int AS monthly_requests,
+    COALESCE(SUM(estimated_cost_usd) FILTER (WHERE started_at >= date_trunc('day', NOW() AT TIME ZONE 'America/Phoenix') AT TIME ZONE 'America/Phoenix'), 0)::float8 AS daily_usd,
+    COALESCE(SUM(estimated_cost_usd) FILTER (WHERE started_at >= date_trunc('month', NOW() AT TIME ZONE 'America/Phoenix') AT TIME ZONE 'America/Phoenix'), 0)::float8 AS monthly_usd
+    FROM extraction_runs WHERE provider='openai'`);
+  if (!result) return { allowed: true, reason: null, usage: {}, limits };
+  const row = result.rows[0] || {};
+  return evaluateOpenAIBudget({
+    dailyRequests: Number(row.daily_requests || 0),
+    monthlyRequests: Number(row.monthly_requests || 0),
+    dailyUsd: Number(row.daily_usd || 0),
+    monthlyUsd: Number(row.monthly_usd || 0)
+  }, limits);
+}
+
 async function readAuditTimeline(identifier) {
   if (!auditConfigured()) return { configured: false };
   const postId = String(identifier || '').match(/\/status\/(\d+)/)?.[1] || String(identifier || '').trim();
@@ -363,7 +448,11 @@ module.exports = {
   findReusableExtraction,
   finishExtractionRun,
   initializeAuditStore,
+  evaluateOpenAIBudget,
+  openAIBudgetLimits,
+  openAIBudgetStatus,
   recordApprovalAction,
+  recordApiCall,
   recordApprovalCard,
   recordGradeAttempt,
   recordPublicationAttempt,

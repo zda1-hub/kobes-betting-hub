@@ -1,5 +1,6 @@
 const { createHash } = require('node:crypto');
 const { sourceTerms } = require('./source-review');
+const { auditedFetch } = require('../../pipeline/api-client');
 
 const MAX_X_POST_LENGTH = 280;
 
@@ -38,7 +39,7 @@ async function syncApprovedFreePickToX(packet, { fetchImpl = fetch, environment 
   const config = freePickXSyncConfig(environment);
   if (!config) return { status: 'disabled' };
 
-  const response = await fetchImpl(`${config.publisherUrl}/api/queue/x`, {
+  const response = await auditedFetch(`${config.publisherUrl}/api/queue/x`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${config.secret}`,
@@ -50,7 +51,14 @@ async function syncApprovedFreePickToX(packet, { fetchImpl = fetch, environment 
       scheduledAt: new Date().toISOString(),
       publishNow: true
     })
-  });
+  }, {
+    service: 'cloudflare-worker',
+    endpointClass: '/api/queue/x',
+    callerComponent: 'bot/lib/free-pick-x',
+    triggerType: 'approved_pick_sync',
+    workflowId: packet.pick_id,
+    pickId: packet.pick_id
+  }, fetchImpl);
   const payload = await response.json().catch(() => ({}));
   if (response.status === 201 || response.status === 202 || response.status === 409) {
     return { status: response.status === 409 ? 'already_requested' : payload.status || 'requested', postId: payload.id };

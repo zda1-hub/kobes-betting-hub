@@ -40,20 +40,93 @@ const headers = (origin) => ({
 const json = (body, status = 200, origin) => new Response(JSON.stringify(body), { status, headers: headers(origin) });
 const form = (data) => new URLSearchParams(Object.entries(data).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)]));
 
+const sanitizedEndpoint = (path) => String(path || '/')
+  .replace(/\/(?:cs|sub|cus|bps|in|evt)_(?:live|test_)?[A-Za-z0-9_]+/g, '/{id}')
+  .replace(/\/\d{6,}(?=\/|$)/g, '/{id}');
+
+async function sha256Text(value) {
+  if (value === undefined || value === null) return null;
+  return toHex(await crypto.subtle.digest('SHA-256', encode.encode(String(value))));
+}
+
+async function auditExternalCall(env, values) {
+  if (!supabaseReady(env)) return;
+  const key = supabaseKey(env);
+  try {
+    await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/api_call_events`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        id: crypto.randomUUID(),
+        environment: env.APP_ENV || 'production',
+        operation_id: values.operationId || null,
+        workflow_id: values.workflowId || null,
+        pick_id: null,
+        member_id: values.memberId || null,
+        service: values.service,
+        endpoint_class: sanitizedEndpoint(values.endpointClass),
+        method: values.method || 'GET',
+        caller_component: 'cloudflare/kobes-checkout-worker',
+        trigger_type: values.triggerType || 'membership_request',
+        provider_request_id: values.providerRequestId || null,
+        client_request_id: values.clientRequestId || null,
+        request_payload_sha256: values.requestPayloadSha256 || null,
+        response_payload_sha256: values.responsePayloadSha256 || null,
+        response_status: values.responseStatus ?? null,
+        outcome: values.outcome,
+        error_class: values.errorClass || null,
+        retry_count: 0,
+        latency_ms: values.latencyMs ?? null,
+        code_commit: env.WORKER_VERSION || null,
+        occurred_at: new Date().toISOString(),
+      }),
+    });
+  } catch (error) {
+    console.error('Unable to persist outbound API audit event.', error?.message || error);
+  }
+}
+
 async function stripe(env, path, values) {
+  const body = values ? form(values) : undefined;
+  const operationId = crypto.randomUUID();
+  const startedAt = Date.now();
   const response = await fetch(`${STRIPE_API}${path}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: values ? form(values) : undefined,
+    body,
   });
-  const result = await response.json();
+  const responseText = await response.text();
+  const result = JSON.parse(responseText);
+  await auditExternalCall(env, {
+    service: 'stripe', endpointClass: path, method: 'POST', operationId,
+    providerRequestId: response.headers.get('request-id'),
+    requestPayloadSha256: await sha256Text(body?.toString()),
+    responsePayloadSha256: await sha256Text(responseText), responseStatus: response.status,
+    outcome: response.ok ? 'SUCCEEDED' : 'HTTP_ERROR', errorClass: response.ok ? null : 'HTTP_ERROR',
+    latencyMs: Date.now() - startedAt,
+  });
   if (!response.ok) throw new Error(result.error?.message || 'Stripe request failed.');
   return result;
 }
 
 async function stripeGet(env, path) {
+  const operationId = crypto.randomUUID();
+  const startedAt = Date.now();
   const response = await fetch(`${STRIPE_API}${path}`, { headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` } });
-  const result = await response.json();
+  const responseText = await response.text();
+  const result = JSON.parse(responseText);
+  await auditExternalCall(env, {
+    service: 'stripe', endpointClass: path, method: 'GET', operationId,
+    providerRequestId: response.headers.get('request-id'),
+    responsePayloadSha256: await sha256Text(responseText), responseStatus: response.status,
+    outcome: response.ok ? 'SUCCEEDED' : 'HTTP_ERROR', errorClass: response.ok ? null : 'HTTP_ERROR',
+    latencyMs: Date.now() - startedAt,
+  });
   if (!response.ok) throw new Error(result.error?.message || 'Stripe request failed.');
   return result;
 }
@@ -314,8 +387,17 @@ async function confirmCancellation(request, env, origin) {
   } catch (error) { return json({ error: error.message }, 403, origin); }
 }
 
-async function discordRequest(path, options = {}) {
+async function discordRequest(path, options = {}, env) {
+  const operationId = crypto.randomUUID();
+  const startedAt = Date.now();
   const response = await fetch(`https://discord.com/api/v10${path}`, options);
+  await auditExternalCall(env, {
+    service: 'discord', endpointClass: `/api/v10${path}`, method: options.method || 'GET', operationId,
+    providerRequestId: response.headers.get('x-request-id'),
+    requestPayloadSha256: await sha256Text(options.body), responseStatus: response.status,
+    outcome: response.ok ? 'SUCCEEDED' : 'HTTP_ERROR', errorClass: response.ok ? null : 'HTTP_ERROR',
+    latencyMs: Date.now() - startedAt,
+  });
   if (!response.ok) throw new Error('Discord could not complete the connection.');
   return response.status === 204 ? null : response.json();
 }
@@ -325,7 +407,7 @@ async function removeMemberRole(subscription, env) {
   if (!memberId || !env.DISCORD_BOT_TOKEN || !env.DISCORD_GUILD_ID || !env.DISCORD_MEMBER_ROLE_ID) return;
   await discordRequest(
     `/guilds/${env.DISCORD_GUILD_ID}/members/${memberId}/roles/${env.DISCORD_MEMBER_ROLE_ID}`,
-    { method: 'DELETE', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } },
+    { method: 'DELETE', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }, env,
   );
 }
 
@@ -333,7 +415,7 @@ async function grantMemberRole(memberId, env) {
   if (!memberId || !env.DISCORD_BOT_TOKEN || !env.DISCORD_GUILD_ID || !env.DISCORD_MEMBER_ROLE_ID) return;
   await discordRequest(
     `/guilds/${env.DISCORD_GUILD_ID}/members/${memberId}/roles/${env.DISCORD_MEMBER_ROLE_ID}`,
-    { method: 'PUT', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } },
+    { method: 'PUT', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }, env,
   );
 }
 
@@ -393,15 +475,25 @@ async function finishDiscordConnection(request, env) {
   let discordAccessToken = '';
   try {
     const state = await readDiscordState(returnedState, env);
+    const tokenStartedAt = Date.now();
+    const tokenBody = form({ client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET, grant_type: 'authorization_code', code, redirect_uri: env.DISCORD_REDIRECT_URI });
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: form({ client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET, grant_type: 'authorization_code', code, redirect_uri: env.DISCORD_REDIRECT_URI }),
+      body: tokenBody,
     });
-    const token = await tokenResponse.json();
+    const tokenText = await tokenResponse.text();
+    const token = JSON.parse(tokenText);
+    await auditExternalCall(env, {
+      service: 'discord', endpointClass: '/api/oauth2/token', method: 'POST',
+      requestPayloadSha256: await sha256Text(tokenBody.toString()),
+      responsePayloadSha256: await sha256Text(tokenText), responseStatus: tokenResponse.status,
+      outcome: tokenResponse.ok ? 'SUCCEEDED' : 'HTTP_ERROR', errorClass: tokenResponse.ok ? null : 'HTTP_ERROR',
+      latencyMs: Date.now() - tokenStartedAt,
+    });
     if (!tokenResponse.ok || !token.access_token) throw new Error('Discord authorization failed.');
     discordAccessToken = token.access_token;
-    const user = await discordRequest('/users/@me', { headers: { Authorization: `Bearer ${token.access_token}` } });
+    const user = await discordRequest('/users/@me', { headers: { Authorization: `Bearer ${token.access_token}` } }, env);
     if (state.intent === 'portal') {
       const membership = await membershipCustomerForDiscord(env, user.id);
       if (!membership?.stripe_customer_id) throw new Error('No paid membership is linked to this Discord account. Connect Discord from the checkout confirmation first.');
@@ -435,18 +527,26 @@ async function finishDiscordConnection(request, env) {
       customerId: stripeId(session.customer) || stripeId(subscription.customer),
       subscriptionId: subscription.id, discordUserId: user.id,
     });
-    await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) });
-    await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, { method: 'PUT', headers: botHeaders });
+    await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) }, env);
+    await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, { method: 'PUT', headers: botHeaders }, env);
     return redirect(`${SITE_ORIGIN}${SITE_PATH}/membership.html?checkout=connected`);
   } catch (error) {
     return new Response(error.message || 'Discord connection failed.', { status: 400 });
   } finally {
     if (discordAccessToken) {
       try {
-        await fetch('https://discord.com/api/oauth2/token/revoke', {
+        const revokeStartedAt = Date.now();
+        const revokeBody = form({ client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET, token: discordAccessToken, token_type_hint: 'access_token' });
+        const revokeResponse = await fetch('https://discord.com/api/oauth2/token/revoke', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: form({ client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET, token: discordAccessToken, token_type_hint: 'access_token' }),
+          body: revokeBody,
+        });
+        await auditExternalCall(env, {
+          service: 'discord', endpointClass: '/api/oauth2/token/revoke', method: 'POST',
+          requestPayloadSha256: await sha256Text(revokeBody.toString()), responseStatus: revokeResponse.status,
+          outcome: revokeResponse.ok ? 'SUCCEEDED' : 'HTTP_ERROR', errorClass: revokeResponse.ok ? null : 'HTTP_ERROR',
+          latencyMs: Date.now() - revokeStartedAt,
         });
       } catch { /* The short-lived token expires even if best-effort revocation fails. */ }
     }

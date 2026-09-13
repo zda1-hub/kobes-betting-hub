@@ -18,6 +18,7 @@ const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timin
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { enrichPacket } = require('../pipeline/enrich-pick');
 const { runCollector } = require('../pipeline/collect-x');
+const { auditedFetch } = require('../pipeline/api-client');
 const {
   auditConfigured,
   initializeAuditStore,
@@ -173,10 +174,16 @@ async function saveFreeRecapState(state) {
 
 async function queueRecapNotification({ id, subject, body }) {
   if (!recapNotificationQueueUrl || !recapNotificationQueueSecret || !recapNotificationRecipient) return 'NOT_CONFIGURED';
-  const response = await fetch(`${recapNotificationQueueUrl}/api/queue/recap-notifications`, {
+  const response = await auditedFetch(`${recapNotificationQueueUrl}/api/queue/recap-notifications`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${recapNotificationQueueSecret}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, recipient: recapNotificationRecipient, subject, body })
+  }, {
+    service: 'cloudflare-worker',
+    endpointClass: '/api/queue/recap-notifications',
+    callerComponent: 'bot/index',
+    triggerType: 'recap_queue',
+    workflowId: id
   });
   if (response.status === 409) return 'ALREADY_QUEUED';
   if (!response.ok) throw new Error(`Recap email queue returned ${response.status}.`);
@@ -465,10 +472,16 @@ async function loadTrendReview(id) {
 
 async function acknowledgeTrendDelivery(id) {
   if (!trendsInboxQueueUrl || !trendsInboxQueueSecret) return;
-  const response = await fetch(`${trendsInboxQueueUrl}/api/queue/trends/deliver`, {
+  const response = await auditedFetch(`${trendsInboxQueueUrl}/api/queue/trends/deliver`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${trendsInboxQueueSecret}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ id })
+  }, {
+    service: 'cloudflare-worker',
+    endpointClass: '/api/queue/trends/deliver',
+    callerComponent: 'bot/index',
+    triggerType: 'trend_acknowledgement',
+    workflowId: id
   });
   if (!response.ok) throw new Error(`Trend queue acknowledgement failed (${response.status}).`);
 }
@@ -477,8 +490,13 @@ async function collectTrendEmails() {
   if (trendsInboxInProgress || !trendsInboxQueueUrl || !trendsInboxQueueSecret || !pickApprovalChannelId) return;
   trendsInboxInProgress = true;
   try {
-    const response = await fetch(`${trendsInboxQueueUrl}/api/queue/trends?limit=10`, {
+    const response = await auditedFetch(`${trendsInboxQueueUrl}/api/queue/trends?limit=10`, {
       headers: { Authorization: `Bearer ${trendsInboxQueueSecret}` }
+    }, {
+      service: 'cloudflare-worker',
+      endpointClass: '/api/queue/trends',
+      callerComponent: 'bot/index',
+      triggerType: 'scheduled_trend_poll'
     });
     if (!response.ok) throw new Error(`Trend inbox request failed (${response.status}).`);
     const { trends = [] } = await response.json();
@@ -926,7 +944,7 @@ async function syncApprovedPickToDailyQueue(entry) {
     console.warn('Daily Picks bridge not configured; pick was published but was not queued for the email workflow.', { pickId: entry.pick_id });
     return;
   }
-  const response = await fetch(`${publisherUrl.replace(/\/$/, '')}/api/queue/daily-picks`, {
+  const response = await auditedFetch(`${publisherUrl.replace(/\/$/, '')}/api/queue/daily-picks`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -943,6 +961,13 @@ async function syncApprovedPickToDailyQueue(entry) {
       source: entry.source_name || 'Kobe submission',
       approvedAt: entry.approved_at || entry.published_at
     })
+  }, {
+    service: 'cloudflare-worker',
+    endpointClass: '/api/queue/daily-picks',
+    callerComponent: 'bot/index',
+    triggerType: 'approved_pick_sync',
+    workflowId: entry.pick_id,
+    pickId: entry.pick_id
   });
   if (!response.ok) throw new Error(`Daily Picks bridge failed (${response.status}): ${await response.text()}`);
   console.log(`Daily Picks queue synced for ${entry.pick_id}.`);
@@ -1071,8 +1096,15 @@ async function hydrateLegacyReviewPacket({ interaction, pickId }) {
   const sourceConfig = sources.find((source) => source.handle?.toLowerCase() === identity.handle.toLowerCase());
   if (!sourceConfig) return null;
 
-  const response = await fetch(`https://api.x.com/2/tweets/${identity.postId}?tweet.fields=created_at,attachments,entities&expansions=attachments.media_keys&media.fields=url,preview_image_url,type`, {
+  const response = await auditedFetch(`https://api.x.com/2/tweets/${identity.postId}?tweet.fields=created_at,attachments,entities&expansions=attachments.media_keys&media.fields=url,preview_image_url,type`, {
     headers: { Authorization: `Bearer ${process.env.X_BEARER_TOKEN}` }
+  }, {
+    service: 'x',
+    endpointClass: '/2/tweets/{id}',
+    callerComponent: 'bot/index',
+    triggerType: 'legacy_review_recovery',
+    workflowId: pickId,
+    pickId
   });
   if (!response.ok) {
     console.error(`Could not recover X approval card ${pickId}: X returned ${response.status}.`);

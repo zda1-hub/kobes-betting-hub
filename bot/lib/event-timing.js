@@ -1,4 +1,5 @@
 const ESPN_BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports';
+const { auditedFetch } = require('../../pipeline/api-client');
 
 function pacificDate(date) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -132,9 +133,16 @@ async function verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl) {
   const athletes = [];
   try {
     for (const teamId of teamIds) {
-      const response = await fetchImpl(`${ESPN_BASE_URL}/${leaguePath}/teams/${teamId}/roster`, {
+      const response = await auditedFetch(`${ESPN_BASE_URL}/${leaguePath}/teams/${teamId}/roster`, {
         headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000)
-      });
+      }, {
+        service: 'espn',
+        endpointClass: '/apis/site/v2/sports/{sport}/{league}/teams/{team_id}/roster',
+        callerComponent: 'bot/lib/event-timing',
+        triggerType: 'candidate_verification',
+        workflowId: packet.pick_id,
+        pickId: packet.pick_id
+      }, fetchImpl);
       if (!response.ok) return { status: 'UNVERIFIABLE', reason: `ESPN roster verification returned ${response.status}.` };
       athletes.push(...rosterAthletes(await response.json()));
     }
@@ -175,9 +183,16 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
     for (let offset = 0; offset <= 3; offset += 1) {
       const day = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
       const date = pacificDate(day).replaceAll('-', '');
-      const response = await fetchImpl(`${ESPN_BASE_URL}/${leaguePath}/scoreboard?dates=${date}&limit=100`, {
+      const response = await auditedFetch(`${ESPN_BASE_URL}/${leaguePath}/scoreboard?dates=${date}&limit=100`, {
         headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000)
-      });
+      }, {
+        service: 'espn',
+        endpointClass: '/apis/site/v2/sports/{sport}/{league}/scoreboard',
+        callerComponent: 'bot/lib/event-timing',
+        triggerType: 'candidate_verification',
+        workflowId: packet.pick_id,
+        pickId: packet.pick_id
+      }, fetchImpl);
       if (!response.ok) continue;
       const scoreboard = await response.json();
       events.push(...(scoreboard.events || []));

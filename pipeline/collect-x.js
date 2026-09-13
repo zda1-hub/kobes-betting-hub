@@ -9,6 +9,7 @@ const {
   recordWorkflowEvent,
   upsertPickCandidate
 } = require('./audit-store');
+const { auditedFetch } = require('./api-client');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { isSupportedSportPick, upcomingEventStatuses } = require('../bot/lib/event-timing');
 const { buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, sourceEvidence, visiblePlays } = require('../bot/lib/source-review');
@@ -153,9 +154,13 @@ async function cleanMonitoringFolderIfDue() {
 }
 
 async function xFetch(url) {
-  const response = await fetch(url, {
+  const response = await auditedFetch(url, {
     headers: { Authorization: `Bearer ${process.env.X_BEARER_TOKEN}` },
     signal: AbortSignal.timeout(15000)
+  }, {
+    service: 'x',
+    callerComponent: 'pipeline/collect-x',
+    triggerType: 'scheduled_monitor'
   });
   if (!response.ok) {
     throw new Error(`X API request failed (${response.status}): ${await response.text()}`);
@@ -168,10 +173,15 @@ async function footballGamesScheduledToday({ now = new Date(), fetchImpl = fetch
   let successfulChecks = 0;
   for (const scoreboardUrl of FOOTBALL_SCOREBOARD_URLS) {
     try {
-      const response = await fetchImpl(`${scoreboardUrl}?dates=${date}&limit=100`, {
+      const response = await auditedFetch(`${scoreboardUrl}?dates=${date}&limit=100`, {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(10000)
-      });
+      }, {
+        service: 'espn',
+        endpointClass: '/apis/site/v2/sports/football/{league}/scoreboard',
+        callerComponent: 'pipeline/collect-x',
+        triggerType: 'schedule_preflight'
+      }, fetchImpl);
       if (!response.ok) continue;
       successfulChecks += 1;
       const payload = await response.json();
@@ -368,8 +378,13 @@ async function discordChannelLabel(channelId, fallback) {
   const token = process.env.DISCORD_TOKEN;
   if (!channelId || !token) return fallback;
   try {
-    const response = await fetch(`https://discord.com/api/v10/channels/${channelId}`, {
+    const response = await auditedFetch(`https://discord.com/api/v10/channels/${channelId}`, {
       headers: { Authorization: `Bot ${token}` }
+    }, {
+      service: 'discord',
+      endpointClass: '/api/v10/channels/{channel_id}',
+      callerComponent: 'pipeline/collect-x',
+      triggerType: 'approval_label_lookup'
     });
     if (!response.ok) return fallback;
     const channel = await response.json();
@@ -446,13 +461,20 @@ async function notifyApprovalChannel(packet) {
     afterState: 'SENDING_APPROVAL_CARD',
     details: { channel_id: channelId }
   });
-  const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+  const response = await auditedFetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: {
       Authorization: `Bot ${token}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(payload)
+  }, {
+    service: 'discord',
+    endpointClass: '/api/v10/channels/{channel_id}/messages',
+    callerComponent: 'pipeline/collect-x',
+    triggerType: 'approval_card',
+    workflowId: packet.pick_id,
+    pickId: packet.pick_id
   });
 
   if (!response.ok) {

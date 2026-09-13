@@ -1,4 +1,5 @@
 const ESPN_BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports';
+const { auditedFetch } = require('../../pipeline/api-client');
 
 const LEAGUES = {
   mlb: { path: 'baseball/mlb', url: 'https://www.espn.com/mlb/game/_/gameId/' },
@@ -120,7 +121,14 @@ function moneylineGrade(row, summary) {
 }
 
 async function getJson(url, fetchImpl) {
-  const response = await fetchImpl(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
+  const response = await auditedFetch(url, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(15000)
+  }, {
+    service: 'espn',
+    callerComponent: 'bot/lib/espn-grading',
+    triggerType: 'pick_grading'
+  }, fetchImpl);
   if (!response.ok) throw new Error(`ESPN returned ${response.status}.`);
   return response.json();
 }
