@@ -2,9 +2,9 @@
 
 **Status:** Active production system with unresolved operational and compliance risks
 
-**Last verified:** 2026-09-12 17:23 MST
+**Last verified:** 2026-09-12 17:32 MST
 
-**Production commit:** `f7711bb` plus the separately deployed Checkout Worker described below; repository cutover is in progress
+**Production runtime change set:** `7e7846a` plus Checkout Worker version `d4edff4e-93ff-41cc-94d9-54c2bcab2d0b`
 
 **Control-file owner:** Zakai Martin
 
@@ -28,15 +28,15 @@ The system is not a single application. It currently spans GitHub Pages, Cloudfl
 
 ### What is definitely live
 
-- `https://kobesbettinghub.com` serves the repository's public site. The live homepage and scripts matched production commit `f7711bb` on 2026-09-12.
+- `https://kobesbettinghub.com` serves the repository's public site from `main`; the membership-management link now targets Discord-authenticated Stripe Customer Portal access.
 - Membership checkout is enabled. Offers shown publicly are `$10 / 7 days` or `2 days free`, followed by `$32.99/month` until canceled.
 - The checkout Cloudflare Worker is reachable and reports healthy. The Discord-authenticated Stripe Customer Portal and Supabase membership/webhook ledger were deployed as Worker version `d4edff4e-93ff-41cc-94d9-54c2bcab2d0b` on 2026-09-12.
 - Stripe Checkout creates subscriptions. After payment/trial confirmation, the customer connects Discord through OAuth and receives the configured paid-member role.
 - Stripe subscription create/update/delete webhooks maintain the Supabase membership state and reconcile Discord access. The Stripe webhook endpoint is active and subscribed to all four required event classes, including Checkout completion.
-- A Render background worker runs the Discord bot and X collector from `f7711bb`, with a 1 GB persistent disk at `/var/data`.
+- A Render background worker runs the Discord bot and X collector from `7e7846a`, with a 1 GB persistent disk at `/var/data`.
 - The production X collector is enabled for 38 configured sources. Its effective interval is 15 minutes during the configured daily Arizona window.
-- The Render environment is configured for `gpt-5.6-luna`; the repository implementation and durable audit path are being cut over in the current deployment.
-- The free Supabase project `kobe betting hub` is healthy. Audit and membership schema migrations `001` and `002` were applied successfully on 2026-09-12; migration `003` will lock the audit tables behind server-side access during the repository cutover. The Checkout Worker is connected with a dedicated server secret, and Render has the pooled database URL with fail-closed audit enforcement enabled for the new code.
+- The Render environment and repository are configured for `gpt-5.6-luna` with bounded output, no reasoning, versioned pricing metadata, and reusable audited extractions.
+- The free Supabase project `kobe betting hub` is healthy. Audit, membership, and audit-table security migrations `001`–`003` were applied successfully on 2026-09-12. The Checkout Worker uses a dedicated server secret; Render uses the encrypted session-pooler connection with fail-closed audit enforcement.
 - The publisher Cloudflare Worker reports ready, connected to X, and configured with Free Pick media storage.
 - Discord `#daily-free-play` contained a Kobe Bot pick at 3:05 PM Arizona on 2026-09-12. The separate public website Free Pick API had no current item when checked and returned `404 No current free pick`. Discord publication and website publication are distinct states and must be reconciled.
 - The latest GitHub Pages deployment for `f7711bb` completed successfully.
@@ -50,7 +50,7 @@ Observed output-quality evidence: the 2026-09-12 Discord screenshot shows a publ
 - Membership persistence now uses Supabase for normalized customer/subscription state and signed webhook event idempotency. Stripe remains the payment and subscription source of truth; Discord role state is the derived entitlement.
 - The Checkout Worker now authenticates returning members with Discord OAuth and then creates a Stripe Customer Portal session. Discord proves which linked member is acting; Stripe authenticates and performs billing, recurring subscription, invoices, payment-method changes, and cancellation.
 - All 38 X sources are approved for monitoring only and are marked `PENDING_SOURCE_TERMS`; none is marked `CONFIRMED` for reuse/publication. Production has a global override allowing source-derived publishing, which conflicts with the approved scope.
-- Render has a pooled `DATABASE_URL` and `AUDIT_DATABASE_REQUIRED=true`; the running source commit must still be updated to the new audit-aware repository code and verified after startup.
+- Render has a pooled `DATABASE_URL` and `AUDIT_DATABASE_REQUIRED=true`. The audit-aware worker completed database initialization, registered Discord commands, and logged in as Kobe Bot after deployment.
 - API calls across membership and Cloudflare services are not centrally logged or cost-attributed.
 - Marketing is intentionally a future workstream, not the current priority.
 
@@ -87,13 +87,13 @@ Kobe Trends email
 | Checkout | Cloudflare Worker | `cloudflare/kobes-checkout-worker.js` | Stripe + Supabase | Secure Discord-authenticated portal and webhook persistence live |
 | Payments | Stripe | called by Checkout Worker | Stripe subscription and invoice records | Live |
 | Member access | Discord | Checkout Worker OAuth/role calls | Stripe status should govern Discord role | Live, needs reconciliation |
-| Discord operations | Render Node worker | `bot/index.js`, `bot/commands.js` | Discord messages plus local logs | Live |
-| X monitoring | Render Node worker | `pipeline/collect-x.js`, `data/twitter-sources.json` | source roster + persistent cursor | Live; durable cursor repository cutover in progress |
-| Model extraction | OpenAI Responses API | `pipeline/enrich-pick.js` | response/request IDs + structured output | Luna/audit repository cutover in progress |
+| Discord operations | Render Node worker | `bot/index.js`, `bot/commands.js` | Discord messages + Supabase workflow events + local logs | Live on `7e7846a` |
+| X monitoring | Render Node worker | `pipeline/collect-x.js`, `data/twitter-sources.json` | source roster + persistent cursor | Live; cursor/dedupe root is on `/var/data` |
+| Model extraction | OpenAI Responses API | `pipeline/enrich-pick.js` | response/request IDs + structured output | Luna + extraction audit live; next-window production evidence pending |
 | Pick approval | private Discord channel | `bot/lib/source-review.js`, `bot/index.js` | Kobe button action | Live |
 | Pick publication | Discord | `bot/index.js` | Discord message ID + audit event | Live |
 | Pick log | Render persistent disk | `bot/lib/pick-log.js` | `/var/data/pick-log.csv` | Live, single-host CSV |
-| Pick/member audit DB | Supabase Postgres | `pipeline/audit-store.js`, `pipeline/migrations/` | Supabase Postgres | Schema live; Worker connected; Render configured; Node startup verification pending |
+| Pick/member audit DB | Supabase Postgres | `pipeline/audit-store.js`, `pipeline/migrations/` | Supabase Postgres | Migrations `001`–`003` live; Worker and Render connected |
 | Event/result verification | ESPN public APIs | `bot/lib/event-timing.js`, `bot/lib/espn-grading.js`, `bot/lib/espn-trends.js` | stored response snapshot/reference after audit cutover | Live, partial market coverage |
 | Public Free Pick | Publisher Worker + R2 | `cloudflare/bettinghub-publisher.js`, `free-pick.js` | R2 `free-picks/current.json` | Service ready; no current pick |
 | X publishing | Publisher Worker + D1 | `cloudflare/bettinghub-publisher.js` | D1 queue/delivery log + X post ID | Connected |
@@ -202,7 +202,7 @@ Do not store bearer tokens, API keys, card data, OAuth access tokens, full webho
 
 Frequent production deploys combined with non-durable collector state can materially amplify X and OpenAI usage. The screenshot's roughly 6,200 average input tokens per request is also consistent with expensive image-bearing or otherwise large requests, but model/API-key filters are needed before attributing it to this worker. This is a credible mechanism for the anomaly, not yet a billing-grade conclusion.
 
-### Containment prepared and now being deployed
+### Containment deployed
 
 - Collector cursor/dedupe state now defaults beside the durable review queue.
 - Render configuration now points `X_MONITORING_ROOT` to `/var/data/x-monitoring`.
@@ -210,7 +210,7 @@ Frequent production deploys combined with non-durable collector state can materi
 - The local Postgres audit implementation records OpenAI request ID, response ID, tokens, latency, prompt/model/pricing versions, status, error, payload hashes, and cost estimate.
 - Identical successful source/model/prompt/input extractions can be reused instead of billed again once the audit database is active.
 
-The Checkout Worker and Supabase configuration are live. The Render source code remains on `f7711bb` until this repository change set is committed, pushed, and the resulting deployment is verified.
+The Checkout Worker, Supabase configuration, durable X cursor path, Luna extraction configuration, and Render audit-aware source are live. The next normal monitoring window must provide production ledger evidence before the incident is considered fully closed.
 
 ### Evidence needed to close the incident
 
@@ -249,9 +249,9 @@ Security rules:
 ### P0 — contain cost and prevent untraceable production behavior
 
 - [ ] Export the exact OpenAI hourly usage/cost data grouped by project, API key, and model; separate Kobe's Betting Hub from other account usage.
-- [ ] Complete and verify the current deployment of durable X cursor/dedupe state.
+- [x] Deploy and verify the durable X cursor/dedupe path on the Render persistent disk.
 - [x] Provision free Supabase Postgres and apply audit/membership schema migrations.
-- [x] Securely connect pooled `DATABASE_URL` to Render and a dedicated Supabase server secret to the checkout Worker. Render is configured fail-closed; startup verification is pending the source deployment.
+- [x] Securely connect pooled `DATABASE_URL` to Render and a dedicated Supabase server secret to the checkout Worker; verify fail-closed startup and database migration completion.
 - [ ] Deploy the OpenAI/pick audit path and prove one candidate from source post through extraction, gates, approval, publication, grade, and recap.
 - [ ] Add a provider-usage reconciliation job: OpenAI Usage grouped by project/key/model and Costs grouped by project; equivalent X/Cloudflare exports where available.
 - [ ] Set named monthly/daily API budgets, anomaly thresholds, and an automated stop/alert rule.
@@ -332,7 +332,7 @@ Database direction: the existing free Supabase Postgres project is the first pro
 - Lead with verified current state, then unknowns, then the smallest safe next change.
 - Never claim “working” from a successful HTTP response alone; prove the business outcome and durable record.
 - Do not deploy, provision paid infrastructure, change billing, rotate keys, post publicly, or message members unless the request authorizes that action.
-- Preserve user changes in the worktree. Current audit/cursor work is uncommitted and not deployed.
+- Preserve user changes in the worktree. Audit/cursor/membership foundation is deployed; inspect `git status` before any new change.
 - Update **Last verified**, **Production commit**, component state, backlog, and decision log after every material production change.
 - Use sub-agents only after scope, ownership, interfaces, and acceptance tests are clear.
 
@@ -349,9 +349,10 @@ Database direction: the existing free Supabase Postgres project is the first pro
 | 2026-09-12 | X monitoring will continue while audit controls are deployed; no pause is authorized. | Zakai Martin | Adopted |
 | 2026-09-12 | The 38 X sources are approved for monitoring only, not confirmed for republication. | Zakai Martin | Adopted |
 | 2026-09-12 | Supabase free Postgres is the preferred initial production audit database. | Zakai Martin | Adopted |
-| 2026-09-12 | Existing Supabase project `kobe betting hub` was selected; audit and membership schemas were migrated successfully. | Zakai Martin | Implemented in database |
+| 2026-09-12 | Existing Supabase project `kobe betting hub` was selected; audit, membership, and table-security schemas were migrated successfully. | Zakai Martin | Live |
 | 2026-09-12 | Use Stripe as payment/subscription authority, Discord OAuth as member identity, Supabase as durable mapping/event ledger, and Stripe Customer Portal for billing/cancellation. | Zakai Martin | Deployed; end-to-end member fixture still required |
-| 2026-09-12 | Switch source extraction from `gpt-5-mini` to `gpt-5.6-luna` with no reasoning, bounded output, request metadata, prompt cache key, and versioned cost rates. | Zakai Martin | Render configured; repository deployment verification pending |
+| 2026-09-12 | Switch source extraction from `gpt-5-mini` to `gpt-5.6-luna` with no reasoning, bounded output, request metadata, prompt cache key, and versioned cost rates. | Zakai Martin | Live; next-window output verification pending |
+| 2026-09-12 | Render must fail closed when the audit DB is unavailable. The session-pooler URL uses encrypted libpq-compatible SSL because the pooler chain is not accepted by the driver's strict CA verification on Render. | Zakai Martin | Live and startup-verified |
 
 ## Owner answers still required
 
