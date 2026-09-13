@@ -4,7 +4,7 @@
 
 **Last verified:** 2026-09-13 12:30 MST
 
-**Production runtime change set:** repository/Render auto-deploy from `main`; Checkout Worker `ae9e52fb-c95b-46c5-8008-8ecaca8e2334`; Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365`; public-site Worker `0f79cda2-fc03-4382-8cf6-98a7acce08b6`
+**Production runtime change set:** repository/Render auto-deploy from `main`; Checkout Worker `ae9e52fb-c95b-46c5-8008-8ecaca8e2334`; Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365`; public-site Worker `59485719-9cab-42eb-bf90-1074c21f0156`
 
 **Control-file owner:** Zakai Martin
 
@@ -33,6 +33,7 @@ Kobe's Betting Hub is a paid sports-pick membership centered on Discord. It also
 - Treat the pair as a potential duplicate-subscription P1 until Kobe identifies the intended Discord membership and the operator explains whether both memberships are legitimate. Keep broad enrollment/promotion on hold; the existing pick workflow may continue under its normal approval controls.
 - The next authorized step is member-driven Customer Portal cancellation through the exact linked Discord identity, followed by read-only Stripe ↔ Supabase ↔ Discord reconciliation. Cancellation stops renewal and does not itself issue a refund. No live subscription was changed during the review.
 - The same checkpoint reran the repository suite (`181/181`) and the five credential-free production smoke checks (`5/5`); both passed.
+- The manage-membership page now shares the production site's ticker, header/navigation, spacing system, responsive content grid, and branded portal card. Static-site version `59485719-9cab-42eb-bf90-1074c21f0156` passed a 390×844 live visual check with no horizontal overflow, preserved the effective Terms and support alias, and passed `5/5` production smoke. The release commit is `89a66c1` on `codex/public-beta-release`.
 
 The system is not a single application. It currently spans GitHub, Cloudflare Workers/D1/KV, Render, Discord, Stripe, X, OpenAI, ESPN, Gmail Apps Script, and Supabase Postgres. Supabase is the shared membership and pick/API audit ledger. OpenAI provider reconciliation is live through a dedicated read-only organization Admin key; Apps Script and some SDK-internal calls still need equivalent records before the ledger is literally exhaustive.
 

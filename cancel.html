@@ -5,13 +5,60 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Manage or cancel your Kobe's Betting Hub membership." />
     <meta name="robots" content="noindex" />
-    <link rel="stylesheet" href="home.css?v=20260901" />
-    <link rel="stylesheet" href="membership.css?v=20260829-manage" />
+    <meta name="theme-color" content="#faf9f7" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="home.css?v=20260902" />
+    <link rel="stylesheet" href="membership.css?v=20260913-manage-layout" />
     <title>Manage Membership | Kobe's Betting Hub</title>
   </head>
   <body>
-    <header class="site-header" data-header><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-menu" data-menu-toggle>Explore <span aria-hidden="true">+</span></button><a class="brand" href="index.html" aria-label="Kobe's Betting Hub home"><img src="betting-hub-logo-final.png" alt="Kobe's Betting Hub" /></a><a class="header-join" href="join.html#offer">Join the Hub</a><nav class="site-menu" id="site-menu" aria-label="Primary navigation" data-menu><a href="index.html#proof">Proof</a><a href="index.html#real-reviews-row">Reviews</a><a href="index.html#real-slips-row">Slips</a><a href="index.html#community">Community</a><a href="cancel.html">Manage membership</a></nav></header>
-    <main class="manage-page"><section class="manage-shell" aria-labelledby="manage-title"><p class="eyebrow">MEMBERSHIP SETTINGS</p><h1 id="manage-title">Manage your membership.</h1><p class="manage-intro" data-status>Sign in with the Discord account connected to your membership. Billing details, payment methods, invoices, and cancellation are handled in Stripe’s secure customer portal.</p><div class="manage-panel"><div class="manage-step"><p class="card-kicker">SECURE ACCOUNT ACCESS</p><h2>Continue with Discord.</h2><p>Discord confirms which Hub member you are. Stripe remains the payment and subscription authority; your card information never passes through this website or Discord.</p><div class="manage-actions"><a class="button" data-portal-login>Open Stripe billing portal <span aria-hidden="true">→</span></a></div></div><p class="manage-message" data-message role="status" aria-live="polite"></p></div><p class="responsible">Canceling stops the next renewal while access continues through Stripe’s paid-through date. Charges are non-refundable except where required by law, card-network rules, or a written Hub exception. If this Discord account is not linked yet, use Connect Discord on the original checkout confirmation once, or contact support.</p></section></main>
-    <footer><span>© <span id="year"></span> KOBE'S BETTING HUB</span><span class="footer-nav"><a href="index.html">Home</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></span><span>21+ • WAGER RESPONSIBLY</span></footer><script>window.__KBH_MEMBERSHIP_CONFIG__ = Object.freeze({"environment":"production","workerOrigin":"https://kobes-betting-hub-checkout.kobedirwin.workers.dev"});</script><script src="cancel.js?v=20260912-portal"></script>
+    <div class="site-ticker" aria-label="Secure membership management through Discord and Stripe.">
+      <div class="site-ticker-track">
+        <span>SECURE MEMBERSHIP MANAGEMENT. DISCORD IDENTITY. STRIPE BILLING.</span>
+        <span aria-hidden="true">SECURE MEMBERSHIP MANAGEMENT. DISCORD IDENTITY. STRIPE BILLING.</span>
+        <span aria-hidden="true">SECURE MEMBERSHIP MANAGEMENT. DISCORD IDENTITY. STRIPE BILLING.</span>
+      </div>
+    </div>
+    <header class="site-header" data-header>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-menu" data-menu-toggle>Explore <span aria-hidden="true">+</span></button>
+      <a class="brand" href="index.html" aria-label="Kobe's Betting Hub home"><img src="betting-hub-logo-final.png" alt="Kobe's Betting Hub" /></a>
+      <a class="header-join" href="join.html#offer">Join the Hub</a>
+      <nav class="site-menu" id="site-menu" aria-label="Primary navigation" data-menu>
+        <a href="index.html#proof">Proof</a>
+        <a href="index.html#recent-picks">Recent picks</a>
+        <a href="index.html#kobes-wins">Kobe's wins</a>
+        <a href="free-pick.html">Free pick</a>
+        <a href="refer.html">Earn $10</a>
+        <a href="cancel.html" aria-current="page">Manage membership</a>
+      </nav>
+    </header>
+    <main class="manage-page">
+      <section class="manage-shell" aria-labelledby="manage-title">
+        <div class="manage-copy">
+          <p class="eyebrow">MEMBERSHIP SETTINGS</p>
+          <h1 id="manage-title">Manage your membership.</h1>
+          <p class="manage-intro" data-status>Sign in with the Discord account connected to your membership. Billing details, payment methods, invoices, and cancellation are handled in Stripe’s secure customer portal.</p>
+        </div>
+        <aside class="manage-panel" aria-label="Secure membership access">
+          <div class="manage-step">
+            <p class="card-kicker">SECURE ACCOUNT ACCESS <span>MEMBERS ONLY</span></p>
+            <h2>Continue with Discord.</h2>
+            <p>Discord confirms which Hub member you are. Stripe remains the payment and subscription authority; your card information never passes through this website or Discord.</p>
+            <div class="manage-actions"><a class="button" data-portal-login>Open Stripe billing portal <span aria-hidden="true">→</span></a></div>
+          </div>
+          <p class="manage-message" data-message role="status" aria-live="polite"></p>
+        </aside>
+        <p class="responsible manage-policy">Canceling stops the next renewal while access continues through Stripe’s paid-through date. Charges are non-refundable except where required by law, card-network rules, or a written Hub exception. If this Discord account is not linked yet, use Connect Discord on the original checkout confirmation once, or <a href="support.html">contact support</a>.</p>
+      </section>
+    </main>
+    <footer>
+      <span>© <span id="year"></span> KOBE'S BETTING HUB</span>
+      <span class="footer-nav"><a href="index.html">Home</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></span>
+      <span>21+ • WAGER RESPONSIBLY</span>
+    </footer>
+    <script>window.__KBH_MEMBERSHIP_CONFIG__ = Object.freeze({"environment":"production","workerOrigin":"https://kobes-betting-hub-checkout.kobedirwin.workers.dev"});</script>
+    <script src="cancel.js?v=20260912-portal"></script>
   </body>
 </html>
