@@ -1,0 +1,39 @@
+name: Membership operations alert
+
+on:
+  schedule:
+    # Every two hours limits private-repository Actions usage while still
+    # surfacing paid-without-access and reconciliation problems during beta.
+    - cron: "30 */2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: membership-operations-alert
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Paid access and billing exceptions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      MEMBERSHIP_ALERT_LOOKBACK_HOURS: "26"
+      MEMBERSHIP_LINK_GRACE_MINUTES: "30"
+    steps:
+      - name: Check out the production source
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check paid access and billing exceptions
+        run: node scripts/check-membership-operations.mjs
