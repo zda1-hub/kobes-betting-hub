@@ -348,9 +348,16 @@ test('verified subscription webhooks grant and remove roles exactly once per eve
       apiCallEvents.push(JSON.parse(options.body));
       return new Response(null, { status: 204 });
     }
-    if (table === 'membership_subscriptions' && method === 'POST') {
-      subscriptionWrites.push(JSON.parse(options.body));
-      return new Response(null, { status: 204 });
+    if (table === 'membership_subscriptions') {
+      if (method === 'POST') {
+        subscriptionWrites.push(JSON.parse(options.body));
+        return new Response(null, { status: 204 });
+      }
+      if (method === 'PATCH') {
+        subscriptionWrites.push(JSON.parse(options.body));
+        return new Response(null, { status: 204 });
+      }
+      if (method === 'GET') return Response.json([{ entitlement_blocked: false, entitlement_block_reason: null }]);
     }
     if (table === 'membership_customers' && method === 'POST') {
       return new Response(null, { status: 204 });
@@ -421,4 +428,155 @@ test('verified subscription webhooks grant and remove roles exactly once per eve
   });
   assert.equal(webhookEvents.get('evt_test_active').status, 'PROCESSED');
   assert.equal(webhookEvents.get('evt_test_canceled').status, 'PROCESSED');
+});
+
+test('billing exception webhooks durably block entitlement while failed payments keep status-based access', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const webhookEvents = new Map();
+  const subscriptions = new Map();
+  const membershipEvents = [];
+  const discordRoleCalls = [];
+  const subscriptionFixtures = new Map([
+    ['sub_refund', { status: 'active', customer: 'cus_refund' }],
+    ['sub_dispute', { status: 'active', customer: 'cus_dispute' }],
+    ['sub_failed_active', { status: 'active', customer: 'cus_failed_active' }],
+    ['sub_failed_past_due', { status: 'past_due', customer: 'cus_failed_past_due' }],
+  ]);
+  const customers = new Map([...subscriptionFixtures.entries()].map(([subscriptionId, fixture]) => [
+    fixture.customer,
+    { stripe_customer_id: fixture.customer, current_subscription_id: subscriptionId, discord_user_id: `discord_${subscriptionId}` },
+  ]));
+  const stripeSubscription = (subscriptionId) => {
+    const fixture = subscriptionFixtures.get(subscriptionId);
+    return {
+      id: subscriptionId,
+      customer: fixture.customer,
+      status: fixture.status,
+      created: 1_700_000_000,
+      metadata: {},
+      items: { data: [{ price: { id: 'price_test_monthly' }, current_period_start: 1_700_000_000, current_period_end: 1_800_000_000 }] },
+    };
+  };
+
+  globalThis.fetch = async (url, options = {}) => {
+    const requestUrl = new URL(url);
+    const method = options.method || 'GET';
+    if (requestUrl.hostname === 'api.stripe.com') {
+      const path = requestUrl.pathname;
+      if (path.startsWith('/v1/invoices/')) {
+        const invoiceId = decodeURIComponent(path.split('/').at(-1));
+        const subscriptionId = invoiceId.replace(/^in_/, 'sub_');
+        return Response.json({ id: invoiceId, parent: { subscription_details: { subscription: subscriptionId } } });
+      }
+      if (path.startsWith('/v1/subscriptions/')) {
+        return Response.json(stripeSubscription(decodeURIComponent(path.split('/').at(-1))));
+      }
+      if (path === '/v1/charges/ch_dispute') return Response.json({ id: 'ch_dispute', invoice: 'in_dispute' });
+      throw new Error(`Unexpected Stripe request: ${method} ${path}`);
+    }
+    if (requestUrl.hostname === 'discord.com') {
+      discordRoleCalls.push({ path: requestUrl.pathname, method });
+      return new Response(null, { status: 204 });
+    }
+    assert.equal(requestUrl.hostname, 'project.supabase.test');
+    const table = requestUrl.pathname.replace('/rest/v1/', '');
+    if (table === 'api_call_events' && method === 'POST') return new Response(null, { status: 204 });
+    if (table === 'stripe_webhook_events') {
+      const eventId = requestUrl.searchParams.get('event_id')?.replace(/^eq\./, '');
+      if (method === 'GET') return Response.json(webhookEvents.has(eventId) ? [webhookEvents.get(eventId)] : []);
+      if (method === 'POST') {
+        const body = JSON.parse(options.body);
+        webhookEvents.set(body.event_id, body);
+        return new Response(null, { status: 204 });
+      }
+      if (method === 'PATCH') {
+        webhookEvents.set(eventId, { ...webhookEvents.get(eventId), ...JSON.parse(options.body) });
+        return new Response(null, { status: 204 });
+      }
+    }
+    if (table === 'membership_customers') {
+      if (method === 'POST') {
+        const body = JSON.parse(options.body);
+        customers.set(body.stripe_customer_id, { ...customers.get(body.stripe_customer_id), ...body });
+        return new Response(null, { status: 204 });
+      }
+      const customerId = requestUrl.searchParams.get('stripe_customer_id')?.replace(/^eq\./, '');
+      return Response.json(customerId && customers.has(customerId) ? [customers.get(customerId)] : []);
+    }
+    if (table === 'membership_subscriptions') {
+      const subscriptionId = requestUrl.searchParams.get('stripe_subscription_id')?.replace(/^eq\./, '');
+      if (method === 'POST') {
+        const body = JSON.parse(options.body);
+        if (!subscriptions.has(body.stripe_subscription_id)) {
+          subscriptions.set(body.stripe_subscription_id, {
+            entitlement_blocked: false,
+            entitlement_block_reason: null,
+            ...body,
+          });
+        }
+        return new Response(null, { status: 204 });
+      }
+      if (method === 'PATCH') {
+        subscriptions.set(subscriptionId, { ...subscriptions.get(subscriptionId), ...JSON.parse(options.body) });
+        return new Response(null, { status: 204 });
+      }
+      if (method === 'GET') return Response.json(subscriptionId && subscriptions.has(subscriptionId) ? [subscriptions.get(subscriptionId)] : []);
+    }
+    if (table === 'membership_events' && method === 'POST') {
+      membershipEvents.push(JSON.parse(options.body));
+      return new Response(null, { status: 204 });
+    }
+    if (table === 'referral_rewards' && method === 'GET') return Response.json([]);
+    throw new Error(`Unexpected Supabase request: ${method} ${requestUrl}`);
+  };
+
+  const secret = 'whsec_local_billing_exceptions';
+  const env = {
+    STRIPE_WEBHOOK_SECRET: secret,
+    STRIPE_SECRET_KEY: 'sk_test_local_only',
+    SUPABASE_URL: 'https://project.supabase.test',
+    SUPABASE_SECRET_KEY: 'sb_secret_test',
+    DISCORD_BOT_TOKEN: 'discord_bot_test',
+    DISCORD_GUILD_ID: 'guild_test',
+    DISCORD_MEMBER_ROLE_ID: 'role_test',
+  };
+  const sendEvent = async (event) => {
+    const payload = JSON.stringify({ created: Math.floor(Date.now() / 1000), livemode: false, ...event });
+    const { timestamp, value } = await stripeSignature(payload, secret);
+    return worker.fetch(new Request('https://worker.test/stripe-webhook', {
+      method: 'POST',
+      headers: { 'Stripe-Signature': `t=${timestamp},v1=${value}` },
+      body: payload,
+    }), env);
+  };
+
+  assert.equal((await sendEvent({ id: 'evt_refund', type: 'charge.refunded', data: { object: { id: 'ch_refund', invoice: 'in_refund' } } })).status, 200);
+  assert.equal(subscriptions.get('sub_refund').entitlement_blocked, true);
+  assert.equal(subscriptions.get('sub_refund').entitlement_block_reason, 'CHARGE_REFUNDED');
+  assert.deepEqual(discordRoleCalls.at(-1), {
+    path: '/api/v10/guilds/guild_test/members/discord_sub_refund/roles/role_test',
+    method: 'DELETE',
+  });
+
+  assert.equal((await sendEvent({ id: 'evt_active_after_refund', type: 'customer.subscription.updated', data: { object: stripeSubscription('sub_refund') } })).status, 200);
+  assert.equal(discordRoleCalls.at(-1).method, 'DELETE');
+  assert.equal(webhookEvents.get('evt_active_after_refund').outcome, 'ROLE_REMOVED_ENTITLEMENT_BLOCKED');
+
+  assert.equal((await sendEvent({ id: 'evt_dispute', type: 'charge.dispute.created', data: { object: { id: 'dp_test', charge: 'ch_dispute' } } })).status, 200);
+  assert.equal(subscriptions.get('sub_dispute').entitlement_blocked, true);
+  assert.equal(subscriptions.get('sub_dispute').entitlement_block_reason, 'CHARGE_DISPUTED');
+
+  assert.equal((await sendEvent({ id: 'evt_failed_active', type: 'invoice.payment_failed', data: { object: { id: 'in_failed_active', subscription: 'sub_failed_active' } } })).status, 200);
+  assert.equal(subscriptions.get('sub_failed_active').entitlement_blocked, false);
+  assert.equal(discordRoleCalls.at(-1).method, 'PUT');
+  assert.equal(webhookEvents.get('evt_failed_active').outcome, 'PAYMENT_FAILED_ROLE_GRANTED');
+
+  assert.equal((await sendEvent({ id: 'evt_failed_past_due', type: 'invoice.payment_failed', data: { object: { id: 'in_failed_past_due', subscription: 'sub_failed_past_due' } } })).status, 200);
+  assert.equal(subscriptions.get('sub_failed_past_due').entitlement_blocked, false);
+  assert.equal(discordRoleCalls.at(-1).method, 'DELETE');
+  assert.equal(webhookEvents.get('evt_failed_past_due').outcome, 'PAYMENT_FAILED_ROLE_REMOVED');
+
+  assert.equal(membershipEvents.filter((event) => event.event_type === 'MEMBERSHIP_ENTITLEMENT_BLOCKED').length, 2);
+  assert.equal(membershipEvents.filter((event) => event.event_type === 'MEMBERSHIP_PAYMENT_FAILED').length, 2);
 });

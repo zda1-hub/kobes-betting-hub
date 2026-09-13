@@ -255,26 +255,35 @@ async function persistSubscription(env, subscription, eventId = null) {
   if (!subscription?.id || !customerId) return;
   const now = new Date().toISOString();
   const item = subscription.items?.data?.[0];
+  const body = {
+    stripe_subscription_id: subscription.id,
+    stripe_customer_id: customerId,
+    status: subscription.status || 'unknown',
+    price_id: stripeId(item?.price),
+    offer: subscription.metadata?.offer || null,
+    cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+    cancel_at: stripeTimestamp(subscription.cancel_at),
+    current_period_start: stripeTimestamp(subscription.current_period_start ?? item?.current_period_start),
+    current_period_end: stripeTimestamp(subscription.current_period_end ?? item?.current_period_end),
+    trial_end: stripeTimestamp(subscription.trial_end),
+    last_stripe_event_id: eventId,
+    raw_metadata: subscription.metadata || {},
+    created_at: stripeTimestamp(subscription.created) || now,
+    updated_at: now,
+  };
   await persistCustomer(env, customerId, { subscriptionId: subscription.id });
+  // Insert if absent, then update only Stripe-owned fields. This deliberately
+  // never writes entitlement_blocked so an ordinary subscription event cannot
+  // clear a concurrent or existing refund/dispute block.
   await supabase(env, 'membership_subscriptions?on_conflict=stripe_subscription_id', {
     method: 'POST',
-    prefer: 'resolution=merge-duplicates,return=minimal',
-    body: {
-      stripe_subscription_id: subscription.id,
-      stripe_customer_id: customerId,
-      status: subscription.status || 'unknown',
-      price_id: stripeId(item?.price),
-      offer: subscription.metadata?.offer || null,
-      cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
-      cancel_at: stripeTimestamp(subscription.cancel_at),
-      current_period_start: stripeTimestamp(subscription.current_period_start ?? item?.current_period_start),
-      current_period_end: stripeTimestamp(subscription.current_period_end ?? item?.current_period_end),
-      trial_end: stripeTimestamp(subscription.trial_end),
-      last_stripe_event_id: eventId,
-      raw_metadata: subscription.metadata || {},
-      created_at: stripeTimestamp(subscription.created) || now,
-      updated_at: now,
-    },
+    prefer: 'resolution=ignore-duplicates,return=minimal',
+    body,
+  });
+  await supabase(env, `membership_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(subscription.id)}`, {
+    method: 'PATCH',
+    prefer: 'return=minimal',
+    body,
   });
 }
 
@@ -291,8 +300,14 @@ async function membershipCustomerForStripe(env, customerId) {
 async function activeMembershipForDiscord(env, discordUserId) {
   const customer = await membershipCustomerForDiscord(env, discordUserId);
   if (!customer?.current_subscription_id) return null;
-  const rows = await supabase(env, `membership_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(customer.current_subscription_id)}&status=in.(active,trialing)&select=stripe_subscription_id,stripe_customer_id,status&limit=1`);
+  const rows = await supabase(env, `membership_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(customer.current_subscription_id)}&status=in.(active,trialing)&entitlement_blocked=is.false&select=stripe_subscription_id,stripe_customer_id,status&limit=1`);
   return rows?.[0] || null;
+}
+
+async function membershipEntitlementBlock(env, subscriptionId) {
+  if (!subscriptionId) return null;
+  const rows = await supabase(env, `membership_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(subscriptionId)}&select=entitlement_blocked,entitlement_block_reason,entitlement_blocked_at&limit=1`);
+  return rows?.[0]?.entitlement_blocked ? rows[0] : null;
 }
 
 async function referralProfileForDiscord(env, discordUserId) {
@@ -709,12 +724,13 @@ async function grantMemberRole(memberId, env) {
 async function syncMemberRole(subscription, env) {
   const memberId = await discordUserForSubscription(env, subscription);
   if (!memberId) return 'NO_DISCORD_LINK';
-  if (ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status)) {
+  const entitlementBlock = await membershipEntitlementBlock(env, subscription.id);
+  if (ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) && !entitlementBlock) {
     await grantMemberRole(memberId, env);
     return 'ROLE_GRANTED';
   }
   await removeMemberRole(subscription, env);
-  return 'ROLE_REMOVED';
+  return entitlementBlock ? 'ROLE_REMOVED_ENTITLEMENT_BLOCKED' : 'ROLE_REMOVED';
 }
 
 async function reconcileMemberships(env) {
@@ -732,7 +748,7 @@ async function reconcileMemberships(env) {
       await persistSubscription(env, subscription);
       const outcome = await syncMemberRole(subscription, env);
       if (outcome === 'ROLE_GRANTED') summary.rolesGranted += 1;
-      else if (outcome === 'ROLE_REMOVED') summary.rolesRemoved += 1;
+      else if (outcome.startsWith('ROLE_REMOVED')) summary.rolesRemoved += 1;
       else summary.noDiscordLink += 1;
       await recordMembershipEvent(env, {
         eventType: 'MEMBERSHIP_RECONCILED', actorType: 'system', subscriptionId,
@@ -1061,6 +1077,62 @@ async function voidReferralForInvoice(env, invoiceId, reason) {
   return status;
 }
 
+async function subscriptionForInvoice(env, invoiceId) {
+  if (!invoiceId) return null;
+  const invoice = await stripeGet(env, `/invoices/${encodeURIComponent(invoiceId)}`);
+  const subscriptionId = invoiceSubscriptionId(invoice);
+  if (!subscriptionId) return null;
+  return stripeGet(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+}
+
+async function blockEntitlementForInvoice(env, invoiceId, eventId, reason) {
+  const subscription = await subscriptionForInvoice(env, invoiceId);
+  if (!subscription) return 'NO_MEMBERSHIP_SUBSCRIPTION';
+  const customerId = stripeId(subscription.customer);
+  const discordUserId = await discordUserForSubscription(env, subscription);
+  await persistSubscription(env, subscription, eventId);
+  await supabase(env, `membership_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(subscription.id)}`, {
+    method: 'PATCH',
+    prefer: 'return=minimal',
+    body: {
+      entitlement_blocked: true,
+      entitlement_block_reason: reason,
+      entitlement_blocked_at: new Date().toISOString(),
+      last_stripe_event_id: eventId,
+      updated_at: new Date().toISOString(),
+    },
+  });
+  const roleOutcome = await syncMemberRole(subscription, env);
+  await recordMembershipEvent(env, {
+    eventType: 'MEMBERSHIP_ENTITLEMENT_BLOCKED',
+    actorType: 'stripe_webhook',
+    actorId: eventId,
+    customerId,
+    subscriptionId: subscription.id,
+    discordUserId,
+    details: { reason, role_outcome: roleOutcome },
+  });
+  return roleOutcome === 'NO_DISCORD_LINK' ? 'ENTITLEMENT_BLOCKED_NO_DISCORD_LINK' : 'ENTITLEMENT_BLOCKED_ROLE_REMOVED';
+}
+
+async function processInvoicePaymentFailed(env, invoice, eventId) {
+  const subscriptionId = invoiceSubscriptionId(invoice);
+  if (!subscriptionId) return 'PAYMENT_FAILED_WITHOUT_SUBSCRIPTION';
+  const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+  await persistSubscription(env, subscription, eventId);
+  const roleOutcome = await syncMemberRole(subscription, env);
+  await recordMembershipEvent(env, {
+    eventType: 'MEMBERSHIP_PAYMENT_FAILED',
+    actorType: 'stripe_webhook',
+    actorId: eventId,
+    customerId: stripeId(subscription.customer),
+    subscriptionId,
+    discordUserId: await discordUserForSubscription(env, subscription),
+    details: { subscription_status: subscription.status, role_outcome: roleOutcome },
+  });
+  return `PAYMENT_FAILED_${roleOutcome}`;
+}
+
 async function updateReferralReward(env, rewardId, values, statuses = null) {
   const statusFilter = statuses?.length ? `&status=in.(${statuses.join(',')})` : '';
   await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(rewardId)}${statusFilter}`, {
@@ -1187,14 +1259,22 @@ async function handleWebhook(request, env) {
       outcome = await syncMemberRole(subscription, env);
     } else if (event.type === 'invoice.paid') {
       outcome = await processReferralInvoicePaid(env, event.data?.object, event.id);
+    } else if (event.type === 'invoice.payment_failed') {
+      outcome = await processInvoicePaymentFailed(env, event.data?.object, event.id);
     } else if (event.type === 'charge.refunded') {
-      outcome = await voidReferralForInvoice(env, stripeId(event.data?.object?.invoice), 'QUALIFYING_CHARGE_REFUNDED');
+      const invoiceId = stripeId(event.data?.object?.invoice);
+      const entitlementOutcome = await blockEntitlementForInvoice(env, invoiceId, event.id, 'CHARGE_REFUNDED');
+      const referralOutcome = await voidReferralForInvoice(env, invoiceId, 'QUALIFYING_CHARGE_REFUNDED');
+      outcome = `${entitlementOutcome};${referralOutcome}`;
     } else if (event.type === 'charge.dispute.created') {
       const chargeId = stripeId(event.data?.object?.charge);
       if (!chargeId) outcome = 'DISPUTE_WITHOUT_CHARGE';
       else {
         const charge = await stripeGet(env, `/charges/${encodeURIComponent(chargeId)}`);
-        outcome = await voidReferralForInvoice(env, stripeId(charge?.invoice), 'QUALIFYING_CHARGE_DISPUTED');
+        const invoiceId = stripeId(charge?.invoice);
+        const entitlementOutcome = await blockEntitlementForInvoice(env, invoiceId, event.id, 'CHARGE_DISPUTED');
+        const referralOutcome = await voidReferralForInvoice(env, invoiceId, 'QUALIFYING_CHARGE_DISPUTED');
+        outcome = `${entitlementOutcome};${referralOutcome}`;
       }
     }
     await finishWebhookEvent(env, event.id, 'PROCESSED', outcome);
