@@ -86,26 +86,32 @@ function likelyPick(text) {
   return (market || units || plusStat || explicitLeaguePick) && (odds || total || line || units || statMarket || plusStat);
 }
 
-function likelyWriteupOrTrend(text, postMediaUrls) {
-  if (likelyPick(text)) return true;
-  if (postMediaUrls.length === 0) return false;
-  // A monitored write-up account may put the actual pick and breakdown only
-  // in its image. Let the vision extractor inspect every media post; the
-  // later NFL, event, and approval gates still reject non-picks and other
-  // sports. This prevents valid cards like the LeBron-format example from
-  // being discarded solely because its caption is short or generic.
-  return true;
+function mediaCaptionHasBetSignal(text) {
+  return /\b(?:pick|play|bet|card|slip|ladder|prop|parlay|odds?|units?|over|under|moneyline|spread|run line|puck line|anytime|to score)\b/i.test(text || '');
 }
 
 function shouldQueueForReview(source, post, postMediaUrls) {
-  // The pick may exist only inside the attached card. Send every media post
-  // from every enabled source through vision; the downstream NFL, exact-event,
-  // capper, and publishability gates decide whether it becomes an approval.
-  if (postMediaUrls.length > 0) return true;
-  // A pick can also be stated entirely in the post text. Let the same
-  // downstream gates inspect those candidates instead of dropping them just
-  // because there is no attached image.
-  return likelyPick(post.text);
+  if (likelyPick(post.text)) return true;
+  if (postMediaUrls.length === 0) return false;
+  // Dedicated photo-review feeds may put the complete play only in the image.
+  // Other feeds need at least a cheap caption signal before consuming vision;
+  // treating every image from every account as a candidate created an
+  // 853-post production backlog on the first monitored morning.
+  if (source.monitoring_mode === 'photo_review') return true;
+  return mediaCaptionHasBetSignal(post.text);
+}
+
+function intakePriority(source, post) {
+  if (likelyPick(post?.text)) return footballPriority(post) === 0 ? 0 : 1;
+  if (mediaCaptionHasBetSignal(post?.text)) return footballPriority(post) === 0 ? 2 : 3;
+  if (source?.monitoring_mode === 'photo_review' && post?.attachments?.media_keys?.length) return 4;
+  return 5;
+}
+
+function configuredMediaOnlyLimit(env = process.env) {
+  const raw = (env.X_MONITOR_MAX_MEDIA_ONLY_PER_SOURCE_PER_RUN || '1').trim();
+  const limit = Number(raw);
+  return Number.isInteger(limit) && limit >= 0 ? limit : 1;
 }
 
 function footballPriority(post) {
@@ -558,10 +564,15 @@ function sourceStateAfterPass({ sourceState, userId, date, lastProcessedId, hand
   if (sourceState.image_rescan_version) {
     nextSourceState.image_rescan_version = sourceState.image_rescan_version;
   }
-  if (rescanImages && completedSourcePass) {
+  // A partial pass retains its old cursor so deferred posts remain fetchable,
+  // but completed/rejected post IDs already provide exact replay protection.
+  // Mark one-time rescans complete even when another post is deferred; leaving
+  // these flags unset caused every handled media post to be reconsidered on
+  // each 15-minute cycle.
+  if (rescanImages) {
     nextSourceState.image_rescan_version = IMAGE_RESCAN_VERSION;
   }
-  if (rescanUpcomingSlate && completedSourcePass) {
+  if (rescanUpcomingSlate) {
     nextSourceState.upcoming_slate_rescan_version = UPCOMING_SLATE_RESCAN_VERSION;
   }
   return nextSourceState;
@@ -674,16 +685,19 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
     } while (nextToken);
     const response = responses[0] || {};
     const media = Object.assign({}, ...responses.map(mediaUrls));
-    // Text-labelled NFL and college-football posts get first look. Keep the
-    // original ID as the tie-breaker so a source remains deterministic.
+    // Strong text-identified picks get first look, followed by caption-signaled
+    // media and finally dedicated photo-review posts. Keep the original ID as
+    // the tie-breaker so a source remains deterministic.
     const posts = responses.flatMap((page) => page.data || [])
-      .sort((a, b) => footballPriority(a) - footballPriority(b) || b.id.localeCompare(a.id));
+      .sort((a, b) => intakePriority(source, a) - intakePriority(source, b) || b.id.localeCompare(a.id));
     if (dailyCatchup && responses.length > 1) {
       console.log(`Backfilled ${posts.length} post(s) from @${source.handle} since ${startTime}.`);
     }
     const handledPostIds = new Set(Array.isArray(sourceState.handled_post_ids) ? sourceState.handled_post_ids : []);
     let lastProcessedId = sourceState.since_id || '';
     let completedSourcePass = true;
+    let mediaOnlyCandidates = 0;
+    const mediaOnlyLimit = configuredMediaOnlyLimit();
     const acceptedPackets = [];
     for (const post of posts) {
       const postMediaUrls = (post.attachments?.media_keys || []).map((key) => media[key]).filter(Boolean);
@@ -712,6 +726,20 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
         continue;
+      }
+      if (!likelyPick(post.text) && postMediaUrls.length > 0) {
+        mediaOnlyCandidates += 1;
+        if (mediaOnlyCandidates > mediaOnlyLimit) {
+          await recordGateDecision(packet, {
+            code: 'MEDIA_ONLY_INTAKE_LIMIT_REACHED',
+            reason: `A newer media-only candidate from @${source.handle} already used this pass's media intake slot.`
+          });
+          console.log(`Skipped @${source.handle} post ${post.id}; bounded media-only intake slot already used.`);
+          skipped += 1;
+          lastProcessedId = post.id;
+          handledPostIds.add(post.id);
+          continue;
+        }
       }
       claimedSourcePostIds.add(String(post.id));
 
@@ -843,7 +871,7 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
       sourceState,
       userId,
       date,
-      lastProcessedId: lastProcessedId || response.meta?.newest_id || '',
+      lastProcessedId: completedSourcePass ? (response.meta?.newest_id || lastProcessedId) : lastProcessedId,
       handledPostIds,
       completedSourcePass,
       rescanImages,
@@ -931,11 +959,13 @@ if (require.main === module) {
 
 module.exports = {
   createModelCallBudget,
+  configuredMediaOnlyLimit,
   configuredModelCallLimit,
   footballGamesScheduledToday,
   footballPriority,
+  intakePriority,
   isSinglePlayPacket,
-  likelyWriteupOrTrend,
+  mediaCaptionHasBetSignal,
   nflGamesScheduledToday,
   recordModelCallDeferral,
   runCollector,

@@ -2,10 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   createModelCallBudget,
+  configuredMediaOnlyLimit,
   footballGamesScheduledToday,
   footballPriority,
+  intakePriority,
   isSinglePlayPacket,
-  likelyWriteupOrTrend,
+  mediaCaptionHasBetSignal,
   nflGamesScheduledToday,
   recordModelCallDeferral,
   shouldQueueForReview,
@@ -26,18 +28,25 @@ test('requires exactly one visible play for each approval card', () => {
   }), false);
 });
 
-test('recognizes a graphic prop ladder from a writeup-or-trend source', () => {
-  assert.equal(likelyWriteupOrTrend('DeMario Douglas Receptions Ladder', ['https://example.com/card.png']), true);
-});
-
-test('sends image-only write-up posts to vision extraction', () => {
-  assert.equal(likelyWriteupOrTrend('', ['https://example.com/lebron-card.png']), true);
-});
-
-test('sends image-only posts from every enabled source to vision extraction', () => {
-  assert.equal(shouldQueueForReview({ monitoring_mode: 'standard' }, { text: '' }, ['https://example.com/pick.png']), true);
-  assert.equal(shouldQueueForReview({ monitoring_mode: 'standard', publish_mode: 'terms_only' }, { text: '' }, ['https://example.com/exclusive.png']), true);
+test('requires a caption signal for generic media while preserving dedicated photo review', () => {
+  assert.equal(shouldQueueForReview({ monitoring_mode: 'standard' }, { text: '' }, ['https://example.com/pick.png']), false);
+  assert.equal(shouldQueueForReview({ monitoring_mode: 'writeup_or_trend' }, { text: 'Tonight\'s ladder card' }, ['https://example.com/ladder.png']), true);
   assert.equal(shouldQueueForReview({ monitoring_mode: 'photo_review' }, { text: '' }, ['https://example.com/card.png']), true);
+});
+
+test('prioritizes strong text picks before signaled and image-only media', () => {
+  assert.equal(mediaCaptionHasBetSignal('Tonight\'s betting card'), true);
+  assert.equal(mediaCaptionHasBetSignal('Practice photos'), false);
+  assert.equal(intakePriority({ monitoring_mode: 'standard' }, { text: 'NFL Rams -4.5 2u' }), 0);
+  assert.equal(intakePriority({ monitoring_mode: 'standard' }, { text: 'MLB player over 1.5 hits' }), 1);
+  assert.equal(intakePriority({ monitoring_mode: 'writeup_or_trend' }, { text: 'NFL card', attachments: { media_keys: ['1'] } }), 2);
+  assert.equal(intakePriority({ monitoring_mode: 'photo_review' }, { text: '', attachments: { media_keys: ['1'] } }), 4);
+});
+
+test('bounds weak media candidates per source without changing strong-pick limits', () => {
+  assert.equal(configuredMediaOnlyLimit({}), 1);
+  assert.equal(configuredMediaOnlyLimit({ X_MONITOR_MAX_MEDIA_ONLY_PER_SOURCE_PER_RUN: '3' }), 3);
+  assert.equal(configuredMediaOnlyLimit({ X_MONITOR_MAX_MEDIA_ONLY_PER_SOURCE_PER_RUN: '-1' }), 1);
 });
 
 test('sends text-only NFL picks from regular and exclusive sources to extraction', () => {
@@ -216,6 +225,6 @@ test('model-call deferrals are audited and logged without advancing the source c
   assert.deepEqual(nextState.handled_post_ids, ['150', '200']);
   assert.equal(nextState.handled_post_ids.includes('250'), false);
   assert.equal(nextState.catchup_date, undefined);
-  assert.equal(nextState.image_rescan_version, undefined);
-  assert.equal(nextState.upcoming_slate_rescan_version, undefined);
+  assert.equal(nextState.image_rescan_version, 'source-routing-image-rescan-v3');
+  assert.equal(nextState.upcoming_slate_rescan_version, 'upcoming-slate-rescan-v1');
 });
