@@ -2,7 +2,7 @@
 
 Audit opened: 2026-09-12 18:34 MST
 
-Latest staging verification: 2026-09-13 04:20 MST
+Latest staging verification: 2026-09-13 03:46 MST
 
 Scope: Stripe Checkout and Customer Portal, Discord OAuth and paid-role synchronization, Supabase membership persistence, webhook behavior, and scheduled reconciliation. All transaction and entitlement mutations in this audit used isolated test resources. Production was not changed, no real money moved, and nothing was published to Discord or X.
 
