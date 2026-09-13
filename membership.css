@@ -5,3 +5,38 @@
 @media (max-width:800px) { .membership-hero { min-height:0; grid-template-columns:1fr; gap:55px; padding:85px 24px 80px; }.membership-hero h1 { font-size:clamp(55px,15vw,82px); }.offer-card { width:calc(100% - 12px); justify-self:start; padding:25px; }.membership-price strong { font-size:62px; }.membership-details { grid-template-columns:1fr; gap:43px; padding:80px 24px; }.membership-details h2,.membership-proof h2 { font-size:48px; }.membership-proof { margin:0 24px 85px; padding:38px 25px; } }
 .offer-card .offer-pending { background:#2c2c2c; color:#bdbdbd; cursor:not-allowed; opacity:1; }.offer-card .offer-pending:hover { background:#2c2c2c; }
 .offer-card .offer-button[hidden] { display:none !important; }
+
+/* Manage membership uses the same editorial grid, card treatment, and mobile rhythm as the join page. */
+.manage-page { min-height:calc(100vh - 240px); }
+.manage-shell { display:grid; grid-template-columns:minmax(0,1.08fr) minmax(360px,.92fr); gap:clamp(42px,7vw,104px); align-items:center; width:min(100%,1440px); margin:0 auto; padding:clamp(74px,9vw,130px) clamp(24px,7.1vw,120px) clamp(68px,8vw,112px); }
+.manage-copy { max-width:720px; }
+.manage-copy h1 { max-width:700px; margin:0 0 30px; font-size:clamp(56px,7vw,104px); font-weight:700; letter-spacing:-.075em; line-height:.88; }
+.manage-intro { max-width:650px; margin:0; color:var(--muted); font-size:clamp(17px,1.5vw,22px); font-weight:500; letter-spacing:-.035em; line-height:1.55; }
+.manage-panel { width:min(100%,480px); justify-self:end; padding:31px; background:var(--ink); color:var(--paper); box-shadow:13px 13px 0 var(--orange); }
+.manage-panel .card-kicker { padding-bottom:22px; border-bottom:1px solid #303030; }
+.manage-panel h2 { margin:0 0 22px; color:#fff; font-size:clamp(36px,4vw,54px); font-weight:700; letter-spacing:-.065em; line-height:.94; }
+.manage-panel .manage-step > p:not(.card-kicker) { margin:0 0 29px; color:#c9c9c9; font-size:14px; line-height:1.65; }
+.manage-actions .button { width:100%; min-width:0; padding:20px 22px; background:var(--orange); color:var(--ink); }
+.manage-actions .button:hover { background:#fff; color:var(--ink); }
+.manage-message { margin:18px 0 0; padding:13px 14px; border-left:3px solid var(--orange); color:#d6d6d6; font-size:12px; line-height:1.5; }
+.manage-message:empty { display:none; }
+.manage-policy { grid-column:1/-1; max-width:880px; margin:0; padding-top:24px; border-top:1px solid var(--line); font-size:12px; line-height:1.7; }
+.manage-policy a { color:var(--ink); font-weight:700; text-underline-offset:3px; }
+
+@media (max-width:800px) {
+  .manage-page { min-height:0; }
+  .manage-shell { grid-template-columns:1fr; gap:42px; padding:70px 24px 78px; }
+  .manage-copy h1 { margin-bottom:24px; font-size:clamp(50px,14vw,74px); }
+  .manage-intro { font-size:17px; line-height:1.55; }
+  .manage-panel { width:calc(100% - 12px); justify-self:start; padding:25px; box-shadow:10px 10px 0 var(--orange); }
+  .manage-panel h2 { font-size:40px; }
+  .manage-actions .button { padding:18px; font-size:11px; }
+  .manage-policy { padding-top:22px; }
+}
+
+@media (max-width:390px) {
+  .manage-shell { padding-right:18px; padding-left:18px; }
+  .manage-copy h1 { font-size:48px; }
+  .manage-panel { padding:22px 20px; }
+  .manage-actions .button { letter-spacing:0; }
+}
