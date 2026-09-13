@@ -82,7 +82,7 @@ test('checkout offer composition matches the published intro pricing without cha
   t.after(() => { globalThis.fetch = originalFetch; });
   const requests = [];
   globalThis.fetch = async (url, options = {}) => {
-    requests.push({ url: String(url), body: String(options.body || '') });
+    requests.push({ url: String(url), body: String(options.body || ''), headers: new Headers(options.headers) });
     return Response.json({ url: 'https://checkout.stripe.test/session' }, { headers: { 'request-id': 'req_test' } });
   };
   const env = {
@@ -92,10 +92,10 @@ test('checkout offer composition matches the published intro pricing without cha
   };
 
   const starter = await worker.fetch(new Request('https://worker.test/create-checkout', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ offer: 'starter' }),
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Checkout-Request-Id': 'fa8b14dd-1c67-4cbe-8308-52a750d0e534' }, body: JSON.stringify({ offer: 'starter' }),
   }), env);
   const trial = await worker.fetch(new Request('https://worker.test/create-checkout', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ offer: 'trial_2_day' }),
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Checkout-Request-Id': 'f054a06e-a74b-439f-a56d-b0be5f6cc613' }, body: JSON.stringify({ offer: 'trial_2_day' }),
   }), env);
 
   assert.equal(starter.status, 200);
@@ -110,6 +110,61 @@ test('checkout offer composition matches the published intro pricing without cha
   assert.equal(trialForm.has('line_items[1][price]'), false);
   assert.equal(trialForm.get('subscription_data[trial_period_days]'), '2');
   assert.equal(trialForm.get('payment_method_collection'), 'always');
+  assert.equal(requests[0].headers.get('Idempotency-Key'), 'fa8b14dd-1c67-4cbe-8308-52a750d0e534');
+  assert.equal(requests[1].headers.get('Idempotency-Key'), 'f054a06e-a74b-439f-a56d-b0be5f6cc613');
+});
+
+test('checkout rejects malformed client request IDs before contacting Stripe', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return Response.json({ url: 'https://checkout.stripe.test/session' });
+  };
+  const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Checkout-Request-Id': 'not-a-uuid' },
+    body: JSON.stringify({ offer: 'starter' }),
+  }), {
+    STRIPE_SECRET_KEY: 'sk_test_local_only',
+    STRIPE_MONTHLY_PRICE_ID: 'price_monthly',
+    STRIPE_STARTER_PRICE_ID: 'price_starter',
+  });
+
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /request ID/);
+  assert.equal(fetchCalls, 0);
+});
+
+test('checkout remains compatible with clients that omit a request ID', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let idempotencyKey = '';
+  globalThis.fetch = async (_url, options = {}) => {
+    idempotencyKey = new Headers(options.headers).get('Idempotency-Key');
+    return Response.json({ url: 'https://checkout.stripe.test/session' });
+  };
+  const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ offer: 'trial_2_day' }),
+  }), {
+    STRIPE_SECRET_KEY: 'sk_test_local_only',
+    STRIPE_MONTHLY_PRICE_ID: 'price_monthly',
+  });
+
+  assert.equal(response.status, 200);
+  assert.match(idempotencyKey, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+});
+
+test('checkout CORS preflight permits the request ID header', async () => {
+  const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
+    method: 'OPTIONS',
+    headers: { Origin: 'https://kobesbettinghub.com' },
+  }), {});
+  assert.equal(response.status, 204);
+  assert.match(response.headers.get('Access-Control-Allow-Headers'), /X-Checkout-Request-Id/);
 });
 
 test('a checkout customer can claim only one Discord identity', async (t) => {

@@ -4,7 +4,7 @@
 
 **Last verified:** 2026-09-12 18:53 MST
 
-**Production runtime change set:** repository/Render `main` at `e68d368`; Checkout Worker `4b66c8f4-d5b0-4b7b-888e-f85584423f9a`; Publisher Worker `b0a60493-82c6-429a-b74d-7a4d8e24f9f9`; public-site Worker `d5d3cd32-182e-4e6c-aa7d-968c81af1b28`
+**Production runtime change set:** repository/Render auto-deploy from `main`; Checkout Worker `4b66c8f4-d5b0-4b7b-888e-f85584423f9a`; Publisher Worker `b0a60493-82c6-429a-b74d-7a4d8e24f9f9`; public-site Worker `d5d3cd32-182e-4e6c-aa7d-968c81af1b28`
 
 **Control-file owner:** Zakai Martin
 

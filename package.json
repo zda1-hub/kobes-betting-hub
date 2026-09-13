@@ -14,7 +14,8 @@
     "prepare:approval": "node pipeline/prepare-approval.js",
     "migrate:audit": "node pipeline/migrate-audit.js",
     "sync:openai-usage": "node scripts/sync-openai-usage.mjs",
-    "test": "node --test bot/**/*.test.js pipeline/**/*.test.js cloudflare/*.test.mjs"
+    "smoke:production": "node scripts/production-smoke.mjs",
+    "test": "node --test bot/**/*.test.js pipeline/**/*.test.js cloudflare/*.test.mjs scripts/*.test.mjs"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -17,6 +17,112 @@ const ALLOWED_IMAGE_TYPES = new Map([
   ["image/webp", "webp"],
 ]);
 
+const X_AUDIT_TABLE = "x_api_call_audit";
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value)));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function redactedResponseShape(value, depth = 0) {
+  if (depth > 6) return "<depth-limit>";
+  if (value === null) return null;
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => redactedResponseShape(item, depth + 1));
+  if (typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().slice(0, 50).map((key) => [key, redactedResponseShape(value[key], depth + 1)]));
+  }
+  return `<${typeof value}>`;
+}
+
+async function responseShapeHash(response) {
+  try {
+    return sha256Hex(JSON.stringify(redactedResponseShape(await response.clone().json())));
+  } catch {
+    return sha256Hex(JSON.stringify({ body: "<non-json>", contentType: response.headers.get("content-type")?.split(";", 1)[0] || null }));
+  }
+}
+
+async function ensureXApiAudit(env) {
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS ${X_AUDIT_TABLE} (
+      id TEXT PRIMARY KEY,
+      occurred_at TEXT NOT NULL,
+      provider TEXT NOT NULL CHECK (provider = 'x'),
+      endpoint_class TEXT NOT NULL,
+      method TEXT NOT NULL,
+      trigger_type TEXT NOT NULL,
+      outcome TEXT NOT NULL CHECK (outcome IN ('SUCCEEDED', 'HTTP_ERROR', 'NETWORK_ERROR')),
+      response_status INTEGER,
+      latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+      provider_request_id TEXT,
+      request_payload_sha256 TEXT,
+      response_payload_sha256 TEXT,
+      worker_version TEXT
+    )`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_x_api_call_audit_time ON ${X_AUDIT_TABLE} (occurred_at DESC)`),
+    env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS x_api_call_audit_no_update
+      BEFORE UPDATE ON ${X_AUDIT_TABLE}
+      BEGIN SELECT RAISE(ABORT, 'x_api_call_audit is append-only'); END`),
+    env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS x_api_call_audit_no_delete
+      BEFORE DELETE ON ${X_AUDIT_TABLE}
+      BEGIN SELECT RAISE(ABORT, 'x_api_call_audit is append-only'); END`),
+  ]);
+}
+
+async function recordXApiCall(env, values) {
+  try {
+    await ensureXApiAudit(env);
+    await env.DB.prepare(`INSERT INTO ${X_AUDIT_TABLE} (
+      id, occurred_at, provider, endpoint_class, method, trigger_type, outcome,
+      response_status, latency_ms, provider_request_id, request_payload_sha256,
+      response_payload_sha256, worker_version
+    ) VALUES (?, ?, 'x', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(
+        crypto.randomUUID(), new Date().toISOString(), values.endpointClass,
+        values.method, values.triggerType, values.outcome, values.responseStatus,
+        values.latencyMs, values.providerRequestId, values.requestPayloadSha256,
+        values.responsePayloadSha256, env.CF_VERSION_METADATA?.id || env.WORKER_VERSION || null,
+      ).run();
+  } catch (error) {
+    console.error("Unable to persist X API audit event", { message: String(error?.message || error) });
+  }
+}
+
+async function auditedXFetch(env, endpoint, init, audit) {
+  const method = String(init?.method || "GET").toUpperCase();
+  const requestPayloadSha256 = await sha256Hex(JSON.stringify(audit.requestShape || {}));
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(endpoint, init);
+    const latencyMs = Date.now() - startedAt;
+    await recordXApiCall(env, {
+      endpointClass: new URL(endpoint).pathname,
+      method,
+      triggerType: audit.triggerType,
+      outcome: response.ok ? "SUCCEEDED" : "HTTP_ERROR",
+      responseStatus: response.status,
+      latencyMs,
+      providerRequestId: response.headers.get("x-request-id") || response.headers.get("x-transaction-id"),
+      requestPayloadSha256,
+      responsePayloadSha256: await responseShapeHash(response),
+    });
+    return response;
+  } catch (error) {
+    await recordXApiCall(env, {
+      endpointClass: new URL(endpoint).pathname,
+      method,
+      triggerType: audit.triggerType,
+      outcome: "NETWORK_ERROR",
+      responseStatus: null,
+      latencyMs: Date.now() - startedAt,
+      providerRequestId: null,
+      requestPayloadSha256,
+      responsePayloadSha256: null,
+    });
+    throw error;
+  }
+}
+
 export default {
   fetch(request, env) {
     return handleRequest(request, env);
@@ -291,7 +397,7 @@ async function enqueueXPost(request, env) {
       `UPDATE approved_posts SET status = 'publishing', last_error = NULL
        WHERE id = ? AND status = 'approved'`,
     ).bind(id).run();
-    if (claim.meta.changes === 1) await publishXPost({ id, body }, env);
+    if (claim.meta.changes === 1) await publishXPost({ id, body }, env, "queue_publish_now");
     const current = await env.DB.prepare(
       `SELECT status, x_post_id AS xPostId, last_error AS lastError
        FROM approved_posts WHERE id = ?`,
@@ -470,21 +576,27 @@ function normalizeFreePickDetails(input) {
 }
 
 async function publishFreePickToX(image, contentType, caption, env) {
-  const token = await getUsableXToken(env);
+  const token = await getUsableXToken(env, "free_pick_publish");
   const encodedImage = base64FromArrayBuffer(await image.arrayBuffer());
-  const mediaResponse = await fetch(MEDIA_UPLOAD_ENDPOINT, {
+  const mediaResponse = await auditedXFetch(env, MEDIA_UPLOAD_ENDPOINT, {
     method: "POST",
     headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" },
     body: JSON.stringify({ media: encodedImage, media_category: "tweet_image" }),
+  }, {
+    triggerType: "free_pick_publish",
+    requestShape: { mediaCategory: "tweet_image", mediaPresent: true },
   });
   const mediaPayload = await mediaResponse.json().catch(() => ({}));
   const mediaId = mediaPayload?.data?.id;
   if (!mediaResponse.ok || !mediaId) throw new Error(xErrorDetail(mediaPayload, mediaResponse.status));
 
-  const postResponse = await fetch(CREATE_POST_ENDPOINT, {
+  const postResponse = await auditedXFetch(env, CREATE_POST_ENDPOINT, {
     method: "POST",
     headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" },
     body: JSON.stringify({ text: caption, media: { media_ids: [String(mediaId)] } }),
+  }, {
+    triggerType: "free_pick_publish",
+    requestShape: { mediaCount: 1, textPresent: true },
   });
   const postPayload = await postResponse.json().catch(() => ({}));
   if (!postResponse.ok || !postPayload?.data?.id) throw new Error(xErrorDetail(postPayload, postResponse.status));
@@ -504,7 +616,7 @@ async function dispatchDuePosts(scheduledTime, env) {
       `UPDATE approved_posts SET status = 'publishing', last_error = NULL
        WHERE id = ? AND status = 'approved'`,
     ).bind(post.id).run();
-    if (claim.meta.changes === 1) await publishXPost(post, env);
+    if (claim.meta.changes === 1) await publishXPost(post, env, "scheduled_dispatch");
   }
 }
 
@@ -516,13 +628,16 @@ async function recoverStuckPosts(now, env) {
   ).bind(cutoff).run();
 }
 
-async function publishXPost(post, env) {
+async function publishXPost(post, env, triggerType) {
   try {
-    const token = await getUsableXToken(env);
-    const response = await fetch(CREATE_POST_ENDPOINT, {
+    const token = await getUsableXToken(env, triggerType);
+    const response = await auditedXFetch(env, CREATE_POST_ENDPOINT, {
       method: "POST",
       headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" },
       body: JSON.stringify({ text: post.body }),
+    }, {
+      triggerType,
+      requestShape: { mediaCount: 0, textPresent: true },
     });
     const payload = await response.json().catch(() => ({}));
     if (response.ok && payload?.data?.id) {
@@ -557,15 +672,18 @@ function xErrorDetail(payload, status) {
   return `X ${status}: ${String(message)}`;
 }
 
-async function getUsableXToken(env) {
+async function getUsableXToken(env, triggerType) {
   const token = await readXToken(env);
   if (!token?.access_token) throw new Error("No X connection exists");
   const expiresAt = Date.parse(token._storedAt || 0) + Number(token.expires_in || 0) * 1000;
   if (!token.refresh_token || !Number.isFinite(expiresAt) || Date.now() < expiresAt - 60_000) return token;
-  const response = await fetch(TOKEN_ENDPOINT, {
+  const response = await auditedXFetch(env, TOKEN_ENDPOINT, {
     method: "POST",
     headers: { authorization: `Basic ${btoa(`${env.X_CLIENT_ID}:${env.X_CLIENT_SECRET}`)}`, "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: token.refresh_token }),
+  }, {
+    triggerType: `${triggerType}_token_refresh`,
+    requestShape: { grantType: "refresh_token", refreshTokenPresent: true },
   });
   if (!response.ok) throw new Error(`X refresh failed: ${response.status}`);
   const refreshed = await response.json();
@@ -592,10 +710,13 @@ async function completeXAuthorization(url, env) {
   if (!code || !state) return html("The authorization response was incomplete.", 400);
   const data = await verifyState(state, env);
   if (!data) return html("The authorization request expired or could not be verified. Start again.", 400);
-  const tokenResponse = await fetch(TOKEN_ENDPOINT, {
+  const tokenResponse = await auditedXFetch(env, TOKEN_ENDPOINT, {
     method: "POST",
     headers: { authorization: `Basic ${btoa(`${env.X_CLIENT_ID}:${env.X_CLIENT_SECRET}`)}`, "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ code, grant_type: "authorization_code", redirect_uri: `${url.origin}${CALLBACK_PATH}`, code_verifier: data.verifier }),
+  }, {
+    triggerType: "oauth_callback",
+    requestShape: { authorizationCodePresent: true, grantType: "authorization_code", verifierPresent: true },
   });
   if (!tokenResponse.ok) {
     console.error("X token exchange failed", { status: tokenResponse.status });
@@ -727,3 +848,8 @@ function json(value, status = 200, extraHeaders = undefined) {
 function html(message, status = 200) {
   return new Response(`<!doctype html><title>Betting Hub</title><p>${message}</p>`, { status, headers: { "content-type": "text/html; charset=UTF-8" } });
 }
+
+export const __test = {
+  auditedXFetch,
+  redactedResponseShape,
+};

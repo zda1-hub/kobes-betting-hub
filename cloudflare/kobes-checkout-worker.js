@@ -32,7 +32,7 @@ const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing']);
 const headers = (origin) => ({
   'Access-Control-Allow-Origin': ALLOWED_SITE_ORIGINS.has(origin) ? origin : SITE_ORIGIN,
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Checkout-Request-Id',
   Vary: 'Origin',
   'Content-Type': 'application/json; charset=utf-8',
 });
@@ -91,13 +91,17 @@ async function auditExternalCall(env, values) {
   }
 }
 
-async function stripe(env, path, values) {
+async function stripe(env, path, values, { idempotencyKey, clientRequestId } = {}) {
   const body = values ? form(values) : undefined;
   const operationId = crypto.randomUUID();
   const startedAt = Date.now();
   const response = await fetch(`${STRIPE_API}${path}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+    },
     body,
   });
   const responseText = await response.text();
@@ -105,6 +109,7 @@ async function stripe(env, path, values) {
   await auditExternalCall(env, {
     service: 'stripe', endpointClass: path, method: 'POST', operationId,
     providerRequestId: response.headers.get('request-id'),
+    clientRequestId,
     requestPayloadSha256: await sha256Text(body?.toString()),
     responsePayloadSha256: await sha256Text(responseText), responseStatus: response.status,
     outcome: response.ok ? 'SUCCEEDED' : 'HTTP_ERROR', errorClass: response.ok ? null : 'HTTP_ERROR',
@@ -649,6 +654,11 @@ async function createCheckout(request, env, origin) {
   let data;
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
   if (!['starter', 'trial_2_day'].includes(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
+  const suppliedRequestId = request.headers.get('X-Checkout-Request-Id');
+  if (suppliedRequestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(suppliedRequestId)) {
+    return json({ error: 'Invalid checkout request ID.' }, 400, origin);
+  }
+  const requestId = suppliedRequestId?.toLowerCase() || crypto.randomUUID();
   if (!env.STRIPE_SECRET_KEY || !env.STRIPE_MONTHLY_PRICE_ID || (data.offer === 'starter' && !env.STRIPE_STARTER_PRICE_ID)) {
     return json({ error: 'Checkout is being finalized. Please try again shortly.' }, 503, origin);
   }
@@ -673,7 +683,10 @@ async function createCheckout(request, env, origin) {
     values['line_items[1][quantity]'] = 1;
   }
   try {
-    const session = await stripe(env, '/checkout/sessions', values);
+    const session = await stripe(env, '/checkout/sessions', values, {
+      idempotencyKey: requestId,
+      clientRequestId: requestId,
+    });
     return json({ url: session.url }, 200, origin);
   } catch (error) {
     return json({ error: error.message }, 502, origin);
