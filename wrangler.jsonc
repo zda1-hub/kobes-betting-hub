@@ -51,6 +51,8 @@
         "STRIPE_FIRST_MONTH_COUPON": "",
         "STRIPE_GLOBAL_PAYOUTS_VERSION": "2026-08-26.preview",
         "STRIPE_MONTHLY_PRICE_ID": "price_1U8UpxE6p9BmPii3GoBjAXII",
+        "STRIPE_PORTAL_CONFIGURATION_ID": "bpc_1UF9gPE6p9BmPii3pI6NPPAn",
+        "STRIPE_RETENTION_COUPON_ID": "VJxmdXFz",
         "STRIPE_STARTER_PRICE_ID": "price_1U8UpLE6p9BmPii3ErYC4FPr",
         "SITE_ORIGIN": "https://kobes-betting-hub-staging.kobedirwin.workers.dev",
         "SUPABASE_URL": "https://ctqmksvfqrysomvckqrm.supabase.co"
