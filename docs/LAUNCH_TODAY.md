@@ -23,8 +23,9 @@ Release type: public beta with monitored improvement while live
 - [x] Discord approval hotfix `6989dd1` is live on Render; startup was healthy and refreshed three pending locked-format cards.
 - [x] Daily zero-pick email is silent. The broken five-minute Apps Script trigger is deleted; the useful daily trigger remains at 0% displayed error.
 - [x] The daily Apps Script source is versioned and protected by four source-invariant tests.
-- [x] Image-backed Free Pick transport is covered locally for exact bytes, single multipart publication, text fallback, and missing-credential failure. The full release suite passes `184/184`.
+- [x] Image-backed Free Pick transport is covered locally for exact bytes, single multipart publication, text fallback, and missing-credential failure. The full release suite passes `185/185`.
 - [x] Isolated image-backed Free Pick acceptance passed on a dedicated staging Worker/storage pair: authorized `201`, unauthorized `401`, exact 68-byte PNG retrieval, X disconnected/not called, and fixture cleanup verified by `404`.
+- [x] Server-side checkout abuse protection is live in Worker `ff778d91-c34c-4b49-92c9-dfa02785fa37`; staging returned `429`/`Retry-After: 60` before Stripe and production retained its seven secrets, reconciliation cron, health, and `5/5` smoke.
 - [x] Luna, durable X cursor/dedupe, two-new-model-calls-per-run cap, and daily/monthly OpenAI hard stops are live.
 - [x] X-source publication remains disabled; all monitored candidates require private human approval.
 
@@ -72,7 +73,7 @@ When all three sections pass, Zakai records `PUBLIC BETA GO` with timestamp, pro
 - [ ] Publish support hours and a response target; support remains manually operated until then.
 - [x] Run one isolated staging image-backed Free Pick and verify the retrieved media before relying on that path; evidence and cleanup are recorded in `docs/STAGING_IMAGE_FREE_PICK_AUDIT_2026-09-13.md`.
 - [ ] Complete approved-pick recap email and Trends intake/approval acceptance.
-- [ ] Add server-side checkout abuse protection before broad public marketing.
+- [x] Add server-side checkout abuse protection before broad public marketing.
 - [ ] Close remaining Apps Script and Discord pre-response API-audit gaps.
 - [ ] Expand deterministic ESPN grading coverage; unsupported markets remain manual.
 - [ ] Build the operator dashboard and add marketing only after the public-beta mechanics are stable.

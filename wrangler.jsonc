@@ -18,6 +18,16 @@
   "triggers": {
     "crons": ["15 16 * * *"]
   },
+  "ratelimits": [
+    {
+      "name": "CHECKOUT_RATE_LIMITER",
+      "namespace_id": "42027101",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    }
+  ],
   "vars": {
     "DISCORD_CLIENT_ID": "1541299881044615238",
     "DISCORD_GUILD_ID": "1215407647155683358",
@@ -41,6 +51,16 @@
       "triggers": {
         "crons": []
       },
+      "ratelimits": [
+        {
+          "name": "CHECKOUT_RATE_LIMITER",
+          "namespace_id": "42027102",
+          "simple": {
+            "limit": 10,
+            "period": 60
+          }
+        }
+      ],
       // Wrangler does not inherit vars into named environments. Keep every external
       // resource here test-only; these placeholders deliberately fail closed.
       "vars": {

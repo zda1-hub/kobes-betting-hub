@@ -329,6 +329,43 @@ test('checkout remains compatible with clients that omit a request ID', async (t
   assert.match(idempotencyKey, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
+test('checkout rate limiting blocks excess attempts before Stripe is called', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    throw new Error('Stripe must not be called after the limiter rejects an attempt');
+  };
+  const seenKeys = [];
+  const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'CF-Connecting-IP': '203.0.113.42',
+      'User-Agent': 'checkout-test-client',
+    },
+    body: JSON.stringify({ offer: 'trial_2_day' }),
+  }), {
+    CHECKOUT_RATE_LIMITER: {
+      async limit({ key }) {
+        seenKeys.push(key);
+        return { success: false };
+      },
+    },
+    STRIPE_SECRET_KEY: 'sk_test_local_only',
+    STRIPE_MONTHLY_PRICE_ID: 'price_monthly',
+  });
+
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get('Retry-After'), '60');
+  assert.match((await response.json()).error, /wait one minute/i);
+  assert.equal(fetchCalls, 0);
+  assert.equal(seenKeys.length, 1);
+  assert.match(seenKeys[0], /^create-checkout:[0-9a-f]{64}$/);
+  assert.equal(seenKeys[0].includes('203.0.113.42'), false);
+});
+
 test('checkout CORS preflight permits the request ID header', async () => {
   const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
     method: 'OPTIONS',

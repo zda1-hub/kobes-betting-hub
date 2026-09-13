@@ -19,6 +19,9 @@
  *   DISCORD_REDIRECT_URI       Worker callback URL registered in Discord
  *   SUPABASE_URL               Existing Kobe's Betting Hub Supabase project URL
  *   SITE_ORIGIN                Required non-production site origin when APP_ENV=staging
+ *
+ * Required Worker binding:
+ *   CHECKOUT_RATE_LIMITER      Per-client create-checkout limiter (10 attempts/minute)
  */
 
 const SITE_ORIGIN = 'https://kobesbettinghub.com';
@@ -49,6 +52,28 @@ const headers = (origin) => ({
 
 const json = (body, status = 200, origin) => new Response(JSON.stringify(body), { status, headers: headers(origin) });
 const form = (data) => new URLSearchParams(Object.entries(data).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)]));
+
+async function checkoutRateLimitResponse(request, env, origin) {
+  if (!env.CHECKOUT_RATE_LIMITER?.limit) return null;
+  // Checkout has no authenticated user yet. A hash of network and client hints
+  // avoids retaining the raw values while a generous limit minimizes shared-IP
+  // false positives. Stripe idempotency remains the duplicate-charge control.
+  const actor = [
+    request.headers.get('cf-connecting-ip') || 'unknown-network',
+    request.headers.get('user-agent') || 'unknown-client',
+  ].join('|');
+  try {
+    const { success } = await env.CHECKOUT_RATE_LIMITER.limit({ key: `create-checkout:${await sha256Text(actor)}` });
+    if (success) return null;
+    return new Response(JSON.stringify({ error: 'Too many checkout attempts. Please wait one minute and try again.' }), {
+      status: 429,
+      headers: { ...headers(origin), 'Retry-After': '60' },
+    });
+  } catch (error) {
+    console.error('Checkout rate limiter unavailable; Stripe idempotency remains active.', error?.message || error);
+    return null;
+  }
+}
 
 function siteOrigin(env) {
   if (env?.APP_ENV !== 'staging') return SITE_ORIGIN;
@@ -1454,7 +1479,10 @@ export default {
     if (request.method === 'GET' && url.pathname === '/referrals/login') return startReferralLogin(request, env);
     if (request.method === 'GET' && url.pathname === '/referrals/onboard') return startPayoutOnboarding(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/callback') return finishDiscordConnection(request, env);
-    if (request.method === 'POST' && url.pathname === '/create-checkout') return createCheckout(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/create-checkout') {
+      const limited = await checkoutRateLimitResponse(request, env, origin);
+      return limited || createCheckout(request, env, origin);
+    }
     if (request.method === 'POST' && ['/cancel/retain', '/cancel/confirm'].includes(url.pathname)) return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'POST' && url.pathname === '/stripe-webhook') return handleWebhook(request, env);
     return json({ error: 'Not found.' }, 404, origin);
@@ -1467,6 +1495,7 @@ export default {
 export const __test = {
   REFERRAL_REWARD_CENTS,
   claimDiscordLink,
+  checkoutRateLimitResponse,
   createDiscordState,
   discordAuthorizationUrl,
   ensurePerMemberRetentionCoupon,
