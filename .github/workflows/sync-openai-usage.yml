@@ -54,7 +54,6 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       PRODUCTION_BACKUP_KEY: ${{ secrets.PRODUCTION_BACKUP_KEY }}
-      PRODUCTION_BACKUP_DIR: ${{ runner.temp }}/kbh-production-backup
     steps:
       - name: Check out the approved release source
         uses: actions/checkout@v4
