@@ -15,7 +15,7 @@
 
 ## Work Zakai and Codex can finish today
 
-1. **Freeze a production membership candidate.** Build it from current `origin/main`, include only reviewed membership/audit changes, record the exact commit and rollback versions, and rerun the full suite.
+1. **Production membership candidate — complete.** Branch `codex/membership-production-candidate`, commit `5420cae`, is frozen from production `main` base `0c35e46`. Its focused exact-main suite passes 154/154, production smoke passes 5/5, and no production state was changed.
 2. **Verify production database recovery.** Record a current encrypted logical backup or confirmed recovery checkpoint before migrations. Do not assume the Supabase free tier provides point-in-time recovery.
 3. **Review the production migration plan.** Plan only migrations `007`, `008`, and `009` against project `mpajyubbnnsdpgdizvht`; verify hashes, RLS, grants, affected row counts, and old-code compatibility.
 4. **Finish adverse billing staging evidence.** Test failed payment/recovery, partial refund, full refund, dispute creation/resolution, and a single-member audited restoration. These remain isolated from real customers and production.
