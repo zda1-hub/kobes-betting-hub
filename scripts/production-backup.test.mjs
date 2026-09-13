@@ -21,7 +21,8 @@ test('production backup is locked to the production project and encrypted before
   assert.match(script, /sslmode=(?:require|verify-ca|verify-full)/);
   assert.match(script, /pg_dump/);
   assert.match(script, /openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000/);
-  assert.match(script, /pg_restore --list >\/dev\/null/);
+  assert.match(script, /pg_restore --list >\/dev\/null \|\| restore_status=\$\?/);
+  assert.match(script, /cat >\/dev\/null/);
   assert.doesNotMatch(script, /pg_restore --list -/);
   assert.doesNotMatch(script, /echo .*database_url/i);
 
