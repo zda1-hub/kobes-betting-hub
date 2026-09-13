@@ -1,6 +1,6 @@
 # X monitor latency audit — 2026-09-13
 
-Status: production remediation approved by Zakai Martin, isolated on top of `origin/main`, and ready for deployment verification. Automatic public X/source publishing remains disabled.
+Status: production remediation approved by Zakai Martin, deployed and verified on Render. Automatic public X/source publishing remains disabled.
 
 ## Read-only production evidence
 
@@ -35,6 +35,11 @@ At that measured size, a full two-call cycle is approximately `$0.00098` and a f
 - Full launch-candidate branch suite: 177/177 passing.
 - Hotfix rebased onto the exact production base: 121/121 passing.
 - `git diff --check`: passing.
-- Required live acceptance: confirm the Render deployment commit, then verify the next production cycle writes no generic-media replay storm, starts no more than six Luna calls, and sends only qualifying private cards to `#pick-approvals`.
+- Production `main` deployed exact commit `518161b97b8645631bf1412996d8a208f35f8d86` successfully on Render at 10:35 Arizona time.
+- Startup confirmed 38 enabled X sources and 12 bounded intake workers.
+- The live worker used exactly 6/6 permitted Luna calls; the independent daily and monthly limits remained unchanged.
+- Deferred candidates fell from 476 on the first remediated startup that was still subject to the stale two-call Render override to 85 after the override was corrected to six, an 82% reduction.
+- The first remediated production startup created one private review packet. The six-call verification cycle created none because its inspected items were rejected or held by the existing event and writeup-quality gates, not because of the model-call bottleneck.
+- No automatic public source publishing was enabled or performed.
 
 No public Discord, X, email, checkout, member, or billing action is authorized by this change.
