@@ -463,9 +463,11 @@ async function publishFreePick(request, env) {
     await putFreePickObject(env, objectKey, image, contentType, "public, max-age=31536000, immutable");
   }
 
-  const pick = { publishedDate, caption, details, objectKey, updatedAt: new Date().toISOString(), xStatus: image ? "pending" : "not_requested" };
+  const xEnabled = Boolean(env.X_CLIENT_ID);
+  const pick = { publishedDate, caption, details, objectKey, updatedAt: new Date().toISOString(), xStatus: image && xEnabled ? "pending" : "not_requested" };
   await writeFreePick(pick, env);
   if (!image) return json({ ...publicFreePick(pick, new URL(request.url).origin), xPosted: false, message: "Text-only Free Pick published to the website." }, 201);
+  if (!xEnabled) return json({ ...publicFreePick(pick, new URL(request.url).origin), xPosted: false, message: "Image Free Pick published to the website; X is disabled in this environment." }, 201);
   try {
     const xPostId = await publishFreePickToX(image, contentType, caption, env);
     pick.xStatus = "published";
@@ -742,6 +744,9 @@ async function readXToken(env) {
 }
 
 async function hasXConnection(env) {
+  // An intentionally isolated environment has no X client binding and must not
+  // touch the OAuth database merely to answer its readiness probe.
+  if (!env.X_CLIENT_ID) return false;
   const row = await env.DB.prepare("SELECT 1 AS connected FROM oauth_tokens WHERE provider = ?").bind("x").first();
   return Boolean(row?.connected);
 }

@@ -34,5 +34,41 @@
   "vars": {
     "RECAP_NOTIFICATION_RECIPIENT": "kobedirwin@gmail.com",
     "X_CLIENT_ID": "MHhtSGlFT2ZsazNOWmhIeWdqNVA6MTpjaQ"
+  },
+  "env": {
+    "staging": {
+      "name": "bettinghub-publisher-staging",
+      "workers_dev": true,
+      "preview_urls": false,
+      "version_metadata": {
+        "binding": "CF_VERSION_METADATA"
+      },
+      "observability": {
+        "enabled": true,
+        "logs": {
+          "head_sampling_rate": 1
+        }
+      },
+      "triggers": {
+        "crons": []
+      },
+      "vars": {
+        "RECAP_NOTIFICATION_RECIPIENT": "",
+        "X_CLIENT_ID": ""
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "bettinghub-publisher-staging",
+          "database_id": "b75fa523-7bd9-4c65-b19d-10ea54a3f5c5"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "FREE_PICK_KV",
+          "id": "1796c6de13894ecfa0355298633317e4"
+        }
+      ]
+    }
   }
 }

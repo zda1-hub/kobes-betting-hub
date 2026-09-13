@@ -78,6 +78,19 @@ test('text-only Free Pick remains readable after publication', async () => {
   assert.equal(current.imageUrl, null);
 });
 
+test('isolated staging health does not require an X binding or OAuth table', async () => {
+  const response = await worker.fetch(new Request('https://publisher.test/health'), {
+    FREE_PICK_KV: memoryKv(),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    service: 'bettinghub-publisher',
+    status: 'ready',
+    xConnected: false,
+    freePickReady: true,
+  });
+});
+
 test('audited X fetch writes a durable redacted D1 record with Worker attribution', async () => {
   const db = auditDb();
   const env = { DB: db, CF_VERSION_METADATA: { id: 'publisher-version-test' } };

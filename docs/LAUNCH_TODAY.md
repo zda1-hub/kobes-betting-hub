@@ -23,7 +23,8 @@ Release type: public beta with monitored improvement while live
 - [x] Discord approval hotfix `6989dd1` is live on Render; startup was healthy and refreshed three pending locked-format cards.
 - [x] Daily zero-pick email is silent. The broken five-minute Apps Script trigger is deleted; the useful daily trigger remains at 0% displayed error.
 - [x] The daily Apps Script source is versioned and protected by four source-invariant tests.
-- [x] Image-backed Free Pick transport is covered locally for exact bytes, single multipart publication, text fallback, and missing-credential failure. The full release suite passes `183/183`.
+- [x] Image-backed Free Pick transport is covered locally for exact bytes, single multipart publication, text fallback, and missing-credential failure. The full release suite passes `184/184`.
+- [x] Isolated image-backed Free Pick acceptance passed on a dedicated staging Worker/storage pair: authorized `201`, unauthorized `401`, exact 68-byte PNG retrieval, X disconnected/not called, and fixture cleanup verified by `404`.
 - [x] Luna, durable X cursor/dedupe, two-new-model-calls-per-run cap, and daily/monthly OpenAI hard stops are live.
 - [x] X-source publication remains disabled; all monitored candidates require private human approval.
 
@@ -69,7 +70,7 @@ When all three sections pass, Zakai records `PUBLIC BETA GO` with timestamp, pro
 - [ ] Monitor Kobe's later production entitlement-end event and confirm role removal.
 - [ ] Add external owner alerts for paid-without-access and reconciliation failures.
 - [ ] Publish support hours and a response target; support remains manually operated until then.
-- [ ] Run one isolated staging image-backed Free Pick and verify the retrieved media before relying on that path; local transport tests already pass.
+- [x] Run one isolated staging image-backed Free Pick and verify the retrieved media before relying on that path; evidence and cleanup are recorded in `docs/STAGING_IMAGE_FREE_PICK_AUDIT_2026-09-13.md`.
 - [ ] Complete approved-pick recap email and Trends intake/approval acceptance.
 - [ ] Add server-side checkout abuse protection before broad public marketing.
 - [ ] Close remaining Apps Script and Discord pre-response API-audit gaps.
