@@ -384,16 +384,9 @@ function buildSourcePickEmbed(packet, destinationLabel) {
 }
 
 function buildSourcePickApprovalEmbed(packet, destinationLabel) {
-  // The approval card begins with the exact member-facing post. The only
-  // private addition is a source link at the bottom, so Kobe can inspect the
-  // original without having to parse operational metadata before deciding.
-  const embed = buildSourcePickEmbed(packet, destinationLabel);
-  const sourceUrl = visible(packet.source?.post_url, '');
-  if (!sourceUrl) return embed;
-  return {
-    ...embed,
-    description: `${embed.description}\n\n[Open original X post](${sourceUrl})`.slice(0, 4096)
-  };
+  // Kobe approves the exact member-facing content. Source URLs and operational
+  // metadata live only in the durable audit ledger, never in the card body.
+  return buildSourcePickEmbed(packet, destinationLabel);
 }
 
 function buttonLabel(value, fallback) {

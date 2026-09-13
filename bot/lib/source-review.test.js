@@ -44,11 +44,10 @@ test('formats a writeup source in Kobe’s pick-first layout', () => {
   assert.equal(embed.image.url, 'https://example.com/player-photo.png');
 });
 
-test('keeps the approval card identical to the member post except for the source link at the bottom', () => {
-  const sourcePost = 'https://x.com/ExampleSource/status/123';
-  const approval = buildSourcePickApprovalEmbed({ ...packet, source: { ...packet.source, post_url: sourcePost } }, 'FREE PICK');
+test('keeps the approval card exactly identical to the member post with no source URL', () => {
+  const approval = buildSourcePickApprovalEmbed({ ...packet, source: { ...packet.source, post_url: 'https://x.com/ExampleSource/status/123' } }, 'FREE PICK');
   const memberPost = buildSourcePickEmbed(packet, 'FREE PICK');
-  assert.equal(approval.description, `${memberPost.description}\n\n[Open original X post](${sourcePost})`);
+  assert.deepEqual(approval, memberPost);
   assert.equal(memberPost.description.includes('original X post'), false);
 });
 
@@ -353,7 +352,7 @@ test('keeps a regular approval card usable when units and odds are absent', () =
       }
     }
   }, 'NFL PICK');
-  assert.equal(approval.description, 'Patriots-Seahawks UNDER 44.5\n\n[Open original X post](https://x.com/ExampleSource/status/456)');
+  assert.equal(approval.description, 'Patriots-Seahawks UNDER 44.5');
 });
 
 test('does not approve a player prop when the player name is absent', () => {

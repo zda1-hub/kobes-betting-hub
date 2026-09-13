@@ -28,6 +28,28 @@ services:
         sync: false
       - key: PICK_LOG_PATH
         sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: AUDIT_DATABASE_REQUIRED
+        sync: false
+      - key: OPENAI_PICK_PROMPT_VERSION
+        value: source-pick-extraction-v1
+      - key: OPENAI_PICK_ANALYSIS_MODEL
+        value: gpt-5.6-luna
+      - key: OPENAI_PICK_REASONING_EFFORT
+        value: none
+      - key: OPENAI_PICK_MAX_OUTPUT_TOKENS
+        value: "3000"
+      - key: OPENAI_PICK_IMAGE_DETAIL
+        value: high
+      - key: OPENAI_PICK_INPUT_USD_PER_MILLION
+        value: "0.20"
+      - key: OPENAI_PICK_CACHED_INPUT_USD_PER_MILLION
+        value: "0.02"
+      - key: OPENAI_PICK_OUTPUT_USD_PER_MILLION
+        value: "1.20"
+      - key: OPENAI_PRICING_VERSION
+        value: gpt-5.6-luna-2026-09-12-list
       - key: FREE_PICK_X_SYNC_ENABLED
         value: "false"
       - key: FREE_PICK_X_PUBLISH_URL
@@ -40,6 +62,8 @@ services:
         sync: false
       - key: X_MONITOR_ENABLED
         sync: false
+      - key: X_MONITORING_ROOT
+        value: /var/data/x-monitoring
       - key: X_MONITOR_START_AT
         sync: false
       - key: X_MONITOR_STOP_AT

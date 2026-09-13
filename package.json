@@ -11,13 +11,15 @@
     "trends:espn": "node pipeline/generate-espn-trends.js",
     "test:real-x-pick": "node pipeline/test-real-x-pick.js",
     "prepare:approval": "node pipeline/prepare-approval.js",
-    "test": "node --test bot/**/*.test.js pipeline/**/*.test.js"
+    "migrate:audit": "node pipeline/migrate-audit.js",
+    "test": "node --test bot/**/*.test.js pipeline/**/*.test.js cloudflare/*.test.mjs"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "dependencies": {
     "discord.js": "^14.22.1",
-    "dotenv": "^16.6.1"
+    "dotenv": "^16.6.1",
+    "pg": "^8.16.3"
   }
 }

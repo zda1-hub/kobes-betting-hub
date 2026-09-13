@@ -146,21 +146,20 @@ for every Pick ID, verify results and calculations, then publish the recap. Pend
 results remain visible and roll forward. Late corrections receive a timestamped
 note in the next recap and in the log.
 
-### Automatic free-pick recap
+### Automatic recap email for Kobe
 
-The worker also creates a separate compact `Free Picks Recap` for the current
-Pacific operating date. It reads only official posts from the configured free
-pick channel and displays a plain prop list with W/L/P/V results, that day’s
-record, and the cumulative free-pick record. It intentionally omits writeups,
-source accounts, confidence, images, X references, and member-channel picks.
+The worker creates a compact official-pick recap for the current Pacific
+operating date. It reads only successfully published rows from the canonical
+pick log and includes their verified W/L/P/V results. Approval-only, rejected,
+and failed-send candidates are excluded.
 
-The recap posts to `FREE_RECAP_CHANNEL_ID` (or `RECAP_CHANNEL_ID`) as soon as
-the daily free-pick approval window has closed (15:00 Arizona by default) and
-every free pick has a verified non-pending grade in `pick-log.csv`. It checks
-every five minutes. A game still in progress does not create a pending notice;
-the worker waits for ESPN to mark it final. If a result remains unresolved
-after the games are final, it notifies Kobe and keeps retrying rather than
-inventing a grade.
+After the approval window closes (15:00 Arizona by default) and every published
+pick has a verified non-pending grade, the worker emails the recap to Kobe for
+review. It does not automatically publish the recap to a public Discord
+channel. A game still in progress does not create a pending notice; the worker
+waits for ESPN to mark it final. If a result remains unresolved after the games
+are final, it emails Kobe a waiting notice and keeps retrying rather than
+inventing a grade. Only Kobe can use `/publish-recap` after review.
 
 ### Canonical-log hosting requirement
 

@@ -18,6 +18,16 @@ const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timin
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { enrichPacket } = require('../pipeline/enrich-pick');
 const { runCollector } = require('../pipeline/collect-x');
+const {
+  auditConfigured,
+  initializeAuditStore,
+  recordApprovalAction,
+  recordGradeAttempt,
+  recordPublicationAttempt,
+  recordPublicationResult,
+  recordRecapRun,
+  readAuditTimeline
+} = require('../pipeline/audit-store');
 
 const required = ['DISCORD_TOKEN'];
 for (const name of required) {
@@ -183,9 +193,19 @@ async function autoGradePendingOfficialPicks(date) {
     && resultFor(row) === 'PENDING'
   ));
   for (const row of pending) {
+    await recordGradeAttempt({ pickId: row.pick_id, result: null, status: 'STARTED', provider: 'ESPN' });
     const grade = await gradePickFromEspn(row);
     attempts.set(row.pick_id, grade);
     if (grade.status !== 'GRADED') {
+      await recordGradeAttempt({
+        pickId: row.pick_id,
+        result: null,
+        status: grade.status || 'PENDING',
+        provider: 'ESPN',
+        sourceReference: grade.source || null,
+        snapshot: grade,
+        errorDetail: grade.reason || 'Not enough verified ESPN data.'
+      });
       console.log(`Automatic grading kept ${row.pick_id} pending: ${grade.reason || 'not enough verified ESPN data'}.`);
       continue;
     }
@@ -199,6 +219,14 @@ async function autoGradePendingOfficialPicks(date) {
     });
     const net = netUnitsFor(updated);
     if (net !== null) await updateOfficialPick(row.pick_id, { net_units: net });
+    await recordGradeAttempt({
+      pickId: row.pick_id,
+      result: grade.result,
+      status: 'GRADED',
+      provider: 'ESPN',
+      sourceReference: grade.source || null,
+      snapshot: grade
+    });
     console.log(`Automatically graded ${row.pick_id} as ${grade.result} from ESPN.`);
   }
   return attempts;
@@ -222,11 +250,15 @@ async function publishDueFreeRecap(date) {
       if (!emailAlreadyHandled) {
         const rows = await readPickLog();
         const embeds = buildLogRecapEmbeds({ date, rows });
+        const includedPickIds = recapRows(rows, date).map((row) => row.pick_id);
+        const content = recapEmailBody(embeds).replaceAll('**', '');
+        await recordRecapRun({ operatingDate: date, includedPickIds, status: 'EMAIL_SEND_STARTED', recipient: recapNotificationRecipient, content, details: { recovered_from_legacy_state: true } });
         const emailStatus = await queueRecapNotification({
           id: `official-recap-final-${date}`,
           subject: `Kobe's Betting Hub — Daily Recap (${date})`,
-          body: recapEmailBody(embeds).replaceAll('**', '')
+          body: content
         });
+        await recordRecapRun({ operatingDate: date, includedPickIds, status: emailStatus, recipient: recapNotificationRecipient, content, details: { recovered_from_legacy_state: true } });
         state.dates[date] = { ...prior, email_status: emailStatus, email_queued_at: new Date().toISOString() };
         await saveFreeRecapState(state);
       }
@@ -238,7 +270,7 @@ async function publishDueFreeRecap(date) {
       && isPublishedRow(row)
     ));
     if (!picks.length) {
-      console.log(`No successfully published official picks were logged for ${date}; no recap was posted.`);
+      console.log(`No successfully published official picks were logged for ${date}; no recap email was sent.`);
       return;
     }
     const gradingAttempts = await autoGradePendingOfficialPicks(date);
@@ -263,10 +295,27 @@ async function publishDueFreeRecap(date) {
       const previous = state.dates?.[date] || {};
       const emailAlreadyHandled = ['QUEUED', 'ALREADY_QUEUED'].includes(previous.email_status);
       if (previous.pending_ids !== pendingIds || !emailAlreadyHandled) {
+        const pendingContent = `Pending verified results: ${pendingIds}`;
+        await recordRecapRun({
+          operatingDate: date,
+          includedPickIds: pending.map((row) => row.pick_id),
+          status: 'PENDING_NOTICE_SEND_STARTED',
+          recipient: recapNotificationRecipient,
+          content: pendingContent,
+          details: { pending_ids: pendingIds }
+        });
         const emailStatus = await queueRecapNotification({
           id: notificationId,
           subject: `Kobe's Betting Hub — Daily recap waiting (${date})`,
-          body: `The daily recap for ${date} is waiting for verified results for: ${pendingIds}.\n\nThe bot will retry ESPN grading and post the recap automatically once every result is settled.`
+          body: `The daily recap for ${date} is waiting for verified results for: ${pendingIds}.\n\nThe bot will retry ESPN grading and email the recap for Kobe's review once every result is settled.`
+        });
+        await recordRecapRun({
+          operatingDate: date,
+          includedPickIds: pending.map((row) => row.pick_id),
+          status: `PENDING_RESULTS_${emailStatus}`,
+          recipient: recapNotificationRecipient,
+          content: pendingContent,
+          details: { pending_ids: pendingIds }
         });
         state.dates = { ...(state.dates || {}), [date]: { status: 'PENDING_RESULTS', pending_ids: pendingIds, notified_at: new Date().toISOString(), email_status: emailStatus } };
         await saveFreeRecapState(state);
@@ -275,18 +324,23 @@ async function publishDueFreeRecap(date) {
       return;
     }
     const embeds = buildLogRecapEmbeds({ date, rows });
+    const content = recapEmailBody(embeds).replaceAll('**', '');
+    const includedPickIds = picks.map((row) => row.pick_id);
     let emailStatus;
     try {
+      await recordRecapRun({ operatingDate: date, includedPickIds, status: 'EMAIL_SEND_STARTED', recipient: recapNotificationRecipient, content });
       emailStatus = await queueRecapNotification({
         id: `official-recap-final-${date}`,
         subject: `Kobe's Betting Hub — Daily Recap (${date})`,
-        body: recapEmailBody(embeds).replaceAll('**', '')
+        body: content
       });
     } catch (error) {
+      await recordRecapRun({ operatingDate: date, includedPickIds, status: 'EMAIL_FAILED', recipient: recapNotificationRecipient, content, errorDetail: error instanceof Error ? error.message : String(error) });
       state.dates[date] = { ...(state.dates[date] || {}), status: 'EMAIL_PENDING', scope: 'official', email_status: 'FAILED' };
       await saveFreeRecapState(state);
       throw error;
     }
+    await recordRecapRun({ operatingDate: date, includedPickIds, status: emailStatus, recipient: recapNotificationRecipient, content });
     state.dates[date] = { ...(state.dates[date] || {}), status: 'EMAIL_SENT', scope: 'official', emailed_at: new Date().toISOString(), email_status: emailStatus };
     await saveFreeRecapState(state);
     console.log(`Emailed automatic official-pick recap for ${date} to the configured Kobe recipient.`);
@@ -764,16 +818,52 @@ async function hubStatusText() {
   const monitorState = !xEnabled ? 'off' : (xMonitorIntervalTimer ? 'running' : 'scheduled / stopped for the current window');
   const durableLog = pickLogPath().startsWith('/var/data/') ? 'configured' : 'not using /var/data';
   const emailConfigured = Boolean(recapNotificationQueueUrl && recapNotificationQueueSecret && recapNotificationRecipient);
+  const auditState = auditConfigured()
+    ? (process.env.AUDIT_DATABASE_REQUIRED === 'true' ? 'required and connected at startup' : 'connected; fail-closed mode is not enabled')
+    : 'not configured — CSV/JSON only';
   return [
     `**Workflow:** ${paused ? 'paused — no posts can publish' : 'ready'}`,
     `**X monitor:** ${monitorState}`,
     `**Free picks today:** ${freeToday}${limit === null ? '' : ` / ${limit}`}`,
     `**Pending free results:** ${pendingFree}`,
     `**Pick log:** ${durableLog}`,
+    `**Database audit:** ${auditState}`,
     `**Automatic grading:** ${process.env.AUTO_GRADE_FREE_PICKS === 'false' ? 'off' : 'on (ESPN)'}`,
     `**Automatic recap email:** ${freeRecapEnabled() && emailConfigured ? `on after ${freeRecapCloseAt()} Arizona time for every successfully published pick` : 'not configured'}`,
     `**Recap email:** ${emailConfigured ? 'connected' : 'not configured'}`
   ].join('\n');
+}
+
+function auditTimestamp(value) {
+  if (!value) return 'unknown time';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
+}
+
+function auditTimelineText(timeline) {
+  if (!timeline.configured) return 'The Postgres audit ledger is not configured. This deployment cannot provide a complete pick timeline.';
+  if (!timeline.found) return 'No audited source post or Pick ID matched that identifier.';
+  const lines = [
+    `**Source:** @${timeline.source.source_handle} — ${timeline.source.post_url || timeline.source.external_post_id}`,
+    `**Posted:** ${auditTimestamp(timeline.source.posted_at)}`,
+    `**Extractions:** ${timeline.extractions.length} | **Candidates:** ${timeline.candidates.length} | **Approval cards:** ${timeline.approvals.length} | **Publications:** ${timeline.publications.length}`
+  ];
+  for (const run of timeline.extractions.slice(-3)) {
+    const usage = [run.input_tokens === null ? null : `${run.input_tokens} in`, run.image_tokens === null ? null : `${run.image_tokens} image`, run.output_tokens === null ? null : `${run.output_tokens} out`].filter(Boolean).join(', ');
+    const cost = run.estimated_cost_usd === null ? '' : `, est. $${Number(run.estimated_cost_usd).toFixed(6)}`;
+    lines.push(`- ${auditTimestamp(run.started_at)} — extraction ${run.status} (${run.model}${usage ? `; ${usage}` : ''}${cost})`);
+  }
+  for (const event of timeline.events.slice(-10)) {
+    const code = event.details?.rejection_code ? ` — ${event.details.rejection_code}` : '';
+    lines.push(`- ${auditTimestamp(event.occurred_at)} — ${event.event_type}${event.candidate_key ? ` [${event.candidate_key}]` : ''}${code}`);
+  }
+  for (const publication of timeline.publications.slice(-3)) {
+    lines.push(`- ${auditTimestamp(publication.published_at || publication.created_at)} — publication ${publication.status} [${publication.pick_id}]${publication.post_reference ? ` ${publication.post_reference}` : ''}`);
+  }
+  for (const grade of timeline.grades.slice(-3)) {
+    lines.push(`- ${auditTimestamp(grade.created_at)} — grade ${grade.status}${grade.result ? ` ${grade.result}` : ''} [${grade.pick_id}]`);
+  }
+  return lines.join('\n').slice(0, 1950);
 }
 
 function isPublisher(interaction) {
@@ -858,27 +948,47 @@ async function syncApprovedPickToDailyQueue(entry) {
   console.log(`Daily Picks queue synced for ${entry.pick_id}.`);
 }
 
-async function postAndLogOfficialPick({ channel, payload, entry }) {
-  await appendOfficialPick(entry);
+async function postAndLogOfficialPick({ channel, payload, entry, packet = null }) {
+  await recordPublicationAttempt(packet, { entry, payload });
   try {
-    const message = await channel.send(payload);
-    await updateOfficialPick(entry.pick_id, {
-      post_reference: discordPostReference(channel, message),
-      status: 'PUBLISHED'
-    });
-    try {
-      await syncApprovedPickToDailyQueue(entry);
-    } catch (error) {
-      console.error('Published pick was not synced to Daily Picks; retry is safe because the queue is idempotent.', { pickId: entry.pick_id, message: error instanceof Error ? error.message : String(error) });
-    }
-    return message;
+    await appendOfficialPick(entry);
   } catch (error) {
-    await updateOfficialPick(entry.pick_id, {
-      status: 'POST_FAILED',
-      notes: `Discord post failed: ${error instanceof Error ? error.message : String(error)}`
-    });
+    await recordPublicationResult(packet, { pickId: entry.pick_id, status: 'LOG_FAILED', errorDetail: error instanceof Error ? error.message : String(error) });
     throw error;
   }
+
+  let message;
+  try {
+    message = await channel.send(payload);
+  } catch (error) {
+    const errorDetail = error instanceof Error ? error.message : String(error);
+    await updateOfficialPick(entry.pick_id, { status: 'POST_FAILED', notes: `Discord post failed: ${errorDetail}` });
+    await recordPublicationResult(packet, { pickId: entry.pick_id, status: 'POST_FAILED', errorDetail });
+    throw error;
+  }
+
+  const postReference = discordPostReference(channel, message);
+  await updateOfficialPick(entry.pick_id, { post_reference: postReference, status: 'PUBLISHED' });
+  try {
+    await recordPublicationResult(packet, {
+      pickId: entry.pick_id,
+      channelId: channel.id,
+      messageId: message.id,
+      postReference,
+      status: 'PUBLISHED'
+    });
+  } catch (error) {
+    // The pre-publication database row is a durable outbox receipt. If the
+    // final update fails after Discord accepts the post, preserve the real
+    // public success and leave the PUBLISHING row available for reconciliation.
+    console.error('Published pick needs audit reconciliation.', { pickId: entry.pick_id, message: error instanceof Error ? error.message : String(error) });
+  }
+  try {
+    await syncApprovedPickToDailyQueue(entry);
+  } catch (error) {
+    console.error('Published pick was not synced to Daily Picks; retry is safe because the queue is idempotent.', { pickId: entry.pick_id, message: error instanceof Error ? error.message : String(error) });
+  }
+  return message;
 }
 
 function approvalOutcomeEmbed(message, { channel, postReference, rejected = false }) {
@@ -1063,6 +1173,7 @@ async function handleSourceReviewButton(interaction) {
     approval.decision = 'REJECTED';
     packet.status = 'REJECTED';
     packet.approval = approval;
+    await recordApprovalAction(packet, { action: 'reject', actorId: interaction.user.id, status: 'REJECTED' });
     await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
     await closeApprovalCard(interaction, { rejected: true });
     await interaction.editReply('Rejected. No member-facing post was made.');
@@ -1106,9 +1217,15 @@ async function handleSourceReviewButton(interaction) {
     const label = action === 'free' ? 'FREE PICK' : 'PAID PICK';
     const extraction = packet.analysis.extraction;
     const firstPlay = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;
+    await recordApprovalAction(packet, {
+      action,
+      actorId: interaction.user.id,
+      status: 'APPROVED_PENDING_PUBLICATION'
+    });
     const publishedMessage = await postAndLogOfficialPick({
       channel,
       payload: { embeds: [buildSourcePickEmbed(packet, label)] },
+      packet,
       entry: {
         pick_id: packet.pick_id,
         operating_date: pacificOperatingDate(),
@@ -1339,6 +1456,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (interaction.commandName === 'pick-audit') {
+    if (!isPickApprover(interaction) && !isAdministrator(interaction)) {
+      await interaction.reply({ ephemeral: true, content: 'Only Kobe or a server administrator can inspect the pick audit ledger.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const timeline = await readAuditTimeline(interaction.options.getString('identifier', true));
+      await interaction.editReply(auditTimelineText(timeline));
+    } catch (error) {
+      console.error('Unable to read pick audit timeline:', error);
+      await interaction.editReply('The database audit timeline could not be read. Check the database connection before relying on this workflow.');
+    }
+    return;
+  }
+
   if (interaction.commandName === 'post-welcome-invite') {
     await interaction.deferReply({ ephemeral: true });
     if (!isAdministrator(interaction)) {
@@ -1397,6 +1530,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (interaction.commandName === 'publish-recap' && !isPickApprover(interaction)) {
+    await interaction.reply({ ephemeral: true, content: 'Only Kobe can publish a recap after reviewing the emailed results.' });
+    return;
+  }
+
   if (interaction.commandName === 'publish-pick' && await pickWorkflowPaused()) {
     await interaction.reply({ ephemeral: true, content: 'The pick workflow is paused. No member-facing post was made.' });
     return;
@@ -1430,6 +1568,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const source = interaction.options.getString('result_source', true);
       const outcome = interaction.options.getString('outcome') || '';
       const pickId = interaction.options.getString('pick_id', true);
+      await recordGradeAttempt({
+        pickId,
+        result: null,
+        status: 'STARTED',
+        provider: 'manual',
+        sourceReference: source,
+        actorType: 'discord_user',
+        actorId: interaction.user.id
+      });
       const updated = await updateOfficialPick(pickId, {
         result,
         status: result === 'PENDING' ? 'PENDING' : 'GRADED',
@@ -1440,6 +1587,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
       const net = netUnitsFor(updated);
       if (net !== null) await updateOfficialPick(pickId, { net_units: net });
+      await recordGradeAttempt({
+        pickId,
+        result,
+        status: result === 'PENDING' ? 'PENDING' : 'GRADED',
+        provider: 'manual',
+        sourceReference: source,
+        snapshot: { outcome },
+        actorType: 'discord_user',
+        actorId: interaction.user.id
+      });
       await interaction.reply({
         ephemeral: true,
         content: `${updated.pick_id} recorded as ${result}. Its recap net units will be calculated from the exact published odds and units risked.`
@@ -1528,6 +1685,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 async function start() {
+  await initializeAuditStore();
   await registerCommandsOnStart();
   await client.login(process.env.DISCORD_TOKEN);
 }

@@ -1,8 +1,10 @@
 # Membership and payment foundation
 
-## Current boundary
+## Current architecture
 
-The website is a safe checkout preview. It does not collect card data, create accounts, activate memberships, or contact any community platform. Do not add payment credentials to this repository.
+Stripe Checkout is the payment entry point and Stripe remains the authority for charges, invoices, renewal, and cancellation. Discord OAuth authenticates the community identity; it is not a payment method. Supabase stores the durable mapping between Stripe customer/subscription IDs and the linked Discord user, plus an idempotent webhook trail. Do not add credentials to this repository.
+
+Members manage billing through Stripe Customer Portal after authenticating with the Discord account linked during onboarding. Do not use a Checkout Session ID in a URL as ongoing account authentication.
 
 ## Subscription states
 
@@ -31,6 +33,12 @@ Use hosted subscription checkout so card data never touches this site:
 4. A signed webhook updates subscription and entitlement records.
 5. The processing page polls the site's membership endpoint for `active` or a recoverable failure.
 6. Active members receive the approved access handoff. Billing changes use the provider's hosted portal.
+
+### Required server-only configuration
+
+- Cloudflare Worker secrets: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN`, `DISCORD_OAUTH_STATE_SECRET`, `SUPABASE_SECRET_KEY`
+- Cloudflare Worker variables: Stripe price IDs, Discord IDs/redirect URI, and `SUPABASE_URL`
+- Render worker secret: pooled Supabase `DATABASE_URL`; set `AUDIT_DATABASE_REQUIRED=true` only after a verified migration and write/read smoke test
 
 Handle checkout completion, subscription creation/change/deletion, invoice success/failure, refunds, and disputes. Store event IDs, reject duplicates, and verify signatures before writes.
 

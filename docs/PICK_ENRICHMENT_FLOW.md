@@ -3,18 +3,24 @@
 This runs only for qualifying posts from the approved public X accounts. It does
 not read any Discord community and it never uses Kobe's personal Discord login.
 
-1. The X monitor finds a possible pick and creates a private review card in
-   `#pick-approvals`.
+1. The X monitor finds a possible pick with a deterministic source filter.
 2. When enrichment is enabled, the system reads the public post and any attached
    image into structured fields: sport, event, market, selection, line, odds,
    units, and the source's stated claims.
-3. The card labels that output **source extraction — not verified**. It does not
+3. Code validates the extracted sport, source identity, event timing, and card
+   format. Invalid or ambiguous candidates are held and do not enter the review
+   channel.
+4. A valid candidate becomes a button-based private card in `#pick-approvals`.
+   The card labels the output **source extraction — not verified**. It does not
    treat a capper's claim or image as a fact.
-4. An authorized odds/results provider must independently verify the current
+5. An authorized odds/results provider must independently verify the current
    line, supporting facts, and later the game result.
-5. Only then can Kobe review the wording, add an approved image, and choose the
+6. Only then can Kobe review the wording, add an approved image, and choose the
    approved destination channel. The Discord bot posts after that approval; it
    does not post as Kobe.
+
+When `DATABASE_URL` is configured, the system also writes the durable audit
+ledger described in `PICK_OPERATIONS_ARCHITECTURE_AND_AUDIT.md`.
 
 ## Turn on source extraction
 

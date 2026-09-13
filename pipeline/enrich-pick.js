@@ -2,6 +2,16 @@ require('dotenv').config();
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const {
+  DEFAULT_PROMPT_VERSION,
+  estimateOpenAICost,
+  findReusableExtraction,
+  finishExtractionRun,
+  recordSourcePost,
+  sha256,
+  startExtractionRun,
+  usageFromResponse
+} = require('./audit-store');
 
 const ROOT = path.join(__dirname, '..');
 const QUEUE_ROOT = path.join(ROOT, 'data', 'monitoring', 'x', 'review-queue');
@@ -75,7 +85,17 @@ function analysisWaiting(status, detail) {
   };
 }
 
-function sourceContent(packet) {
+function configuredImageDetail(env = process.env) {
+  const detail = (env.OPENAI_PICK_IMAGE_DETAIL || 'high').trim().toLowerCase();
+  return ['low', 'high', 'auto'].includes(detail) ? detail : 'high';
+}
+
+function configuredMaxOutputTokens(env = process.env) {
+  const value = Number.parseInt(env.OPENAI_PICK_MAX_OUTPUT_TOKENS || '3000', 10);
+  return Number.isInteger(value) && value >= 256 ? value : 3000;
+}
+
+function sourceContent(packet, imageDetail = configuredImageDetail()) {
   const source = packet.source;
   const text = [
     'Extract the betting terms and claims from this public X post.',
@@ -99,9 +119,41 @@ function sourceContent(packet) {
   ].join('\n');
   const content = [{ type: 'input_text', text }];
   for (const imageUrl of (source.media_urls || []).slice(0, 4)) {
-    content.push({ type: 'input_image', image_url: imageUrl, detail: 'high' });
+    content.push({ type: 'input_image', image_url: imageUrl, detail: imageDetail });
   }
   return content;
+}
+
+function extractionRequest(packet, env = process.env) {
+  const model = env.OPENAI_PICK_ANALYSIS_MODEL || 'gpt-5.6-luna';
+  const promptVersion = env.OPENAI_PICK_PROMPT_VERSION || DEFAULT_PROMPT_VERSION;
+  const imageDetail = configuredImageDetail(env);
+  const requestBody = {
+    model,
+    input: [{ role: 'user', content: sourceContent(packet, imageDetail) }],
+    max_output_tokens: configuredMaxOutputTokens(env),
+    store: false,
+    metadata: { workload: 'source_pick_extraction', prompt_version: promptVersion },
+    prompt_cache_key: `kobes-betting-hub:${promptVersion}`,
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'source_pick_extraction',
+        strict: true,
+        schema: EXTRACTION_SCHEMA
+      }
+    }
+  };
+  const reasoningEffort = (env.OPENAI_PICK_REASONING_EFFORT || 'none').trim();
+  if (reasoningEffort) requestBody.reasoning = { effort: reasoningEffort };
+  return { model, promptVersion, imageDetail, requestBody };
+}
+
+function pricingVersion(model, env = process.env) {
+  if (env.OPENAI_PRICING_VERSION) return env.OPENAI_PRICING_VERSION;
+  if (model === 'gpt-5.6-luna') return 'gpt-5.6-luna-2026-09-12-list';
+  if (model === 'gpt-5-mini') return 'gpt-5-mini-2026-09-12-list';
+  return null;
 }
 
 function sourceClaims(extraction) {
@@ -114,27 +166,74 @@ async function extractSourcePick(packet) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return analysisWaiting('WAITING_FOR_OPENAI_API_KEY', 'Add OPENAI_API_KEY locally before enabling source extraction.');
 
-  const model = process.env.OPENAI_PICK_ANALYSIS_MODEL || 'gpt-5';
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model,
-      input: [{ role: 'user', content: sourceContent(packet) }],
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'source_pick_extraction',
-          strict: true,
-          schema: EXTRACTION_SCHEMA
-        }
-      }
-    })
+  const { model, promptVersion, imageDetail, requestBody } = extractionRequest(packet);
+  const content = requestBody.input[0].content;
+  const inputSha256 = sha256(requestBody);
+  const sourcePostId = await recordSourcePost(packet);
+  const reusable = await findReusableExtraction({
+    sourcePostId,
+    provider: 'openai',
+    model,
+    promptVersion,
+    inputSha256
   });
+  if (reusable?.raw_structured_output?.extraction) {
+    return {
+      status: 'SOURCE_EXTRACTED',
+      detail: 'Reused an identical audited source extraction. Independent odds, stats, and results checks are still required.',
+      extracted_at: new Date().toISOString(),
+      model,
+      provider: 'openai',
+      prompt_version: promptVersion,
+      extraction_run_id: reusable.id,
+      request_id: reusable.request_id,
+      response_id: reusable.provider_response_id,
+      usage: {
+        input_tokens: reusable.input_tokens,
+        cached_input_tokens: reusable.cached_input_tokens,
+        image_tokens: reusable.image_tokens,
+        output_tokens: reusable.output_tokens
+      },
+      estimated_cost_usd: reusable.estimated_cost_usd === null ? null : Number(reusable.estimated_cost_usd),
+      latency_ms: reusable.latency_ms,
+      reused: true,
+      source_only: true,
+      extraction: reusable.raw_structured_output.extraction,
+      draft_status: 'WAITING_FOR_INDEPENDENT_VERIFICATION'
+    };
+  }
 
+  const extractionRunId = await startExtractionRun({
+    sourcePostId,
+    provider: 'openai',
+    model,
+    promptVersion,
+    inputSha256,
+    imageCount: content.filter((item) => item.type === 'input_image').length,
+    imageDetail
+  });
+  const startedAt = Date.now();
+  let response;
+  try {
+    response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+  } catch (error) {
+    await finishExtractionRun(extractionRunId, {
+      status: 'FAILED',
+      latencyMs: Date.now() - startedAt,
+      errorCode: 'OPENAI_NETWORK_ERROR',
+      errorDetail: error instanceof Error ? error.message : String(error)
+    });
+    return analysisWaiting('EXTRACTION_FAILED', 'OpenAI extraction request could not be completed.');
+  }
+
+  const requestId = response.headers?.get?.('x-request-id') || null;
   if (!response.ok) {
     let message = '';
     try {
@@ -144,21 +243,76 @@ async function extractSourcePick(packet) {
       // Keep the card useful even if the upstream error body is unavailable.
     }
     const safeMessage = String(message).replace(/\s+/g, ' ').slice(0, 300);
+    await finishExtractionRun(extractionRunId, {
+      requestId,
+      responseStatus: response.status,
+      latencyMs: Date.now() - startedAt,
+      status: 'FAILED',
+      errorCode: 'OPENAI_HTTP_ERROR',
+      errorDetail: safeMessage || `HTTP ${response.status}`
+    });
     return analysisWaiting('EXTRACTION_FAILED', `OpenAI extraction request failed (${response.status})${safeMessage ? `: ${safeMessage}` : '.'}`);
   }
 
+  let responseBody;
+  let rawOutput;
   let extraction;
   try {
-    extraction = JSON.parse(outputText(await response.json()));
-  } catch {
+    responseBody = await response.json();
+    rawOutput = outputText(responseBody);
+    extraction = JSON.parse(rawOutput);
+  } catch (error) {
+    const usage = usageFromResponse(responseBody);
+    await finishExtractionRun(extractionRunId, {
+      requestId,
+      providerResponseId: responseBody?.id || null,
+      responseStatus: response.status,
+      latencyMs: Date.now() - startedAt,
+      usage,
+      estimatedCostUsd: estimateOpenAICost(model, usage),
+      costBasis: pricingVersion(model),
+      status: 'FAILED',
+      errorCode: 'INVALID_MODEL_JSON',
+      errorDetail: error instanceof Error ? error.message : 'OpenAI returned unreadable JSON.',
+      rawStructuredOutput: { output_text: rawOutput || null }
+    });
     return analysisWaiting('EXTRACTION_FAILED', 'OpenAI returned an unreadable extraction.');
   }
+
+  const usage = usageFromResponse(responseBody);
+  const latencyMs = Date.now() - startedAt;
+  const estimatedCostUsd = estimateOpenAICost(model, usage);
+  await finishExtractionRun(extractionRunId, {
+    requestId,
+    providerResponseId: responseBody.id || null,
+    responseStatus: response.status,
+    latencyMs,
+    usage,
+    estimatedCostUsd,
+    costBasis: pricingVersion(model),
+    status: 'SUCCEEDED',
+    rawStructuredOutput: { output_text: rawOutput, extraction }
+  });
 
   return {
     status: 'SOURCE_EXTRACTED',
     detail: 'Terms and claims were extracted from the source post/image. Independent odds, stats, and results checks are still required.',
     extracted_at: new Date().toISOString(),
     model,
+    provider: 'openai',
+    prompt_version: promptVersion,
+    extraction_run_id: extractionRunId,
+    request_id: requestId,
+    response_id: responseBody.id || null,
+    usage: {
+      input_tokens: usage.inputTokens,
+      cached_input_tokens: usage.cachedInputTokens,
+      image_tokens: usage.imageTokens,
+      output_tokens: usage.outputTokens
+    },
+    estimated_cost_usd: estimatedCostUsd,
+    latency_ms: latencyMs,
+    reused: false,
     source_only: true,
     extraction,
     draft_status: 'WAITING_FOR_INDEPENDENT_VERIFICATION'
@@ -206,4 +360,13 @@ if (require.main === module) {
   });
 }
 
-module.exports = { enrichPacket, outputText, EXTRACTION_SCHEMA, sourceClaims };
+module.exports = {
+  enrichPacket,
+  outputText,
+  EXTRACTION_SCHEMA,
+  sourceClaims,
+  configuredImageDetail,
+  configuredMaxOutputTokens,
+  extractionRequest,
+  pricingVersion
+};

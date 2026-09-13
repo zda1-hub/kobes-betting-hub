@@ -3,6 +3,12 @@ require('dotenv').config();
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
+const {
+  recordApprovalCard,
+  recordSourcePost,
+  recordWorkflowEvent,
+  upsertPickCandidate
+} = require('./audit-store');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { isSupportedSportPick, upcomingEventStatuses } = require('../bot/lib/event-timing');
 const { buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, sourceEvidence, visiblePlays } = require('../bot/lib/source-review');
@@ -10,13 +16,17 @@ const { buildSourcePickApprovalEmbed, reviewButtons, sourceCapperName, sourceEvi
 const ROOT = path.join(__dirname, '..');
 const SOURCES_PATH = path.join(ROOT, 'data', 'twitter-sources.json');
 const PICK_WORKFLOW_PATH = path.join(ROOT, 'data', 'pick-workflow.json');
-const MONITORING_ROOT = path.join(ROOT, 'data', 'monitoring');
-const X_MONITORING_ROOT = path.join(MONITORING_ROOT, 'x');
-const CLEANUP_STATE_PATH = path.join(MONITORING_ROOT, '.x-cleanup.json');
-const STATE_PATH = path.join(X_MONITORING_ROOT, 'state.json');
-// Monitoring state may be cleaned up, but an approval draft must stay present
-// for the Discord card that refers to it, including across a Render deploy.
+// An approval draft must stay present for the Discord card that refers to it,
+// including across a Render deploy.
 const QUEUE_ROOT = reviewQueuePath();
+// Put collection cursors beside the durable review queue. On Render this
+// resolves under /var/data, so a deploy cannot forget already-inspected posts
+// and repeat the same X lookups and OpenAI extractions. An explicit root is
+// supported for migrations and non-Render deployments.
+const X_MONITORING_ROOT = process.env.X_MONITORING_ROOT?.trim()
+  || path.join(path.dirname(QUEUE_ROOT), 'x-monitoring');
+const CLEANUP_STATE_PATH = path.join(X_MONITORING_ROOT, '.cleanup.json');
+const STATE_PATH = path.join(X_MONITORING_ROOT, 'state.json');
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
 // Revisit image posts once after changing source routing so previously held
 // image cards can be reconsidered under the current approval-card mode.
@@ -135,9 +145,9 @@ async function cleanMonitoringFolderIfDue() {
   const due = !Number.isFinite(lastCleanup) || Date.now() - lastCleanup >= WEEK_IN_MS;
 
   if (due) {
-    await fs.rm(X_MONITORING_ROOT, { recursive: true, force: true });
-    console.log('Cleared the weekly X monitoring folder.');
-    await fs.mkdir(MONITORING_ROOT, { recursive: true });
+    // state.json is the spend-control cursor. Do not delete it during routine
+    // cleanup: losing it causes a full same-day rescan after the next pass.
+    await fs.mkdir(X_MONITORING_ROOT, { recursive: true });
     await fs.writeFile(CLEANUP_STATE_PATH, `${JSON.stringify({ last_cleanup_at: new Date().toISOString() }, null, 2)}\n`);
   }
 }
@@ -383,6 +393,12 @@ async function notifyApprovalChannel(packet) {
   const channelId = process.env.PICK_APPROVAL_CHANNEL_ID;
   const token = process.env.DISCORD_TOKEN;
   if (!channelId || !token) {
+    await upsertPickCandidate(packet, { status: 'HELD_NOT_READY', rejectionCodes: ['APPROVAL_CHANNEL_NOT_CONFIGURED'] });
+    await recordWorkflowEvent(packet, {
+      eventType: 'CANDIDATE_HELD',
+      afterState: 'HELD_NOT_READY',
+      details: { rejection_code: 'APPROVAL_CHANNEL_NOT_CONFIGURED' }
+    });
     console.warn(`Review packet #${packet.approval_number} saved locally; Discord approval notification is not configured.`);
     return null;
   }
@@ -406,28 +422,66 @@ async function notifyApprovalChannel(packet) {
     packet.status = 'HELD_NOT_READY';
     packet.approval_ready = false;
     packet.hold_reason = error instanceof Error ? error.message : 'The candidate is incomplete or not publishable.';
+    await upsertPickCandidate(packet, { status: 'HELD_NOT_READY', rejectionCodes: ['APPROVAL_CARD_NOT_READY'] });
+    await recordWorkflowEvent(packet, {
+      eventType: 'CANDIDATE_HELD',
+      beforeState: 'ELIGIBLE',
+      afterState: 'HELD_NOT_READY',
+      details: { rejection_code: 'APPROVAL_CARD_NOT_READY', reason: packet.hold_reason }
+    });
     console.log(`Held ${packet.pick_id}; ${packet.hold_reason}`);
     return null;
   }
   packet.status = 'READY_FOR_APPROVAL';
   packet.approval_ready = true;
   const labels = await approvalButtonLabels(packet);
+  const payload = {
+    embeds,
+    components: reviewButtons(packet.pick_id, labels)
+  };
+  await upsertPickCandidate(packet, { status: 'READY_FOR_APPROVAL' });
+  await recordWorkflowEvent(packet, {
+    eventType: 'APPROVAL_CARD_SEND_STARTED',
+    beforeState: 'ELIGIBLE',
+    afterState: 'SENDING_APPROVAL_CARD',
+    details: { channel_id: channelId }
+  });
   const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: {
       Authorization: `Bot ${token}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      embeds,
-      components: reviewButtons(packet.pick_id, labels)
-    })
+    body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
-    throw new Error(`Discord approval notification failed (${response.status}): ${await response.text()}`);
+    const detail = (await response.text()).replace(/\s+/g, ' ').slice(0, 500);
+    await recordWorkflowEvent(packet, {
+      eventType: 'APPROVAL_CARD_SEND_FAILED',
+      beforeState: 'SENDING_APPROVAL_CARD',
+      afterState: 'APPROVAL_SEND_FAILED',
+      details: { response_status: response.status, error: detail }
+    });
+    throw new Error(`Discord approval notification failed (${response.status}): ${detail}`);
   }
-  return (await response.json()).id;
+  const messageId = (await response.json()).id;
+  await recordApprovalCard(packet, { channelId, messageId, payload });
+  return messageId;
+}
+
+async function recordGateDecision(packet, { code, reason, status = 'REJECTED' }) {
+  await upsertPickCandidate(packet, { status, rejectionCodes: [code] });
+  await recordWorkflowEvent(packet, {
+    eventType: status === 'ELIGIBLE'
+      ? 'CANDIDATE_ELIGIBLE'
+      : status === 'REJECTED'
+        ? 'CANDIDATE_REJECTED'
+        : 'CANDIDATE_SKIPPED',
+    beforeState: packet.status || 'OBSERVED',
+    afterState: status,
+    details: { rejection_code: status === 'ELIGIBLE' ? null : code, reason }
+  });
 }
 
 async function queueSplitPlayPackets(packet, outputPath) {
@@ -547,7 +601,10 @@ async function runCollector({ maxCandidates } = {}) {
     const acceptedPackets = [];
     for (const post of posts) {
       const postMediaUrls = (post.attachments?.media_keys || []).map((key) => media[key]).filter(Boolean);
+      const packet = createPacket({ date, sequence: 0, source, post, media });
+      await recordSourcePost(packet);
       if (claimedSourcePostIds.has(String(post.id))) {
+        await recordGateDecision(packet, { code: 'ALREADY_QUEUED', reason: 'This X post already has a current approval packet.', status: 'DEDUPLICATED' });
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
         continue;
@@ -558,10 +615,12 @@ async function runCollector({ maxCandidates } = {}) {
       const revisitHeldPost = !queuedSourcePostIds.has(String(post.id))
         && ((rescanImages && postMediaUrls.length > 0) || rescanUpcomingSlate);
       if (handledPostIds.has(post.id) && !revisitHeldPost) {
+        await recordGateDecision(packet, { code: 'ALREADY_HANDLED', reason: 'This source post was already evaluated in an earlier collection pass.', status: 'DEDUPLICATED' });
         lastProcessedId = post.id;
         continue;
       }
       if (!shouldQueueForReview(source, post, postMediaUrls)) {
+        await recordGateDecision(packet, { code: 'NO_BET_SIGNAL', reason: 'No deterministic betting signal was found before model extraction.' });
         console.log(`Skipped @${source.handle} post ${post.id}; no recognizable pick signal.`);
         skipped += 1;
         lastProcessedId = post.id;
@@ -570,7 +629,6 @@ async function runCollector({ maxCandidates } = {}) {
       }
       claimedSourcePostIds.add(String(post.id));
 
-      const packet = createPacket({ date, sequence: 0, source, post, media });
       // Extract the source terms first. Research is intentionally deferred
       // until the cheap NFL, exact-event, and roster gates pass; otherwise a
       // rejected candidate can spend minutes on web search and block the rest
@@ -578,6 +636,7 @@ async function runCollector({ maxCandidates } = {}) {
       packet.analysis = await enrichPacket(packet, { research: false });
 
       if (!isSupportedSportPick(packet)) {
+        await recordGateDecision(packet, { code: 'UNSUPPORTED_SPORT', reason: 'The extraction did not identify a supported sport.' });
         console.log(`Skipped @${source.handle} post ${post.id}; it is not explicitly identified as a supported sport pick.`);
         skipped += 1;
         lastProcessedId = post.id;
@@ -586,6 +645,8 @@ async function runCollector({ maxCandidates } = {}) {
       }
 
       if (packet.analysis.status !== 'SOURCE_EXTRACTED' || !packet.analysis.extraction?.is_pick_candidate) {
+        const code = packet.analysis.status === 'SOURCE_EXTRACTED' ? 'MODEL_NOT_PICK_CANDIDATE' : 'EXTRACTION_FAILED';
+        await recordGateDecision(packet, { code, reason: packet.analysis.detail || 'The model did not return a publishable source extraction.' });
         console.log(`Skipped @${source.handle} post ${post.id}; the source did not identify a publishable pick.`);
         skipped += 1;
         lastProcessedId = post.id;
@@ -597,6 +658,7 @@ async function runCollector({ maxCandidates } = {}) {
       // review a card that would credit the feed itself or leave authorship
       // ambiguous.
       if (source.publish_mode === 'terms_only' && !sourceCapperName(packet)) {
+        await recordGateDecision(packet, { code: 'MISSING_SOURCE_CAPPER', reason: 'The original capper was not clearly identified.' });
         console.log(`Skipped @${source.handle} post ${post.id}; original capper is not clearly identified.`);
         skipped += 1;
         lastProcessedId = post.id;
@@ -632,14 +694,32 @@ async function runCollector({ maxCandidates } = {}) {
         }
         const firstRejected = timing.playStatuses.find((result) => result.status !== 'UPCOMING');
         if (firstRejected) {
+          await recordWorkflowEvent(packet, {
+            eventType: 'MULTIPLAY_FILTERED',
+            beforeState: 'SOURCE_EXTRACTED',
+            afterState: 'PARTIALLY_ELIGIBLE',
+            details: {
+              kept_play_count: validPlays.length,
+              rejected_play_count: timing.playStatuses.length - validPlays.length,
+              first_rejection_status: firstRejected.status,
+              first_rejection_reason: firstRejected.reason || null
+            }
+          });
           console.log(`Kept ${validPlays.length} upcoming leg(s) from @${source.handle} post ${post.id}; dropped other leg(s): ${firstRejected.reason || firstRejected.status}.`);
         }
+        await recordGateDecision(packet, { code: 'ELIGIBLE', reason: `${validPlays.length} upcoming play(s) passed source and event gates.`, status: 'ELIGIBLE' });
         acceptedPackets.push({ packet, postId: String(post.id), source, post });
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
         continue;
       }
       if (timing.status !== 'UPCOMING') {
+        const timingCode = timing.status === 'STARTED_OR_FINISHED'
+          ? 'STALE_EVENT'
+          : timing.status === 'PLAYER_NOT_ON_EVENT_TEAM'
+            ? 'PLAYER_NOT_ON_EVENT_TEAM'
+            : 'EVENT_NOT_VERIFIED';
+        await recordGateDecision(packet, { code: timingCode, reason: timing.reason || timing.status });
         console.log(`Skipped @${source.handle} post ${post.id}; ${timing.reason || 'the event is not an upcoming game scheduled today'}.`);
         skipped += 1;
         lastProcessedId = post.id;
@@ -647,6 +727,7 @@ async function runCollector({ maxCandidates } = {}) {
         continue;
       }
 
+      await recordGateDecision(packet, { code: 'ELIGIBLE', reason: 'Source extraction and event gates passed.', status: 'ELIGIBLE' });
       acceptedPackets.push({ packet, postId: String(post.id), source, post });
       lastProcessedId = post.id;
       handledPostIds.add(post.id);

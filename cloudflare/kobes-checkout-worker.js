@@ -7,6 +7,7 @@
  *   DISCORD_CLIENT_SECRET      Discord OAuth application client secret
  *   DISCORD_BOT_TOKEN          Discord bot token (Manage Roles permission required)
  *   DISCORD_OAUTH_STATE_SECRET Random secret used to secure OAuth state
+ *   SUPABASE_SECRET_KEY        Server-only sb_secret key; never expose it to the website
  *
  * Required Worker variables:
  *   STRIPE_MONTHLY_PRICE_ID    $32.99/month recurring Stripe Price ID
@@ -15,6 +16,7 @@
  *   DISCORD_GUILD_ID           Kobe's Discord server ID
  *   DISCORD_MEMBER_ROLE_ID     Paid-member role ID
  *   DISCORD_REDIRECT_URI       Worker callback URL registered in Discord
+ *   SUPABASE_URL               Existing Kobe's Betting Hub Supabase project URL
  */
 
 const SITE_ORIGIN = 'https://kobesbettinghub.com';
@@ -25,6 +27,7 @@ const ALLOWED_SITE_ORIGINS = new Set([
   'https://zda1-hub.github.io',
 ]);
 const STRIPE_API = 'https://api.stripe.com/v1';
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing']);
 
 const headers = (origin) => ({
   'Access-Control-Allow-Origin': ALLOWED_SITE_ORIGINS.has(origin) ? origin : SITE_ORIGIN,
@@ -53,6 +56,153 @@ async function stripeGet(env, path) {
   const result = await response.json();
   if (!response.ok) throw new Error(result.error?.message || 'Stripe request failed.');
   return result;
+}
+
+function supabaseKey(env) {
+  return env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '';
+}
+
+function supabaseReady(env) {
+  return Boolean(env.SUPABASE_URL && supabaseKey(env));
+}
+
+async function supabase(env, path, { method = 'GET', body, prefer } = {}) {
+  if (!supabaseReady(env)) throw new Error('Membership persistence is not configured.');
+  const key = supabaseKey(env);
+  const response = await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${path}`, {
+    method,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      ...(prefer ? { Prefer: prefer } : {}),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let detail = '';
+    try { detail = (await response.json())?.message || ''; } catch { /* no readable error body */ }
+    throw new Error(`Membership database request failed (${response.status})${detail ? `: ${detail}` : '.'}`);
+  }
+  if (response.status === 204) return null;
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+}
+
+const stripeId = (value) => (typeof value === 'string' ? value : value?.id || '');
+const stripeTimestamp = (value) => (Number.isFinite(value) ? new Date(value * 1000).toISOString() : null);
+
+async function persistCustomer(env, customerId, fields = {}) {
+  if (!customerId) return;
+  const now = new Date().toISOString();
+  const body = {
+    stripe_customer_id: customerId,
+    updated_at: now,
+  };
+  if (fields.discordUserId) {
+    body.discord_user_id = fields.discordUserId;
+    body.linked_at = now;
+  }
+  if (fields.subscriptionId) body.current_subscription_id = fields.subscriptionId;
+  await supabase(env, 'membership_customers?on_conflict=stripe_customer_id', {
+    method: 'POST',
+    prefer: 'resolution=merge-duplicates,return=minimal',
+    body,
+  });
+}
+
+async function persistSubscription(env, subscription, eventId = null) {
+  const customerId = stripeId(subscription?.customer);
+  if (!subscription?.id || !customerId) return;
+  const now = new Date().toISOString();
+  const item = subscription.items?.data?.[0];
+  await persistCustomer(env, customerId, { subscriptionId: subscription.id });
+  await supabase(env, 'membership_subscriptions?on_conflict=stripe_subscription_id', {
+    method: 'POST',
+    prefer: 'resolution=merge-duplicates,return=minimal',
+    body: {
+      stripe_subscription_id: subscription.id,
+      stripe_customer_id: customerId,
+      status: subscription.status || 'unknown',
+      price_id: stripeId(item?.price),
+      offer: subscription.metadata?.offer || null,
+      cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+      current_period_start: stripeTimestamp(subscription.current_period_start),
+      current_period_end: stripeTimestamp(subscription.current_period_end),
+      trial_end: stripeTimestamp(subscription.trial_end),
+      last_stripe_event_id: eventId,
+      raw_metadata: subscription.metadata || {},
+      created_at: stripeTimestamp(subscription.created) || now,
+      updated_at: now,
+    },
+  });
+}
+
+async function membershipCustomerForDiscord(env, discordUserId) {
+  const rows = await supabase(env, `membership_customers?discord_user_id=eq.${encodeURIComponent(discordUserId)}&select=stripe_customer_id,current_subscription_id&limit=1`);
+  return rows?.[0] || null;
+}
+
+async function discordUserForSubscription(env, subscription) {
+  if (subscription?.metadata?.discord_user_id) return subscription.metadata.discord_user_id;
+  const customerId = stripeId(subscription?.customer);
+  if (!customerId || !supabaseReady(env)) return '';
+  const rows = await supabase(env, `membership_customers?stripe_customer_id=eq.${encodeURIComponent(customerId)}&select=discord_user_id&limit=1`);
+  return rows?.[0]?.discord_user_id || '';
+}
+
+async function recordMembershipEvent(env, values) {
+  if (!supabaseReady(env)) return;
+  await supabase(env, 'membership_events', {
+    method: 'POST',
+    prefer: 'return=minimal',
+    body: {
+      id: crypto.randomUUID(),
+      event_type: values.eventType,
+      actor_type: values.actorType,
+      actor_id: values.actorId || null,
+      stripe_customer_id: values.customerId || null,
+      stripe_subscription_id: values.subscriptionId || null,
+      discord_user_id: values.discordUserId || null,
+      details: values.details || {},
+      occurred_at: new Date().toISOString(),
+    },
+  });
+}
+
+async function beginWebhookEvent(env, event, payload) {
+  const existing = await supabase(env, `stripe_webhook_events?event_id=eq.${encodeURIComponent(event.id)}&select=status&limit=1`);
+  if (existing?.[0]?.status === 'PROCESSED') return false;
+  if (!existing?.length) {
+    const digest = await crypto.subtle.digest('SHA-256', encode.encode(payload));
+    await supabase(env, 'stripe_webhook_events', {
+      method: 'POST',
+      prefer: 'return=minimal',
+      body: {
+        event_id: event.id,
+        event_type: event.type,
+        stripe_created_at: stripeTimestamp(event.created),
+        livemode: Boolean(event.livemode),
+        payload_sha256: toHex(digest),
+        status: 'RECEIVED',
+        received_at: new Date().toISOString(),
+      },
+    });
+  }
+  return true;
+}
+
+async function finishWebhookEvent(env, eventId, status, outcome, errorDetail = null) {
+  await supabase(env, `stripe_webhook_events?event_id=eq.${encodeURIComponent(eventId)}`, {
+    method: 'PATCH',
+    prefer: 'return=minimal',
+    body: {
+      status,
+      outcome,
+      error_detail: errorDetail ? String(errorDetail).slice(0, 500) : null,
+      processed_at: new Date().toISOString(),
+    },
+  });
 }
 
 async function signingKey(secret) {
@@ -97,9 +247,9 @@ function discordReady(env) {
   return Boolean(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET && env.DISCORD_BOT_TOKEN && env.DISCORD_OAUTH_STATE_SECRET && env.DISCORD_GUILD_ID && env.DISCORD_MEMBER_ROLE_ID && env.DISCORD_REDIRECT_URI);
 }
 
-async function createDiscordState(sessionId, env) {
+async function createDiscordState({ sessionId = null, intent = 'connect' }, env) {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
-  const body = toBase64Url(encode.encode(JSON.stringify({ sessionId, expiresAt: Math.floor(Date.now() / 1000) + 600, nonce: toBase64Url(bytes) })));
+  const body = toBase64Url(encode.encode(JSON.stringify({ sessionId, intent, expiresAt: Math.floor(Date.now() / 1000) + 600, nonce: toBase64Url(bytes) })));
   return `${body}.${await sign(body, env.DISCORD_OAUTH_STATE_SECRET)}`;
 }
 
@@ -107,7 +257,8 @@ async function readDiscordState(state, env) {
   const [body, signature, ...extra] = state.split('.');
   if (!body || !signature || extra.length || !secureEqual(await sign(body, env.DISCORD_OAUTH_STATE_SECRET), signature)) throw new Error('Invalid Discord connection request.');
   const value = JSON.parse(decode.decode(fromBase64Url(body)));
-  if (!value.sessionId || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord connection link expired. Return to your checkout confirmation and try again.');
+  if (!['connect', 'portal'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
+  if (value.intent === 'connect' && !value.sessionId) throw new Error('That Discord connection request is incomplete.');
   return value;
 }
 
@@ -170,12 +321,31 @@ async function discordRequest(path, options = {}) {
 }
 
 async function removeMemberRole(subscription, env) {
-  const memberId = subscription?.metadata?.discord_user_id;
+  const memberId = await discordUserForSubscription(env, subscription);
   if (!memberId || !env.DISCORD_BOT_TOKEN || !env.DISCORD_GUILD_ID || !env.DISCORD_MEMBER_ROLE_ID) return;
   await discordRequest(
     `/guilds/${env.DISCORD_GUILD_ID}/members/${memberId}/roles/${env.DISCORD_MEMBER_ROLE_ID}`,
     { method: 'DELETE', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } },
   );
+}
+
+async function grantMemberRole(memberId, env) {
+  if (!memberId || !env.DISCORD_BOT_TOKEN || !env.DISCORD_GUILD_ID || !env.DISCORD_MEMBER_ROLE_ID) return;
+  await discordRequest(
+    `/guilds/${env.DISCORD_GUILD_ID}/members/${memberId}/roles/${env.DISCORD_MEMBER_ROLE_ID}`,
+    { method: 'PUT', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } },
+  );
+}
+
+async function syncMemberRole(subscription, env) {
+  const memberId = await discordUserForSubscription(env, subscription);
+  if (!memberId) return 'NO_DISCORD_LINK';
+  if (ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status)) {
+    await grantMemberRole(memberId, env);
+    return 'ROLE_GRANTED';
+  }
+  await removeMemberRole(subscription, env);
+  return 'ROLE_REMOVED';
 }
 
 function redirect(url) {
@@ -188,7 +358,11 @@ async function startDiscordConnection(request, env) {
   try { await activeSubscription(sessionId, env); }
   catch (error) { return new Response(error.message, { status: 403 }); }
 
-  const state = await createDiscordState(sessionId, env);
+  const state = await createDiscordState({ sessionId, intent: 'connect' }, env);
+  return redirect(discordAuthorizationUrl(state, env));
+}
+
+function discordAuthorizationUrl(state, env) {
   const authorization = new URL('https://discord.com/oauth2/authorize');
   authorization.search = new URLSearchParams({
     client_id: env.DISCORD_CLIENT_ID,
@@ -198,7 +372,15 @@ async function startDiscordConnection(request, env) {
     state,
     prompt: 'consent',
   }).toString();
-  return redirect(authorization.toString());
+  return authorization.toString();
+}
+
+async function startPortalLogin(request, env) {
+  if (!discordReady(env) || !supabaseReady(env)) return new Response('Membership management is being configured. Please check back shortly.', { status: 503 });
+  const intent = new URL(request.url).searchParams.get('intent');
+  if (intent !== 'portal') return new Response('Invalid membership-management request.', { status: 400 });
+  const state = await createDiscordState({ intent: 'portal' }, env);
+  return redirect(discordAuthorizationUrl(state, env));
 }
 
 async function finishDiscordConnection(request, env) {
@@ -208,9 +390,9 @@ async function finishDiscordConnection(request, env) {
   const returnedState = url.searchParams.get('state');
   if (!code || !returnedState) return new Response('Discord did not complete the connection.', { status: 400 });
 
+  let discordAccessToken = '';
   try {
-    const { sessionId } = await readDiscordState(returnedState, env);
-    const subscription = await activeSubscription(sessionId, env);
+    const state = await readDiscordState(returnedState, env);
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -218,18 +400,56 @@ async function finishDiscordConnection(request, env) {
     });
     const token = await tokenResponse.json();
     if (!tokenResponse.ok || !token.access_token) throw new Error('Discord authorization failed.');
+    discordAccessToken = token.access_token;
     const user = await discordRequest('/users/@me', { headers: { Authorization: `Bearer ${token.access_token}` } });
+    if (state.intent === 'portal') {
+      const membership = await membershipCustomerForDiscord(env, user.id);
+      if (!membership?.stripe_customer_id) throw new Error('No paid membership is linked to this Discord account. Connect Discord from the checkout confirmation first.');
+      const portal = await stripe(env, '/billing_portal/sessions', {
+        customer: membership.stripe_customer_id,
+        return_url: `${SITE_ORIGIN}${SITE_PATH}/cancel.html?portal=returned`,
+      });
+      await recordMembershipEvent(env, {
+        eventType: 'BILLING_PORTAL_OPENED', actorType: 'discord_user', actorId: user.id,
+        customerId: membership.stripe_customer_id, subscriptionId: membership.current_subscription_id,
+        discordUserId: user.id,
+      });
+      return redirect(portal.url);
+    }
+
+    const subscription = await activeSubscription(state.sessionId, env);
+    const session = await stripeGet(env, `/checkout/sessions/${encodeURIComponent(state.sessionId)}`);
     const botHeaders = { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' };
     await stripe(env, `/subscriptions/${encodeURIComponent(subscription.id)}`, {
       'metadata[discord_user_id]': user.id,
       'metadata[discord_connected_at]': new Date().toISOString(),
     });
+    if (!supabaseReady(env)) throw new Error('Membership persistence is not configured.');
+    await persistCustomer(env, stripeId(session.customer) || stripeId(subscription.customer), {
+      discordUserId: user.id,
+      subscriptionId: subscription.id,
+    });
+    await persistSubscription(env, { ...subscription, metadata: { ...(subscription.metadata || {}), discord_user_id: user.id } });
+    await recordMembershipEvent(env, {
+      eventType: 'DISCORD_ACCOUNT_LINKED', actorType: 'discord_user', actorId: user.id,
+      customerId: stripeId(session.customer) || stripeId(subscription.customer),
+      subscriptionId: subscription.id, discordUserId: user.id,
+    });
     await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) });
     await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, { method: 'PUT', headers: botHeaders });
-    await fetch('https://discord.com/api/oauth2/token/revoke', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form({ client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET, token: token.access_token, token_type_hint: 'access_token' }) });
-    return redirect(`${SITE_ORIGIN}${SITE_PATH}/membership.html?checkout=connected&subscription=${encodeURIComponent(subscription.id)}&session_id=${encodeURIComponent(sessionId)}`);
+    return redirect(`${SITE_ORIGIN}${SITE_PATH}/membership.html?checkout=connected`);
   } catch (error) {
     return new Response(error.message || 'Discord connection failed.', { status: 400 });
+  } finally {
+    if (discordAccessToken) {
+      try {
+        await fetch('https://discord.com/api/oauth2/token/revoke', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: form({ client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET, token: discordAccessToken, token_type_hint: 'access_token' }),
+        });
+      } catch { /* The short-lived token expires even if best-effort revocation fails. */ }
+    }
   }
 }
 
@@ -269,18 +489,33 @@ async function createCheckout(request, env, origin) {
 }
 
 async function handleWebhook(request, env) {
+  const contentLength = Number(request.headers.get('Content-Length') || 0);
+  if (contentLength > 1_000_000) return new Response('Webhook payload is too large.', { status: 413 });
   const payload = await request.text();
   const valid = await verifyStripeSignature(payload, request.headers.get('Stripe-Signature'), env.STRIPE_WEBHOOK_SECRET);
   if (!valid) return new Response('Invalid Stripe signature.', { status: 400 });
-  const event = JSON.parse(payload);
-  if (['customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
-    const subscription = event.data?.object;
-    if (subscription && !['active', 'trialing'].includes(subscription.status)) {
-      try { await removeMemberRole(subscription, env); }
-      catch (error) { return new Response(`Member access could not be removed: ${error.message}`, { status: 500 }); }
+  if (!supabaseReady(env)) return new Response('Membership persistence is not configured.', { status: 503 });
+  try {
+    const event = JSON.parse(payload);
+    if (!await beginWebhookEvent(env, event, payload)) return new Response('ok: duplicate', { status: 200 });
+    let outcome = 'RECORDED';
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data?.object;
+      await persistCustomer(env, stripeId(session?.customer), { subscriptionId: stripeId(session?.subscription) });
+      outcome = 'CHECKOUT_RECORDED';
+    } else if (['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
+      const subscription = event.data?.object;
+      await persistSubscription(env, subscription, event.id);
+      outcome = await syncMemberRole(subscription, env);
     }
+    await finishWebhookEvent(env, event.id, 'PROCESSED', outcome);
+    return new Response('ok', { status: 200 });
+  } catch (error) {
+    let eventId = '';
+    try { eventId = JSON.parse(payload)?.id || ''; } catch { /* invalid JSON */ }
+    try { if (eventId) await finishWebhookEvent(env, eventId, 'FAILED', 'PROCESSING_FAILED', error.message); } catch { /* Stripe retry remains authoritative */ }
+    return new Response(`Webhook processing failed: ${error.message}`, { status: 500 });
   }
-  return new Response('ok', { status: 200 });
 }
 
 export default {
@@ -289,12 +524,12 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: headers(origin) });
     if (request.method === 'GET' && url.pathname === '/health') return json({ ok: true }, 200, origin);
-    if (request.method === 'GET' && url.pathname === '/cancel/offer') return cancellationOffer(request, env, origin);
+    if (request.method === 'GET' && url.pathname === '/cancel/offer') return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'GET' && url.pathname === '/discord/connect') return startDiscordConnection(request, env);
+    if (request.method === 'GET' && url.pathname === '/discord/login') return startPortalLogin(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/callback') return finishDiscordConnection(request, env);
     if (request.method === 'POST' && url.pathname === '/create-checkout') return createCheckout(request, env, origin);
-    if (request.method === 'POST' && url.pathname === '/cancel/retain') return retainMembership(request, env, origin);
-    if (request.method === 'POST' && url.pathname === '/cancel/confirm') return confirmCancellation(request, env, origin);
+    if (request.method === 'POST' && ['/cancel/retain', '/cancel/confirm'].includes(url.pathname)) return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'POST' && url.pathname === '/stripe-webhook') return handleWebhook(request, env);
     return json({ error: 'Not found.' }, 404, origin);
   },

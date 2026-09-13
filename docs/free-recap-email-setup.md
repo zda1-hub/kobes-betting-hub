@@ -1,9 +1,9 @@
 # Automatic free-pick recap email
 
-The Discord bot already posts the final compact free-pick recap. This optional
-addition emails Kobe a copy when it posts, or one notice when a recap is waiting
-on a verified result. It uses the existing Cloudflare Worker plus Kobe's Gmail
-Apps Script; neither service receives a Gmail password.
+The Discord bot emails Kobe the final official-pick recap for review, or one
+notice when a recap is waiting on a verified result. It does not automatically
+publish that recap to a public Discord channel. It uses the existing Cloudflare
+Worker plus Kobe's Gmail Apps Script; neither service receives a Gmail password.
 
 ## One-time setup
 
@@ -28,7 +28,8 @@ Apps Script; neither service receives a Gmail password.
 
 ## Behavior
 
-- A final recap posts in Discord and is queued for exactly one email.
+- A final recap is queued for exactly one email to Kobe; public Discord posting
+  remains a separate Kobe-only action.
 - If any official free pick remains `PENDING`, one email lists those Pick IDs.
   The bot retries ESPN grading on later checks and sends the final recap when
   every result is settled.

@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kobes-betting-hub-checkout",
+  "account_id": "f541faefbba2bcb7a22967292aa7fc85",
+  "main": "cloudflare/kobes-checkout-worker.js",
+  "compatibility_date": "2026-09-12",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1
+    }
+  },
+  "vars": {
+    "DISCORD_CLIENT_ID": "1541299881044615238",
+    "DISCORD_GUILD_ID": "1215407647155683358",
+    "DISCORD_MEMBER_ROLE_ID": "1539063967878619218",
+    "DISCORD_REDIRECT_URI": "https://kobes-betting-hub-checkout.kobedirwin.workers.dev/discord/callback",
+    "STRIPE_FIRST_MONTH_COUPON": "O9RCPLIa",
+    "STRIPE_MONTHLY_PRICE_ID": "price_1U7mwnE6p9BmPii3ge8dmJw2",
+    "STRIPE_STARTER_PRICE_ID": "price_1U8sr9E6p9BmPii3C2r5jTb4",
+    "SUPABASE_URL": "https://mpajyubbnnsdpgdizvht.supabase.co"
+  }
+}

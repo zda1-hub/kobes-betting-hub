@@ -1,6 +1,8 @@
 # Kobe's Betting Hub
 
-Project workspace and dependency-free public website for the Betting Hub relaunch. The site remains in a pre-checkout state until pricing, policies, business details, and providers are approved.
+Project workspace for the public website, paid membership, Discord access, pick operations, and publishing automations. Production checkout is live, while several audit, policy, and operational controls remain incomplete.
+
+The authoritative current-state document is [PROJECT_CONTROL.md](PROJECT_CONTROL.md). Read it before relying on older plans or checklists.
 
 ## Required before paid launch
 
@@ -12,6 +14,7 @@ Project workspace and dependency-free public website for the Betting Hub relaunc
 
 ## Start here
 
+- [Project control file](PROJECT_CONTROL.md)
 - [Project plan](docs/PROJECT_PLAN.md)
 - [Today checklist](docs/TODAY_CHECKLIST.md)
 - [Kobe meeting agenda](docs/MEETING_AGENDA.md)

@@ -203,5 +203,13 @@ module.exports = [
   ,
   new SlashCommandBuilder()
     .setName('hub-status')
-    .setDescription('Privately check pick monitoring, logging, grading, and recap readiness')
+    .setDescription('Privately check pick monitoring, logging, grading, and recap readiness'),
+  new SlashCommandBuilder()
+    .setName('pick-audit')
+    .setDescription('Privately inspect the database timeline for one pick or X post')
+    .addStringOption((option) => option
+      .setName('identifier')
+      .setDescription('Exact Pick ID or original X post URL')
+      .setRequired(true)
+      .setMaxLength(1000))
 ].map((command) => command.toJSON());
