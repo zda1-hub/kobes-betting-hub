@@ -32,8 +32,6 @@ services:
         sync: false
       - key: AUDIT_DATABASE_REQUIRED
         sync: false
-      - key: OPENAI_ADMIN_KEY
-        sync: false
       - key: OPENAI_EXPECTED_PROJECT_ID
         value: proj_8DxPJSInvFUVEZgs8KMld4rz
       - key: OPENAI_EXPECTED_API_KEY_ID

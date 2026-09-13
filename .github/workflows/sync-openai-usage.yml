@@ -1,0 +1,38 @@
+name: Reconcile OpenAI usage
+
+on:
+  schedule:
+    # GitHub cron is UTC. Arizona remains UTC-7 year-round: 03:15 MST.
+    - cron: "15 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openai-usage-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_ENV: production
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OPENAI_ADMIN_KEY: ${{ secrets.OPENAI_ADMIN_KEY }}
+      OPENAI_EXPECTED_PROJECT_ID: proj_8DxPJSInvFUVEZgs8KMld4rz
+      OPENAI_EXPECTED_API_KEY_ID: key_TDES2zUP3W9UZaej
+      OPENAI_USAGE_LOOKBACK_HOURS: "48"
+    steps:
+      - name: Check out the production source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Import audited OpenAI usage and cost snapshots
+        run: node scripts/sync-openai-usage.mjs
