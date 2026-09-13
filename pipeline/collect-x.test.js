@@ -2,7 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   createModelCallBudget,
+  createSourceModelCallReservation,
   configuredMediaOnlyLimit,
+  configuredPerSourceModelCallLimit,
   footballGamesScheduledToday,
   footballPriority,
   intakePriority,
@@ -10,8 +12,10 @@ const {
   mediaCaptionHasBetSignal,
   nflGamesScheduledToday,
   recordModelCallDeferral,
+  rotateSources,
   shouldQueueForReview,
   shouldSplitPlayPackets,
+  sourceSupportSignalCount,
   sourceStateAfterPass
 } = require('./collect-x');
 const { enrichPacket } = require('./enrich-pick');
@@ -37,10 +41,50 @@ test('requires a caption signal for generic media while preserving dedicated pho
 test('prioritizes strong text picks before signaled and image-only media', () => {
   assert.equal(mediaCaptionHasBetSignal('Tonight\'s betting card'), true);
   assert.equal(mediaCaptionHasBetSignal('Practice photos'), false);
-  assert.equal(intakePriority({ monitoring_mode: 'standard' }, { text: 'NFL Rams -4.5 2u' }), 0);
-  assert.equal(intakePriority({ monitoring_mode: 'standard' }, { text: 'MLB player over 1.5 hits' }), 1);
-  assert.equal(intakePriority({ monitoring_mode: 'writeup_or_trend' }, { text: 'NFL card', attachments: { media_keys: ['1'] } }), 2);
-  assert.equal(intakePriority({ monitoring_mode: 'photo_review' }, { text: '', attachments: { media_keys: ['1'] } }), 4);
+  assert.equal(intakePriority({ monitoring_mode: 'standard' }, { text: 'NFL Rams -4.5 2u' }), 1);
+  assert.equal(intakePriority({ monitoring_mode: 'standard' }, { text: 'MLB player over 1.5 hits' }), 3);
+  assert.equal(intakePriority({ monitoring_mode: 'writeup_or_trend' }, { text: 'NFL card', attachments: { media_keys: ['1'] } }), 4);
+  assert.equal(intakePriority({ monitoring_mode: 'photo_review' }, { text: '', attachments: { media_keys: ['1'] } }), 6);
+});
+
+test('prioritizes source-supported writeups within the same sport', () => {
+  const supported = {
+    text: [
+      'NFL Jaxson Dart over 204.5 passing yards -115',
+      '230 yards in last season matchup',
+      'Opposing QBs cleared in 14 of 17 games',
+      'Averaged 222 yards in 8 road starts'
+    ].join('\n')
+  };
+  assert.equal(sourceSupportSignalCount(supported.text), 4);
+  assert.equal(intakePriority({ monitoring_mode: 'standard' }, supported), 0);
+  assert.equal(intakePriority({ monitoring_mode: 'standard' }, { text: 'NFL Jaxson Dart over 204.5 passing yards -115' }), 1);
+});
+
+test('rotates the source roster so capped runs do not repeatedly favor the same accounts', () => {
+  const sources = ['a', 'b', 'c', 'd'];
+  assert.deepEqual(rotateSources(sources, 0), sources);
+  assert.deepEqual(rotateSources(sources, 2), ['c', 'd', 'a', 'b']);
+  assert.deepEqual(rotateSources(sources, 6), ['c', 'd', 'a', 'b']);
+  assert.deepEqual(rotateSources(sources, -1), ['d', 'a', 'b', 'c']);
+});
+
+test('defaults to one paid extraction per source per run', () => {
+  assert.equal(configuredPerSourceModelCallLimit({}), 1);
+  assert.equal(configuredPerSourceModelCallLimit({ X_MONITOR_MAX_MODEL_CALLS_PER_SOURCE_PER_RUN: '2' }), 2);
+  assert.equal(configuredPerSourceModelCallLimit({ X_MONITOR_MAX_MODEL_CALLS_PER_SOURCE_PER_RUN: '0' }), 1);
+});
+
+test('one source cannot consume the run-wide model budget', () => {
+  const runBudget = createModelCallBudget(3);
+  const sourceA = createSourceModelCallReservation(runBudget, 1);
+  const sourceB = createSourceModelCallReservation(runBudget, 1);
+  const sourceC = createSourceModelCallReservation(runBudget, 1);
+  assert.equal(sourceA.tryStart(), true);
+  assert.equal(sourceA.tryStart(), false);
+  assert.equal(sourceB.tryStart(), true);
+  assert.equal(sourceC.tryStart(), true);
+  assert.equal(runBudget.started, 3);
 });
 
 test('bounds weak media candidates per source without changing strong-pick limits', () => {
