@@ -26,6 +26,7 @@ Customer-experience requirement: checkout, Discord access, billing management, c
 - `support@kobesbettinghub.com` is active and forwards to the verified destination `themartinventures@gmail.com`.
 - The production migration ledger was checked read-only on 2026-09-13 and contains referral migrations `005_referral_cash_rewards` and `006_referral_reward_ten_dollars`.
 - The production Supabase project is on the free plan and explicitly reports that provider-managed project backups are unavailable. An encrypted logical dump is therefore required immediately before migrations 007–009.
+- Backup preparation was checked again from the authenticated production dashboard. Supabase exposes the IPv4 session-pooler endpoint `aws-0-us-east-2.pooler.supabase.com:5432`, database `postgres`, and user `postgres.mpajyubbnnsdpgdizvht`. The database password is intentionally absent from the repository, process environment, and macOS Keychain, so no logical dump has been attempted and no password has been rotated. The operator must supply the existing password through a local secret prompt, or personally reset it, before the encrypted dump can be created.
 - Stripe remains the payment/subscription authority. Discord OAuth identifies the member; Discord is not a payment method. Supabase persists the Stripe-to-Discord mapping and event/audit trail.
 
 ## Public-beta decision
