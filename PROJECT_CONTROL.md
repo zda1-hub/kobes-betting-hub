@@ -29,6 +29,7 @@ The system is not a single application. It currently spans GitHub Pages, Cloudfl
 ### What is definitely live
 
 - `https://kobesbettinghub.com` serves the repository's public site from `main`; the membership-management link now targets Discord-authenticated Stripe Customer Portal access.
+- The GitHub Pages artifact manifest explicitly includes `cancel.html` and `cancel.js`; this was corrected after the first cutover build omitted them.
 - Membership checkout is enabled. Offers shown publicly are `$10 / 7 days` or `2 days free`, followed by `$32.99/month` until canceled.
 - The checkout Cloudflare Worker is reachable and reports healthy. The Discord-authenticated Stripe Customer Portal and Supabase membership/webhook ledger were deployed as Worker version `d4edff4e-93ff-41cc-94d9-54c2bcab2d0b` on 2026-09-12.
 - Stripe Checkout creates subscriptions. After payment/trial confirmation, the customer connects Discord through OAuth and receives the configured paid-member role.
