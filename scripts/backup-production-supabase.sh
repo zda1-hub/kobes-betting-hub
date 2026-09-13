@@ -74,7 +74,7 @@ export KBH_BACKUP_KEY="${backup_key}"
 /usr/bin/openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
   -pass env:KBH_BACKUP_KEY \
   -in "${partial_dump}" \
-  | "${pg_bin}/pg_restore" --list - >/dev/null
+  | "${pg_bin}/pg_restore" --list >/dev/null
 
 mv "${partial_dump}" "${encrypted_dump}"
 checksum="$(shasum -a 256 "${encrypted_dump}" | awk '{print $1}')"
