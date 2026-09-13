@@ -1146,6 +1146,23 @@ async function hydrateLegacyReviewPacket({ interaction, pickId }) {
 
 async function findReviewPacket(pickId, interaction) {
   if (!/^[A-Za-z0-9_-]+$/.test(pickId)) return null;
+
+  // Collector-generated IDs encode their operating date and the packet file
+  // uses the same ID without the trailing `-X`. Read that exact path first.
+  // The fallback scan exists only for legacy/nonstandard cards. Without this
+  // fast path, every button press reread every historical JSON packet on the
+  // persistent disk before approval could continue.
+  if (/^\d{8}-\d+-X$/.test(pickId)) {
+    const date = `${pickId.slice(0, 4)}-${pickId.slice(4, 6)}-${pickId.slice(6, 8)}`;
+    const packetPath = path.join(reviewQueueRoot, date, `${pickId.replace(/-X$/, '')}.json`);
+    try {
+      const packet = JSON.parse(await fs.readFile(packetPath, 'utf8'));
+      if (packet.pick_id === pickId) return { packet, packetPath };
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+
   let dates;
   try {
     dates = await fs.readdir(reviewQueueRoot, { withFileTypes: true });
@@ -1167,7 +1184,10 @@ async function findReviewPacket(pickId, interaction) {
 
 async function handleSourceReviewButton(interaction) {
   const [, pickId, action] = interaction.customId.split(':');
+  const startedAt = Date.now();
+  const trace = (stage) => console.log(`[approval:${pickId}] ${stage} after ${Date.now() - startedAt}ms`);
   await interaction.deferReply({ ephemeral: true });
+  trace('interaction acknowledged');
   if (!isPickApprover(interaction)) {
     await interaction.editReply('Only Kobe can approve, route, or reject this source draft.');
     return;
@@ -1177,6 +1197,7 @@ async function handleSourceReviewButton(interaction) {
     return;
   }
   const found = await findReviewPacket(pickId, interaction);
+  trace('review packet loaded');
   if (!found) {
     await interaction.editReply('The review packet is no longer available. Do not publish it; create a fresh draft.');
     return;
@@ -1224,6 +1245,7 @@ async function handleSourceReviewButton(interaction) {
       throw new Error('This regular card does not contain at least three clean, relevant breakdown points. Reject it and wait for a corrected card.');
     }
     const timing = await upcomingEventStatus(packet);
+    trace(`event verification ${timing.status}`);
     if (timing.status !== 'UPCOMING') {
       throw new Error(timing.status === 'STARTED_OR_FINISHED'
         ? 'This game has already started, so this card cannot be published.'
@@ -1247,6 +1269,7 @@ async function handleSourceReviewButton(interaction) {
       actorId: interaction.user.id,
       status: 'APPROVED_PENDING_PUBLICATION'
     });
+    trace('approval audit recorded');
     const publishedMessage = await postAndLogOfficialPick({
       channel,
       payload: { embeds: [buildSourcePickEmbed(packet, label)] },
@@ -1274,6 +1297,7 @@ async function handleSourceReviewButton(interaction) {
         notes: `Approved from public X source: ${packet.source.post_url || ''}`
       }
     });
+    trace('official Discord post and canonical log completed');
     approval.decision = action === 'free' ? 'FREE_PUBLISHED' : 'PAID_PUBLISHED';
     approval.destination_sport = action === 'free' ? 'free' : sport;
     packet.status = 'PUBLISHED';
@@ -1302,8 +1326,10 @@ async function handleSourceReviewButton(interaction) {
       }
     }
     await interaction.editReply(`Published to ${channel}. [View official post](${postReference})${siteNote}${xNote}`);
+    trace('interaction completed');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to complete this approval action.';
+    console.error(`[approval:${pickId}] failed after ${Date.now() - startedAt}ms:`, message);
     await interaction.editReply(message);
   }
 }

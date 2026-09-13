@@ -44,7 +44,15 @@ function getPool() {
   }
   if (!pool) {
     const { Pool } = require('pg');
-    pool = new Pool({ connectionString: databaseUrl(), max: 6, connectionTimeoutMillis: 10000 });
+    pool = new Pool({
+      connectionString: databaseUrl(),
+      max: 6,
+      connectionTimeoutMillis: 10000,
+      // A required audit write must fail closed, but it must not leave a
+      // Discord interaction spinning until its token expires.
+      query_timeout: 7500,
+      statement_timeout: 7000
+    });
     pool.on('error', (error) => console.error('Idle audit database connection failed:', error.message));
   }
   return pool;
