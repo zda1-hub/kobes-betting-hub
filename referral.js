@@ -24,10 +24,13 @@ const referralInput = document.querySelector('[data-referral-link]');
 const copyButton = document.querySelector('[data-copy-referral]');
 const payoutSetup = document.querySelector('[data-payout-setup]');
 const message = document.querySelector('[data-referral-message]');
+const referralLogin = document.querySelector('[data-referral-login]');
 const sandboxSite = window.location.hostname === 'kobes-betting-hub-referral-sandbox.kobedirwin.workers.dev';
 const workerOrigin = sandboxSite
   ? 'https://kobes-betting-hub-checkout-referral-sandbox.kobedirwin.workers.dev'
   : 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
+
+if (referralLogin) referralLogin.href = `${workerOrigin}/referrals/login`;
 
 if (/^KBH-[A-Z0-9]{10}$/.test(code) && dashboard && referralInput) {
   const referralUrl = new URL(sandboxSite ? `${window.location.origin}/join.html` : 'https://kobesbettinghub.com/join.html');
