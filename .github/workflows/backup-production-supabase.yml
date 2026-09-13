@@ -35,8 +35,7 @@ jobs:
       - name: Install PostgreSQL client
         shell: bash
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client-17
+          docker pull postgres:17-alpine
 
       - name: Create, encrypt, and verify logical backup
         id: backup
@@ -60,13 +59,12 @@ jobs:
           trap cleanup EXIT
 
           kbh_pg_url="$(printf '%s' "$DATABASE_URL" | sed -E 's/([?&])uselibpqcompat=true(&?)/\1/; s/\?&/?/; s/[?&]$//')"
-          /usr/lib/postgresql/17/bin/pg_dump \
-            --dbname="$kbh_pg_url" \
-            --format=custom \
-            --no-owner \
-            --no-privileges \
-            --file="$plain"
-          /usr/lib/postgresql/17/bin/pg_restore --list "$plain" >/dev/null
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e DATABASE_URL="$kbh_pg_url" \
+            -v "$plain:/backup.dump" \
+            postgres:17-alpine \
+            sh -c 'pg_dump --dbname="$DATABASE_URL" --format=custom --no-owner --no-privileges --file=/backup.dump'
+          docker run --rm -v "$plain:/backup.dump:ro" postgres:17-alpine pg_restore --list /backup.dump >/dev/null
 
           openssl enc -aes-256-cbc -salt -pbkdf2 -iter 600000 -md sha256 \
             -in "$plain" \
@@ -76,7 +74,7 @@ jobs:
             -in "$encrypted" \
             -out "$restored" \
             -pass env:BACKUP_KEY
-          /usr/lib/postgresql/17/bin/pg_restore --list "$restored" >/dev/null
+          docker run --rm -v "$restored:/backup.dump:ro" postgres:17-alpine pg_restore --list /backup.dump >/dev/null
 
           sha256sum "$encrypted" > "${encrypted}.sha256"
           cat > artifacts/README.txt <<EOF
