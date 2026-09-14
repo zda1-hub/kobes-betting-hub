@@ -220,10 +220,24 @@ function looksLikeSelection(note) {
   return false;
 }
 
+function looksLikeEngagementBait(note) {
+  const raw = String(note || '');
+  const normalized = normalizedText(raw);
+  // Keep approval cards about the wager. Social calls-to-action such as
+  // "150 ❤️s if you want some parlays" are not evidence, even when emoji
+  // normalization leaves only a stray "s" between the number and phrase.
+  if (/[❤♥]/u.test(raw) && /\bif\s+you\s+want\b/i.test(raw)) return true;
+  if (/^\d{1,6}\s+s?\s*if\s+you\s+want\b/.test(normalized)) return true;
+  if (/\bif\s+you\s+want\s+(?:some\s+)?(?:parlays?|plays?|picks?|cards?)\b/.test(normalized)) return true;
+  if (/\b(?:likes?|hearts?|reposts?|retweets?|comments?|replies|follows?|shares?|bookmarks?)\b.*\b(?:for|if\s+you\s+want|to\s+(?:get|unlock|see))\b/.test(normalized)) return true;
+  return false;
+}
+
 function isUsefulSupport(note, pickTerms, packet) {
   const normalized = normalizedText(note);
   if (!normalized) return false;
-  if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|banger|bang bang|two leg|2 leg|parlay|lets catch|let s catch|lets go|let s go|winner|profit|payout|refund|power play|ladder|make \d+\s*x|\d+\s*\$?\s*to\s+(?:win|one person)|you(?:'|’)ll love|you gonna love|like the demons|link on post|slide for|nfl is back|football is back|baseball is back|nba is back|nhl is back)\b/.test(normalized)) return false;
+  if (looksLikeEngagementBait(note)) return false;
+  if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|banger|bang bang|two leg|2 leg|parlays?|lets catch|let s catch|lets go|let s go|winner|profit|payout|refund|power play|ladder|make \d+\s*x|\d+\s*\$?\s*to\s+(?:win|one person)|you(?:'|’)ll love|you gonna love|like the demons|link on post|slide for|nfl is back|football is back|baseball is back|nba is back|nhl is back)\b/.test(normalized)) return false;
   if (/^\d{1,2}\s\d{2}\s*(?:am|pm)?\b/.test(normalized)) return false;
   // A source post can mix a genuine bet graphic with timeline chatter,
   // promotional tooling, or a general sports rant. None of that is pick

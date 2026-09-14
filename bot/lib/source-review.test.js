@@ -152,6 +152,27 @@ test('does not include promotional banger wording in a writeup', () => {
   assert.equal(embed.description, 'Cooper Kupp Over 2.5 Receptions (-132)\n\n- Kupp has cleared 2+ receptions in 9 of his last 10 games');
 });
 
+test('removes social engagement bait while preserving the play breakdown', () => {
+  const embed = buildSourcePickEmbed({
+    ...packet,
+    analysis: {
+      ...packet.analysis,
+      extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection: 'Kenneth Walker III over 17.5 receiving yards', player_name: 'Kenneth Walker III', line: '17.5 receiving yards', odds_american: '-112', units: '' }],
+        source_claims: [
+          '150 ❤️s if you want some parlays',
+          'He is the bellcow as long as he is healthy',
+          'Edge vs Line +10.85',
+          'avg 26.35 · line 15.5',
+          'He cleared this mark in 11 of 17 games'
+        ]
+      }
+    }
+  }, 'PAID PICK');
+  assert.equal(embed.description, 'Kenneth Walker III over 17.5 receiving yards (-112)\n\n- He is the bellcow as long as he is healthy\n- Edge vs Line +10.85\n- avg 26.35 · line 15.5\n- He cleared this mark in 11 of 17 games');
+});
+
 test('does not count generic season hype as writeup evidence', () => {
   const malformed = {
     ...packet,
