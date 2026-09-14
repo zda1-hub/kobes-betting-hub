@@ -1,6 +1,6 @@
 # Kobe's Betting Hub — Current Public-Beta Launch Checklist
 
-Status time: 2026-09-13 19:57 Arizona
+Status time: 2026-09-13 20:03 Arizona
 
 Technical/billing/support owner and final production approver: Zakai Martin
 
@@ -86,7 +86,7 @@ When all three sections pass, Zakai records `PUBLIC BETA GO` with timestamp, pro
 - [x] Publish support hours and a response target; support remains manually operated during the public beta.
 - [x] Run one isolated staging image-backed Free Pick and verify the retrieved media before relying on that path; evidence and cleanup are recorded in `docs/STAGING_IMAGE_FREE_PICK_AUDIT_2026-09-13.md`.
 - [ ] Complete the live queue/delivery portion of approved-pick recap email and Trends intake/approval acceptance. The fixture-only format path passes with no external delivery.
-- [ ] Finish Google authorization and install the backlog-safe Trends/recap triggers, then accept one private Trends card and one new email without publishing test content. Credential alignment, Apps Script source/properties, Render polling, channel allowlisting, and text-only X fallback are complete; Google stopped the run at its standard unverified-self-owned-script warning pending owner confirmation.
+- [ ] Finish the backlog-safe recap trigger, then accept one private Trends card and one new recap/social-package email without publishing test content. Google authorization is complete; the Trends read-only connection passed and `queueKobeTrendEmails` is installed every five minutes. The recap connection correctly failed closed with `401`, so its trigger remains uninstalled until the existing Render recap credential is copied into the mismatched Apps Script property with owner confirmation.
 - [x] Consolidate the Google operations source into one generated bundle and require activation timestamps so the five pre-existing recap rows and any old Trends mail are excluded. Read-only connection tests are included and the release suite passes `210/210`.
 - [x] Add server-side checkout abuse protection before broad public marketing.
 - [ ] Close the remaining Apps Script provider-call audit gap. Discord response and pre-response failures are covered.
