@@ -1,71 +1,77 @@
-# Kobe's Betting Hub launch checklist
+# Kobe's Betting Hub — Current Public-Beta Launch Checklist
 
-This is the shared source of truth for the free-picks pilot and paid-membership launch. A task is only marked complete after it has been verified, not merely planned.
+**Status date:** 2026-09-13
 
-## Verified foundation
+**Authority:** `PROJECT_CONTROL.md` remains the project source of truth.
 
-- [x] Kobe Bot application is connected to the Betting Hub Discord server.
-- [x] Current local Discord bot token is valid and Kobe Bot is running locally.
-- [x] Private `#pick-approvals` channel is configured.
-- [x] Member-facing destination channels are allowlisted and the bot can access them: Exclusives, NFL writeups, All Football Trends, MLB writeups, Baseball Trends, and Daily Recap.
-- [x] Manual pick preview/publish and recap commands are registered.
-- [x] X API credentials are configured.
-- [x] OpenAI API key is stored locally; API billing credits still need to be added before image analysis can run.
-- [x] 37 public X sources are staged but disabled: 8 standard pick sources, 7 photo-review sources, and 22 writeup/trend sources.
-- [x] No partner Discord community access or personal-account automation is used.
+**Final production approver / technical and support owner:** Zakai Martin
 
-## Free-picks pilot
+**Business and pick approver:** Kobe
 
-- [x] OpenAI API credits added and a live API request succeeded.
-- [x] `#daily-free-play` Channel ID received: `1539061878062583848` and added as an allowlisted free-pick destination.
-- [x] Kobe Bot access to `#daily-free-play` verified.
-- [x] Built approval-card controls for source drafts: Post as Free Pick, Post to Paid Sport, Reject, and a saved audit decision.
-- [x] A private, safety-locked approval-card button test was created from a real public CappersUSA source; its publish buttons are disabled.
-- [ ] Kobe clicks Reject on the safety test card before source monitoring is enabled.
-- [x] Built source-specific intake rules for text picks, photo-only candidates, and writeup/trend candidates; all remain private and disabled until tested.
-- [x] Set photo/exclusive member-post format to capper name followed by one play per line, with visible unit size or dollar stake only.
-- [x] Ran the first private approval-card/button test against a stored source draft.
-- [x] A real public CappersUSA photo-source extraction was sent privately to `#pick-approvals` (test only; no member post).
-- [x] Kobe confirmed the original capper, play, odds, and units/stake in the private photo-pick test.
-- [ ] Run one real text-pick approval privately; Kobe confirms the post layout and destination.
-- [ ] Start with a small, explicitly approved source group. Keep all public posting approval-first.
-- [ ] Review three to five days of free-pick cost, accuracy, duplicates, and recap behavior.
-- [ ] Choose the full-source activation date/time in California time and set the X monthly spending limit.
+This checklist replaces the obsolete early-build checklist. A box is complete only when production or isolated staging evidence proves the business outcome.
 
-## Paid-membership launch
+## Verified and live
 
-- [ ] Obtain written confirmation from the payment provider that the paid sports-content subscription is supported for the intended jurisdictions and business model.
-- [ ] Create the paid-member Discord role and provide its Role ID.
-- [ ] Lock paid channels to the paid-member role and keep `@everyone` out.
-- [ ] Finalize legal business owner, support email, price, cancellation/refund policy, terms, privacy policy, responsible-gambling notice, and age/location rules.
-- [ ] Create the approved processor product for the $32.99/month membership and configure the bank payout account.
-- [ ] Configure live checkout, signed webhooks, Discord OAuth connection, and automated role grant/removal.
-- [ ] Deploy the membership service and run a real end-to-end test purchase before public launch.
-- [x] Render Background Worker is deployed and reporting Live for the current GitHub `main` release.
-- [ ] Publish and deploy the newer approval-button, photo-format, and source-intake updates to GitHub/Render; do not enable source monitoring before this release is live.
-- [ ] Run a small internal member cohort before opening payment links publicly.
+- [x] Public website, Checkout Worker, Publisher Worker, Free Pick API/page, and client asset pass the five-check production smoke suite.
+- [x] Stripe is the subscription authority; Discord OAuth identifies the linked member; Supabase stores normalized membership and audit state.
+- [x] Production migrations through `009` are live, including cancellation fields, service-role access, and refund/dispute entitlement blocks.
+- [x] The paid-member bot role has `Manage Roles`, is above the paid role, and production reconciliation successfully granted both observed eligible roles.
+- [x] Checkout is idempotent and rate limited before Stripe; signed webhooks handle subscription, invoice-payment-failure, refund, and dispute events.
+- [x] Stripe Customer Portal provides payment-method, invoice, and cancellation management.
+- [x] Isolated test-clock evidence proves role grant, one-time 75%-off retention, return to `$32.99`, terminal cancellation, Supabase cancellation, and Discord role removal.
+- [x] The live starter offer uses `$10` once for the first seven days, followed by `$32.99/month`. The correct one-time price is the product default; the mistaken `$10/week` price is archived and had zero active subscriptions.
+- [x] The alternate offer is two days free followed by `$32.99/month`.
+- [x] Effective Terms, Privacy, cancellation/refund disclosures, public-beta disclosure, and responsible-gambling language are live.
+- [x] `support@kobesbettinghub.com` forwards to the owner. Support hours are Monday–Saturday, 9:00 AM–7:00 PM Pacific, with a one-business-day response target.
+- [x] The read-only membership/pick operations alarm and scheduled production-health workflow are active.
+- [x] X intake uses Luna under request/dollar limits, preserves audit records, and remains approval-first.
+- [x] Recap and Trends polling are activated with backlog exclusions; empty runs send no public content.
+- [x] Latest production source passes the complete 210-test release suite.
 
-## Daily recaps and social
+## Final gates before invitations
 
-- [ ] Confirm whether early recaps are manually verified or connect a results/odds data provider for automated grading.
-- [ ] Configure the official Instagram account for recap publishing.
-- [ ] Configure the official X account only if automatic recap posts are desired.
-- [ ] Test one recap through Discord, Instagram, and X without exposing it publicly.
+- [ ] Kobe opens the billing portal using the Discord identity linked to the intended duplicate membership and schedules that exact membership for cancellation. An operator must not guess or cancel either subscription on his behalf.
+- [ ] Zakai performs a read-only Stripe → Supabase → Discord reconciliation after Kobe reports completion. Confirm the selected subscription is scheduled to end, the other subscription is unchanged, and paid access remains through the displayed paid-through date.
+- [ ] Kobe acts on one fresh locked-format Discord approval card. Verify the interaction ends with a clear approved/rejected terminal result instead of disappearing after “thinking.” Do not publish a test pick publicly.
+- [ ] Record `PUBLIC BETA GO`, timestamp/timezone, current commit and runtime versions, support coverage, and accepted residual risks in `PROJECT_CONTROL.md`.
 
-## Current monthly budget target
+## First-member activation routine
 
-| Item | Launch cap / estimate |
-| --- | ---: |
-| X monitoring for 37 accounts | $75 |
-| OpenAI photo analysis | $20 |
-| Discord bot and channel posts | $0 |
-| Website | $0 |
-| Subscription/role automation | $5 |
-| Domain | about $2 |
-| Daily X recap posts | about $1 |
-| Bot hosting while Mac stays on | $0 |
-| **Fixed launch operating budget** | **about $103/month** |
-| Always-on bot host later | about +$10/month |
-| Payment processing | about $1.49 per $32.99 domestic-card member, after provider approval |
+For each initial member, complete these checks within five minutes of checkout:
 
-Paid ads, a premium odds/results provider, taxes, and legal/accounting work are not included in this budget.
+1. Confirm exactly one Stripe customer/subscription and the disclosed offer: `$10` once plus seven-day trial, or two-day free trial, then `$32.99/month`.
+2. Confirm the signed webhook is processed and Supabase has one matching customer/subscription state.
+3. Confirm exactly one Discord identity is linked and the paid role is granted.
+4. Confirm the member can see paid channels and cannot see staff-only channels.
+5. Confirm Manage Membership reaches Stripe Customer Portal using the linked Discord identity.
+6. Give the member the official support route; record only sanitized internal references, never card data, tokens, or passwords.
+7. If money, identity, or entitlement state is unclear, stop new invitations and open an incident before changing any other account.
+
+## First-day operating routine
+
+- Run the five public smoke checks before the first invitation and after any deployment.
+- Review every new activation rather than sampling.
+- Check the private operations alarm, Stripe webhook failures/retries, Supabase reconciliation, Discord roles, and support queue at least every 30 minutes while invitations are active.
+- Reconcile all active/trialing memberships at close of day.
+- Ensure every official pick has an approval, publication, canonical-log, grade/correction, and recap trail.
+- Keep monitored-source publication approval-first; do not publish a synthetic test pick.
+
+## Stop conditions
+
+Stop new invitations immediately for any of the following:
+
+- Duplicate or unexplained charge/subscription.
+- Paid member without access, or access without eligible payment.
+- Wrong Discord identity linked or first-claim protection failure.
+- Timely cancellation followed by an unexpected renewal.
+- Repeated webhook/reconciliation failure or stale monitoring.
+- Wrong, unapproved, or unlogged member-facing pick.
+- Checkout, website, or support route fails the public smoke/acceptance check.
+
+## Safe post-launch backlog
+
+- Observe the first real renewal and period-end cancellation through terminal role removal.
+- Complete real approved-pick grading, recap, Trends, X, and Instagram Story content acceptance as legitimate content becomes available.
+- Add a shared ticketing system and name a backup operator/legal-compliance owner.
+- Decide non-OpenAI infrastructure budgets and retention periods.
+- Build the deferred original black/orange sports-broadcast homepage redesign in a preview environment after memberships are rolling.
