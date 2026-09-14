@@ -1,7 +1,8 @@
 -- New referrals earn $10. Keep the former $20 value valid so any reward
 -- recorded under the original program can still be paid as promised.
 ALTER TABLE referral_rewards
-  DROP CONSTRAINT IF EXISTS referral_rewards_reward_amount_cents_check;
+  DROP CONSTRAINT IF EXISTS referral_rewards_reward_amount_cents_check,
+  DROP CONSTRAINT IF EXISTS referral_rewards_reward_amount_cents_valid;
 
 ALTER TABLE referral_rewards
   ALTER COLUMN reward_amount_cents SET DEFAULT 1000;

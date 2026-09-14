@@ -9,6 +9,12 @@ const migrationPath = path.join(
   '005_relabel_unscoped_openai_cost_snapshots.sql',
 );
 
+const referralRewardMigrationPath = path.join(
+  __dirname,
+  'migrations',
+  '006_referral_reward_ten_dollars.sql',
+);
+
 test('legacy OpenAI cost migration only relabels keyless snapshots and is repeat-safe', async () => {
   const sql = await fs.readFile(migrationPath, 'utf8');
   const update = sql.match(/UPDATE provider_usage_snapshots[\s\S]*?;/i)?.[0] || '';
@@ -28,4 +34,10 @@ test('legacy OpenAI cost migration only relabels keyless snapshots and is repeat
   legacyRow.source = 'openai_costs_api_unscoped';
   assert.equal(matchesUpdate(legacyRow), false);
   assert.equal(matchesUpdate({ ...legacyRow, source: 'openai_costs_api', apiKeyReference: 'key_current' }), false);
+});
+
+test('referral reward migration replaces its named constraint repeat-safely', async () => {
+  const sql = await fs.readFile(referralRewardMigrationPath, 'utf8');
+  assert.match(sql, /DROP CONSTRAINT IF EXISTS referral_rewards_reward_amount_cents_valid/i);
+  assert.match(sql, /ADD CONSTRAINT referral_rewards_reward_amount_cents_valid/i);
 });
