@@ -1,6 +1,6 @@
 # Kobe's Betting Hub — Current Public-Beta Launch Checklist
 
-Status time: 2026-09-13 18:41 Arizona
+Status time: 2026-09-13 19:57 Arizona
 
 Technical/billing/support owner and final production approver: Zakai Martin
 
@@ -39,6 +39,8 @@ Release type: public beta with monitored improvement while live
 - [x] A repeatable fixture-only recap/Trends acceptance produces both formats with zero network calls and zero Discord, email, or X delivery.
 - [x] Discord failures that occur before the SDK emits a response are now recorded as redacted API audit events; no message content, interaction token, or channel/member identifier is stored.
 - [x] One approved Free Pick now creates a deterministic 1080×1920 Instagram Story PNG from the approved terms, exposes a dated download URL, avoids a duplicate X post when the image publisher already succeeded, and queues a private social-package email for Kobe. No generative-image API is used.
+- [x] The dedicated Trends queue credential is aligned across the production Publisher Worker, Render, and Apps Script without recording its value. Render now checks the private inbox every five minutes. Its first poll exposed that `#pick-approvals` was missing from `ALLOWED_CHANNEL_IDS`; the channel was added, the replacement deployment succeeded, Kobe Bot logged in, and the next startup poll completed without the allowlist error.
+- [x] Text-only Free Pick X fallback is enabled. Image-backed approvals remain single-shot through the Publisher Worker, and no public test post was created during activation.
 
 ## Three gates before public-beta invitations
 
@@ -84,7 +86,7 @@ When all three sections pass, Zakai records `PUBLIC BETA GO` with timestamp, pro
 - [x] Publish support hours and a response target; support remains manually operated during the public beta.
 - [x] Run one isolated staging image-backed Free Pick and verify the retrieved media before relying on that path; evidence and cleanup are recorded in `docs/STAGING_IMAGE_FREE_PICK_AUDIT_2026-09-13.md`.
 - [ ] Complete the live queue/delivery portion of approved-pick recap email and Trends intake/approval acceptance. The fixture-only format path passes with no external delivery.
-- [ ] Align one dedicated Trends queue credential across Cloudflare, Render, and Apps Script; install backlog-safe Trends/recap triggers; then accept one private Trends card and one new email without publishing test content.
+- [ ] Finish Google authorization and install the backlog-safe Trends/recap triggers, then accept one private Trends card and one new email without publishing test content. Credential alignment, Apps Script source/properties, Render polling, channel allowlisting, and text-only X fallback are complete; Google stopped the run at its standard unverified-self-owned-script warning pending owner confirmation.
 - [x] Consolidate the Google operations source into one generated bundle and require activation timestamps so the five pre-existing recap rows and any old Trends mail are excluded. Read-only connection tests are included and the release suite passes `210/210`.
 - [x] Add server-side checkout abuse protection before broad public marketing.
 - [ ] Close the remaining Apps Script provider-call audit gap. Discord response and pre-response failures are covered.
