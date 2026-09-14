@@ -146,4 +146,26 @@ function attachDiscordRestAudit(rest, context = {}, options = {}) {
   };
 }
 
-module.exports = { attachDiscordRestAudit, auditedFetch, endpointClass, inferredService, requestBodyHash };
+async function recordDiscordPreResponseFailure(context = {}, error, recordImpl = recordApiCall) {
+  const responseStatus = Number(error?.status || error?.rawError?.status);
+  const hasStatus = Number.isFinite(responseStatus) && responseStatus > 0;
+  await recordImpl({
+    service: 'discord',
+    endpointClass: context.endpointClass || '/interactions/{id}/{token}',
+    method: String(context.method || 'POST').toUpperCase(),
+    callerComponent: context.callerComponent || 'discord-sdk',
+    triggerType: context.triggerType || 'pre_response_failure',
+    operationId: context.operationId,
+    workflowId: context.workflowId,
+    pickId: context.pickId,
+    memberId: context.memberId,
+    clientRequestId: context.clientRequestId,
+    responseStatus: hasStatus ? responseStatus : null,
+    outcome: hasStatus ? 'HTTP_ERROR' : 'NETWORK_ERROR',
+    errorClass: String(error?.code || error?.rawError?.code || error?.name || 'NETWORK_ERROR').slice(0, 80),
+    retryCount: Number.isInteger(context.retryCount) ? context.retryCount : 0,
+    latencyMs: Number.isFinite(context.latencyMs) ? context.latencyMs : null
+  });
+}
+
+module.exports = { attachDiscordRestAudit, auditedFetch, endpointClass, inferredService, recordDiscordPreResponseFailure, requestBodyHash };

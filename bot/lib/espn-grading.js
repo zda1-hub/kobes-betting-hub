@@ -83,11 +83,21 @@ function statSpec(row, entries) {
   if (/\bhits?\b/.test(text)) return pick('batting', 'hits', 'hits');
   if (/\bruns?\b/.test(text)) return pick('batting', 'runs', 'runs');
   if (/passing yards?/.test(text)) return pick('passing', 'passingYards', 'passing yards');
+  if (/pass(?:ing)? completions?/.test(text)) return pick('passing', ['completions', 'passingCompletions'], 'pass completions');
+  if (/pass(?:ing)? attempts?/.test(text)) return pick('passing', ['passingAttempts', 'attempts'], 'pass attempts');
+  if (/passing touchdowns?|pass tds?/.test(text)) return pick('passing', ['passingTouchdowns', 'passingTDs'], 'passing touchdowns');
+  if (/interceptions? thrown/.test(text)) return pick('passing', ['interceptions', 'interceptionsThrown'], 'interceptions thrown');
+  if (/longest pass|long pass/.test(text)) return pick('passing', ['longPassing', 'longestPass', 'long'], 'longest pass');
+  if (/rushing touchdowns?|rush tds?/.test(text)) return pick('rushing', ['rushingTouchdowns', 'rushingTDs'], 'rushing touchdowns');
+  if (/rushing attempts?|carries/.test(text)) return pick('rushing', ['rushingAttempts', 'attempts', 'carries'], 'rushing attempts');
+  if (/longest rush|long rush/.test(text)) return pick('rushing', ['longRushing', 'longestRush', 'long'], 'longest rush');
   if (/rushing yards?/.test(text)) return pick('rushing', 'rushingYards', 'rushing yards');
   if (/longest reception|long reception|longest catch|long catch/.test(text)) {
     return pick('receiving', ['longestReception', 'longReception', 'long'], 'longest reception');
   }
   if (/receiving yards?/.test(text)) return pick('receiving', 'receivingYards', 'receiving yards');
+  if (/receiving touchdowns?|receiving tds?/.test(text)) return pick('receiving', ['receivingTouchdowns', 'receivingTDs'], 'receiving touchdowns');
+  if (/receiving targets?|\btargets?\b/.test(text)) return pick('receiving', ['receivingTargets', 'targets'], 'receiving targets');
   if (/receptions?/.test(text)) return pick('receiving', 'receptions', 'receptions');
   return null;
 }
@@ -118,6 +128,37 @@ function moneylineGrade(row, summary) {
   });
   if (!team || typeof team.winner !== 'boolean') return null;
   return { result: team.winner ? 'W' : 'L', outcome: `${team.team?.displayName || 'Team'} ${team.score ?? ''}`.trim() };
+}
+
+function gameTotalGrade(row, summary) {
+  const text = `${row.selection || ''} ${row.market || ''} ${row.published_line || ''}`.toLowerCase();
+  if (!/\b(?:full game|game|match) total\b/.test(text)) return null;
+  const comparison = directionAndLine(row);
+  if (!comparison) return null;
+  const competitors = summary.header?.competitions?.[0]?.competitors || [];
+  const scores = competitors.map((competitor) => Number(competitor.score));
+  if (scores.length !== 2 || scores.some((score) => !Number.isFinite(score))) return null;
+  const actual = scores[0] + scores[1];
+  return { result: compare(actual, comparison), outcome: `Final game total: ${actual}` };
+}
+
+function spreadGrade(row, summary) {
+  const text = `${row.selection || ''} ${row.market || ''} ${row.published_line || ''}`;
+  if (!/\bspread\b/i.test(text)) return null;
+  const competitors = summary.header?.competitions?.[0]?.competitors || [];
+  const team = competitors.find((competitor) => {
+    const names = [competitor.team?.displayName, competitor.team?.shortDisplayName, competitor.team?.abbreviation]
+      .map(compact).filter((name) => name.length >= 2);
+    return names.some((name) => compact(row.selection).includes(name));
+  });
+  const opponent = competitors.find((competitor) => competitor !== team);
+  const line = Number(`${row.selection || ''} ${row.published_line || ''}`.match(/(?:^|\s)([+-]\d+(?:\.\d+)?)(?=\s|$)/)?.[1]);
+  const teamScore = Number(team?.score);
+  const opponentScore = Number(opponent?.score);
+  if (!team || !opponent || !Number.isFinite(line) || !Number.isFinite(teamScore) || !Number.isFinite(opponentScore)) return null;
+  const adjusted = teamScore + line;
+  const result = adjusted === opponentScore ? 'P' : adjusted > opponentScore ? 'W' : 'L';
+  return { result, outcome: `${team.team?.displayName || 'Team'} ${teamScore}, opponent ${opponentScore} (${line > 0 ? '+' : ''}${line})` };
 }
 
 async function getJson(url, fetchImpl) {
@@ -156,6 +197,10 @@ async function gradePickFromEspn(row, { fetchImpl = fetch } = {}) {
   const source = `${league.url}${event.id}`;
   const moneyline = moneylineGrade(row, summary);
   if (moneyline) return { status: 'GRADED', ...moneyline, source };
+  const gameTotal = gameTotalGrade(row, summary);
+  if (gameTotal) return { status: 'GRADED', ...gameTotal, source };
+  const spread = spreadGrade(row, summary);
+  if (spread) return { status: 'GRADED', ...spread, source };
   const comparison = directionAndLine(row);
   if (!comparison) return { status: 'PENDING', reason: 'No clear over/under line was found.' };
   const spec = statSpec(row, athleteEntries(summary));
@@ -171,4 +216,4 @@ async function gradePickFromEspn(row, { fetchImpl = fetch } = {}) {
   };
 }
 
-module.exports = { gradePickFromEspn, inningsToOuts, matchingEvent, statSpec };
+module.exports = { gameTotalGrade, gradePickFromEspn, inningsToOuts, matchingEvent, spreadGrade, statSpec };

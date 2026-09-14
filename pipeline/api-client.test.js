@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { attachDiscordRestAudit, auditedFetch, endpointClass, inferredService, requestBodyHash } = require('./api-client');
+const { attachDiscordRestAudit, auditedFetch, endpointClass, inferredService, recordDiscordPreResponseFailure, requestBodyHash } = require('./api-client');
 
 test('classifies operational API providers without retaining query strings', () => {
   assert.equal(inferredService('https://api.x.com/2/users/123456789/tweets?max_results=20'), 'x');
@@ -81,4 +81,20 @@ test('records a provider network failure exactly once', async () => {
   assert.equal(events.length, 1);
   assert.equal(events[0].outcome, 'NETWORK_ERROR');
   assert.equal(events[0].errorClass, 'TypeError');
+});
+
+test('records Discord failures that happen before the SDK emits a response event', async () => {
+  const events = [];
+  await recordDiscordPreResponseFailure({
+    endpointClass: '/interactions/{id}/{token}',
+    callerComponent: 'bot/index',
+    triggerType: 'approval_failure_receipt',
+    pickId: '20260913-NFL-001'
+  }, Object.assign(new TypeError('network unavailable'), { code: 'UND_ERR_CONNECT_TIMEOUT' }), async (event) => events.push(event));
+  assert.equal(events.length, 1);
+  assert.equal(events[0].service, 'discord');
+  assert.equal(events[0].outcome, 'NETWORK_ERROR');
+  assert.equal(events[0].errorClass, 'UND_ERR_CONNECT_TIMEOUT');
+  assert.equal(events[0].pickId, '20260913-NFL-001');
+  assert.doesNotMatch(JSON.stringify(events[0]), /network unavailable/);
 });

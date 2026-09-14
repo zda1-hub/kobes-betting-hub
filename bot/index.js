@@ -33,7 +33,7 @@ const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timin
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { enrichPacket } = require('../pipeline/enrich-pick');
 const { runCollector } = require('../pipeline/collect-x');
-const { attachDiscordRestAudit, auditedFetch } = require('../pipeline/api-client');
+const { attachDiscordRestAudit, auditedFetch, recordDiscordPreResponseFailure } = require('../pipeline/api-client');
 const {
   auditConfigured,
   initializeAuditStore,
@@ -1051,6 +1051,13 @@ async function closeApprovalCard(interaction, outcome) {
     // The official post and canonical log remain authoritative. A cosmetic
     // receipt failure must never make a successful publication look failed.
     console.error('Could not add the approval-card receipt:', error);
+    await recordDiscordPreResponseFailure({
+      endpointClass: '/channels/{id}/messages/{id}',
+      method: 'PATCH',
+      callerComponent: 'bot/index',
+      triggerType: 'approval_card_receipt',
+      pickId: String(interaction.customId || '').split(':').at(-1) || null
+    }, error).catch((auditError) => console.error('Unable to audit approval-card receipt failure:', auditError?.message || auditError));
   }
 }
 
@@ -1065,6 +1072,15 @@ async function respondToInteractionFailure(interaction, content, context) {
     // Discord interaction tokens expire. A stale button must not create an
     // unhandled rejection or restart the worker while X monitoring runs.
     const code = error?.code || error?.rawError?.code;
+    await recordDiscordPreResponseFailure({
+      endpointClass: '/interactions/{id}/{token}',
+      method: 'POST',
+      callerComponent: 'bot/index',
+      triggerType: 'interaction_failure_receipt',
+      pickId: String(interaction.customId || '').startsWith('source-review:')
+        ? String(interaction.customId).split(':').at(-1)
+        : null
+    }, error).catch((auditError) => console.error('Unable to audit Discord interaction failure:', auditError?.message || auditError));
     if (code === 50027 || /Invalid Webhook Token|Unknown interaction/i.test(String(error))) {
       console.warn(`${context} could not be acknowledged because the Discord interaction token expired.`);
       return;

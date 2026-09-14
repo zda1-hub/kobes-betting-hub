@@ -95,3 +95,36 @@ test('grades grouped ESPN receiving stats for a final longest-reception prop', a
   assert.equal(grade.result, 'L');
   assert.equal(grade.outcome, 'A.J. Brown: 14 longest reception');
 });
+
+test('recognizes additional common football prop keys without fuzzy arithmetic', () => {
+  const { statSpec } = require('./espn-grading');
+  const entries = [
+    { name: 'Josh Allen', category: 'passing', values: {} },
+    { name: 'Josh Allen', category: 'rushing', values: {} },
+    { name: 'Stefon Diggs', category: 'receiving', values: {} }
+  ];
+  assert.deepEqual(statSpec({ selection: 'Josh Allen over 34.5 pass attempts' }, entries).key, ['passingAttempts', 'attempts']);
+  assert.deepEqual(statSpec({ selection: 'Josh Allen over 7.5 carries' }, entries).key, ['rushingAttempts', 'attempts', 'carries']);
+  assert.deepEqual(statSpec({ selection: 'Stefon Diggs over 7.5 targets' }, entries).key, ['receivingTargets', 'targets']);
+});
+
+test('grades an explicit full-game total from the final score', () => {
+  const { gameTotalGrade } = require('./espn-grading');
+  assert.deepEqual(gameTotalGrade({
+    selection: 'Full game total Over 45.5', market: 'Full game total', published_line: 'Over 45.5'
+  }, {
+    header: { competitions: [{ competitors: [{ score: '27' }, { score: '20' }] }] }
+  }), { result: 'W', outcome: 'Final game total: 47' });
+});
+
+test('grades only explicitly labeled team spreads', () => {
+  const { spreadGrade } = require('./espn-grading');
+  const final = { header: { competitions: [{ competitors: [
+    { team: { displayName: 'Dallas Cowboys', shortDisplayName: 'Cowboys', abbreviation: 'DAL' }, score: '24' },
+    { team: { displayName: 'New York Giants', shortDisplayName: 'Giants', abbreviation: 'NYG' }, score: '21' }
+  ] }] } };
+  assert.deepEqual(spreadGrade({ selection: 'Dallas Cowboys -2.5 spread', published_line: '-2.5' }, final), {
+    result: 'W', outcome: 'Dallas Cowboys 24, opponent 21 (-2.5)'
+  });
+  assert.equal(spreadGrade({ selection: 'Dallas Cowboys -110', published_line: '-110' }, final), null);
+});

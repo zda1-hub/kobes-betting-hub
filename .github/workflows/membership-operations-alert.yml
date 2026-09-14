@@ -23,6 +23,8 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       MEMBERSHIP_ALERT_LOOKBACK_HOURS: "26"
       MEMBERSHIP_LINK_GRACE_MINUTES: "30"
+      PICK_ALERT_LOOKBACK_HOURS: "26"
+      PICK_ALERT_STUCK_MINUTES: "5"
     steps:
       - name: Check out the production source
         uses: actions/checkout@v5
@@ -37,3 +39,5 @@ jobs:
         run: npm ci
       - name: Check paid access and billing exceptions
         run: node scripts/check-membership-operations.mjs
+      - name: Check private pick operations dashboard
+        run: node scripts/check-pick-operations.mjs

@@ -16,6 +16,8 @@
     "migrate:production": "node pipeline/migrate-production.js",
     "sync:openai-usage": "node scripts/sync-openai-usage.mjs",
     "smoke:production": "node scripts/production-smoke.mjs",
+    "check:pick-operations": "node scripts/check-pick-operations.mjs",
+    "test:content:non-public": "node scripts/non-public-content-acceptance.mjs",
     "test": "node --test bot/**/*.test.js pipeline/**/*.test.js cloudflare/*.test.mjs scripts/*.test.mjs"
   },
   "engines": {

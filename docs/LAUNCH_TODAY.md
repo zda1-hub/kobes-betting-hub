@@ -1,6 +1,6 @@
 # Kobe's Betting Hub — Current Public-Beta Launch Checklist
 
-Status time: 2026-09-13 18:27 Arizona
+Status time: 2026-09-13 18:41 Arizona
 
 Technical/billing/support owner and final production approver: Zakai Martin
 
@@ -23,7 +23,7 @@ Release type: public beta with monitored improvement while live
 - [x] Discord approval hotfix `6989dd1` is live on Render; startup was healthy and refreshed three pending locked-format cards.
 - [x] Daily zero-pick email is silent. The broken five-minute Apps Script trigger is deleted; the useful daily trigger remains at 0% displayed error.
 - [x] The daily Apps Script source is versioned and protected by four source-invariant tests.
-- [x] Image-backed Free Pick transport is covered locally for exact bytes, single multipart publication, text fallback, and missing-credential failure. The full release suite passes `194/194`.
+- [x] Image-backed Free Pick transport is covered locally for exact bytes, single multipart publication, text fallback, and missing-credential failure. The full release suite passes `202/202`.
 - [x] Isolated image-backed Free Pick acceptance passed on a dedicated staging Worker/storage pair: authorized `201`, unauthorized `401`, exact 68-byte PNG retrieval, X disconnected/not called, and fixture cleanup verified by `404`.
 - [x] Server-side checkout abuse protection is live in Worker `ff778d91-c34c-4b49-92c9-dfa02785fa37`; staging returned `429`/`Retry-After: 60` before Stripe and production retained its seven secrets, reconciliation cron, health, and `5/5` smoke.
 - [x] Luna, durable X cursor/dedupe, two-new-model-calls-per-run cap, and daily/monthly OpenAI hard stops are live.
@@ -33,6 +33,10 @@ Release type: public beta with monitored improvement while live
 - [x] The Render restart regression is fixed: the referral constraint migration is repeat-safe, and the latest production instance registered commands, logged in, refreshed three pending cards, and entered the normal grading/recap loop.
 - [x] The active managed role `Kobe's Betting Hub` has `Manage Roles` and is above `VIP`. The separate unused `Kobe Bot` integration role has no mistakenly elevated permission.
 - [x] Controlled production reconciliation checked both active subscriptions and granted both VIP roles with zero failures. GitHub Actions run `34795945247` then passed with 2 active subscriptions, 0 unlinked members, 0 reconciliation failures, 0 failed/stuck webhooks, and a fresh reconciliation timestamp.
+- [x] A private read-only pick-operations dashboard now checks for stuck approvals/publications, unresolved post failures, recap failures, recent provider-network errors, publication counts, OpenAI request counts, and estimated extraction cost in the existing scheduled owner alarm.
+- [x] Deterministic ESPN grading now also supports explicit team spreads, explicit full-game totals, pass completions/attempts/touchdowns/interceptions, rushing attempts/touchdowns/longest rush, and receiving targets/touchdowns. Ambiguous markets remain pending for manual verification.
+- [x] A repeatable fixture-only recap/Trends acceptance produces both formats with zero network calls and zero Discord, email, or X delivery.
+- [x] Discord failures that occur before the SDK emits a response are now recorded as redacted API audit events; no message content, interaction token, or channel/member identifier is stored.
 
 ## Three gates before public-beta invitations
 
@@ -77,11 +81,11 @@ When all three sections pass, Zakai records `PUBLIC BETA GO` with timestamp, pro
 - [x] Activate the implemented private GitHub owner alarm on the default branch and run its first production read-only check. It covers paid-without-access, unresolved reconciliation failures, failed/stuck webhooks, and stale reconciliation without exposing identifiers.
 - [ ] Publish support hours and a response target; support remains manually operated until then.
 - [x] Run one isolated staging image-backed Free Pick and verify the retrieved media before relying on that path; evidence and cleanup are recorded in `docs/STAGING_IMAGE_FREE_PICK_AUDIT_2026-09-13.md`.
-- [ ] Complete approved-pick recap email and Trends intake/approval acceptance.
+- [ ] Complete the live queue/delivery portion of approved-pick recap email and Trends intake/approval acceptance. The fixture-only format path passes with no external delivery.
 - [x] Add server-side checkout abuse protection before broad public marketing.
-- [ ] Close remaining Apps Script and Discord pre-response API-audit gaps.
-- [ ] Expand deterministic ESPN grading coverage; unsupported markets remain manual.
-- [ ] Build the operator dashboard and add marketing only after the public-beta mechanics are stable.
+- [ ] Close the remaining Apps Script provider-call audit gap. Discord response and pre-response failures are covered.
+- [x] Expand deterministic ESPN grading for the common football props plus explicit spreads/full-game totals; unsupported or ambiguous markets remain manual.
+- [x] Build the private read-only operator dashboard. Add marketing only after the public-beta mechanics are stable.
 
 ## Current owner decisions still open
 
