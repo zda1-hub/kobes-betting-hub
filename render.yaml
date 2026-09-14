@@ -84,5 +84,13 @@ services:
         value: "1"
       - key: X_MONITOR_MAX_APPROVED_FREE_PICKS
         sync: false
+      - key: TRENDS_INBOX_ENABLED
+        value: "false"
+      - key: TRENDS_INBOX_QUEUE_URL
+        value: https://bettinghub-publisher.kobedirwin.workers.dev
+      - key: TRENDS_INBOX_QUEUE_SECRET
+        sync: false
+      - key: TRENDS_INBOX_POLL_INTERVAL_MS
+        value: "300000"
       - key: AUTO_REGISTER_COMMANDS
         value: "true"
