@@ -39,14 +39,19 @@ function memoryKv() {
   const values = new Map();
   return {
     async put(key, value, options = {}) {
-      values.set(key, { value: String(value), metadata: options.metadata || null });
+      values.set(key, { value, metadata: options.metadata || null });
     },
-    async get(key) {
-      return values.get(key)?.value || null;
+    async get(key, type) {
+      const value = values.get(key)?.value;
+      if (value == null) return null;
+      if (type === 'text' && typeof value !== 'string') return new TextDecoder().decode(value);
+      return value;
     },
     async getWithMetadata(key) {
       const stored = values.get(key);
-      return stored ? { value: new TextEncoder().encode(stored.value).buffer, metadata: stored.metadata } : { value: null, metadata: null };
+      if (!stored) return { value: null, metadata: null };
+      const value = typeof stored.value === 'string' ? new TextEncoder().encode(stored.value).buffer : stored.value;
+      return { value, metadata: stored.metadata };
     },
   };
 }
@@ -76,6 +81,64 @@ test('text-only Free Pick remains readable after publication', async () => {
   assert.equal(current.publishedDate, '2026-09-12');
   assert.equal(current.details.selection, 'Bijan Robinson over 29.5 receiving yards');
   assert.equal(current.imageUrl, null);
+  assert.equal(current.storyUrl, null);
+});
+
+test('stores and serves a dated Instagram Story without publishing it to X', async () => {
+  const store = memoryKv();
+  const storyBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]).buffer;
+  const form = new FormData();
+  form.set('date', '2026-09-14');
+  form.set('caption', 'FREE PLAY\nArizona over 20.5 points');
+  form.set('selection', 'Arizona over 20.5 points');
+  form.set('story', new File([storyBytes], 'story.png', { type: 'image/png' }));
+  const env = { FREE_PICK_KV: store, FREE_PICK_SITE_PUBLISH_SECRET: 'test-publisher-secret' };
+  const publishResponse = await worker.fetch(new Request('https://publisher.test/api/free-pick/publish', {
+    method: 'POST', headers: { authorization: 'Bearer test-publisher-secret' }, body: form,
+  }), env);
+  assert.equal(publishResponse.status, 201);
+  const published = await publishResponse.json();
+  assert.equal(published.imageUrl, null);
+  assert.equal(published.xPosted, false);
+  assert.equal(published.storyUrl, 'https://publisher.test/media/free-pick/story/2026-09-14');
+
+  const storyResponse = await worker.fetch(new Request(published.storyUrl), env);
+  assert.equal(storyResponse.status, 200);
+  assert.equal(storyResponse.headers.get('content-type'), 'image/png');
+  assert.deepEqual(new Uint8Array(await storyResponse.arrayBuffer()), new Uint8Array(storyBytes));
+});
+
+test('recap delivery can start at activation without releasing the old backlog', async () => {
+  const statements = [];
+  const env = {
+    RECAP_NOTIFICATION_QUEUE_SECRET: 'recap-secret',
+    DB: {
+      prepare(sql) {
+        const statement = {
+          sql,
+          bindings: [],
+          bind(...values) { this.bindings = values; return this; },
+          async all() { return { results: [] }; },
+          async run() { return { meta: { changes: 0 } }; },
+        };
+        statements.push(statement);
+        return statement;
+      },
+      async batch() { return []; },
+    },
+  };
+  const response = await worker.fetch(new Request('https://publisher.test/api/queue/recap-notifications?after=2026-09-14T02%3A00%3A00.000Z', {
+    headers: { authorization: 'Bearer recap-secret' },
+  }), env);
+  assert.equal(response.status, 200);
+  const select = statements.find((statement) => /SELECT id, recipient, subject/.test(statement.sql));
+  assert.match(select.sql, /created_at >= \?/);
+  assert.deepEqual(select.bindings, ['2026-09-14T02:00:00.000Z']);
+
+  const invalid = await worker.fetch(new Request('https://publisher.test/api/queue/recap-notifications?after=not-a-date', {
+    headers: { authorization: 'Bearer recap-secret' },
+  }), env);
+  assert.equal(invalid.status, 400);
 });
 
 test('isolated staging health does not require an X binding or OAuth table', async () => {

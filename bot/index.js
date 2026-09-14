@@ -26,7 +26,7 @@ const {
   approvalCopySha256
 } = require('./lib/source-review');
 const { fillMissingEvidence } = require('./lib/espn-pick-research');
-const { syncApprovedFreePickToX } = require('./lib/free-pick-x');
+const { shouldRunTextXFallback, syncApprovedFreePickToX } = require('./lib/free-pick-x');
 const { publishApprovedFreePickToSite } = require('./lib/free-pick-site');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
@@ -1354,10 +1354,26 @@ async function handleSourceReviewButton(interaction) {
     const postReference = discordPostReference(channel, publishedMessage);
     await closeApprovalCard(interaction, { channel, postReference });
     let siteNote = '';
+    let siteSync = null;
     if (action === 'free') {
       try {
-        const siteSync = await publishApprovedFreePickToSite(packet);
+        siteSync = await publishApprovedFreePickToSite(packet);
         siteNote = siteSync.status === 'disabled' ? ' Website sync is not configured.' : ` Website sync: ${siteSync.status}${siteSync.image ? ' with image.' : ' as a text card.'}`;
+        if (siteSync.storyUrl) {
+          const socialStatus = await queueRecapNotification({
+            id: `free-pick-social-${packet.pick_id}`,
+            subject: `Kobe's Betting Hub — Instagram Story ready (${pacificOperatingDate()})`,
+            body: [
+              'The approved Free Pick social package is ready.',
+              '',
+              `Instagram Story PNG (1080×1920): ${siteSync.storyUrl}`,
+              `Approved Discord post: ${postReference}`,
+              '',
+              'Download the PNG, review the visible line/odds, and post it manually from the official Instagram account. Do not edit the pick terms.'
+            ].join('\n')
+          });
+          siteNote += ` Instagram Story email: ${socialStatus.toLowerCase().replaceAll('_', ' ')}.`;
+        }
       } catch (siteError) {
         console.error('Approved Discord free pick was not synced to the website', { pickId: packet.pick_id, message: String(siteError) });
         siteNote = ' Website sync needs attention.';
@@ -1366,8 +1382,12 @@ async function handleSourceReviewButton(interaction) {
     let xNote = '';
     if (action === 'free') {
       try {
-        const xSync = await syncApprovedFreePickToX(packet);
-        xNote = xSync.status === 'disabled' ? ' X sync is disabled.' : ` X sync: ${xSync.status}.`;
+        if (!shouldRunTextXFallback(siteSync)) {
+          xNote = ' X sync: published with the approved image.';
+        } else {
+          const xSync = await syncApprovedFreePickToX(packet);
+          xNote = xSync.status === 'disabled' ? ' X text fallback is disabled.' : ` X sync: ${xSync.status}.`;
+        }
       } catch (xError) {
         console.error('Approved Discord free pick was not synced to X', { pickId: packet.pick_id, message: String(xError) });
         xNote = ' Discord post is live; X sync needs attention.';

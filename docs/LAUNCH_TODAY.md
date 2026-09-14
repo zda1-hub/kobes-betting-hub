@@ -20,6 +20,7 @@ Release type: public beta with monitored improvement while live
 - [x] The isolated Stripe clock proved `$8.25` once, return to `$32.99`, terminal cancellation, Supabase canceled state, and Discord role removal.
 - [x] Effective Terms, Privacy, cancellation, no-refund exceptions, retention, dispute-access, and public-beta disclosures are live under Kobe Irwin operating publicly as Kobe's Betting Hub in California.
 - [x] `support@kobesbettinghub.com` forwards to the technical/billing owner.
+- [x] Public support hours are Monday through Saturday, 9:00 AM–7:00 PM Pacific Time, with a one-business-day response target.
 - [x] Discord approval hotfix `6989dd1` is live on Render; startup was healthy and refreshed three pending locked-format cards.
 - [x] Daily zero-pick email is silent. The broken five-minute Apps Script trigger is deleted; the useful daily trigger remains at 0% displayed error.
 - [x] The daily Apps Script source is versioned and protected by four source-invariant tests.
@@ -37,6 +38,7 @@ Release type: public beta with monitored improvement while live
 - [x] Deterministic ESPN grading now also supports explicit team spreads, explicit full-game totals, pass completions/attempts/touchdowns/interceptions, rushing attempts/touchdowns/longest rush, and receiving targets/touchdowns. Ambiguous markets remain pending for manual verification.
 - [x] A repeatable fixture-only recap/Trends acceptance produces both formats with zero network calls and zero Discord, email, or X delivery.
 - [x] Discord failures that occur before the SDK emits a response are now recorded as redacted API audit events; no message content, interaction token, or channel/member identifier is stored.
+- [x] One approved Free Pick now creates a deterministic 1080×1920 Instagram Story PNG from the approved terms, exposes a dated download URL, avoids a duplicate X post when the image publisher already succeeded, and queues a private social-package email for Kobe. No generative-image API is used.
 
 ## Three gates before public-beta invitations
 
@@ -79,9 +81,10 @@ When all three sections pass, Zakai records `PUBLIC BETA GO` with timestamp, pro
 
 - [ ] Monitor Kobe's later production entitlement-end event and confirm role removal.
 - [x] Activate the implemented private GitHub owner alarm on the default branch and run its first production read-only check. It covers paid-without-access, unresolved reconciliation failures, failed/stuck webhooks, and stale reconciliation without exposing identifiers.
-- [ ] Publish support hours and a response target; support remains manually operated until then.
+- [x] Publish support hours and a response target; support remains manually operated during the public beta.
 - [x] Run one isolated staging image-backed Free Pick and verify the retrieved media before relying on that path; evidence and cleanup are recorded in `docs/STAGING_IMAGE_FREE_PICK_AUDIT_2026-09-13.md`.
 - [ ] Complete the live queue/delivery portion of approved-pick recap email and Trends intake/approval acceptance. The fixture-only format path passes with no external delivery.
+- [ ] Align one dedicated Trends queue credential across Cloudflare, Render, and Apps Script; install backlog-safe Trends/recap triggers; then accept one private Trends card and one new email without publishing test content.
 - [x] Add server-side checkout abuse protection before broad public marketing.
 - [ ] Close the remaining Apps Script provider-call audit gap. Discord response and pre-response failures are covered.
 - [x] Expand deterministic ESPN grading for the common football props plus explicit spreads/full-game totals; unsupported or ambiguous markets remain manual.
@@ -89,7 +92,6 @@ When all three sections pass, Zakai records `PUBLIC BETA GO` with timestamp, pro
 
 ## Current owner decisions still open
 
-- Support hours/timezone and response target.
 - Backup technical/billing operator and legal/compliance reviewer.
 - Age/location restrictions and records-retention periods.
 - X, Cloudflare, Render, and total-infrastructure budget alert/stop thresholds.

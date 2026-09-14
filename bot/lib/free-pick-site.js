@@ -1,6 +1,7 @@
 const DEFAULT_PUBLISHER_URL = 'https://bettinghub-publisher.kobedirwin.workers.dev';
 const { publicPickTerms, sourceEvidence } = require('./source-review');
 const { auditedFetch } = require('../../pipeline/api-client');
+const { instagramStoryFilename, renderInstagramStory } = require('./instagram-story');
 
 function phoenixOperatingDate() {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
@@ -15,7 +16,7 @@ function siteConfig(environment = process.env) {
   return { url, secret };
 }
 
-async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, environment = process.env } = {}) {
+async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, environment = process.env, storyRenderer = renderInstagramStory } = {}) {
   const config = siteConfig(environment);
   if (!config) return { status: 'disabled' };
 
@@ -32,7 +33,9 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
   };
   const caption = ['FREE PLAY', ...publicPickTerms(packet)].join('\n').slice(0, 280);
   const imageUrl = packet.approval?.image_url;
-  let response;
+  let imagePayload = null;
+  let imageType = '';
+  let storyPayload = null;
 
   if (imageUrl) {
     try {
@@ -45,25 +48,35 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
         pickId: packet.pick_id
       }, fetchImpl);
       if (imageResponse.ok) {
-        const type = imageResponse.headers.get('content-type') || 'image/png';
-        const form = new FormData();
-        form.append('image', new Blob([await imageResponse.arrayBuffer()], { type }), 'free-pick.png');
-        Object.entries({ date: phoenixOperatingDate(), caption, ...details }).forEach(([key, value]) => form.append(key, String(value || '')));
-        response = await auditedFetch(`${config.url}/api/free-pick/publish`, { method: 'POST', headers: { authorization: `Bearer ${config.secret}` }, body: form }, {
-          service: 'cloudflare-worker',
-          endpointClass: '/api/free-pick/publish',
-          callerComponent: 'bot/lib/free-pick-site',
-          triggerType: 'approved_pick_sync',
-          workflowId: packet.pick_id,
-          pickId: packet.pick_id
-        }, fetchImpl);
+        imageType = imageResponse.headers.get('content-type') || 'image/png';
+        imagePayload = await imageResponse.arrayBuffer();
       }
     } catch (error) {
       console.error('Approved free-pick image could not be copied to the website; falling back to text.', error);
     }
   }
 
-  if (!response) {
+  try {
+    storyPayload = await storyRenderer(packet);
+  } catch (error) {
+    console.error('Instagram Story generation failed; continuing without the social asset.', error);
+  }
+
+  let response;
+  if (imagePayload || storyPayload) {
+    const form = new FormData();
+    if (imagePayload) form.append('image', new Blob([imagePayload], { type: imageType }), 'free-pick.png');
+    if (storyPayload) form.append('story', new Blob([storyPayload], { type: 'image/png' }), instagramStoryFilename(packet.pick_id));
+    Object.entries({ date: phoenixOperatingDate(), caption, ...details }).forEach(([key, value]) => form.append(key, String(value || '')));
+    response = await auditedFetch(`${config.url}/api/free-pick/publish`, { method: 'POST', headers: { authorization: `Bearer ${config.secret}` }, body: form }, {
+      service: 'cloudflare-worker',
+      endpointClass: '/api/free-pick/publish',
+      callerComponent: 'bot/lib/free-pick-site',
+      triggerType: 'approved_pick_sync',
+      workflowId: packet.pick_id,
+      pickId: packet.pick_id
+    }, fetchImpl);
+  } else {
     response = await auditedFetch(`${config.url}/api/free-pick/publish`, {
       method: 'POST',
       headers: { authorization: `Bearer ${config.secret}`, 'content-type': 'application/json' },
@@ -79,7 +92,12 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
   }
   const payload = await response.json().catch(() => ({}));
   if (response.status === 201 || response.status === 202 || response.status === 409) {
-    return { status: response.status === 409 ? 'already_published' : 'published', image: Boolean(payload.imageUrl) };
+    return {
+      status: response.status === 409 ? 'already_published' : 'published',
+      image: Boolean(payload.imageUrl),
+      storyUrl: payload.storyUrl || null,
+      xPosted: payload.xPosted === true,
+    };
   }
   throw new Error(`Free-pick website publish failed (${response.status}): ${payload.error || 'Unknown error'}`);
 }

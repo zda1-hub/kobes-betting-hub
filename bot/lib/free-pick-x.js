@@ -35,6 +35,10 @@ function freePickXSyncConfig(environment = process.env) {
   return { publisherUrl, secret };
 }
 
+function shouldRunTextXFallback(siteSync) {
+  return siteSync?.xPosted !== true;
+}
+
 async function syncApprovedFreePickToX(packet, { fetchImpl = fetch, environment = process.env } = {}) {
   const config = freePickXSyncConfig(environment);
   if (!config) return { status: 'disabled' };
@@ -66,4 +70,4 @@ async function syncApprovedFreePickToX(packet, { fetchImpl = fetch, environment 
   throw new Error(`X free-pick sync failed (${response.status}): ${payload.error || 'Unknown error'}`);
 }
 
-module.exports = { buildFreePickXPost, freePickXPostId, freePickXSyncConfig, syncApprovedFreePickToX };
+module.exports = { buildFreePickXPost, freePickXPostId, freePickXSyncConfig, shouldRunTextXFallback, syncApprovedFreePickToX };

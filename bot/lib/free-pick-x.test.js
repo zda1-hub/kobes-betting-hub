@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildFreePickXPost, freePickXPostId, freePickXSyncConfig, syncApprovedFreePickToX } = require('./free-pick-x');
+const { buildFreePickXPost, freePickXPostId, freePickXSyncConfig, shouldRunTextXFallback, syncApprovedFreePickToX } = require('./free-pick-x');
 
 const packet = {
   pick_id: '20260829-MLB-001',
@@ -20,6 +20,12 @@ test('formats the approved free pick as a compact X post', () => {
 test('leaves X sync disabled unless explicitly enabled', () => {
   assert.equal(freePickXSyncConfig({}), null);
   assert.throws(() => freePickXSyncConfig({ FREE_PICK_X_SYNC_ENABLED: 'true' }), /requires/);
+});
+
+test('does not queue a duplicate text post when the website already posted the image to X', () => {
+  assert.equal(shouldRunTextXFallback({ xPosted: true }), false);
+  assert.equal(shouldRunTextXFallback({ xPosted: false }), true);
+  assert.equal(shouldRunTextXFallback(null), true);
 });
 
 test('sends one idempotent immediate request when sync is enabled', async () => {

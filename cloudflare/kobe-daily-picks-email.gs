@@ -8,6 +8,7 @@ const TIME_ZONE = 'America/Phoenix';
 const PICK_SHEET_KEY = 'PICK_QUEUE_SHEET_ID';
 const X_QUEUE_SECRET_KEY = 'X_PUBLISHER_QUEUE_SECRET';
 const RECAP_QUEUE_SECRET_KEY = 'RECAP_NOTIFICATION_QUEUE_SECRET';
+const RECAP_NOTIFICATION_START_KEY = 'RECAP_NOTIFICATION_START_AT';
 const DAILY_EMAIL_HOUR = 14;
 const PUBLISHER_URL = 'https://bettinghub-publisher.kobedirwin.workers.dev';
 
@@ -191,9 +192,14 @@ function stripHtml_(html) {
 // This function is intentionally not installed as a trigger while its dedicated
 // queue credential is unresolved. Render remains the active recap producer.
 function deliverKobeRecapNotifications() {
-  const secret = PropertiesService.getScriptProperties().getProperty(RECAP_QUEUE_SECRET_KEY);
+  const properties = PropertiesService.getScriptProperties();
+  const secret = properties.getProperty(RECAP_QUEUE_SECRET_KEY);
   if (!secret) throw new Error('Set ' + RECAP_QUEUE_SECRET_KEY + ' in Apps Script Project Settings first.');
-  const response = UrlFetchApp.fetch(PUBLISHER_URL + '/api/queue/recap-notifications', {
+  const startAt = properties.getProperty(RECAP_NOTIFICATION_START_KEY);
+  if (!startAt || isNaN(Date.parse(startAt))) {
+    throw new Error('Set ' + RECAP_NOTIFICATION_START_KEY + ' to the activation ISO timestamp before installing this trigger.');
+  }
+  const response = UrlFetchApp.fetch(PUBLISHER_URL + '/api/queue/recap-notifications?after=' + encodeURIComponent(new Date(startAt).toISOString()), {
     method: 'get',
     headers: { Authorization: 'Bearer ' + secret },
     muteHttpExceptions: true

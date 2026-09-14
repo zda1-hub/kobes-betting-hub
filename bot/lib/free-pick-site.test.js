@@ -31,13 +31,18 @@ const packet = {
 
 test('image-backed Free Pick copies exact approved image bytes into one multipart publish', async () => {
   const expectedBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
+  const storyBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 9, 8, 7, 6]);
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url: String(url), init });
     if (String(url) === packet.approval.image_url) {
       return new Response(expectedBytes, { status: 200, headers: { 'content-type': 'image/png' } });
     }
-    return new Response(JSON.stringify({ imageUrl: 'https://publisher.test/media/free-pick/current' }), {
+    return new Response(JSON.stringify({
+      imageUrl: 'https://publisher.test/media/free-pick/current',
+      storyUrl: 'https://publisher.test/media/free-pick/story/2026-09-14',
+      xPosted: true,
+    }), {
       status: 201,
       headers: { 'content-type': 'application/json' }
     });
@@ -48,10 +53,14 @@ test('image-backed Free Pick copies exact approved image bytes into one multipar
     environment: {
       FREE_PICK_SITE_PUBLISH_URL: 'https://publisher.test',
       FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret'
-    }
+    },
+    storyRenderer: async () => storyBytes,
   });
 
-  assert.deepEqual(result, { status: 'published', image: true });
+  assert.deepEqual(result, {
+    status: 'published', image: true,
+    storyUrl: 'https://publisher.test/media/free-pick/story/2026-09-14', xPosted: true,
+  });
   assert.equal(calls.length, 2);
   assert.equal(calls[0].url, packet.approval.image_url);
   assert.equal(calls[1].url, 'https://publisher.test/api/free-pick/publish');
@@ -62,16 +71,20 @@ test('image-backed Free Pick copies exact approved image bytes into one multipar
   const image = calls[1].init.body.get('image');
   assert.equal(image.type, 'image/png');
   assert.deepEqual(new Uint8Array(await image.arrayBuffer()), expectedBytes);
+  const story = calls[1].init.body.get('story');
+  assert.equal(story.type, 'image/png');
+  assert.deepEqual(new Uint8Array(await story.arrayBuffer()), storyBytes);
   assert.match(calls[1].init.body.get('caption'), /Bijan Robinson over 29\.5 receiving yards/);
   assert.equal(calls[1].init.body.get('selection'), 'Bijan Robinson over 29.5 receiving yards');
 });
 
 test('image retrieval failure falls back to one text-only publish', async () => {
+  const storyBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url: String(url), init });
     if (String(url) === packet.approval.image_url) throw new Error('fixture media unavailable');
-    return new Response(JSON.stringify({ imageUrl: null }), {
+    return new Response(JSON.stringify({ imageUrl: null, storyUrl: 'https://publisher.test/media/free-pick/story/2026-09-14', xPosted: false }), {
       status: 201,
       headers: { 'content-type': 'application/json' }
     });
@@ -85,16 +98,50 @@ test('image retrieval failure falls back to one text-only publish', async () => 
       environment: {
         FREE_PICK_SITE_PUBLISH_URL: 'https://publisher.test',
         FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret'
-      }
+      },
+      storyRenderer: async () => storyBytes,
     });
-    assert.deepEqual(result, { status: 'published', image: false });
+    assert.deepEqual(result, {
+      status: 'published', image: false,
+      storyUrl: 'https://publisher.test/media/free-pick/story/2026-09-14', xPosted: false,
+    });
   } finally {
     console.error = originalError;
   }
 
   assert.equal(calls.length, 2);
+  assert.ok(calls[1].init.body instanceof FormData);
+  assert.equal(calls[1].init.body.get('image'), null);
+  assert.equal(calls[1].init.body.get('story').type, 'image/png');
+  assert.match(calls[1].init.body.get('caption'), /Bijan Robinson over 29\.5 receiving yards/);
+});
+
+test('falls back to JSON when both source media and Story rendering fail', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    if (String(url) === packet.approval.image_url) throw new Error('fixture media unavailable');
+    return new Response(JSON.stringify({ imageUrl: null, storyUrl: null, xPosted: false }), {
+      status: 201,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const result = await publishApprovedFreePickToSite(packet, {
+      fetchImpl,
+      environment: {
+        FREE_PICK_SITE_PUBLISH_URL: 'https://publisher.test',
+        FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret',
+      },
+      storyRenderer: async () => { throw new Error('fixture story unavailable'); },
+    });
+    assert.deepEqual(result, { status: 'published', image: false, storyUrl: null, xPosted: false });
+  } finally {
+    console.error = originalError;
+  }
   assert.equal(calls[1].init.headers['content-type'], 'application/json');
-  assert.match(calls[1].init.body, /Bijan Robinson over 29\.5 receiving yards/);
 });
 
 test('Free Pick site publishing remains disabled without a dedicated credential', () => {
