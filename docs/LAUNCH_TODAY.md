@@ -85,6 +85,7 @@ When all three sections pass, Zakai records `PUBLIC BETA GO` with timestamp, pro
 - [x] Run one isolated staging image-backed Free Pick and verify the retrieved media before relying on that path; evidence and cleanup are recorded in `docs/STAGING_IMAGE_FREE_PICK_AUDIT_2026-09-13.md`.
 - [ ] Complete the live queue/delivery portion of approved-pick recap email and Trends intake/approval acceptance. The fixture-only format path passes with no external delivery.
 - [ ] Align one dedicated Trends queue credential across Cloudflare, Render, and Apps Script; install backlog-safe Trends/recap triggers; then accept one private Trends card and one new email without publishing test content.
+- [x] Consolidate the Google operations source into one generated bundle and require activation timestamps so the five pre-existing recap rows and any old Trends mail are excluded. Read-only connection tests are included and the release suite passes `210/210`.
 - [x] Add server-side checkout abuse protection before broad public marketing.
 - [ ] Close the remaining Apps Script provider-call audit gap. Discord response and pre-response failures are covered.
 - [x] Expand deterministic ESPN grading for the common football props plus explicit spreads/full-game totals; unsupported or ambiguous markets remain manual.

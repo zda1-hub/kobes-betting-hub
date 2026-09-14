@@ -4,8 +4,8 @@
 const TRENDS_LABEL = 'Kobe Trends';
 const TRENDS_QUEUED_LABEL = 'Kobe Trends/Queued';
 const TRENDS_QUEUE_SECRET_KEY = 'TRENDS_QUEUE_SECRET';
+const TRENDS_EMAIL_START_KEY = 'TRENDS_EMAIL_START_AT';
 const TRENDS_SENDER = 'kobedirwin@gmail.com';
-const RECAP_NOTIFICATION_QUEUE_SECRET_KEY = 'RECAP_NOTIFICATION_QUEUE_SECRET';
 
 function installKobeTrendsInbox() {
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
@@ -19,12 +19,17 @@ function queueKobeTrendEmails() {
   const sourceLabel = GmailApp.getUserLabelByName(TRENDS_LABEL);
   if (!sourceLabel) throw new Error('Create the Gmail label “' + TRENDS_LABEL + '” first.');
   const queuedLabel = GmailApp.getUserLabelByName(TRENDS_QUEUED_LABEL) || GmailApp.createLabel(TRENDS_QUEUED_LABEL);
-  const secret = PropertiesService.getScriptProperties().getProperty(TRENDS_QUEUE_SECRET_KEY);
+  const properties = PropertiesService.getScriptProperties();
+  const secret = properties.getProperty(TRENDS_QUEUE_SECRET_KEY);
   if (!secret) throw new Error('Set ' + TRENDS_QUEUE_SECRET_KEY + ' in Apps Script Project Settings first.');
+  const startAt = properties.getProperty(TRENDS_EMAIL_START_KEY);
+  if (!startAt || isNaN(Date.parse(startAt))) throw new Error('Set ' + TRENDS_EMAIL_START_KEY + ' to the activation ISO timestamp first.');
+  const startMs = Date.parse(startAt);
   const threads = GmailApp.search('label:"' + TRENDS_LABEL + '" -label:"' + TRENDS_QUEUED_LABEL + '"', 0, 50);
   let queued = 0;
   threads.forEach(function(thread) {
     thread.getMessages().forEach(function(message) {
+      if (message.getDate().getTime() < startMs) return;
       const sender = emailAddress_(message.getFrom()).toLowerCase();
       if (sender !== TRENDS_SENDER) return;
       const league = trendLeague_(message.getSubject());
@@ -47,6 +52,16 @@ function queueKobeTrendEmails() {
   return queued + ' Kobe Trends email(s) queued for private Discord approval.';
 }
 
+function testTrendsQueueConnection() {
+  const secret = PropertiesService.getScriptProperties().getProperty(TRENDS_QUEUE_SECRET_KEY);
+  if (!secret) throw new Error('Set ' + TRENDS_QUEUE_SECRET_KEY + ' in Apps Script Project Settings first.');
+  const response = UrlFetchApp.fetch(PUBLISHER_URL + '/api/queue/trends?limit=1', {
+    method: 'get', headers: { Authorization: 'Bearer ' + secret }, muteHttpExceptions: true
+  });
+  if (response.getResponseCode() !== 200) throw new Error('Trends queue connection failed (' + response.getResponseCode() + ').');
+  return 'Trends queue connection is ready. No email or Discord post was created.';
+}
+
 function trendLeague_(subject) {
   const value = String(subject || '').toLowerCase();
   if (/\b(nfl|football)\b/.test(value)) return 'nfl';
@@ -57,38 +72,4 @@ function trendLeague_(subject) {
 function emailAddress_(from) {
   const match = String(from || '').match(/<([^>]+)>/) || String(from || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
   return match ? String(match[1] || match[0]).trim() : '';
-}
-
-// Add this trigger in the same Apps Script project. It delivers only recap
-// status emails queued by the Render bot through the protected Worker queue.
-function installKobeRecapNotifications() {
-  ScriptApp.getProjectTriggers().forEach(function(trigger) {
-    if (trigger.getHandlerFunction() === 'deliverKobeRecapNotifications') ScriptApp.deleteTrigger(trigger);
-  });
-  ScriptApp.newTrigger('deliverKobeRecapNotifications').timeBased().everyMinutes(5).create();
-  return 'Kobe recap notifications will be delivered every five minutes.';
-}
-
-function deliverKobeRecapNotifications() {
-  // Reuse the already-authorized publisher connection when it is present.
-  // This keeps recap delivery separate at the queue level without requiring
-  // a second copy of an existing secret in Apps Script.
-  const properties = PropertiesService.getScriptProperties();
-  const secret = properties.getProperty(RECAP_NOTIFICATION_QUEUE_SECRET_KEY)
-    || properties.getProperty(TRENDS_QUEUE_SECRET_KEY);
-  if (!secret) throw new Error('Set ' + RECAP_NOTIFICATION_QUEUE_SECRET_KEY + ' or ' + TRENDS_QUEUE_SECRET_KEY + ' in Apps Script Project Settings first.');
-  const response = UrlFetchApp.fetch(PUBLISHER_URL + '/api/queue/recap-notifications', {
-    method: 'get', headers: { Authorization: 'Bearer ' + secret }, muteHttpExceptions: true
-  });
-  if (response.getResponseCode() !== 200) throw new Error('Recap notification fetch failed (' + response.getResponseCode() + '): ' + response.getContentText());
-  const notifications = JSON.parse(response.getContentText()).notifications || [];
-  notifications.forEach(function(item) {
-    MailApp.sendEmail(item.recipient, item.subject, item.body);
-    const acknowledgement = UrlFetchApp.fetch(PUBLISHER_URL + '/api/queue/recap-notifications/deliver', {
-      method: 'post', contentType: 'application/json', headers: { Authorization: 'Bearer ' + secret },
-      payload: JSON.stringify({ id: item.id }), muteHttpExceptions: true
-    });
-    if (acknowledgement.getResponseCode() !== 200) throw new Error('Recap notification acknowledgement failed (' + acknowledgement.getResponseCode() + '): ' + acknowledgement.getContentText());
-  });
-  return notifications.length + ' recap notification(s) delivered.';
 }

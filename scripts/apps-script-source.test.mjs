@@ -39,10 +39,10 @@ test('Apps Script source stores only property names and no credential values', (
   assert.doesNotMatch(source, /postgres(?:ql)?:\/\//);
 });
 
-test('recap polling uses its dedicated property and is documented as trigger-disabled', () => {
+test('recap polling uses its dedicated credential and backlog-safe activation property', () => {
   assert.match(source, /const RECAP_QUEUE_SECRET_KEY = 'RECAP_NOTIFICATION_QUEUE_SECRET';/);
   assert.match(source, /const RECAP_NOTIFICATION_START_KEY = 'RECAP_NOTIFICATION_START_AT';/);
-  assert.match(source, /intentionally not installed as a trigger/);
+  assert.match(source, /function installKobeRecapNotifications\(/);
   assert.match(source, /getProperty\(RECAP_QUEUE_SECRET_KEY\)/);
   assert.match(source, /getProperty\(RECAP_NOTIFICATION_START_KEY\)/);
   assert.match(source, /recap-notifications\?after=/);
