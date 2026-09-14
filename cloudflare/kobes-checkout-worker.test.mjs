@@ -35,6 +35,26 @@ test('manual reconciliation endpoint requires its dedicated operations secret', 
   }), env), true);
 });
 
+test('Discord role readiness requires Manage Roles and a lower configured role', () => {
+  const botUserId = 'bot_user';
+  const targetRoleId = 'paid_member';
+  const roles = [
+    { id: 'bot_role', position: 10, permissions: String(1n << 28n), tags: { bot_id: botUserId } },
+    { id: targetRoleId, position: 9, permissions: '0' },
+  ];
+  assert.deepEqual(workerTest.discordRoleReadiness(botUserId, roles, targetRoleId), {
+    botRolePresent: true,
+    botRoleName: null,
+    configuredRolePresent: true,
+    configuredRoleName: null,
+    manageRoles: true,
+    hierarchyReady: true,
+    ready: true,
+  });
+  assert.equal(workerTest.discordRoleReadiness(botUserId, roles.map((role) => ({ ...role, permissions: '0' })), targetRoleId).ready, false);
+  assert.equal(workerTest.discordRoleReadiness(botUserId, roles.map((role) => role.id === targetRoleId ? { ...role, position: 11 } : role), targetRoleId).hierarchyReady, false);
+});
+
 test('legacy checkout-session cancellation endpoints are disabled', async () => {
   const response = await worker.fetch(new Request('https://worker.test/cancel/offer?session_id=cs_test_leaked'), {});
   assert.equal(response.status, 410);

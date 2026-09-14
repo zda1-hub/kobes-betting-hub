@@ -885,6 +885,38 @@ async function syncMemberRole(subscription, env) {
   return entitlementBlock ? 'ROLE_REMOVED_ENTITLEMENT_BLOCKED' : 'ROLE_REMOVED';
 }
 
+const DISCORD_MANAGE_ROLES_PERMISSION = 1n << 28n;
+
+function discordRoleReadiness(botUserId, roles, configuredRoleId) {
+  const botRole = (roles || []).find((role) => String(role?.tags?.bot_id || '') === String(botUserId || ''));
+  const configuredRole = (roles || []).find((role) => String(role?.id || '') === String(configuredRoleId || ''));
+  const botPermissions = BigInt(String(botRole?.permissions || '0'));
+  const botPosition = Number(botRole?.position ?? -1);
+  const configuredRolePosition = Number(configuredRole?.position ?? -1);
+  const manageRoles = Boolean(botPermissions & DISCORD_MANAGE_ROLES_PERMISSION);
+  return {
+    botRolePresent: Boolean(botRole),
+    botRoleName: botRole?.name || null,
+    configuredRolePresent: Boolean(configuredRole),
+    configuredRoleName: configuredRole?.name || null,
+    manageRoles,
+    hierarchyReady: Boolean(botRole && configuredRole && botPosition > configuredRolePosition),
+    ready: Boolean(botRole && configuredRole && manageRoles && botPosition > configuredRolePosition),
+  };
+}
+
+async function inspectDiscordRoleReadiness(env) {
+  if (!env.DISCORD_BOT_TOKEN || !env.DISCORD_GUILD_ID || !env.DISCORD_MEMBER_ROLE_ID) {
+    throw new Error('Discord role configuration is incomplete.');
+  }
+  const headers = { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` };
+  const [botUser, roles] = await Promise.all([
+    discordRequest('/users/@me', { headers }, env, { triggerType: 'membership_operations_check' }),
+    discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/roles`, { headers }, env, { triggerType: 'membership_operations_check' }),
+  ]);
+  return discordRoleReadiness(botUser?.id, roles, env.DISCORD_MEMBER_ROLE_ID);
+}
+
 async function listStripeSubscriptions(env) {
   const subscriptions = [];
   let startingAfter = '';
@@ -1513,6 +1545,14 @@ export default {
         return json({ error: 'Membership reconciliation failed safely.' }, 500, origin);
       }
     }
+    if (request.method === 'GET' && url.pathname === '/ops/discord-role-readiness') {
+      if (!await authorizedOperationsRequest(request, env)) return json({ error: 'Unauthorized.' }, 401, origin);
+      try { return json(await inspectDiscordRoleReadiness(env), 200, origin); }
+      catch (error) {
+        console.error('Discord role readiness check failed.', error?.message || error);
+        return json({ error: 'Discord role readiness check failed safely.' }, 500, origin);
+      }
+    }
     if (request.method === 'GET' && url.pathname === '/cancel/offer') return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'GET' && url.pathname === '/discord/connect') return startDiscordConnection(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/login') return startPortalLogin(request, env);
@@ -1539,6 +1579,7 @@ export const __test = {
   checkoutRateLimitResponse,
   createDiscordState,
   discordAuthorizationUrl,
+  discordRoleReadiness,
   ensurePerMemberRetentionCoupon,
   invoiceSubscriptionId,
   listStripeSubscriptions,
