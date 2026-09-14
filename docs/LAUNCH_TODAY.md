@@ -1,6 +1,6 @@
 # Kobe's Betting Hub — Current Public-Beta Launch Checklist
 
-Status time: 2026-09-13 18:20 Arizona
+Status time: 2026-09-13 18:27 Arizona
 
 Technical/billing/support owner and final production approver: Zakai Martin
 
@@ -28,11 +28,11 @@ Release type: public beta with monitored improvement while live
 - [x] Server-side checkout abuse protection is live in Worker `ff778d91-c34c-4b49-92c9-dfa02785fa37`; staging returned `429`/`Retry-After: 60` before Stripe and production retained its seven secrets, reconciliation cron, health, and `5/5` smoke.
 - [x] Luna, durable X cursor/dedupe, two-new-model-calls-per-run cap, and daily/monthly OpenAI hard stops are live.
 - [x] X-source publication remains disabled; all monitored candidates require private human approval.
-- [x] The private production membership alarm is active on GitHub Actions and correctly detects paid-without-access and unresolved reconciliation failures without emitting member identifiers.
+- [x] The private production membership alarm is active on GitHub Actions and verifies paid access, reconciliation, and webhook health without emitting member identifiers.
 - [x] Stripe-first reconciliation imported both legacy live subscriptions into production Supabase and recovered their Stripe-stored Discord identity mappings.
 - [x] The Render restart regression is fixed: the referral constraint migration is repeat-safe, and the latest production instance registered commands, logged in, refreshed three pending cards, and entered the normal grading/recap loop.
-- [x] The active managed role is identified as `Kobe's Betting Hub`; it already has `Manage Roles`. The mistakenly enabled permission on the separate unused `Kobe Bot` integration role was disabled and saved.
-- [ ] In Discord's owner UI, drag `Kobe's Betting Hub` above `VIP`. Discord rejects a bot trying to raise its own managed role, so this one hierarchy move cannot be automated. After the move, rerun controlled reconciliation and require two successful role grants plus a clean operations alarm. No billing action is involved.
+- [x] The active managed role `Kobe's Betting Hub` has `Manage Roles` and is above `VIP`. The separate unused `Kobe Bot` integration role has no mistakenly elevated permission.
+- [x] Controlled production reconciliation checked both active subscriptions and granted both VIP roles with zero failures. GitHub Actions run `34795945247` then passed with 2 active subscriptions, 0 unlinked members, 0 reconciliation failures, 0 failed/stuck webhooks, and a fresh reconciliation timestamp.
 
 ## Three gates before public-beta invitations
 
@@ -40,7 +40,7 @@ Release type: public beta with monitored improvement while live
    - [ ] Kobe completes cancellation through `kobesbettinghub.com/cancel` for the intended membership.
    - [ ] Zakai reports completion; the operator does not cancel or alter another subscription.
 
-2. **Read-only membership reconciliation — ready immediately afterward**
+2. **Live-cancellation reconciliation — ready immediately afterward**
    - [ ] Identify which of the two observed live `$32.99/month` subscriptions changed.
    - [ ] Verify Stripe cancellation scheduling and paid-through date.
    - [ ] Verify matching Supabase customer/subscription/webhook/audit rows.
