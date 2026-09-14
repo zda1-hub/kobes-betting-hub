@@ -336,6 +336,12 @@ Status meanings: **Complete** means the intended production control and its imme
 - [ ] Consolidate or archive stale docs and trackers after their content is reconciled into this control file.
 - [ ] Add marketing only after legal claims, attribution, conversion tracking consent, and unit economics are approved.
 
+### P3 — post-launch visual upgrade
+
+- [ ] After memberships are reliably converting and retaining real members, redesign the public homepage with an original sports-broadcast / premium-sportsbook / streetwear feel: black and orange, game-day motion, stronger live-board presentation, real pick/result proof, and a persistent membership CTA.
+- [ ] Preserve fast mobile performance, reduced-motion accessibility, billing clarity, and the trusted checkout/cancellation experience. Do not copy Pornhub branding, layout, or trade dress; use only the general high-contrast black/orange energy as inspiration.
+- [ ] Build and approve the redesign in a preview environment before replacing the conversion-focused production homepage.
+
 ## Recursive improvement mechanism
 
 Every improvement cycle must follow this loop:
@@ -444,6 +450,8 @@ Database direction: the existing free Supabase Postgres project is the first pro
 | 2026-09-13 | Consolidate the controlled daily, recap, and Trends Google Apps Script source into one reproducible bundle. Require separate activation timestamps for Trends and recap polling so pre-activation queue rows cannot be emailed, and add read-only connection tests before installing either five-minute trigger. | Zakai Martin | Complete in source; `210/210` tests pass; account-side credential alignment and trigger installation remain |
 | 2026-09-13 | Align a rotated dedicated Trends credential across Publisher, Render, and Apps Script; enable five-minute production polling and text-only Free Pick X fallback; save backlog-safe Apps Script activation timestamps. The first poll exposed a missing private approval-channel allowlist entry, which was added before a successful replacement deploy. Google authorization then completed, the Trends connection passed, and its five-minute trigger was installed. No credential value or public test content was retained in the audit. | Zakai Martin | Trends transport live; one fresh private-card acceptance remains |
 | 2026-09-13 | With explicit owner approval, copy the existing Render recap credential directly into Apps Script, rerun the read-only connection test, and install the five-minute delivery trigger. The test and first scheduled recap execution completed. Create the missing `Kobe Trends` Gmail label after the first scheduled Trends error, then prove the worker completes with the new empty label and no external delivery. | Zakai Martin | Recap and Trends transports active; one fresh post-activation Trends card and one future legitimate recap/social package remain for content acceptance |
+| 2026-09-13 | Defer the immersive public-site redesign until memberships are rolling. Future direction: an original black/orange sports-broadcast and premium-sportsbook presentation without copying Pornhub branding or compromising checkout clarity and performance. | Zakai Martin | Backlogged |
+| 2026-09-13 | A read-only Stripe catalog review confirmed the live monthly price is `$32.99/month` and production pins the starter offer to one-time price `price_1U8sr9E6p9BmPii3C2r5jTb4` (“First 7 days — one-time charge”). The same product still contains obsolete active/default `$10/week` price `price_1U7my7E6p9BmPii3Vy1kZS0p`; the Worker does not reference it, but deliberate archival would remove operator ambiguity. | Technical operator | Correct production IDs verified; obsolete catalog cleanup pending |
 
 ## Owner answers still required
 
