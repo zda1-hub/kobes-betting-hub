@@ -1,6 +1,6 @@
 # Kobe's Betting Hub — Current Public-Beta Launch Checklist
 
-Status time: 2026-09-13 20:03 Arizona
+Status time: 2026-09-14 21:51 Arizona
 
 Technical/billing/support owner and final production approver: Zakai Martin
 
@@ -42,26 +42,26 @@ Release type: public beta with monitored improvement while live
 - [x] The dedicated Trends queue credential is aligned across the production Publisher Worker, Render, and Apps Script without recording its value. Render now checks the private inbox every five minutes. Its first poll exposed that `#pick-approvals` was missing from `ALLOWED_CHANNEL_IDS`; the channel was added, the replacement deployment succeeded, Kobe Bot logged in, and the next startup poll completed without the allowlist error.
 - [x] Text-only Free Pick X fallback is enabled. Image-backed approvals remain single-shot through the Publisher Worker, and no public test post was created during activation.
 
-## Three gates before public-beta invitations
+## Public-beta launch gates — complete
 
-1. **Live cancellation acceptance — waiting on Kobe**
-   - [ ] Kobe completes cancellation through `kobesbettinghub.com/cancel` for the intended membership.
-   - [ ] Zakai reports completion; the operator does not cancel or alter another subscription.
+1. **Live cancellation acceptance**
+   - [x] Kobe completed cancellation through `kobesbettinghub.com/cancel` for the intended membership.
+   - [x] Stripe scheduled exactly one membership to end on September 30 at 08:38 while leaving the second subscription unchanged and showing no further invoice.
 
-2. **Live-cancellation reconciliation — ready immediately afterward**
-   - [ ] Identify which of the two observed live `$32.99/month` subscriptions changed.
-   - [ ] Verify Stripe cancellation scheduling and paid-through date.
-   - [ ] Verify matching Supabase customer/subscription/webhook/audit rows.
-   - [ ] Verify Discord access remains until entitlement end, with no refund.
-   - [ ] Preserve identifiers/timestamps in the release record; never copy secrets or card data.
+2. **Live-cancellation reconciliation**
+   - [x] The changed live `$32.99/month` subscription was identified without altering the other membership.
+   - [x] Stripe and Supabase agree on the September 30 paid-through/end timestamp.
+   - [x] The signed production webhook returned `200` and Supabase recorded `PROCESSED` / `ROLE_GRANTED`.
+   - [x] Discord access remains active through entitlement end, with no refund and no entitlement block.
+   - [x] Private identifiers remain out of the public release record.
 
 3. **Fresh real pick acceptance**
-   - [ ] Kobe approves one current real pick he actually wants published.
-   - [ ] Confirm the interaction produces a clear terminal response rather than disappearing after “thinking.”
-   - [ ] Confirm approved content exactly matches locked terms/evidence and the intended Discord destination.
-   - [ ] Confirm the canonical pick log and API audit event contain the same Pick ID and publication result.
+   - [x] Kobe approved and published the current Travis Kelce over 3.5 receptions Free Pick.
+   - [x] The interaction produced the intended public Discord card without the disappearing “thinking” failure.
+   - [x] The public Free Pick API and website expose the same approved selection.
+   - [x] Social engagement bait is now removed from future/refreshed approval cards while wager evidence is preserved; release suite `211/211` passed.
 
-When all three sections pass, Zakai records `PUBLIC BETA GO` with timestamp, production versions, operator, monitoring window, and rollback references.
+`PUBLIC BETA GO` was recorded by Zakai Martin at 2026-09-14 21:51 MST. Begin with organic Discord invitations, reconcile the first five paid signups individually, and hold paid advertising/referral promotion until the first operating day closes cleanly.
 
 ## Pick timing
 

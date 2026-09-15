@@ -51,13 +51,21 @@ Governing jurisdiction approved by owner: California
 
 This release will use a public beta rather than a closed cohort. There is no mandatory multi-day wait after acceptance passes. Invitations may open to any interested member, while operational improvements continue behind the scenes.
 
-The public-beta label does not waive the customer-facing acceptance gate. Before invitations open, one production account must demonstrate:
+### PUBLIC BETA GO — 2026-09-14 21:51 MST
+
+The production acceptance lifecycle passed. Kobe used the production portal to schedule one live `$32.99/month` membership to end on September 30 at 08:38 while access remains active through the paid period, no further invoice is scheduled, and the second live membership remains unchanged. Stripe delivered the signed subscription update to the Checkout Worker with `200`. Production Supabase reports one scheduled cancellation, two currently active subscriptions, zero scheduled-cancellation entitlement blocks, and one processed live subscription webhook whose role outcome is `ROLE_GRANTED`. Private membership identifiers are intentionally omitted here.
+
+GitHub Actions run `34930217840` passed immediately afterward with zero active memberships missing Discord, zero reconciliation failures, zero failed or stuck webhooks, and a fresh reconciliation timestamp. The fresh Travis Kelce Free Pick also passed the Discord approval/publication acceptance. Render reports commit `5ddf951` live, the release suite passed `211/211`, and the public read-only smoke suite passed `5/5`.
+
+Organic public-beta invitations are approved. The operator must reconcile the first five paid signups individually and stop new invitations on any charge-without-access, access-without-payment, duplicate-subscription, or billing-portal failure. Paid advertising and referral promotion remain deferred until the first operating day closes cleanly. The scheduled September 30 terminal cancellation and Discord role removal remain a monitored post-launch acceptance item.
+
+The public-beta label does not waive the customer-facing acceptance gate. Before invitations open, production must demonstrate the live path through cancellation scheduling, while the isolated Stripe-clock environment demonstrates the later terminal event:
 
 1. recurring Checkout succeeds at the advertised price and cadence;
 2. the correct Discord identity is linked and the paid role is granted;
 3. the billing portal opens for that same member;
 4. cancellation is scheduled without an unauthorized refund;
-5. access remains through the paid period and is removed at entitlement end;
+5. live access remains through the paid period; isolated time advancement proves removal at entitlement end, with the real September 30 event retained as post-launch acceptance;
 6. Stripe, Supabase, Discord, and the API audit trail agree.
 
 ## Final production promotion checklist
@@ -74,9 +82,9 @@ The public-beta label does not waive the customer-facing acceptance gate. Before
 - [x] Publish effective Terms and Privacy pages identifying Kobe Irwin, California, `support@kobesbettinghub.com`, the public-beta status, recurring billing, cancellation, refund exceptions, and payment-dispute access behavior.
 - [x] Deploy the bounded Discord approval-verification hotfix to Render and pass the post-deploy `5/5` read-only production smoke suite.
 - [x] Suppress zero-pick Apps Script emails and remove only the failing five-minute recap trigger.
-- [ ] Run the single production acceptance lifecycle above; do not use an unrelated real customer.
-- [ ] Reconcile every Stripe event received during promotion with Supabase and Discord.
-- [ ] Record the public-beta GO time, exact versions, operator, monitoring window, and rollback reference.
+- [x] Complete live acceptance through cancellation scheduling and paid-through access on the intended account; rely on the completed isolated terminal proof while monitoring the real September 30 entitlement-end event.
+- [x] Reconcile the live cancellation event with Stripe, Supabase, and Discord; the first five new public-beta signups remain individually monitored operating work.
+- [x] Record the public-beta GO time, production versions, operator, monitoring rules, and rollback references.
 
 ## Accepted operational follow-ups
 
