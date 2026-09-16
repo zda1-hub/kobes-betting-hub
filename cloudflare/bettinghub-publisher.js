@@ -140,7 +140,10 @@ async function handleRequest(request, env) {
   if (url.pathname === "/health") {
     return json({ service: "bettinghub-publisher", status: "ready", xConnected: await hasXConnection(env), freePickReady: hasFreePickStore(env) });
   }
-  if (url.pathname === START_PATH) return beginXAuthorization(url, env);
+  if (url.pathname === START_PATH) {
+    if (!await hasBearer(request, env.QUEUE_INGEST_SECRET)) return json({ error: "Unauthorized" }, 401);
+    return beginXAuthorization(url, env);
+  }
   if (url.pathname === CALLBACK_PATH) return completeXAuthorization(url, env);
   if (url.pathname === "/api/queue/x" && request.method === "POST") return enqueueXPost(request, env);
   if (url.pathname === "/api/queue/x" && request.method === "GET") return listRecentPosts(request, env);
@@ -215,7 +218,7 @@ function dailyPickText(value, maximum = 1000) {
 }
 
 async function enqueueDailyPick(request, env) {
-  if (!dailyPickQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  if (!await dailyPickQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
   let input;
   try { input = await request.json(); } catch { return json({ error: 'Expected JSON' }, 400); }
   const id = dailyPickText(input.id, 160);
@@ -228,7 +231,7 @@ async function enqueueDailyPick(request, env) {
 }
 
 async function listDailyPicks(request, env) {
-  if (!dailyPickQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  if (!await dailyPickQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
   await ensureDailyPickQueue(env);
   const date = dailyPickText(new URL(request.url).searchParams.get('date'), 10);
   const { results } = await env.DB.prepare(`SELECT id, operating_date AS operatingDate, sport, event, market, selection, line_odds AS lineOdds, units, reason, cta, source, approved_at AS approvedAt FROM daily_picks WHERE status = 'approved' AND operating_date = ? ORDER BY created_at ASC`).bind(date).all();
@@ -236,7 +239,7 @@ async function listDailyPicks(request, env) {
 }
 
 async function markDailyPickDelivered(request, env) {
-  if (!dailyPickQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
+  if (!await dailyPickQueueAuthorized(request, env)) return json({ error: 'Unauthorized' }, 401);
   let input;
   try { input = await request.json(); } catch { return json({ error: 'Expected JSON' }, 400); }
   const id = dailyPickText(input.id, 160);
@@ -317,15 +320,15 @@ async function ensureRecapNotifications(env) {
   ]);
 }
 
-function recapNotificationAuthorized(request, env) {
+async function recapNotificationAuthorized(request, env) {
   // The existing Daily Picks Email Apps Script already has the protected
   // publisher queue secret. Accept it here as a migration-safe reader for
   // recap-status delivery, while Render keeps using the recap-specific secret
   // when it enqueues a notification.
-  return hasBearer(request, env.RECAP_NOTIFICATION_QUEUE_SECRET)
-    || hasBearer(request, env.QUEUE_INGEST_SECRET)
-    || hasBearer(request, env.TRENDS_QUEUE_SECRET)
-    || hasBearer(request, env.X_PUBLISHER_QUEUE_SECRET);
+  return await hasBearer(request, env.RECAP_NOTIFICATION_QUEUE_SECRET)
+    || await hasBearer(request, env.QUEUE_INGEST_SECRET)
+    || await hasBearer(request, env.TRENDS_QUEUE_SECRET)
+    || await hasBearer(request, env.X_PUBLISHER_QUEUE_SECRET);
 }
 
 async function enqueueRecapNotification(request, env) {
@@ -379,7 +382,7 @@ async function markRecapNotificationDelivered(request, env) {
 
 // This internal endpoint deliberately accepts approved text posts, not source URLs or downloaded media.
 async function enqueueXPost(request, env) {
-  if (!await hasBearer(request, env.QUEUE_INGEST_SECRET)) return json({ error: "Unauthorized" }, 401);
+  if (!(await hasBearer(request, env.FREE_PICK_X_QUEUE_SECRET) || await hasBearer(request, env.QUEUE_INGEST_SECRET))) return json({ error: "Unauthorized" }, 401);
   let input;
   try {
     input = await request.json();
@@ -415,7 +418,7 @@ async function enqueueXPost(request, env) {
 }
 
 async function listRecentPosts(request, env) {
-  if (!await hasBearer(request, env.QUEUE_INGEST_SECRET)) return json({ error: "Unauthorized" }, 401);
+  if (!(await hasBearer(request, env.FREE_PICK_X_QUEUE_SECRET) || await hasBearer(request, env.QUEUE_INGEST_SECRET))) return json({ error: "Unauthorized" }, 401);
   const { results } = await env.DB.prepare(
     `SELECT id, body, scheduled_at AS scheduledAt, status, published_at AS publishedAt, x_post_id AS xPostId, last_error AS lastError
      FROM approved_posts ORDER BY created_at DESC LIMIT 25`,
