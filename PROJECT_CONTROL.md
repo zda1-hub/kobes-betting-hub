@@ -2,9 +2,9 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-14 21:51 MST
+**Last verified:** 2026-09-16 16:44 MST (scoped X repair and post-deploy checks)
 
-**Production runtime change set:** repository/Render auto-deploy from `main` at `1a07657685951aa81298908ae86fc61c8ab6dab7`; Checkout Worker `bbdf7a3e-1d2c-4ebe-a908-35416b3c0f51`; Publisher Worker `33bdf3f7-f0aa-4d8b-b133-9b0ec2212365`; public-site Worker `59485719-9cab-42eb-bf90-1074c21f0156`
+**Production runtime change set:** repository/Render source fix `dbd23fd42389ec3e58bfb960a4637f186a67067d`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`. Public-site version above was historical; no public-site deployment occurred in the September 16 repair.
 
 **Control-file owner:** Zakai Martin
 
@@ -21,6 +21,12 @@ This is the authoritative project brain for humans and coding agents. Read this 
 The owners do not need to read every repository document. The operating chat should use this file to answer: what is live, what talks to what, what costs money, what failed, what is next, and which decisions require an owner.
 
 ## Executive state
+
+### September 16 — pre-Thursday X repair
+
+Restored the missing original encrypted-token key, refreshed X authorization successfully and confirmed @kobesbettinghub. Aligned Render's existing delivery key through a dedicated X-only Publisher binding without changing other queue credentials. The production bot's X queue GET now returns 200, malformed POST returns 400 without a write, and that key cannot reconnect the X account. X account reconnection now requires the operator credential; daily/recap asynchronous authorization defects are fixed. Source release tests passed 217/217, exact-live-bundle checks passed 29 assertions and website smoke passed 5/5. Render restarted successfully and logged in as Kobe Bot.
+
+Twenty-four outdated queued wagers were reversibly held in draft with original rows preserved before restoring dispatch authorization. No public test, old wager, email, payment or membership change was made. **X write/media acceptance remains pending one genuine new Free Pick approval and recorded matching post ID/URL.** Ordinary channel messages/manual `/publish-pick` are not automatically included in this bridge. Locked Discord formatting and live image/Story features were preserved. Tax settings were unchanged; applicability remains a seller decision. See `docs/X_LAUNCH_REPAIR_2026-09-16.md` for versions, rollback, evidence and launch checklist. The earlier row-presence-only "X connected" statement is not sufficient delivery evidence.
 
 Kobe's Betting Hub is a paid sports-pick membership centered on Discord. It also has a public website, Stripe checkout, Discord entitlement automation, a monitored X-source pick pipeline, human approval in Discord, result grading through ESPN, recap email queues, a public Free Pick page, and optional X publishing.
 
@@ -399,6 +405,7 @@ Database direction: the existing free Supabase Postgres project is the first pro
 
 | Date | Decision / evidence | Owner | Status |
 |---|---|---|---|
+| 2026-09-16 | Deploy source fix `dbd23fd` and Publisher `2f3418de-62bc-4f36-b169-e8521d77d815`: restore original X encryption key, inherit existing Render delivery key into X-only binding, protect X account reconnect and await email authorization. Hold 24 outdated wagers reversibly. X refresh/identity and Render credential checks passed; 217 release tests, 29 live-bundle assertions and 5/5 public smoke passed. | Zakai Martin | Authentication/transport repaired; first genuine X write still required. No public fixture or membership mutation. |
 | 2026-09-12 | One root control file will govern project context and work across one primary chat. | Technical operator | Adopted |
 | 2026-09-12 | Do not use sub-agents until shared scope and interfaces are established. | Technical operator | Superseded after the nine-step matrix was established |
 | 2026-09-12 | Treat request/cost attribution, durable collector state, and production audit as P0. | Technical operator | Active |
