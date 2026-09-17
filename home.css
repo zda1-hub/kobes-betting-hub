@@ -58,3 +58,30 @@ footer { display:flex; flex-direction:column; align-items:center; justify-conten
 @media (max-width:800px) {
   .site-ticker + .site-header { top:30px; }
 }
+
+/* A shared, readable benefit panel: the reference's bold list, in the Hub palette. */
+.vip-access { min-width:0; padding:clamp(25px,4vw,52px); border:1px solid var(--line); border-left:5px solid var(--orange); background:#fff; }
+.vip-access h2 { margin:0 0 30px; font-size:clamp(27px,3vw,42px); font-weight:800; line-height:1.15; letter-spacing:-.035em; text-transform:uppercase; }
+.vip-access .eyebrow { margin-bottom:14px; font-size:10px; }
+.vip-access-home { margin:0 clamp(24px,7.1vw,120px) 40px; }
+.vip-access-inline { margin:32px 0; }
+.membership-hero-vip { align-items:start; }
+.membership-hero-vip #offer { scroll-margin-top:175px; }
+.vip-benefits { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:30px 45px; margin:0; padding:0; list-style:none; }
+.vip-benefits li { display:grid; grid-template-columns:32px minmax(0,1fr); align-items:start; gap:12px; }
+.vip-benefits li > span { font-size:25px; line-height:1.5; }
+.vip-benefits p { margin:0; color:var(--muted); font-size:clamp(15px,1.4vw,19px); line-height:1.65; overflow-wrap:break-word; }
+.vip-benefits strong { color:var(--ink); font-weight:800; }
+.vip-access-inline .vip-benefits { grid-template-columns:1fr; gap:22px; }
+.vip-access-note { margin:28px 0 0; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; line-height:1.6; }
+.vip-access > .text-link { display:inline-block; margin-top:22px; line-height:1.6; }
+@media (max-width:800px) {
+  .vip-access-home { margin:0 24px 30px; }
+  .membership-hero-vip #offer { scroll-margin-top:128px; }
+  .vip-access { padding:26px 20px; }
+  .vip-access h2 { margin-bottom:25px; font-size:27px; }
+  .vip-benefits { grid-template-columns:1fr; gap:24px; }
+  .vip-benefits li { grid-template-columns:26px minmax(0,1fr); gap:10px; }
+  .vip-benefits li > span { font-size:22px; }
+  .vip-benefits p { font-size:15px; }
+}
