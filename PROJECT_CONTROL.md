@@ -2,9 +2,9 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-17 15:08 MST (exclusive intake/retry/quarantine live; 29 private cards and 54 original wagers directly verified at 15:06)
+**Last verified:** 2026-09-17 15:14 MST (VIP benefits website panel live; 243 tests and 5/5 public smoke pass; exact production homepage, join page and stylesheet verified)
 
-**Production runtime change set:** Render exclusive source-term intake/retry/quarantine fix `b076acfde65d82cf4af782d6d63f5ff2890ab7a6`, deploy `dep-dam69k4s728c73asmm00`, retains evidence-isolation fix `4d4b106`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `2b8e3541-070c-452d-8416-24699150df15`. September 17 changes cover Node evidence isolation, exclusive recovery, homepage copy/layout, and ticker-aware shared header offsets; Checkout, Publisher bindings, and billing were not changed.
+**Production runtime change set:** Render exclusive source-term intake/retry/quarantine fix `b076acfde65d82cf4af782d6d63f5ff2890ab7a6`, deploy `dep-dam69k4s728c73asmm00`, retains evidence-isolation fix `4d4b106`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `e9e73764-5001-4a1f-88f3-981bc0926c62` (benefits commit `7b71810`). September 17 changes cover Node evidence isolation, exclusive recovery, homepage copy/layout, ticker-aware shared header offsets and consistent VIP benefit panels; Checkout, Publisher bindings, and billing were not changed. Requested $194.99 annual and $134.99 longer-term offers are not yet configured; the latter term requires confirmation.
 
 **Control-file owner:** Zakai Martin
 
@@ -431,6 +431,7 @@ Database direction: the existing free Supabase Postgres project is the first pro
 
 | Date | Decision / evidence | Owner | Status |
 |---|---|---|---|
+| 2026-09-17 | Publish shared VIP benefit panels on homepage and join page, with icon-led bold labels and orange accent; no unverified capper count, completeness or instant-access claim. Static Worker `e9e73764-5001-4a1f-88f3-981bc0926c62`, commit `7b71810`; 243 tests, 5/5 public smoke and exact production assets pass; regular Arc desktop/320px/400px visuals checked. | Zakai Martin | Live. Existing $10/seven-day and two-day-free intros unchanged, both then $32.99/month. New prepaid plan duration clarification pending before billing implementation. |
 | 2026-09-17 | Source-only exclusive private intake, same-day backfill and safe Discord 429 handling. Final quarantine commit `b076acf`, Render `dep-dam69k4s728c73asmm00` live. 240 tests and 5/5 smoke pass; direct reads verify 29 approval cards / 54 exact source wagers. | Zakai Martin / Kobe | 27 owner approvals and two undecided at 15:06; no operator approval/direct publication. Six unclear source candidates held. Separate approval room proposed, not configured. |
 | 2026-09-17 | Recover two EZMSports exclusives through private approvals; Kobe approved both and direct reads confirm exact source bets in #exclusives. Deploy `94b4e53` / `dep-dam631n40ujc73ap89bg`; 233 tests and 5/5 smoke pass. | Zakai Martin / Kobe | Initial recovery verified; superseded by broader source-term intake above. |
 | 2026-09-17 | Remove phantom ticker spacing across shared-header pages; static Worker `2b8e3541-070c-452d-8416-24699150df15`. 228 release tests and regular Arc visual checks pass; live paid starter invoice/link and September 24 renewal rechecked read-only. | Zakai Martin | Website live; no billing or social-post mutation. |
