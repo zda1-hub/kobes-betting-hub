@@ -17,7 +17,9 @@ The owner screenshot shows Josh Allen/Bills passing analysis repeated on Jahmyr 
 
 Local release suite: **223/223 passed**, including six new regression tests reproducing the screenshot and checking isolated ESPN athlete/market requests, source-first behavior, stale-copy refusal, wager-header/hashtag exclusion, and matching approval/member rendering. No public fixture, payment, membership mutation, or credential change was made.
 
-No database migration or environment change is required. Ship the scoped Node changes through main/Render auto-deploy. Verify the commit is live, the bot logs in, and today's undecided private cards refresh or hold. The next genuine Kobe approval remains the live content acceptance; transport success is not proof of factual correctness.
+No database migration or environment change was required. Final commit `4d4b1066a58a1114e72acb525dd60e40701dfee6` is live through Render deploy `dep-dam5lbfqj5pc73e5smj0` (finished 21:25:39 UTC); startup registered commands and logged in as Kobe Bot. Direct Discord reads at approximately 21:27 UTC verified cards `20260917-019-02-X` (Gibbs) and `20260917-019-03-X` (DJ Moore): four correct-player/market ESPN facts apiece, no inherited Josh Allen/Bills passing prose, no repeated wager bullet, and matching saved approval-copy locks. Public read-only smoke passed 5/5. The next genuine Kobe approval remains the public content acceptance; transport success is not proof of factual correctness.
+
+The final verification-record commit is documentation-only and uses Render's documented `[skip render]` phrase to preserve the verified running code without another unnecessary restart.
 
 Rollback reference is pre-fix main `ec759fe843e5dde96187644330e16f913f0a9ac4`. It contains the contamination defect, so if operational rollback is necessary, hold affected publishing first; do not reactivate unsafe old approval cards.
 

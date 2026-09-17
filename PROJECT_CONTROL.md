@@ -2,9 +2,9 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-16 16:44 MST (scoped X repair and post-deploy checks)
+**Last verified:** 2026-09-17 14:27 MST (new-member entitlement and live approval-card correction)
 
-**Production runtime change set:** repository/Render source fix `dbd23fd42389ec3e58bfb960a4637f186a67067d`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`. Public-site version above was historical; no public-site deployment occurred in the September 16 repair.
+**Production runtime change set:** Render evidence-isolation fix `4d4b1066a58a1114e72acb525dd60e40701dfee6`, deploy `dep-dam5lbfqj5pc73e5smj0`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`. September 17 changed only Node pick evidence/approval behavior; Checkout, Publisher bindings, billing, and website content were not changed.
 
 **Control-file owner:** Zakai Martin
 
@@ -24,7 +24,7 @@ The owners do not need to read every repository document. The operating chat sho
 
 ### September 17 — launch-day evidence isolation hotfix
 
-Reproduced the owner's Josh Allen/Gibbs/DJ Moore cross-play breakdown contamination. A scoped fix requires per-play source attribution, refuses parent/shared evidence inheritance, researches only each play's missing facts, blocks stale unsafe copy, and corrects/holds today's undecided private cards at startup. The locked pick-first format and matching approval/member copy are unchanged. First deployment `cad28db` went live on Render and direct Discord reads confirmed separate Gibbs/DJ Moore evidence. That live inspection also caught wager headers and matchup hashtags counting as evidence; the final tightening excludes those without deleting historical over/under facts. Local release tests passed **223/223**; no migration or credential change is needed. See `docs/PICK_EVIDENCE_ISOLATION_2026-09-17.md` for rollout and rollback precautions. Verify the final auto-deploy and refreshed copy before declaring content acceptance complete.
+Reproduced the owner's Josh Allen/Gibbs/DJ Moore cross-play breakdown contamination. A scoped fix requires per-play source attribution, refuses parent/shared evidence inheritance, researches only each play's missing facts, blocks stale unsafe copy, and corrects/holds today's undecided private cards at startup. The locked pick-first format and matching approval/member copy are unchanged. First deployment `cad28db` confirmed separate Gibbs/DJ Moore evidence; final tightening excludes wager headers and matchup hashtags without deleting historical over/under facts. Local release tests passed **223/223**; no migration or credential change is needed. Final deployment `4d4b106` is live; direct Discord reads verified four Gibbs rushing-attempt facts and four DJ Moore receiving-yard facts, no inherited passing prose or duplicated wager bullet, and both saved approval-copy hashes match. The next genuine owner approval remains the public content acceptance. See `docs/PICK_EVIDENCE_ISOLATION_2026-09-17.md` for rollout and rollback precautions.
 
 Read-only launch checks confirm the new starter member's Discord link and live membership role, with processed live-mode checkout/invoice and role-grant webhooks. Today's pick log contains three paid publications and no Free Pick; site/X delivery has no corresponding API/queue records today and the public current item still says September 15. Instagram's `kobeslocks` connection table is empty. These are explicit remaining delivery/access checks, not evidence that all marketing automation is ready.
 
@@ -411,6 +411,7 @@ Database direction: the existing free Supabase Postgres project is the first pro
 
 | Date | Decision / evidence | Owner | Status |
 |---|---|---|---|
+| 2026-09-17 | Deploy evidence isolation `4d4b106` through Render `dep-dam5lbfqj5pc73e5smj0`. Release tests passed 223/223; bot login and 5/5 public smoke passed. Direct live Gibbs/DJ Moore card reads show four own-market facts each and matching copy locks. New starter member is linked with VIP present and processed live-mode payment/link webhooks. No Free Pick site/X delivery exists today; Instagram connection is empty. | Zakai Martin | Pick evidence correction live; today's Free Pick message link and Instagram tester/authorization still needed. No billing or public fixture mutation. |
 | 2026-09-16 | Deploy source fix `dbd23fd` and Publisher `2f3418de-62bc-4f36-b169-e8521d77d815`: restore original X encryption key, inherit existing Render delivery key into X-only binding, protect X account reconnect and await email authorization. Hold 24 outdated wagers reversibly. X refresh/identity and Render credential checks passed; 217 release tests, 29 live-bundle assertions and 5/5 public smoke passed. | Zakai Martin | Authentication/transport repaired; first genuine X write still required. No public fixture or membership mutation. |
 | 2026-09-12 | One root control file will govern project context and work across one primary chat. | Technical operator | Adopted |
 | 2026-09-12 | Do not use sub-agents until shared scope and interfaces are established. | Technical operator | Superseded after the nine-step matrix was established |
