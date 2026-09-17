@@ -2,9 +2,9 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-17 14:35 MST (curated homepage and Instagram tester invitation)
+**Last verified:** 2026-09-17 14:39 MST (flush shared headers and live Stripe starter-member recheck)
 
-**Production runtime change set:** Render evidence-isolation fix `4d4b1066a58a1114e72acb525dd60e40701dfee6`, deploy `dep-dam5lbfqj5pc73e5smj0`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `2adc34d6-026f-4629-9a3b-f1fe201030d8`. September 17 changes cover Node evidence isolation and homepage copy/layout; Checkout, Publisher bindings, and billing were not changed.
+**Production runtime change set:** Render evidence-isolation fix `4d4b1066a58a1114e72acb525dd60e40701dfee6`, deploy `dep-dam5lbfqj5pc73e5smj0`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `2b8e3541-070c-452d-8416-24699150df15`. September 17 changes cover Node evidence isolation, homepage copy/layout, and ticker-aware shared header offsets; Checkout, Publisher bindings, and billing were not changed.
 
 **Control-file owner:** Zakai Martin
 
@@ -23,6 +23,10 @@ The owners do not need to read every repository document. The operating chat sho
 ## Executive state
 
 ### September 17 — curated homepage and Instagram tester invitation
+
+Follow-up website coherence check fixed the shared sticky header's unconditional ticker offset. Headers without a ticker now use top zero; only an immediately preceding visible ticker reserves 34px desktop/30px mobile. All six shared-header pages use the same cache-busted stylesheet. Regular Arc checks cover desktop Free Pick and mobile Free Pick (including scroll), referrals, and membership management. Two new regression tests pass; the full release suite is **228/228**. Existing non-sticky support/legal/editorial headers do not reserve ticker offsets.
+
+Rechecked the actual live Stripe subscription detail: the starter invoice is **$10.00 Paid**, the Discord connection metadata is present, and the next invoice is **$32.99 on September 24**. Stripe's trialing label represents the seven-day starter interval, not an unpaid invoice. The earlier launch-day Discord role check remains the direct role-presence evidence. No customer billing data or subscription was changed.
 
 The live homepage now leads with “Real cappers. Real plays. One Hub.” and explicitly describes picks curated from other bettors and reviewed by Kobe. Existing historical results/reviews/slips follow the hero, then a three-step curation explanation. No wins, performance totals, or expert credentials were invented. Selected-example and betting-risk disclosures remain; trial links, navigation, and the image viewer remain functional. Regular Arc previews passed at desktop, 400px and 320px phone widths, including mobile full-screen proof viewing. Release tests passed **226/226**. Deployed only the static website Worker; no bot restart or billing mutation is needed.
 
@@ -279,6 +283,7 @@ Detailed immutable reconciliation notes are in `docs/OPENAI_USAGE_RECONCILIATION
 
 | Data | Location | Sensitivity | Retention / deletion state |
 |---|---|---|---|
+| 2026-09-17 | Remove phantom ticker spacing across all shared-header pages and publish static Worker `2b8e3541-070c-452d-8416-24699150df15`. 228/228 release tests pass; regular Arc desktop/mobile/scroll visual checks pass. Recheck live Stripe starter invoice Paid, Discord link metadata, and next monthly invoice September 24. | Zakai Martin | Website live; payment/link reverified read-only. No bot, billing, or social-post mutation. |
 | Subscription/payment/customer data | Stripe | High | Governed by Stripe; local policy missing |
 | Discord user ID on subscription | Stripe metadata | Personal identifier | Policy missing |
 | Discord member/channel/message IDs | Discord, CSV, JSON, planned Postgres | Personal/operational | Policy missing |

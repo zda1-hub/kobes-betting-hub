@@ -50,3 +50,11 @@ footer { display:flex; flex-direction:column; align-items:center; justify-conten
   .how-grid { grid-template-columns:1fr; }
   #proof,#how-it-works,.slideshow-row { scroll-margin-top:128px; }
 }
+
+/* Only reserve a ticker offset when a real ticker precedes the header.
+   Free Pick, referrals, and the membership fallback have no ticker. */
+.site-header { top:0; }
+.site-ticker + .site-header { top:34px; }
+@media (max-width:800px) {
+  .site-ticker + .site-header { top:30px; }
+}
