@@ -20,11 +20,11 @@ test('every public shared-header page uses the same cache-busted stylesheet', as
     const html = await readFile(new URL(page, root), 'utf8');
     if (!/href="home\.css/.test(html)) continue;
     sharedPages.push(page);
-    assert.match(html, /href="home\.css\?v=20260917-vip-access"/, page);
+    assert.match(html, /href="home\.css\?v=20260917-exclusives"/, page);
     const beforeHeader = html.slice(html.indexOf('<body'), html.indexOf('<header'));
     if (/class="site-ticker"/.test(beforeHeader)) {
       assert.match(beforeHeader, /<\/div>\s*$/, page);
     }
   }
-  assert.deepEqual(sharedPages.sort(), ['cancel.html', 'free-pick.html', 'index.html', 'join.html', 'membership.html', 'refer.html']);
+  assert.deepEqual(sharedPages.sort(), ['cancel.html', 'exclusives.html', 'free-pick.html', 'index.html', 'join.html', 'membership.html', 'refer.html']);
 });

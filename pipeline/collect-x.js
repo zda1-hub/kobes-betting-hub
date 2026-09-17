@@ -3,7 +3,7 @@ require('dotenv').config();
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
-const { exclusiveTextExtraction, exclusiveSourceIsCurrent } = require('./exclusive-text');
+const { exclusiveTextExtraction, exclusiveSourceIsCurrent, exclusiveTextGroups, exclusiveWagerKey, completeXPost } = require('./exclusive-text');
 const { discordRateLimitedFetch, recoverySendFailureStatus } = require('./discord-retry');
 const {
   recordApprovalCard,
@@ -308,7 +308,7 @@ async function postsFor(source, userId, { sinceId, startTime, nextToken } = {}) 
   const url = new URL(`https://api.x.com/2/users/${userId}/tweets`);
   url.searchParams.set('exclude', 'retweets,replies');
   url.searchParams.set('max_results', '100');
-  url.searchParams.set('tweet.fields', 'created_at,attachments,entities');
+  url.searchParams.set('tweet.fields', 'created_at,attachments,entities,note_tweet');
   url.searchParams.set('expansions', 'attachments.media_keys');
   url.searchParams.set('media.fields', 'url,preview_image_url,type');
   if (sinceId) url.searchParams.set('since_id', sinceId);
@@ -680,12 +680,14 @@ async function queueSplitPlayPackets(packet, outputPath) {
   return created;
 }
 
-async function runCollector({ maxCandidates, maxModelCalls } = {}) {
+async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}) {
   if (await pickWorkflowPaused()) {
     console.log('Pick workflow is paused; no X posts will be collected or sent for approval.');
     return { created: 0, skipped: 0, deferred: 0, modelCalls: 0, sourceCount: 0, paused: true };
   }
-  const sources = (await readJson(SOURCES_PATH, [])).filter((source) => source.enabled);
+  const enabledSources = (await readJson(SOURCES_PATH, [])).filter((source) => source.enabled);
+  if (sourceHandles && (!Array.isArray(sourceHandles) || sourceHandles.some(handle => !enabledSources.some(s => s.handle === handle)))) throw new Error('Only configured enabled source handles may be selected.');
+  const sources = sourceHandles ? enabledSources.filter(s => sourceHandles.includes(s.handle)) : enabledSources;
   if (sources.length === 0) {
     console.log('No X sources are enabled. Nothing to collect.');
     return { created: 0, skipped: 0, deferred: 0, modelCalls: 0, sourceCount: 0 };
@@ -764,7 +766,7 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
     // Strong text-identified picks get first look, followed by caption-signaled
     // media and finally dedicated photo-review posts. Keep the original ID as
     // the tie-breaker so a source remains deterministic.
-    const posts = responses.flatMap((page) => page.data || [])
+    const posts = responses.flatMap((page) => page.data || []).map(completeXPost)
       .sort((a, b) => intakePriority(source, a) - intakePriority(source, b) || b.id.localeCompare(a.id));
     if (dailyCatchup && responses.length > 1) {
       console.log(`Backfilled ${posts.length} post(s) from @${source.handle} since ${startTime}.`);
@@ -780,6 +782,14 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
       const postMediaUrls = (post.attachments?.media_keys || []).map((key) => media[key]).filter(Boolean);
       const packet = createPacket({ date, sequence: 0, source, post, media });
       await recordSourcePost(packet);
+      if (source.exclusive_text_groups) {
+        // Serialized commit below performs per-capper durable deduplication,
+        // including partial previous deliveries. Never merge these through AI.
+        acceptedPackets.push({ groupedExclusive: true, packet, postId: String(post.id), source, post });
+        lastProcessedId = post.id;
+        handledPostIds.add(post.id);
+        continue;
+      }
       if (claimedSourcePostIds.has(String(post.id))) {
         await recordGateDecision(packet, { code: 'ALREADY_QUEUED', reason: 'This X post already has a current approval packet.', status: 'DEDUPLICATED' });
         lastProcessedId = post.id;
@@ -1002,8 +1012,16 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
   }
 
   async function commitSourceResult(result) {
-    state.sources[result.source.handle] = result.nextSourceState;
     for (const candidate of result.acceptedPackets) {
+      if (candidate.groupedExclusive) {
+        const receipts = await recoverAuditedExclusive({ source_handle: candidate.source.handle,
+          external_post_id: candidate.post.id, posted_at: candidate.post.created_at, raw_text: candidate.post.text });
+        created += receipts.groups.filter(r => r.message && r.status !== 'ALREADY_QUEUED').length;
+        console.log('Grouped exclusive receipts:', JSON.stringify(receipts));
+        const names = await fs.readdir(path.join(QUEUE_ROOT, date));
+        sequence = Math.max(sequence, ...names.map(f => Number(f.match(/^\d{8}-(\d+)/)?.[1]) || 0));
+        continue;
+      }
       sequence += 1;
       const packet = candidate.packet;
       packet.approval_number = sequence;
@@ -1025,6 +1043,7 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
       created += 1;
       queuedSourcePostIds.add(candidate.postId);
     }
+    state.sources[result.source.handle] = result.nextSourceState;
   }
 
   async function sourceWorker() {
@@ -1100,6 +1119,7 @@ async function recoverAuditedExclusive(row) {
   if (!source) throw new Error('Source is not an enabled exclusive feed.');
   const date = pacificDate();
   if (pacificDate(new Date(row.posted_at)) !== date) throw new Error('Recovery is limited to today’s source posts.');
+  if (source.exclusive_text_groups) return recoverExclusiveGroups(row, source, date);
   if ((await existingSourcePostIds(date)).has(row.external_post_id)) {
     const directory = path.join(QUEUE_ROOT, date);
     for (const file of (await fs.readdir(directory)).filter(name => name.endsWith('.json'))) {
@@ -1144,6 +1164,55 @@ async function recoverAuditedExclusive(row) {
   }
   // Keep the reservation after an uncertain send; never blindly duplicate it.
   return deliverRecoveredApproval(packet, packetPath);
+}
+
+async function recoverExclusiveGroups(row, source, date) {
+  const directory = path.join(QUEUE_ROOT, date);
+  await fs.mkdir(directory, { recursive: true });
+  const saved = [];
+  for (const file of (await fs.readdir(directory)).filter(f => f.endsWith('.json'))) {
+    saved.push({ file: path.join(directory, file), packet: await readJson(path.join(directory, file), {}) });
+  }
+  const known = new Set();
+  for (const { packet } of saved) {
+    if (!packet.discord_review_message_id && !['RECOVERY_RESERVED', 'RECOVERY_SEND_PENDING', 'RECOVERY_SEND_UNCERTAIN'].includes(packet.status)) continue;
+    for (const play of visiblePlays(packet)) known.add(exclusiveWagerKey(sourceCapperName(packet), `${play.terms}${play.units ? ` (${play.units})` : ''}`));
+  }
+  const groups = [];
+  for (const block of exclusiveTextGroups(source, row.raw_text)) {
+    if (!block.extraction) { groups.push({ capper: block.capper, status: 'HELD', reason: block.reason }); continue; }
+    const groupKey = `${row.external_post_id}:${block.index}`;
+    const prior = saved.find(s => s.packet.source?.exclusive_group_key === groupKey);
+    if (prior) {
+      if (prior.packet.discord_review_message_id) { groups.push({ capper: block.capper, status: 'ALREADY_QUEUED', message: prior.packet.discord_review_message_id }); continue; }
+      throw new Error('Group send reservation requires reconciliation; no blind resend.');
+    }
+    const extraction = structuredClone(block.extraction);
+    extraction.plays = extraction.plays.filter(p => !known.has(exclusiveWagerKey(block.capper, p.selection)));
+    if (!extraction.plays.length) { groups.push({ capper: block.capper, status: 'DEDUPLICATED' }); continue; }
+    extraction.selection = extraction.plays[0].selection;
+    const packet = createPacket({ date, sequence: 0, source, post: { id: row.external_post_id, text: row.raw_text, created_at: new Date(row.posted_at).toISOString() }, media: {} });
+    packet.source.exclusive_group_key = groupKey;
+    packet.analysis = { status: 'SOURCE_EXTRACTED', source_only: true, extraction, model: null, extracted_at: new Date().toISOString() };
+    packet.verification.exclusive_review = 'SOURCE_TERMS_OWNER_APPROVAL';
+    try {
+      if (!exclusiveSourceIsCurrent(packet)) throw new Error('Source is not current.');
+      buildSourcePickApprovalEmbed(packet, 'APPROVED PICK');
+    } catch (error) { groups.push({ capper: block.capper, status: 'HELD', reason: error.message }); continue; }
+    let sequence = Math.max(0, ...saved.map(s => Number(path.basename(s.file).match(/^\d{8}-(\d+)/)?.[1]) || 0)) + 1;
+    let packetPath;
+    for (;;) {
+      packet.approval_number = sequence; packet.pick_id = `${numberFor(date, sequence)}-X`; packet.status = 'RECOVERY_RESERVED';
+      packetPath = path.join(directory, `${numberFor(date, sequence)}.json`);
+      try { await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`, { flag: 'wx' }); break; }
+      catch (error) { if (error.code !== 'EEXIST') throw error; sequence += 1; }
+    }
+    saved.push({ file: packetPath, packet });
+    const receipt = await deliverRecoveredApproval(packet, packetPath);
+    groups.push({ capper: block.capper, ...receipt });
+    for (const p of extraction.plays) known.add(exclusiveWagerKey(block.capper, p.selection));
+  }
+  return { post: row.external_post_id, groups };
 }
 
 if (require.main === module) {

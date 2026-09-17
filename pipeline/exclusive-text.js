@@ -27,4 +27,26 @@ function exclusiveSourceIsCurrent(packet, now = new Date()) {
   return date(posted) === date(now);
 }
 
-module.exports = { exclusiveTextExtraction, exclusiveSourceIsCurrent };
+// Aggregators explicitly separate original cappers with horizontal rules.
+// Parse blocks independently: an incomplete block must not contaminate another.
+function exclusiveTextGroups(source, text) {
+  if (!source?.exclusive_text_groups || source.publish_mode !== 'terms_only') return [];
+  return String(text || '').split(/\r?\n\s*[─━—_-]{5,}\s*\r?\n/).map((block, index) => {
+    const lines = block.trim().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const capper = lines[0] || '';
+    const body = lines.slice(1).filter(s => !/^(?:MLB\s+Part\s+\d+\/\d+|Thursday Plays)$/i.test(s));
+    const genericHeading = /^(?:exclusive (?:play|pick)s?|free picks?|vip picks?|daily plays?|results?|recap)$/i.test(capper);
+    const extraction = genericHeading ? null : exclusiveTextExtraction(source, [capper, ...body].join('\n'));
+    return { index, capper, extraction, reason: extraction ? null : 'Original capper or complete market terms are unclear.' };
+  });
+}
+
+function exclusiveWagerKey(capper, selection) {
+  return `${String(capper || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')}|${String(selection || '').toLowerCase().replace(/\s+/g, ' ').trim()}`;
+}
+
+function completeXPost(post) {
+  return { ...post, text: post.note_tweet?.text || post.text || '' };
+}
+
+module.exports = { exclusiveTextExtraction, exclusiveSourceIsCurrent, exclusiveTextGroups, exclusiveWagerKey, completeXPost };

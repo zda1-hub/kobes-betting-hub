@@ -80,6 +80,19 @@
     "notes": "Monitor public posts only. Do not publish copied copy or media until reuse/credit terms are confirmed."
   },
   {
+    "handle": "BettingBuddyy",
+    "display_name": "Betting Buddy",
+    "enabled": true,
+    "approved_by": "Zakai Martin",
+    "approved_on": "2026-09-17",
+    "monitoring_mode": "photo_review",
+    "publish_mode": "terms_only",
+    "exclusive_text_groups": true,
+    "credit_line": "Source: @BettingBuddyy",
+    "reuse_permission": "PENDING_SOURCE_TERMS",
+    "notes": "Owner-requested private exclusive intake. Separate original cappers; preserve exact terms; no researched copy, automatic publication or copied media. Unclear blocks are held."
+  },
+  {
     "handle": "EZMSports",
     "display_name": "EZMSportsBetting",
     "enabled": true,

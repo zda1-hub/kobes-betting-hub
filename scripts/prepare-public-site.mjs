@@ -11,6 +11,9 @@ const membershipConfigPattern = /window\.__KBH_MEMBERSHIP_CONFIG__ = Object\.fre
 
 const publicFiles = [
   'index.html',
+  'exclusives.html',
+  'exclusives.css',
+  'exclusives.js',
   'join.html',
   'membership.html',
   'cancel.html',

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { exclusiveTextExtraction, exclusiveSourceIsCurrent } = require('./exclusive-text');
+const { exclusiveTextExtraction, exclusiveSourceIsCurrent, exclusiveTextGroups, exclusiveWagerKey, completeXPost } = require('./exclusive-text');
 const { buildSourcePickApprovalEmbed } = require('../bot/lib/source-review');
 const { shouldQueueForReview } = require('./collect-x');
 const source = { publish_mode: 'terms_only', handle: 'EZMSports', display_name: 'EZMSportsBetting' };
@@ -36,4 +36,36 @@ test('exclusive approval remains limited to current Pacific day and rejects futu
   assert.equal(exclusiveSourceIsCurrent(p('2026-09-17T06:59:00Z'), now), false);
   assert.equal(exclusiveSourceIsCurrent(p('2026-09-18T01:00:00Z'), now), false);
   assert.equal(exclusiveSourceIsCurrent(p(''), now), false);
+});
+
+test('Betting Buddy separates cappers losslessly and holds unclear blocks independently', () => {
+  const feed = { handle: 'BettingBuddyy', display_name: 'Betting Buddy', publish_mode: 'terms_only', exclusive_text_groups: true };
+  const text = 'BANKROLL BILL\n\nMLB Part 2/2\nTwins/Angels under 8 -130 (1.5U)\nDetroit Tigers F5 ML -116 (1.25U)\n─────────────────────────\nTCC\nMLB\nKC @ HOU\n─────────────────────────\nTROY WEST\nNFL\nLions +5.5 (-110)';
+  const groups = exclusiveTextGroups(feed, text);
+  assert.equal(groups.length, 3);
+  assert.deepEqual(groups[0].extraction.plays.map(p => p.selection), ['Twins/Angels under 8 -130 (1.5U)', 'Detroit Tigers F5 ML -116 (1.25U)']);
+  assert.equal(groups[1].extraction, null);
+  assert.equal(groups[2].extraction.source_capper_name, 'TROY WEST');
+  const descriptions = groups.filter(g => g.extraction).map(g => buildSourcePickApprovalEmbed({ source: feed, analysis: { status: 'SOURCE_EXTRACTED', extraction: g.extraction } }, 'APPROVED PICK').description);
+  assert.ok(!descriptions[0].includes('TROY WEST'));
+  assert.equal(descriptions[1], 'TROY WEST\n• Lions +5.5 (-110)');
+});
+
+test('grouped feed never treats result/ad/unspecified units or truncated text as bets', () => {
+  const feed = { ...source, exclusive_text_groups: true };
+  for (const text of ['EXCLUSIVE PLAY\nBrewers ML', 'TCC\nMLB\nKC @ HOU', 'PARDON MY PICK\n2U', 'PROP BOMB\nSubscribe now\nLoveland over 46.5', 'Troy West\nYesterday cashed Lions +5.5', 'Troy West\nLions ML … https://t.co/123']) assert.equal(exclusiveTextGroups(feed, text)[0].extraction, null);
+  assert.deepEqual(exclusiveTextGroups(source, 'Troy West\nLions +5.5'), []);
+});
+
+test('complete X long-post body wins over truncated preview without changing terms', () => {
+  const full = 'Troy West\nLions +5.5 (-110)\n─────────\nBen Burns\nMets ML +120';
+  const post = completeXPost({ id: '1', text: 'Troy West …', note_tweet: { text: full } });
+  assert.equal(post.text, full);
+  assert.equal(completeXPost({ text: 'Lions ML' }).text, 'Lions ML');
+});
+
+test('exclusive dedupe matches capper spacing but distinguishes odds, lines, stakes and cappers', () => {
+  const key = exclusiveWagerKey('BANKROLL BILL', 'Twins/Angels Under 8 -130 (1.5U)');
+  assert.equal(key, exclusiveWagerKey('BankrollBill', 'Twins/Angels under 8 -130 (1.5U)'));
+  for (const [capper, bet] of [['Other', 'Twins/Angels Under 8 -130 (1.5U)'], ['BankrollBill', 'Twins/Angels Under 8.5 -130 (1.5U)'], ['BankrollBill', 'Twins/Angels Under 8 -120 (1.5U)'], ['BankrollBill', 'Twins/Angels Under 8 -130 (1U)']]) assert.notEqual(key, exclusiveWagerKey(capper, bet));
 });
