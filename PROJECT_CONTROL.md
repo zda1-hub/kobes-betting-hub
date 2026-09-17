@@ -2,9 +2,9 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-17 14:27 MST (new-member entitlement and live approval-card correction)
+**Last verified:** 2026-09-17 14:35 MST (curated homepage and Instagram tester invitation)
 
-**Production runtime change set:** Render evidence-isolation fix `4d4b1066a58a1114e72acb525dd60e40701dfee6`, deploy `dep-dam5lbfqj5pc73e5smj0`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`. September 17 changed only Node pick evidence/approval behavior; Checkout, Publisher bindings, billing, and website content were not changed.
+**Production runtime change set:** Render evidence-isolation fix `4d4b1066a58a1114e72acb525dd60e40701dfee6`, deploy `dep-dam5lbfqj5pc73e5smj0`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `2adc34d6-026f-4629-9a3b-f1fe201030d8`. September 17 changes cover Node evidence isolation and homepage copy/layout; Checkout, Publisher bindings, and billing were not changed.
 
 **Control-file owner:** Zakai Martin
 
@@ -21,6 +21,12 @@ This is the authoritative project brain for humans and coding agents. Read this 
 The owners do not need to read every repository document. The operating chat should use this file to answer: what is live, what talks to what, what costs money, what failed, what is next, and which decisions require an owner.
 
 ## Executive state
+
+### September 17 — curated homepage and Instagram tester invitation
+
+The live homepage now leads with “Real cappers. Real plays. One Hub.” and explicitly describes picks curated from other bettors and reviewed by Kobe. Existing historical results/reviews/slips follow the hero, then a three-step curation explanation. No wins, performance totals, or expert credentials were invented. Selected-example and betting-risk disclosures remain; trial links, navigation, and the image viewer remain functional. Regular Arc previews passed at desktop, 400px and 320px phone widths, including mobile full-screen proof viewing. Release tests passed **226/226**. Deployed only the static website Worker; no bot restart or billing mutation is needed.
+
+Submitted the Instagram-only tester invitation for `kobeslocks` in Bettinhub Story Connection. Meta's Instagram Testers view confirms **Pending**. Kobe must accept through Instagram's Apps and Websites invitation settings before authorization. This does not grant app administration or activate automatic Story publishing. The connection remains unauthorised until he completes the next step.
 
 ### September 17 — launch-day evidence isolation hotfix
 
@@ -411,6 +417,7 @@ Database direction: the existing free Supabase Postgres project is the first pro
 
 | Date | Decision / evidence | Owner | Status |
 |---|---|---|---|
+| 2026-09-17 | Publish curated slogan → existing historical proof → explanation homepage with responsive layout and three new regression tests. Static Worker `2adc34d6-026f-4629-9a3b-f1fe201030d8`; 226/226 release tests and regular Arc desktop/400px/320px visual checks passed. Submit Instagram tester invitation to `kobeslocks`; Meta confirms Pending. | Zakai Martin | Website live; Kobe's tester acceptance and Instagram authorization remain. No billing or social-post mutation. |
 | 2026-09-17 | Deploy evidence isolation `4d4b106` through Render `dep-dam5lbfqj5pc73e5smj0`. Release tests passed 223/223; bot login and 5/5 public smoke passed. Direct live Gibbs/DJ Moore card reads show four own-market facts each and matching copy locks. New starter member is linked with VIP present and processed live-mode payment/link webhooks. No Free Pick site/X delivery exists today; Instagram connection is empty. | Zakai Martin | Pick evidence correction live; today's Free Pick message link and Instagram tester/authorization still needed. No billing or public fixture mutation. |
 | 2026-09-16 | Deploy source fix `dbd23fd` and Publisher `2f3418de-62bc-4f36-b169-e8521d77d815`: restore original X encryption key, inherit existing Render delivery key into X-only binding, protect X account reconnect and await email authorization. Hold 24 outdated wagers reversibly. X refresh/identity and Render credential checks passed; 217 release tests, 29 live-bundle assertions and 5/5 public smoke passed. | Zakai Martin | Authentication/transport repaired; first genuine X write still required. No public fixture or membership mutation. |
 | 2026-09-12 | One root control file will govern project context and work across one primary chat. | Technical operator | Adopted |
