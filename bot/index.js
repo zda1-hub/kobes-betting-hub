@@ -1650,6 +1650,9 @@ async function refreshPendingResearchApprovals() {
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  // Independent boards/readers must not wait behind historical card research.
+  startInjuryReports();
+  startTelegramReader();
   try {
     await refreshPendingResearchApprovals();
   } catch (error) {
@@ -1660,8 +1663,6 @@ client.once(Events.ClientReady, async (readyClient) => {
   startTrendInbox();
   startFreeRecapSchedule();
   startFreePickDelivery();
-  startInjuryReports();
-  startTelegramReader();
 });
 
 async function registerCommandsOnStart() {
@@ -2016,6 +2017,9 @@ async function shutdown() {
   const deadline = setTimeout(() => process.exit(0), 25000);
   try { await Promise.all([injuryDelivery?.stop(), telegramReader?.stop()]); }
   catch { console.error('Cloud drain interrupted; uncertain sends will be reconciled on restart.'); }
+  while (xCollectionInProgress || trendsPublicationInProgress || trendsInboxInProgress || freeRecapInProgress) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
   client.destroy();
   await closeAuditStore().catch(() => {});
   clearTimeout(deadline);
