@@ -158,7 +158,7 @@ function requiresNamedPlayer(play) {
 }
 
 function hasExplicitBettingMarket(play) {
-  return /\b(?:over|under|o\s*\/\s*u|moneyline|\bml\b|spread|nrfi|yrfi|btts|to hit|anytime|team total|yes|no)\b|(?:^|\s)[+-]\d+(?:\.\d+)?/i.test(play?.terms || '');
+  return /\b(?:over|under|o\s*\/\s*u|moneyline|\bml\b|spread|nrfi|yrfi|btts|to hit|anytime|team total|yes|no)\b|\b[ou]\s*\d+(?:\.\d+)?|(?:^|[\s(])[+-]\s*\d+(?:\.\d+)?/i.test(play?.terms || '');
 }
 
 function isGenericMarketWithoutEvent(play) {

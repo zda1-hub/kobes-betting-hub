@@ -3,6 +3,7 @@ require('dotenv').config();
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
+const { exclusiveTextExtraction, exclusiveSourceIsCurrent } = require('./exclusive-text');
 const {
   recordApprovalCard,
   recordSourcePost,
@@ -112,6 +113,7 @@ function sourceSupportSignalCount(text) {
 }
 
 function shouldQueueForReview(source, post, postMediaUrls) {
+  if (exclusiveTextExtraction(source, post.text)) return true;
   if (likelyPick(post.text)) return true;
   if (postMediaUrls.length === 0) return false;
   // Dedicated photo-review feeds may put the complete play only in the image.
@@ -738,7 +740,7 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
     // event has not started. Later passes return to normal since_id polling.
     const rescanImages = sourceState.image_rescan_version !== IMAGE_RESCAN_VERSION;
     const upcomingSlateRescanVersion = source.publish_mode === 'terms_only'
-      ? `${UPCOMING_SLATE_RESCAN_VERSION}-exclusive-team-v2` : UPCOMING_SLATE_RESCAN_VERSION;
+      ? `${UPCOMING_SLATE_RESCAN_VERSION}-exclusive-terms-v3` : UPCOMING_SLATE_RESCAN_VERSION;
     const rescanUpcomingSlate = sourceState.upcoming_slate_rescan_version !== upcomingSlateRescanVersion;
     const dailyCatchup = sourceState.catchup_date !== date || rescanImages || rescanUpcomingSlate;
     const startTime = dailyCatchup ? pacificStartIso(date) : undefined;
@@ -798,17 +800,17 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
         handledPostIds.add(post.id);
         continue;
       }
-      if (!likelyPick(post.text) && postMediaUrls.length > 0) {
+      const textExtraction = exclusiveTextExtraction(source, post.text);
+      if (!textExtraction && !likelyPick(post.text) && postMediaUrls.length > 0) {
         mediaOnlyCandidates += 1;
         if (mediaOnlyCandidates > mediaOnlyLimit) {
           await recordGateDecision(packet, {
             code: 'MEDIA_ONLY_INTAKE_LIMIT_REACHED',
             reason: `A newer media-only candidate from @${source.handle} already used this pass's media intake slot.`
           });
-          console.log(`Skipped @${source.handle} post ${post.id}; bounded media-only intake slot already used.`);
-          skipped += 1;
-          lastProcessedId = post.id;
-          handledPostIds.add(post.id);
+          console.log(`Deferred @${source.handle} post ${post.id}; bounded media-only intake slot already used.`);
+          deferred += 1;
+          completedSourcePass = false;
           continue;
         }
       }
@@ -818,7 +820,9 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
       // until the cheap NFL, exact-event, and roster gates pass; otherwise a
       // rejected candidate can spend minutes on web search and block the rest
       // of the 38-account scan.
-      packet.analysis = await enrichPacket(packet, {
+      packet.analysis = textExtraction ? { status: 'SOURCE_EXTRACTED', source_only: true,
+        extraction: textExtraction, extracted_at: new Date().toISOString(), model: null,
+        detail: 'Lossless exclusive source-text extraction; no model or research.' } : await enrichPacket(packet, {
         research: false,
         beforeOpenAIRequest: () => sourceModelReservation.tryStart()
       });
@@ -838,7 +842,7 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
         continue;
       }
 
-      if (!isSupportedSportPick(packet)) {
+      if (source.publish_mode !== 'terms_only' && !isSupportedSportPick(packet)) {
         await recordGateDecision(packet, { code: 'UNSUPPORTED_SPORT', reason: 'The extraction did not identify a supported sport.' });
         console.log(`Skipped @${source.handle} post ${post.id}; it is not explicitly identified as a supported sport pick.`);
         skipped += 1;
@@ -864,6 +868,28 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
         await recordGateDecision(packet, { code: 'MISSING_SOURCE_CAPPER', reason: 'The original capper was not clearly identified.' });
         console.log(`Skipped @${source.handle} post ${post.id}; original capper is not clearly identified.`);
         skipped += 1;
+        lastProcessedId = post.id;
+        handledPostIds.add(post.id);
+        continue;
+      }
+
+      // Exclusives are source terms for Kobe's human review, not researched
+      // writeups. Missing league/opponent labels must not hide clear bets.
+      // Rendering still enforces capper identity, actual markets and context.
+      if (source.publish_mode === 'terms_only') {
+        try {
+          if (!exclusiveSourceIsCurrent(packet)) throw new Error('Exclusive source is not from today.');
+          buildSourcePickApprovalEmbed(packet, 'APPROVED PICK');
+        } catch (error) {
+          await recordGateDecision(packet, { code: 'EXCLUSIVE_TERMS_UNCLEAR', reason: error.message });
+          skipped += 1;
+          lastProcessedId = post.id;
+          handledPostIds.add(post.id);
+          continue;
+        }
+        packet.verification.exclusive_review = 'SOURCE_TERMS_OWNER_APPROVAL';
+        await recordGateDecision(packet, { code: 'ELIGIBLE', reason: 'Clear exclusive source terms require Kobe approval; no researched breakdown.', status: 'ELIGIBLE' });
+        acceptedPackets.push({ packet, postId: String(post.id), source, post });
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
         continue;
@@ -1055,20 +1081,16 @@ async function recoverAuditedExclusive(row) {
   const date = pacificDate();
   if (pacificDate(new Date(row.posted_at)) !== date) throw new Error('Recovery is limited to today’s source posts.');
   if ((await existingSourcePostIds(date)).has(row.external_post_id)) return { status: 'ALREADY_QUEUED', post: row.external_post_id };
-  const extraction = row.raw_structured_output?.extraction;
+  const extraction = exclusiveTextExtraction(source, row.raw_text) || row.raw_structured_output?.extraction;
   if (!extraction?.is_pick_candidate) throw new Error('No successful audited pick extraction is available.');
   const packet = createPacket({ date, sequence: 0, source,
     post: { id: row.external_post_id, text: row.raw_text, created_at: new Date(row.posted_at).toISOString() }, media: {} });
   packet.source.media_urls = row.media_urls || [];
   packet.analysis = { status: 'SOURCE_EXTRACTED', source_only: true, extraction: structuredClone(extraction),
     extraction_run_id: row.extraction_run_id, prompt_version: row.prompt_version,
-    model: row.model, extracted_at: new Date(row.completed_at).toISOString(), detail: 'Recovered from successful audited source extraction.' };
-  if (!sourceCapperName(packet) || !isSupportedSportPick(packet)) throw new Error('Capper or sport is not identified.');
-  const timing = await upcomingEventStatuses(packet);
-  if (timing.status !== 'UPCOMING') throw new Error(timing.reason || timing.status);
-  packet.verification.event_start = timing.eventStart;
-  packet.verification.event_timezone = timing.source;
-  packet.verification.verified_events = timing.playStatuses.map(result => ({ event: result.verifiedEvent, event_id: result.verifiedEventId, event_start: result.eventStart }));
+    model: extraction.lossless_text_terms ? null : row.model, extracted_at: new Date(row.completed_at || Date.now()).toISOString(), detail: 'Recovered original exclusive source terms for owner approval.' };
+  if (!sourceCapperName(packet) || !exclusiveSourceIsCurrent(packet)) throw new Error('Current source or capper is not identified.');
+  packet.verification.exclusive_review = 'SOURCE_TERMS_OWNER_APPROVAL';
   buildSourcePickApprovalEmbed(packet, 'APPROVED PICK');
   const directory = path.join(QUEUE_ROOT, date);
   await fs.mkdir(directory, { recursive: true });

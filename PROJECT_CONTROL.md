@@ -2,9 +2,9 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-17 14:39 MST (flush shared headers and live Stripe starter-member recheck)
+**Last verified:** 2026-09-17 14:56 MST (two recovered exclusive approvals and member-facing posts directly verified)
 
-**Production runtime change set:** Render evidence-isolation fix `4d4b1066a58a1114e72acb525dd60e40701dfee6`, deploy `dep-dam5lbfqj5pc73e5smj0`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `2b8e3541-070c-452d-8416-24699150df15`. September 17 changes cover Node evidence isolation, homepage copy/layout, and ticker-aware shared header offsets; Checkout, Publisher bindings, and billing were not changed.
+**Production runtime change set:** Render exclusive-team recovery fix `94b4e538ddfad3547f6b97fa5d639be7aa60bd45`, deploy `dep-dam631n40ujc73ap89bg`, retains evidence-isolation fix `4d4b106`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `2b8e3541-070c-452d-8416-24699150df15`. September 17 changes cover Node evidence isolation, exclusive recovery, homepage copy/layout, and ticker-aware shared header offsets; Checkout, Publisher bindings, and billing were not changed.
 
 **Control-file owner:** Zakai Martin
 
@@ -21,6 +21,12 @@ This is the authoritative project brain for humans and coding agents. Read this 
 The owners do not need to read every repository document. The operating chat should use this file to answer: what is live, what talks to what, what costs money, what failed, what is next, and which decisions require an owner.
 
 ## Executive state
+
+### September 17 — exclusive recovery and expanded private intake
+
+Recovered EZMSports source posts `2100620530697273349` (Emory Hunt, Lions +5.5 -114) and `2100620430998667690` (Joe Duffy, Detroit Lions +4' -110) using saved successful extractions, no new model calls. They reached private approvals; Kobe approved both. Direct Discord reads verified official #exclusives messages `1550263951177023540` and `1550263962208043139`. Release suite passed 233/233 and public smoke 5/5 for that deployed fix.
+
+Owner subsequently requested all clear exclusives in private approvals, not only schedule-resolvable posts. Preparing a lossless text intake for capper + actual wager lines; no AI/model cap for that path, no research or invented league/opponent/odds. Exclusive source-only approval will no longer require independent ESPN coverage; current Pacific-day source and clear capper/market/context checks remain, and Kobe is the publication gate. Existing known event-start timestamps still block stale publication. Image/model extraction remains bounded, but intake overflow must defer rather than mark unreviewed posts handled. This follow-up has passed 236 local release tests; deployment and actual recovered-card acceptance still pending.
 
 ### September 17 — curated homepage and Instagram tester invitation
 
@@ -283,6 +289,7 @@ Detailed immutable reconciliation notes are in `docs/OPENAI_USAGE_RECONCILIATION
 
 | Data | Location | Sensitivity | Retention / deletion state |
 |---|---|---|---|
+| 2026-09-17 | Recover two EZMSports exclusives through private approvals; Kobe approved both and direct reads confirm exact source bets in #exclusives. Deploy `94b4e53` / `dep-dam631n40ujc73ap89bg`; 233 release tests and 5/5 public smoke passed. Owner requests expanded source-only exclusive intake and same-day backfill. | Zakai Martin / Kobe | Two recovery posts verified; broader private-approval intake preparing, no automatic publication. |
 | 2026-09-17 | Remove phantom ticker spacing across all shared-header pages and publish static Worker `2b8e3541-070c-452d-8416-24699150df15`. 228/228 release tests pass; regular Arc desktop/mobile/scroll visual checks pass. Recheck live Stripe starter invoice Paid, Discord link metadata, and next monthly invoice September 24. | Zakai Martin | Website live; payment/link reverified read-only. No bot, billing, or social-post mutation. |
 | Subscription/payment/customer data | Stripe | High | Governed by Stripe; local policy missing |
 | Discord user ID on subscription | Stripe metadata | Personal identifier | Policy missing |

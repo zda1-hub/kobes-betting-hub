@@ -30,6 +30,7 @@ const { shouldRunTextXFallback, syncApprovedFreePickToX } = require('./lib/free-
 const { publishApprovedFreePickToSite } = require('./lib/free-pick-site');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
+const { exclusiveSourceIsCurrent } = require('../pipeline/exclusive-text');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { enrichPacket } = require('../pipeline/enrich-pick');
 const { runCollector } = require('../pipeline/collect-x');
@@ -1280,7 +1281,7 @@ async function handleSourceReviewButton(interaction) {
     const publicationPacket = monitoringOnly ? independentWriteupPacket(packet) : packet;
     const termsOnly = isTermsOnlyMode(publicationPacket);
     assertPublishableExtraction(publicationPacket);
-    if (!isSupportedSportPick(publicationPacket)) {
+    if (!configuredTermsOnly && !isSupportedSportPick(publicationPacket)) {
       throw new Error('Only picks explicitly identified as a supported sport can be published.');
     }
     if (!termsOnly) {
@@ -1288,7 +1289,15 @@ async function handleSourceReviewButton(interaction) {
       assertApprovalCopyMatches(publicationPacket);
     }
     trace('event verification started');
-    const timing = await upcomingEventStatus(publicationPacket);
+    if (configuredTermsOnly && !exclusiveSourceIsCurrent(publicationPacket)) {
+      throw new Error('This exclusive source is not from today. Use a current card.');
+    }
+    if (configuredTermsOnly && publicationPacket.verification?.event_start
+      && Date.parse(publicationPacket.verification.event_start) <= Date.now()) {
+      throw new Error('This verified game has already started. Use a current card.');
+    }
+    const timing = configuredTermsOnly ? { status: 'UPCOMING', source: 'SOURCE_TERMS_OWNER_APPROVAL' }
+      : await upcomingEventStatus(publicationPacket);
     trace(`event verification ${timing.status}`);
     if (timing.status !== 'UPCOMING') {
       throw new Error(timing.status === 'STARTED_OR_FINISHED'
