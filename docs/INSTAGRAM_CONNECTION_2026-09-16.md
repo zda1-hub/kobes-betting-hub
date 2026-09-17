@@ -2,6 +2,24 @@
 
 ## State and scope
 
+### Credentials and Meta settings verified — tester invitation pending
+
+This checkpoint supersedes the incomplete-setup statements below; earlier checkpoints remain as history. All three credentials are encrypted Cloudflare secrets on the separate `bettinghub-instagram` Worker. The independent operator credential and token-encryption key have recoverable macOS Keychain entries under service `bettinghub-instagram`, accounts `INSTAGRAM_OPERATOR_SECRET` and `INSTAGRAM_TOKEN_ENCRYPTION_KEY`; no secret values are stored in the repository or audit. Meta's app secret was transferred without printing it. Regular Arc coordinate controls resolved the earlier accessibility-click failures.
+
+Meta now shows **Ready for testing** for exactly `instagram_business_basic` and `instagram_business_content_publish`. Comments, messages, insights and advertising permissions were not added. Business-login settings visibly retain the exact callback `https://bettinghub-instagram.kobedirwin.workers.dev/auth/instagram/callback`. The app remains unpublished; this does not establish Advanced Access or App Review approval.
+
+Live checks: `/health` **200**, configured=true, connection-only, publishingEnabled=false, version `7e0db810-01ab-4481-b8fe-13be6e5f6e01`; authenticated status **200**, target=kobeslocks, connected=false; authenticated nonexistent publishing route **404**. Status initialized only the connector's separate Instagram tables in the existing D1 binding. No invitation/token/account connection or provider call was created by these checks, and no existing Publisher/bot/billing service was deployed or changed.
+
+Prepared Meta's **Instagram Tester** invitation for exact username `kobeslocks`, but did not submit it. Action-time confirmation is required before granting the role. Kobe must accept that invitation and then authorize his own Business account; actual account type and account ownership/management eligibility remain unverified. Issue the protected one-use authorization link only after tester acceptance. Read-only verification follows authorization. Automatic Story dispatch is still not implemented; any first public Story requires separate approval.
+
+### Setup continuation — blocked in Meta UI
+
+Retried the exact Instagram API setup URL in regular Arc using paste, page reload, accessibility and coordinate actions, and a fresh regular tab. Meta content was intermittently accessible, but the visible setup panel remained loading/blank and permission/Show/login controls did not produce a verified action. Closed only the newly created retry tab. No secret revealed, permission grant verified, tester role assigned or authorization invite issued. Cloudflare secret-name listing is empty; live health still reports version `58331cc7-3ef9-49e3-8225-adf2ab5ea4a8`, configured=false, publishingEnabled=false. Connection-only tests reran **20/20 passed**. Human intervention to get the regular Arc Meta setup panel responsive is needed; no posting or existing service changes made.
+
+### Owner-selected account change — @kobeslocks
+
+The owner superseded @bettinhub with **@kobeslocks**. Consent, username checks, SQL target constraint, account-bound token encryption and status now use @kobeslocks; @bettinhub is rejected. The Meta app name and registered callback origin remain unchanged. No real account was connected or invitation issued. A read-only remote sqlite_master check found zero Instagram tables (zero rows written), so no existing credential/schema migration or cleanup was needed. Source `0492eab` deployed only the separate connector as version `58331cc7-3ef9-49e3-8225-adf2ab5ea4a8`; live health verifies that version with configured=false and publishingEnabled=false. Connection tests **20/20**, full regressions **237/237**, and production-config dry run passed. Actual @kobeslocks Business type, Meta permissions/access level, exact saved redirect, protected credentials and Kobe authorization remain gates. No public content or existing bot/Publisher/billing/website deployment occurred.
+
 Implemented and deployed as a separate connector, **not configured or connected**. Owner changed the target to **@kobeslocks**; **@bettinhub is excluded**. The actual Business account type remains to be verified through authorization; the connection rejects Creator/personal accounts. No Instagram, X, Discord or email content was sent. No membership, Stripe, tax or existing production runtime changed.
 
 ### Meta setup and deployment checkpoint

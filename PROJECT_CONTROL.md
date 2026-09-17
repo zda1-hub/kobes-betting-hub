@@ -406,6 +406,10 @@ The owners do not need to read every repository document. The operating chat sho
 
 ## Executive state
 
+### Instagram setup verified — owner authorization still pending
+
+The separate @kobeslocks connector now has all three encrypted Cloudflare secrets, with independent operator/encryption recovery credentials in macOS Keychain. Live version `7e0db810-01ab-4481-b8fe-13be6e5f6e01` reports configured=true, connection-only and publishingEnabled=false. Authenticated status returned 200 / connected=false; a nonexistent publishing route returned 404. Meta visibly shows basic/content-publish permissions Ready for testing and the exact registered callback. Prepared but did not submit @kobeslocks's Instagram Tester invitation; action-time role confirmation and Kobe's acceptance/authorization are next. No public content, existing-service redeployment or provider call. Status initialized only separate Instagram tables. This supersedes incomplete-setup claims below, which remain historical. Full evidence: `docs/INSTAGRAM_CONNECTION_2026-09-16.md`. Account connection is not automated Story delivery; dispatch remains unimplemented.
+
 ### September 17 — management address and diagnostic fixes deployed
 
 Owner explicitly authorized stopping the failed Telegram attempt and deploying.
