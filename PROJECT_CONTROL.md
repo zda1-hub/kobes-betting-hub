@@ -2,9 +2,9 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-17 16:00 MST (live six-month/annual checkout buttons verified; referral and Manage membership visible; 254 tests and 5/5 smoke checks; 44 private cards / 139 supplied wager lines read back without mismatches)
+**Last verified:** 2026-09-17 15:58 MST (live six-month/annual checkout buttons verified; referral and Manage membership visible at desktop and 320/400px mobile widths; 254 tests and 5/5 smoke checks; 44 private cards / 139 supplied wager lines read back without mismatches; both connected subscribers have Discord VIP)
 
-**Production runtime change set:** Render Free Pick durable recovery `44afd87404c75505c0d0d02ca02ea640ba2bd425`, live deploy `dep-dam6osrncjis73cb34hg`, retains evidence isolation and exclusive intake fixes; Checkout Worker `76d4ffc3-d7ed-471f-ac94-2412055b8ce5`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `e6c1d259-b1f0-4a0a-ae87-038a41bda41f`. Six-month $134.99 and annual $194.99 recurring Stripe offers are configured and verified through live website buttons. Both monthly intro offers remain. No existing subscription migration or Stripe Tax change was made.
+**Production runtime change set:** Render `e595ecc0fd753f56da820d2ec507bd38bd8c1ccb`, live deploy `dep-dam6v28ae00c73ag35mg`, retains durable Free Pick recovery, evidence isolation and exclusive intake fixes and corrects manual-import transport wiring. Startup registered commands and logged in as Kobe Bot; Checkout Worker `76d4ffc3-d7ed-471f-ac94-2412055b8ce5`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `e6c1d259-b1f0-4a0a-ae87-038a41bda41f`. Six-month $134.99 and annual $194.99 recurring Stripe offers are configured and verified through live website buttons. Both monthly intro offers remain. No existing subscription migration or Stripe Tax change was made.
 
 **Control-file owner:** Zakai Martin
 
@@ -27,6 +27,8 @@ The owners do not need to read every repository document. The operating chat sho
 See `docs/MEMBERSHIP_PLANS_2026-09-17.md`. Live buttons open Stripe at $134.99 every six months and $194.99 every year, without trials or extra starter charges. Accurate savings, renewal terms, responsive cards, orange Manage membership link and a bordered referral panel are deployed. Black-on-black inherited link color is corrected. Monthly retention coupons are not offered to longer plans. No payment was submitted during acceptance checks.
 
 All 44 capper-grouped private cards / 139 exact wager lines were delivered and read back with zero term mismatches. At readback 39 cards showed Kobe's completed approval footer; the import itself made zero member publications. Incomplete market terms remain held rather than guessed.
+
+Fresh Discord reads confirmed VIP for both connected subscribers. A later membership-operations check reports three additional active two-day trial records without Discord linkage after the grace window, with zero failed/stuck webhooks or reconciliation failures. These are not confirmed paying members; review customer connection/possible duplicate checkout before counting access. No automatic cancellation was performed. Live `/cancel` and `/refer` navigation and their secure Discord entry points were checked; actual referral cash payout was not acceptance-tested.
 
 Free Pick recovery runs in the existing cloud bot with a stable X queue ID per pick and no historical replay. At the read-only check no September 17 Free Pick existed in the configured channel; the site legitimately retained September 15. A genuine current-day approval is still needed to verify live X publication. Instagram has no authorized connection; delivered Story email packages do not prove automatic Instagram posting. A final recap still needs verified grades; unsupported/missing-event markets are not fabricated. Telegram application creation is complete, but independent session authorization and the cloud reader are not complete.
 
