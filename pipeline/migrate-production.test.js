@@ -158,8 +158,7 @@ test('apply rechecks the ledger under one advisory-locked transaction and skips 
   assert.deepEqual(database.writes, [
     'BEGIN',
     'LOCK',
-    `MIGRATION:${APPROVED_MIGRATIONS[1].version}`,
-    `MIGRATION:${APPROVED_MIGRATIONS[2].version}`,
+    ...APPROVED_MIGRATIONS.slice(1).map((migration) => `MIGRATION:${migration.version}`),
     'COMMIT',
   ]);
   assert.deepEqual(result.applied, APPROVED_MIGRATIONS.slice(1).map((migration) => migration.version));

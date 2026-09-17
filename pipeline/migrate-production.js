@@ -21,6 +21,11 @@ const APPROVED_MIGRATIONS = [
     version: '009_membership_entitlement_blocks',
     sha256: 'c011195cbbb91161f1ef6844ce041d724c8217995756980a2030968cd072a098',
   },
+  {
+    name: '010_referral_payout_safety.sql',
+    version: '010_referral_payout_safety',
+    sha256: '2e8e1eee812d17db951d73136c50d98e13551076d5399f99b937525a6069546d',
+  },
 ];
 const PROTECTED_TABLES = [
   'source_posts',
@@ -282,7 +287,7 @@ function usage() {
     'Usage: node pipeline/migrate-production.js [--plan | --apply]',
     '',
     'Plan mode is the default and makes no database writes.',
-    'Only approved production migrations 007 through 009 are considered.',
+    'Only approved production migrations 007 through 010 are considered.',
   ].join('\n');
 }
 

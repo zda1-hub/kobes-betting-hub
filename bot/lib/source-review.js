@@ -151,6 +151,9 @@ function isPlayerProp(play) {
 function requiresNamedPlayer(play) {
   const terms = play?.terms || '';
   if (!isPlayerProp(play)) return false;
+  // A source-supplied teaser can say “7 point” while naming the team spread
+  // and game total. This is not an unnamed individual-player points prop.
+  if (/\bteaser\b/i.test(terms) && /[A-Za-z]+\s+[+-]\d+(?:\.\d+)?/.test(terms)) return false;
   // Team sides/totals can contain words such as points or runs. They are not
   // individual-player props and therefore do not need an athlete name.
   if (/\bteam\b|\bgame\s+total\b|\btotal\s+points\b|\b(?:vs?\.?|@)\b|\//i.test(terms)) return false;

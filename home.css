@@ -38,6 +38,9 @@ footer { display:flex; flex-direction:column; align-items:center; justify-conten
 .hero-curated + .slideshow-section { padding-top:60px; }
 .how-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; max-width:1240px; margin:0 auto; }
 .how-grid .value-card { padding:30px; }
+.community-section { background:var(--paper); }
+.community-invite { max-width:1240px; margin:32px auto 0; }
+#value-comparison .comparison-panel { margin-top:0; }
 .how-grid .value-card h3 { font-size:clamp(28px,2.6vw,38px); line-height:1.05; }
 #proof,#how-it-works,.slideshow-row { scroll-margin-top:175px; }
 @media (max-width:800px) {

@@ -7,10 +7,11 @@ const root = new URL('../', import.meta.url);
 const html = await readFile(new URL('exclusives.html', root), 'utf8');
 const data = JSON.parse(await readFile(new URL('data/exclusive-directory.json', root), 'utf8'));
 
-test('exclusive directory preserves all 55 supplied capper prices and intervals', () => {
-  assert.equal(data.entries.length, 55);
+test('exclusive directory preserves all 50 remaining capper prices and intervals', () => {
+  assert.equal(data.entries.length, 50);
   const rows = [...html.matchAll(/<tr data-capper-row><td[^>]*>\d+<\/td><th scope="row">([^<]+)<\/th><td[^>]*>([^<]+)<\/td><\/tr>/g)].map(m => ({ name: m[1], price: m[2] }));
   assert.deepEqual(rows, data.entries);
+  for (const name of ['AllBets', 'BL', 'SetPointBets', 'Shark', 'Spartan']) assert.ok(!rows.some(row => row.name === name));
   assert.match(html, /SeekingReturns’ two weekly rates/);
   assert.match(html, /not independently verified current offers/);
   assert.match(html, /not what you pay to join the Hub/);

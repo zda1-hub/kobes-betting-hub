@@ -1,14 +1,10 @@
 {
   "as_of": "2026-09-17",
-  "provenance": "Owner-supplied Discord exclusive-list screenshots; standalone rates not independently verified.",
+  "provenance": "Owner-supplied Discord exclusive-list screenshots; standalone rates not independently verified. Public lineup excludes AllBets, BL, SetPointBets, Shark, and Spartan at owner request.",
   "entries": [
     {
       "name": "AlgoPicks",
       "price": "$99/week"
-    },
-    {
-      "name": "AllBets",
-      "price": "N/A"
     },
     {
       "name": "AnalyticsCapper",
@@ -41,10 +37,6 @@
     {
       "name": "BettingWithBush",
       "price": "$15/week"
-    },
-    {
-      "name": "BL",
-      "price": "N/A"
     },
     {
       "name": "BulliesPicks",
@@ -183,20 +175,8 @@
       "price": "$20/week, $50/week"
     },
     {
-      "name": "SetPointBets",
-      "price": "N/A"
-    },
-    {
-      "name": "Shark",
-      "price": "N/A"
-    },
-    {
       "name": "SmartMoneySports",
       "price": "$150/month"
-    },
-    {
-      "name": "Spartan",
-      "price": "N/A"
     },
     {
       "name": "Teddy Covers",

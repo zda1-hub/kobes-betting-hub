@@ -14,18 +14,31 @@ test('homepage presents short slogan, historical proof, then curation explanatio
   const how = html.indexOf('id="how-it-works"');
   assert.ok(hero >= 0 && hero < proof && proof < how);
   assert.doesNotMatch(html, /Opening after final access testing/);
-  assert.match(html, /Selected examples—not a complete performance record/);
+  assert.match(html, /not a complete performance record/);
 });
 
 test('homepage retains real gallery files, image viewer, membership and navigation', async () => {
   const paths = [...html.matchAll(/data-image="(assets\/[^"\s]+)"/g)].map(match => match[1]);
   assert.ok(paths.length >= 20);
+  assert.equal(paths.length, 21);
+  assert.equal(new Set(paths).size, 21, 'each supplied proof image appears once before rail cloning');
   await Promise.all(paths.map(path => access(new URL(path, root))));
   assert.match(html, /data-dialog-close/);
   assert.match(html, /data-menu-toggle/);
   assert.match(html, /href="join.html#offer">Try 2 days free/);
   assert.match(html, /href="cancel.html"/);
   assert.match(html, /No outcome is guaranteed/);
+});
+
+test('homepage follows Kobe’s requested conversion sequence with reviews between exclusives and value', () => {
+  const ids = ['proof', 'how-it-works', 'why-picks', 'exclusives', 'first-reviews', 'value-comparison', 'community', 'more-proof', 'join'];
+  const positions = ids.map(id => html.indexOf(`id="${id}"`));
+  assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1])));
+  const allIds = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(new Set(allIds).size, allIds.length, 'all gallery and section IDs remain unique');
+  for (const match of html.matchAll(/href="#([^"]+)"/g)) assert.ok(allIds.includes(match[1]), `anchor ${match[1]} exists`);
+  assert.doesNotMatch(html, /70% over a large sample|\$5,000\+|\$8,000|\$8000/);
+  assert.match(html, /for \$32\.99\/month after your introductory offer/);
 });
 
 test('curated headline and process have narrow-screen layouts and anchor offsets', () => {

@@ -172,7 +172,7 @@ async function stripe(env, path, values, { idempotencyKey, clientRequestId } = {
 async function stripeGet(env, path) {
   const operationId = crypto.randomUUID();
   const startedAt = Date.now();
-  const response = await fetch(`${STRIPE_API}${path}`, { headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` } });
+  const response = await fetch(`${STRIPE_API}${path}`, { signal: AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` } });
   const responseText = await response.text();
   const result = JSON.parse(responseText);
   await auditExternalCall(env, {
@@ -193,6 +193,7 @@ async function stripeV2(env, path, { method = 'GET', body, idempotencyKey, strip
   const payload = body === undefined ? undefined : JSON.stringify(body);
   const response = await fetch(`${STRIPE_API_V2}${path}`, {
     method,
+    signal: AbortSignal.timeout(15_000),
     headers: {
       Authorization: `Bearer ${env.STRIPE_GLOBAL_PAYOUTS_KEY}`,
       'Stripe-Version': env.STRIPE_GLOBAL_PAYOUTS_VERSION || STRIPE_V2_VERSION,
@@ -238,6 +239,7 @@ async function supabase(env, path, { method = 'GET', body, prefer } = {}) {
   const key = supabaseKey(env);
   const response = await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${path}`, {
     method,
+    signal: AbortSignal.timeout(15_000),
     headers: {
       apikey: key,
       Authorization: `Bearer ${key}`,
@@ -429,15 +431,16 @@ async function finalizeReferralIdentity(env, subscriptionId, customerId, referre
   const existingMembership = await membershipCustomerForDiscord(env, referredDiscordUserId);
   const duplicateMember = Boolean(existingMembership?.stripe_customer_id && existingMembership.stripe_customer_id !== customerId);
   const voidReason = selfReferral ? 'SELF_REFERRAL' : duplicateMember ? 'EXISTING_MEMBER' : null;
-  await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(reward.id)}`, {
-    method: 'PATCH',
-    prefer: 'return=minimal',
-    body: {
-      referred_discord_user_id: referredDiscordUserId,
-      ...(voidReason ? { status: 'VOID', status_reason: voidReason } : {}),
-      updated_at: new Date().toISOString(),
-    },
-  });
+  try {
+    await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(reward.id)}&payout_attempt_started_at=is.null&stripe_outbound_payment_id=is.null&status=in.(PENDING_PAYMENT,${REFERRAL_PRE_PAYOUT_STATUSES.join(',')})`, {
+      method: 'PATCH', prefer: 'return=minimal',
+      body: { referred_discord_user_id: referredDiscordUserId, ...(voidReason ? { status: 'VOID', status_reason: voidReason } : {}), updated_at: new Date().toISOString() },
+    });
+  } catch {
+    // A person opening another Stripe account does not become a new referral.
+    // Holding a duplicate reward must not prevent their legitimate VIP connection.
+    await updateReferralReward(env, reward.id, { status: 'REVIEW_REQUIRED', status_reason: 'DUPLICATE_IDENTITY_REQUIRES_REVIEW' }, ['PENDING_PAYMENT', ...REFERRAL_PRE_PAYOUT_STATUSES]);
+  }
   await recordReferralEvent(env, {
     rewardId: reward.id,
     eventType: voidReason ? 'REFERRAL_VOIDED' : 'REFERRED_DISCORD_LINKED',
@@ -1260,14 +1263,15 @@ async function processReferralInvoicePaid(env, invoice, eventId) {
     });
     reward = reward || await referralRewardForSubscription(env, subscriptionId);
   }
-  if (!reward || ['VOID', 'PAYOUT_SENT'].includes(reward.status)) return reward?.status || 'REFERRAL_NOT_FOUND';
+  if (!reward || reward.status !== 'PENDING_PAYMENT') return reward?.status || 'REFERRAL_NOT_FOUND';
+  if (stripeId(invoice.customer) !== reward.referred_stripe_customer_id) return 'REFERRAL_CUSTOMER_MISMATCH';
   if (reward.first_paid_invoice_id && reward.first_paid_invoice_id !== invoice.id) return 'REFERRAL_ALREADY_QUALIFIED';
   const paidAtSeconds = Number(invoice?.status_transitions?.paid_at || invoice?.created || Math.floor(Date.now() / 1000));
   const paidAt = new Date(paidAtSeconds * 1000);
   const eligibleAt = new Date(paidAt.getTime() + REFERRAL_HOLD_DAYS * 24 * 60 * 60 * 1000);
-  await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(reward.id)}&first_paid_invoice_id=is.null`, {
+  const qualified = await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(reward.id)}&first_paid_invoice_id=is.null&status=eq.PENDING_PAYMENT`, {
     method: 'PATCH',
-    prefer: 'return=minimal',
+    prefer: 'return=representation',
     body: {
       first_paid_invoice_id: invoice.id,
       first_paid_at: paidAt.toISOString(),
@@ -1277,6 +1281,7 @@ async function processReferralInvoicePaid(env, invoice, eventId) {
       updated_at: new Date().toISOString(),
     },
   });
+  if (!qualified?.length) return 'REFERRAL_ALREADY_PROCESSED';
   await recordReferralEvent(env, {
     rewardId: reward.id,
     eventType: 'FIRST_MEMBERSHIP_PAYMENT_CONFIRMED',
@@ -1290,11 +1295,10 @@ async function voidReferralForInvoice(env, invoiceId, reason) {
   const rows = await supabase(env, `referral_rewards?first_paid_invoice_id=eq.${encodeURIComponent(invoiceId)}&select=id,status&limit=1`);
   const reward = rows?.[0];
   if (!reward) return 'NO_REFERRAL_INVOICE';
-  const status = reward.status === 'PAYOUT_SENT' ? 'REVIEW_REQUIRED' : 'VOID';
-  await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(reward.id)}`, {
-    method: 'PATCH', prefer: 'return=minimal',
-    body: { status, status_reason: reason, updated_at: new Date().toISOString() },
-  });
+  // A refund must not race a claimed transfer back into a retryable state.
+  const voided = await updateReferralReward(env, reward.id, { status: 'VOID', status_reason: reason }, ['PENDING_PAYMENT', ...REFERRAL_PRE_PAYOUT_STATUSES]);
+  const reviewed = voided?.length ? [] : await updateReferralReward(env, reward.id, { status: 'REVIEW_REQUIRED', status_reason: reason }, ['READY', 'PAYOUT_SENT', 'PAYOUT_UNCERTAIN', 'PAYOUT_FAILED', 'REVIEW_REQUIRED']);
+  const status = voided?.length ? 'VOID' : reviewed?.length ? 'REVIEW_REQUIRED' : reward.status;
   await recordReferralEvent(env, { rewardId: reward.id, eventType: status === 'VOID' ? 'REFERRAL_VOIDED' : 'REFERRAL_REVIEW_REQUIRED', details: { reason } });
   return status;
 }
@@ -1355,11 +1359,72 @@ async function processInvoicePaymentFailed(env, invoice, eventId) {
   return `PAYMENT_FAILED_${roleOutcome}`;
 }
 
+const REFERRAL_PRE_PAYOUT_STATUSES = ['HOLDING', 'AWAITING_PAYOUT_SETUP', 'AWAITING_MEMBER_IDENTITY'];
+
 async function updateReferralReward(env, rewardId, values, statuses = null) {
   const statusFilter = statuses?.length ? `&status=in.(${statuses.join(',')})` : '';
-  await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(rewardId)}${statusFilter}`, {
-    method: 'PATCH', prefer: 'return=minimal', body: { ...values, updated_at: new Date().toISOString() },
+  const unclaimedFilter = statuses?.every((status) => ['PENDING_PAYMENT', ...REFERRAL_PRE_PAYOUT_STATUSES].includes(status))
+    ? '&stripe_outbound_payment_id=is.null&payout_attempt_started_at=is.null' : '';
+  return supabase(env, `referral_rewards?id=eq.${encodeURIComponent(rewardId)}${statusFilter}${unclaimedFilter}`, {
+    method: 'PATCH', prefer: 'return=representation', body: { ...values, updated_at: new Date().toISOString() },
   });
+}
+
+function referralSafetyFailure(reason, status = 'REVIEW_REQUIRED') {
+  const error = new Error(reason);
+  error.referralStatus = status;
+  return error;
+}
+
+async function qualifyingReferralCharge(env, reward) {
+  const invoice = await stripeGet(env, `/invoices/${encodeURIComponent(reward.first_paid_invoice_id)}`);
+  if (invoice.status !== 'paid' || invoice.currency !== 'usd' || Number(invoice.amount_paid) < 3299
+      || stripeId(invoice.customer) !== reward.referred_stripe_customer_id
+      || invoiceSubscriptionId(invoice) !== reward.referred_subscription_id) {
+    throw referralSafetyFailure('PAYMENT_NO_LONGER_QUALIFIES', 'VOID');
+  }
+  let chargeId = stripeId(invoice.charge);
+  let intentId = stripeId(invoice.payment_intent);
+  if (!chargeId && !intentId) {
+    const payments = await stripeGet(env, `/invoice_payments?invoice=${encodeURIComponent(invoice.id)}&status=paid&limit=100`);
+    if (payments.has_more || payments.data?.length !== 1) throw referralSafetyFailure('PAYMENT_REQUIRES_REVIEW');
+    const payment = payments.data[0];
+    if (payment.invoice !== invoice.id || payment.status !== 'paid' || payment.currency !== 'usd' || Number(payment.amount_paid) < 3299) throw referralSafetyFailure('PAYMENT_REQUIRES_REVIEW');
+    intentId = stripeId(payment.payment?.payment_intent);
+    chargeId = stripeId(payment.payment?.charge);
+  }
+  if (!chargeId && intentId) {
+    const intent = await stripeGet(env, `/payment_intents/${encodeURIComponent(intentId)}`);
+    if (intent.status !== 'succeeded' || stripeId(intent.customer) !== reward.referred_stripe_customer_id) throw referralSafetyFailure('PAYMENT_REQUIRES_REVIEW');
+    chargeId = stripeId(intent.latest_charge);
+  }
+  if (!chargeId) throw referralSafetyFailure('CHARGE_NOT_VERIFIED');
+  const charge = await stripeGet(env, `/charges/${encodeURIComponent(chargeId)}`);
+  if (!charge.paid || !charge.captured || charge.status !== 'succeeded' || charge.currency !== 'usd'
+      || Number(charge.amount_captured) < 3299 || stripeId(charge.customer) !== reward.referred_stripe_customer_id) throw referralSafetyFailure('CHARGE_NOT_VERIFIED');
+  if (charge.refunded || Number(charge.amount_refunded) > 0 || charge.disputed) throw referralSafetyFailure('PAYMENT_REFUNDED_OR_DISPUTED', 'VOID');
+  const refunds = await stripeGet(env, `/refunds?charge=${encodeURIComponent(chargeId)}&limit=100`);
+  if (refunds.has_more || (refunds.data || []).some((refund) => !['failed', 'canceled'].includes(refund.status))) throw referralSafetyFailure('REFUND_PENDING_OR_COMPLETED');
+  if (charge.review || ['elevated', 'highest'].includes(charge.outcome?.risk_level)
+      || Object.values(charge.fraud_details || {}).includes('fraudulent')) throw referralSafetyFailure('PAYMENT_RISK_REVIEW');
+  const fingerprint = charge.payment_method_details?.card?.fingerprint;
+  if (!fingerprint) throw referralSafetyFailure('CARD_IDENTITY_NOT_VERIFIED');
+  return { chargeId, fingerprintHash: await sha256Text(fingerprint) };
+}
+
+async function checkReferrerCardIdentity(env, reward, fingerprintHash) {
+  const member = await activeMembershipForDiscord(env, reward.referrer_discord_user_id);
+  if (!member || member.stripe_customer_id === reward.referred_stripe_customer_id) throw referralSafetyFailure('REFERRER_IDENTITY_REQUIRES_REVIEW');
+  const customer = encodeURIComponent(member.stripe_customer_id);
+  const methods = await stripeGet(env, `/payment_methods?customer=${customer}&type=card&limit=100`);
+  const charges = await stripeGet(env, `/charges?customer=${customer}&limit=100`);
+  // Incomplete history must not silently pass a self-referral check.
+  if (methods.has_more || charges.has_more) throw referralSafetyFailure('REFERRER_HISTORY_REQUIRES_REVIEW');
+  const fingerprints = [...(methods.data || []).map((method) => method.card?.fingerprint), ...(charges.data || []).map((charge) => charge.payment_method_details?.card?.fingerprint)].filter(Boolean);
+  if (!fingerprints.length) throw referralSafetyFailure('REFERRER_CARD_IDENTITY_NOT_VERIFIED');
+  for (const fingerprint of fingerprints) {
+    if (await sha256Text(fingerprint) === fingerprintHash) throw referralSafetyFailure('SHARED_CARD_REQUIRES_REVIEW');
+  }
 }
 
 function referralPayoutAmount(reward) {
@@ -1371,8 +1436,14 @@ function referralPayoutAmount(reward) {
 async function processReferralPayouts(env) {
   if (!supabaseReady(env) || !env.STRIPE_GLOBAL_PAYOUTS_KEY) return { skipped: 'not_configured', checked: 0, paid: 0 };
   const now = new Date().toISOString();
-  const rewards = await supabase(env, `referral_rewards?status=in.(HOLDING,AWAITING_PAYOUT_SETUP,AWAITING_MEMBER_IDENTITY,PAYOUT_FAILED)&eligible_at=lte.${encodeURIComponent(now)}&stripe_outbound_payment_id=is.null&select=*&order=eligible_at.asc&limit=50`);
-  const summary = { checked: 0, paid: 0, awaitingSetup: 0, awaitingIdentity: 0, failed: 0, voided: 0 };
+  // An interrupted/unknown attempt is never replayed, even after Stripe's
+  // idempotency retention expires. An operator must reconcile the provider receipt.
+  const staleAt = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  await supabase(env, `referral_rewards?status=eq.READY&payout_attempt_started_at=lte.${encodeURIComponent(staleAt)}&stripe_outbound_payment_id=is.null`, {
+    method: 'PATCH', prefer: 'return=minimal', body: { status: 'PAYOUT_UNCERTAIN', status_reason: 'INTERRUPTED_ATTEMPT_REQUIRES_RECONCILIATION', updated_at: now },
+  });
+  const rewards = await supabase(env, `referral_rewards?status=in.(${REFERRAL_PRE_PAYOUT_STATUSES.join(',')})&eligible_at=lte.${encodeURIComponent(now)}&stripe_outbound_payment_id=is.null&payout_attempt_started_at=is.null&select=*&order=eligible_at.asc&limit=50`);
+  const summary = { checked: 0, paid: 0, awaitingSetup: 0, awaitingIdentity: 0, failed: 0, voided: 0, review: 0 };
   if (!rewards?.length) return summary;
   const financialAccounts = await stripeV2(env, '/money_management/financial_accounts');
   const financialAccountId = financialAccounts?.data?.[0]?.id;
@@ -1380,30 +1451,29 @@ async function processReferralPayouts(env) {
 
   for (const reward of rewards) {
     summary.checked += 1;
+    let claimed = false;
+    let sendAttempted = false;
+    let receiptSaved = false;
     try {
       const payoutAmount = referralPayoutAmount(reward);
       if (!reward.referred_discord_user_id) {
         summary.awaitingIdentity += 1;
-        await updateReferralReward(env, reward.id, { status: 'AWAITING_MEMBER_IDENTITY', status_reason: 'REFERRED_DISCORD_NOT_CONNECTED' });
+        await updateReferralReward(env, reward.id, { status: 'AWAITING_MEMBER_IDENTITY', status_reason: 'REFERRED_DISCORD_NOT_CONNECTED' }, REFERRAL_PRE_PAYOUT_STATUSES);
         continue;
       }
       if (reward.referred_discord_user_id === reward.referrer_discord_user_id) {
         summary.voided += 1;
-        await updateReferralReward(env, reward.id, { status: 'VOID', status_reason: 'SELF_REFERRAL' });
+        await updateReferralReward(env, reward.id, { status: 'VOID', status_reason: 'SELF_REFERRAL' }, REFERRAL_PRE_PAYOUT_STATUSES);
         await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_VOIDED', details: { reason: 'SELF_REFERRAL' } });
         continue;
       }
-      const invoice = await stripeGet(env, `/invoices/${encodeURIComponent(reward.first_paid_invoice_id)}`);
-      if (invoice.status !== 'paid' || Number(invoice.amount_paid || 0) < 3299) {
-        summary.voided += 1;
-        await updateReferralReward(env, reward.id, { status: 'VOID', status_reason: 'PAYMENT_NO_LONGER_QUALIFIES' });
-        await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_VOIDED', details: { reason: 'PAYMENT_NO_LONGER_QUALIFIES' } });
-        continue;
-      }
+      if (await membershipEntitlementBlock(env, reward.referred_subscription_id)) throw referralSafetyFailure('REFERRED_MEMBERSHIP_BLOCKED', 'VOID');
+      const payment = await qualifyingReferralCharge(env, reward);
+      await checkReferrerCardIdentity(env, reward, payment.fingerprintHash);
       const profile = await referralProfileForDiscord(env, reward.referrer_discord_user_id);
       if (!profile?.stripe_recipient_account_id) {
         summary.awaitingSetup += 1;
-        await updateReferralReward(env, reward.id, { status: 'AWAITING_PAYOUT_SETUP', status_reason: 'RECIPIENT_NOT_CONNECTED' });
+        await updateReferralReward(env, reward.id, { status: 'AWAITING_PAYOUT_SETUP', status_reason: 'RECIPIENT_NOT_CONNECTED' }, REFERRAL_PRE_PAYOUT_STATUSES);
         continue;
       }
       const includes = stripeV2IncludeQuery(['configuration.recipient']);
@@ -1413,7 +1483,7 @@ async function processReferralPayouts(env) {
       const payoutMethodId = payoutMethods?.data?.[0]?.id;
       if (!referralRecipientIsReady(capability, payoutMethodId)) {
         summary.awaitingSetup += 1;
-        await updateReferralReward(env, reward.id, { status: 'AWAITING_PAYOUT_SETUP', status_reason: 'RECIPIENT_VERIFICATION_PENDING' });
+        await updateReferralReward(env, reward.id, { status: 'AWAITING_PAYOUT_SETUP', status_reason: 'RECIPIENT_VERIFICATION_PENDING' }, REFERRAL_PRE_PAYOUT_STATUSES);
         continue;
       }
       if (profile.payout_status !== 'READY') {
@@ -1424,7 +1494,17 @@ async function processReferralPayouts(env) {
         });
         await recordReferralEvent(env, { rewardId: reward.id, eventType: 'PAYOUT_RECIPIENT_READY', actorType: 'system', actorId: profile.discord_user_id });
       }
-      await updateReferralReward(env, reward.id, { status: 'READY', status_reason: null }, ['HOLDING', 'AWAITING_PAYOUT_SETUP', 'AWAITING_MEMBER_IDENTITY', 'PAYOUT_FAILED']);
+      const claim = await updateReferralReward(env, reward.id, {
+        status: 'READY', status_reason: null, payout_attempt_started_at: new Date().toISOString(),
+        payment_fingerprint_sha256: payment.fingerprintHash, qualifying_charge_id: payment.chargeId,
+      }, REFERRAL_PRE_PAYOUT_STATUSES);
+      if (claim?.length !== 1) continue;
+      claimed = true;
+      const freshPayment = await qualifyingReferralCharge(env, reward);
+      if (freshPayment.chargeId !== payment.chargeId || freshPayment.fingerprintHash !== payment.fingerprintHash) throw referralSafetyFailure('PAYMENT_CHANGED_DURING_REVIEW');
+      const current = await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(reward.id)}&status=eq.READY&stripe_outbound_payment_id=is.null&select=id&limit=1`);
+      if (current?.length !== 1) continue;
+      sendAttempted = true;
       const payout = await stripeV2(env, '/money_management/outbound_payments', {
         method: 'POST',
         idempotencyKey: `kbh-referral-${reward.id}`,
@@ -1437,13 +1517,27 @@ async function processReferralPayouts(env) {
         },
       });
       if (!payout?.id) throw new Error('Stripe did not return a payout ID.');
-      await updateReferralReward(env, reward.id, { status: 'PAYOUT_SENT', status_reason: null, stripe_outbound_payment_id: payout.id }, ['READY']);
+      const saved = await updateReferralReward(env, reward.id, { status: 'PAYOUT_SENT', status_reason: null, stripe_outbound_payment_id: payout.id }, ['READY']);
+      if (!saved?.length) {
+        // A concurrent refund can flag review while Stripe accepts the transfer.
+        // Preserve that flag, but save the receipt so it cannot disappear/retry.
+        const reviewed = await updateReferralReward(env, reward.id, { stripe_outbound_payment_id: payout.id }, ['REVIEW_REQUIRED', 'PAYOUT_UNCERTAIN']);
+        if (!reviewed?.length) throw new Error('Payout receipt requires reconciliation.');
+      }
+      receiptSaved = true;
       await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_PAYOUT_SENT', details: { outbound_payment_id: payout.id, amount_cents: payoutAmount } });
       summary.paid += 1;
     } catch (error) {
       summary.failed += 1;
-      await updateReferralReward(env, reward.id, { status: 'PAYOUT_FAILED', status_reason: String(error?.message || error).slice(0, 300) });
-      try { await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_PAYOUT_FAILED', details: { error: String(error?.message || error).slice(0, 300) } }); } catch { /* Keep the payout failure primary. */ }
+      if (receiptSaved) continue;
+      const status = sendAttempted ? 'PAYOUT_UNCERTAIN' : error.referralStatus || 'REVIEW_REQUIRED';
+      const reason = sendAttempted ? 'PROVIDER_RESULT_REQUIRES_RECONCILIATION' : error.referralStatus ? error.message : 'PRECHECK_OR_DUPLICATE_REQUIRES_REVIEW';
+      if (status === 'VOID') summary.voided += 1;
+      else summary.review += 1;
+      try {
+        await updateReferralReward(env, reward.id, { status, status_reason: reason }, claimed ? ['READY'] : REFERRAL_PRE_PAYOUT_STATUSES);
+        await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_SAFETY_HOLD', details: { reason } });
+      } catch { /* Durable READY remains non-retryable if receipt/hold persistence fails. */ }
     }
   }
   console.log('Referral payout processing completed.', summary);
@@ -1596,6 +1690,8 @@ export const __test = {
   listStripeSubscriptions,
   processReferralInvoicePaid,
   processReferralPayouts,
+  qualifyingReferralCharge,
+  voidReferralForInvoice,
   portalSessionValues,
   monthlyRetentionEligible,
   referralPayoutAmount,

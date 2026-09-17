@@ -64,6 +64,14 @@ test('complete X long-post body wins over truncated preview without changing ter
   assert.equal(completeXPost({ text: 'Lions ML' }).text, 'Lions ML');
 });
 
+test('Troy West mixed-sport unit-prefixed teaser and moneylines stay exact in private approval copy', () => {
+  const text = 'ITS TROY WEST\n15 unit NFL: Lions +11.5 UNDER 61.5. 7 point Teaser\n15 unit MLB: Dodgers ML\n15 unit MLB: Padres ML\n15 unit MLB: Twins ML';
+  const extraction = exclusiveTextExtraction(source, text);
+  assert.ok(extraction);
+  assert.equal(buildSourcePickApprovalEmbed({ source, analysis: { status: 'SOURCE_EXTRACTED', extraction } }, 'APPROVED PICK').description,
+    'ITS TROY WEST\n• 15 unit NFL: Lions +11.5 UNDER 61.5. 7 point Teaser\n• 15 unit MLB: Dodgers ML\n• 15 unit MLB: Padres ML\n• 15 unit MLB: Twins ML');
+});
+
 test('exclusive dedupe matches capper spacing but distinguishes odds, lines, stakes and cappers', () => {
   const key = exclusiveWagerKey('BANKROLL BILL', 'Twins/Angels Under 8 -130 (1.5U)');
   assert.equal(key, exclusiveWagerKey('BankrollBill', 'Twins/Angels under 8 -130 (1.5U)'));
