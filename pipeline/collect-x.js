@@ -343,7 +343,7 @@ async function existingSourcePostIds(date) {
       // A packet without a Discord review message was held before approval.
       // Leave it eligible for an explicit one-time rescan after a routing fix;
       // packets already sent to Kobe remain deduplicated.
-      if (postId && packet.discord_review_message_id) ids.add(String(postId));
+      if (postId && (packet.discord_review_message_id || packet.status === 'RECOVERY_RESERVED')) ids.add(String(postId));
     } catch {
       // A malformed historical packet must not stop the live collector.
     }
@@ -624,7 +624,7 @@ async function recordModelCallDeferral(packet, { sourceHandle, postId, recordDec
   return { skipped: 1, deferred: 1 };
 }
 
-function sourceStateAfterPass({ sourceState, userId, date, lastProcessedId, handledPostIds, completedSourcePass, rescanImages, rescanUpcomingSlate }) {
+function sourceStateAfterPass({ sourceState, userId, date, lastProcessedId, handledPostIds, completedSourcePass, rescanImages, rescanUpcomingSlate, upcomingSlateRescanVersion = UPCOMING_SLATE_RESCAN_VERSION }) {
   const nextSourceState = {
     user_id: userId,
     // An incomplete pass must retain the previous cursor. Already handled
@@ -645,8 +645,11 @@ function sourceStateAfterPass({ sourceState, userId, date, lastProcessedId, hand
   if (rescanImages) {
     nextSourceState.image_rescan_version = IMAGE_RESCAN_VERSION;
   }
-  if (rescanUpcomingSlate) {
-    nextSourceState.upcoming_slate_rescan_version = UPCOMING_SLATE_RESCAN_VERSION;
+  // The exclusive recovery pass revisits previously rejected posts. If a
+  // model-budget deferral interrupts it, retain its marker so those old
+  // handled IDs remain eligible next pass rather than silently losing them.
+  if (rescanUpcomingSlate && (upcomingSlateRescanVersion === UPCOMING_SLATE_RESCAN_VERSION || completedSourcePass)) {
+    nextSourceState.upcoming_slate_rescan_version = upcomingSlateRescanVersion;
   }
   return nextSourceState;
 }
@@ -734,7 +737,9 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
     // posted a valid play earlier in the day; it should still reach Kobe if the
     // event has not started. Later passes return to normal since_id polling.
     const rescanImages = sourceState.image_rescan_version !== IMAGE_RESCAN_VERSION;
-    const rescanUpcomingSlate = sourceState.upcoming_slate_rescan_version !== UPCOMING_SLATE_RESCAN_VERSION;
+    const upcomingSlateRescanVersion = source.publish_mode === 'terms_only'
+      ? `${UPCOMING_SLATE_RESCAN_VERSION}-exclusive-team-v2` : UPCOMING_SLATE_RESCAN_VERSION;
+    const rescanUpcomingSlate = sourceState.upcoming_slate_rescan_version !== upcomingSlateRescanVersion;
     const dailyCatchup = sourceState.catchup_date !== date || rescanImages || rescanUpcomingSlate;
     const startTime = dailyCatchup ? pacificStartIso(date) : undefined;
     const responses = [];
@@ -871,6 +876,11 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
       const timing = await upcomingEventStatuses(packet);
       packet.verification.event_start = timing.eventStart || null;
       packet.verification.event_timezone = timing.source || null;
+      packet.verification.verified_events = (timing.playStatuses || []).map(result => ({
+        selection: result.play?.selection, status: result.status,
+        event: result.verifiedEvent || null, event_id: result.verifiedEventId || null,
+        event_start: result.eventStart || null
+      }));
       const extractedPlays = Array.isArray(packet.analysis.extraction.plays)
         ? packet.analysis.extraction.plays
         : [];
@@ -955,7 +965,8 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
       handledPostIds,
       completedSourcePass,
       rescanImages,
-      rescanUpcomingSlate
+      rescanUpcomingSlate,
+      upcomingSlateRescanVersion
     });
     return { source, nextSourceState, acceptedPackets };
   }
@@ -1035,6 +1046,49 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
   return { created, skipped, deferred, modelCalls: modelCallBudget.started, sourceCount: sources.length };
 }
 
+// Operator recovery reuses a successful audited extraction and delivers only
+// to private approval, through the normal rendering/audit path. No model call.
+async function recoverAuditedExclusive(row) {
+  if (await pickWorkflowPaused()) throw new Error('Pick workflow is paused.');
+  const source = (await readJson(SOURCES_PATH, [])).find(entry => entry.enabled && entry.handle === row.source_handle && entry.publish_mode === 'terms_only');
+  if (!source) throw new Error('Source is not an enabled exclusive feed.');
+  const date = pacificDate();
+  if (pacificDate(new Date(row.posted_at)) !== date) throw new Error('Recovery is limited to today’s source posts.');
+  if ((await existingSourcePostIds(date)).has(row.external_post_id)) return { status: 'ALREADY_QUEUED', post: row.external_post_id };
+  const extraction = row.raw_structured_output?.extraction;
+  if (!extraction?.is_pick_candidate) throw new Error('No successful audited pick extraction is available.');
+  const packet = createPacket({ date, sequence: 0, source,
+    post: { id: row.external_post_id, text: row.raw_text, created_at: new Date(row.posted_at).toISOString() }, media: {} });
+  packet.source.media_urls = row.media_urls || [];
+  packet.analysis = { status: 'SOURCE_EXTRACTED', source_only: true, extraction: structuredClone(extraction),
+    extraction_run_id: row.extraction_run_id, prompt_version: row.prompt_version,
+    model: row.model, extracted_at: new Date(row.completed_at).toISOString(), detail: 'Recovered from successful audited source extraction.' };
+  if (!sourceCapperName(packet) || !isSupportedSportPick(packet)) throw new Error('Capper or sport is not identified.');
+  const timing = await upcomingEventStatuses(packet);
+  if (timing.status !== 'UPCOMING') throw new Error(timing.reason || timing.status);
+  packet.verification.event_start = timing.eventStart;
+  packet.verification.event_timezone = timing.source;
+  packet.verification.verified_events = timing.playStatuses.map(result => ({ event: result.verifiedEvent, event_id: result.verifiedEventId, event_start: result.eventStart }));
+  buildSourcePickApprovalEmbed(packet, 'APPROVED PICK');
+  const directory = path.join(QUEUE_ROOT, date);
+  await fs.mkdir(directory, { recursive: true });
+  const files = await fs.readdir(directory);
+  let sequence = Math.max(0, ...files.map(file => Number(file.match(/^\d{8}-(\d+)/)?.[1]) || 0)) + 1;
+  let packetPath;
+  for (;;) {
+    packet.approval_number = sequence;
+    packet.pick_id = `${numberFor(date, sequence)}-X`;
+    packet.status = 'RECOVERY_RESERVED';
+    packetPath = path.join(directory, `${numberFor(date, sequence)}.json`);
+    try { await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`, { flag: 'wx' }); break; }
+    catch (error) { if (error.code !== 'EEXIST') throw error; sequence += 1; }
+  }
+  // Keep the reservation after an uncertain send; never blindly duplicate it.
+  packet.discord_review_message_id = await notifyApprovalChannel(packet);
+  await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+  return { status: packet.status, pick: packet.pick_id, post: row.external_post_id, message: packet.discord_review_message_id };
+}
+
 if (require.main === module) {
   runCollector().catch((error) => {
     console.error(error.message);
@@ -1055,6 +1109,7 @@ module.exports = {
   mediaCaptionHasBetSignal,
   nflGamesScheduledToday,
   recordModelCallDeferral,
+  recoverAuditedExclusive,
   rotateSources,
   runCollector,
   shouldQueueForReview,

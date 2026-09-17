@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { espnLeague, isRecentSourcePost, upcomingEventStatus, upcomingEventStatuses } = require('./event-timing');
+const { espnLeague, isRecentSourcePost, matchesExtractedEvent, upcomingEventStatus, upcomingEventStatuses } = require('./event-timing');
 
 const packet = {
   source: { posted_at: '2026-08-30T14:00:00.000Z' },
@@ -228,4 +228,61 @@ test('does not allow an undated or unsupported pick through the schedule gate', 
 
 test('does not treat old source posts as fresh when the matchup is unavailable', () => {
   assert.equal(isRecentSourcePost(packet, { now: new Date('2026-08-31T15:00:00.000Z'), maximumAgeHours: 24 }), false);
+});
+
+const exclusiveSide = {
+  source: { publish_mode: 'terms_only' },
+  analysis: { extraction: { league: 'NFL', sport: 'NFL', event: '', player_name: '',
+    plays: [{ selection: 'Lions +5.5', line: '+5.5', odds_american: '-114', event: '', player_name: '' }] } }
+};
+const exclusiveGame = { id: 'det-buf', name: 'Detroit Lions at Buffalo Bills', date: '2026-09-17T23:15:00Z',
+  competitions: [{ competitors: [
+    { team: { displayName: 'Detroit Lions', shortDisplayName: 'Lions', name: 'Lions', abbreviation: 'DET' } },
+    { team: { displayName: 'Buffalo Bills', shortDisplayName: 'Bills', name: 'Bills', abbreviation: 'BUF' } }
+  ] }] };
+test('two aliases for one team cannot verify an explicit different opponent', () => {
+  assert.equal(matchesExtractedEvent({ analysis: { extraction: { event: 'Detroit Lions at Kansas City Chiefs' } } }, exclusiveGame), false);
+  assert.equal(matchesExtractedEvent({ analysis: { extraction: { event: 'Detroit Lions at Buffalo Bills' } } }, exclusiveGame), true);
+});
+function exclusiveFetch(events, failedDay = '') {
+  return async url => new Response(JSON.stringify({ events }), { status: failedDay && url.includes(failedDay) ? 503 : 200 });
+}
+
+test('resolves an exclusive team-side post to one official matchup without changing source terms', async () => {
+  const input = structuredClone(exclusiveSide);
+  const snapshot = structuredClone(input);
+  const result = await upcomingEventStatuses(input, { now: new Date('2026-09-17T20:00:00Z'), fetchImpl: exclusiveFetch([exclusiveGame]) });
+  assert.equal(result.status, 'UPCOMING');
+  assert.equal(result.playStatuses[0].verifiedEvent, 'Detroit Lions at Buffalo Bills');
+  assert.deepEqual(input, snapshot);
+  assert.equal(result.playStatuses[0].play.odds_american, '-114');
+});
+
+test('refuses ambiguous exclusive team fixtures and incomplete schedule coverage', async () => {
+  const options = { now: new Date('2026-09-17T20:00:00Z') };
+  const another = { ...exclusiveGame, id: 'second-det', date: '2026-09-19T23:15:00Z' };
+  for (const fetchImpl of [exclusiveFetch([exclusiveGame, another]), exclusiveFetch([exclusiveGame], '20260919')]) {
+    const result = await upcomingEventStatuses(exclusiveSide, { ...options, fetchImpl });
+    assert.notEqual(result.status, 'UPCOMING');
+  }
+});
+
+test('exclusive matchup resolution does not guess player props, change explicit matchups, or permit started games', async () => {
+  const options = { now: new Date('2026-09-17T20:00:00Z'), fetchImpl: exclusiveFetch([exclusiveGame]) };
+  for (const changes of [
+    { selection: 'Jameson Williams 60+ receiving yards', player_name: 'Jameson Williams' },
+    { event: 'Detroit Lions at Kansas City Chiefs' },
+    { selection: 'over 49.5 points' },
+    { selection: 'Lionsgate +5.5' }
+  ]) {
+    const input = structuredClone(exclusiveSide);
+    Object.assign(input.analysis.extraction.plays[0], changes);
+    const result = await upcomingEventStatuses(input, options);
+    assert.notEqual(result.status, 'UPCOMING');
+  }
+  const started = await upcomingEventStatuses(exclusiveSide, { ...options, now: new Date('2026-09-18T00:00:00Z') });
+  assert.equal(started.status, 'STARTED_OR_FINISHED');
+  const regular = structuredClone(exclusiveSide);
+  regular.source.publish_mode = 'writeup_review';
+  assert.equal((await upcomingEventStatuses(regular, options)).status, 'UNVERIFIABLE');
 });

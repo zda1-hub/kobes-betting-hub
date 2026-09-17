@@ -65,12 +65,14 @@ function matchesExtractedEvent(packet, event) {
   const sourceEvent = compact(packet.analysis?.extraction?.event);
   if (!sourceEvent) return false;
   const competitors = event.competitions?.[0]?.competitors || [];
-  const teamNames = competitors.flatMap((competitor) => [
+  // Count distinct teams, not matching aliases. "Detroit Lions" and
+  // "Lions" are one team; both must not falsely verify an unrelated opponent.
+  return competitors.filter(competitor => [
     competitor.team?.displayName,
     competitor.team?.shortDisplayName,
     competitor.team?.abbreviation
-  ]).map(compact).filter((name) => name.length >= 3);
-  return new Set(teamNames.filter((name) => sourceEvent.includes(name))).size >= 2;
+  ].map(compact).filter(name => name.length >= 3)
+    .some(name => sourceEvent.includes(name))).length >= 2;
 }
 
 function packetForPlay(packet, play) {
@@ -167,7 +169,8 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
   const extraction = packet.analysis?.extraction || {};
   const plays = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays : [extraction];
   const playPackets = plays.map((play) => packetForPlay(packet, play));
-  if (playPackets.some((playPacket) => !playPacket.analysis.extraction.event?.trim())) {
+  const exclusiveTeamLookup = packet.source?.publish_mode === 'terms_only';
+  if (!exclusiveTeamLookup && playPackets.some((playPacket) => !playPacket.analysis.extraction.event?.trim())) {
     return {
       status: 'UNVERIFIABLE',
       reason: 'The source did not identify an exact event.',
@@ -180,6 +183,7 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
   // upcoming plays merely because kickoff is not on the calendar date of the
   // source post.
   const events = [];
+  let completeSlate = true;
   try {
     const fetchScoreboard = async (offset) => {
       const day = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
@@ -199,14 +203,14 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
     if (todayResponse.ok) {
       const scoreboard = await todayResponse.json();
       events.push(...(scoreboard.events || []));
-    }
+    } else completeSlate = false;
     const todayMatchesEveryPlay = playPackets.every((playPacket) => events
       .some((candidate) => matchesExtractedEvent(playPacket, candidate)));
     const laterResponses = todayMatchesEveryPlay
       ? []
       : await Promise.all([1, 2, 3].map(fetchScoreboard));
     for (const response of laterResponses) {
-      if (!response.ok) continue;
+      if (!response.ok) { completeSlate = false; continue; }
       const scoreboard = await response.json();
       events.push(...(scoreboard.events || []));
     }
@@ -215,13 +219,17 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
   }
   if (!events.length) return { status: 'NOT_SCHEDULED_TODAY', reason: 'No matching event is scheduled in the upcoming three-day slate.' };
 
-  const matchedEvents = playPackets.map((playPacket) => events
-    .find((candidate) => matchesExtractedEvent(playPacket, candidate)));
+  const matchedEvents = playPackets.map((playPacket) => {
+    if (exclusiveTeamLookup && !playPacket.analysis.extraction.event?.trim()) {
+      return completeSlate ? resolveExclusiveTeamEvent(playPacket, events) : null;
+    }
+    return events.find((candidate) => matchesExtractedEvent(playPacket, candidate));
+  });
   const playStatuses = [];
   for (let index = 0; index < matchedEvents.length; index += 1) {
     const event = matchedEvents[index];
     if (!event?.date) {
-      playStatuses.push({ play: plays[index], status: 'NOT_SCHEDULED_TODAY', reason: 'No matching event is scheduled today.' });
+      playStatuses.push({ play: plays[index], status: 'NOT_SCHEDULED_TODAY', reason: 'No unambiguous matching event was verified in the upcoming slate.' });
       continue;
     }
     const start = new Date(event.date);
@@ -243,6 +251,8 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
       play: plays[index],
       status: start.getTime() > now.getTime() ? 'UPCOMING' : 'STARTED_OR_FINISHED',
       eventStart: start.toISOString(),
+      verifiedEvent: event.name || event.competitions[0].competitors.map(entry => entry.team.displayName).join(' vs '),
+      verifiedEventId: event.id || null,
       source: playerVerification?.athlete ? 'ESPN schedule and roster' : 'ESPN schedule',
       seasonYear: Number(event.season?.year) || start.getUTCFullYear(),
       athlete: playerVerification?.athlete || null,
@@ -261,6 +271,31 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
     athlete: playStatuses[0]?.athlete || null,
     playStatuses
   };
+}
+
+// Exclusive team-side posts often say only "Lions +5.5". Resolve the
+// opponent from a complete official slate, not model memory. Only a team
+// explicitly beginning a side/ML/team-total selection qualifies; player
+// props and generic labels never acquire an inferred matchup. More than one
+// matching fixture (including already-started fixtures) stays blocked.
+function resolveExclusiveTeamEvent(packet, events) {
+  const extraction = packet.analysis?.extraction || {};
+  if (extraction.player_name) return null;
+  const selection = String(extraction.selection || '').trim();
+  const matches = new Map();
+  for (const event of events) {
+    const teams = event.competitions?.[0]?.competitors?.map(entry => entry.team) || [];
+    if (teams.length !== 2) continue;
+    const namedTeams = teams.filter(team => [team.displayName, team.shortDisplayName, team.name, team.abbreviation]
+      .filter(Boolean).some(alias => {
+        const escaped = String(alias).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`^${escaped}\\s+(?:[+-]\\d|ML\\b|moneyline\\b|team total\\b)`, 'i').test(selection);
+      }));
+    if (namedTeams.length !== 1) continue;
+    const key = `${event.id || ''}:${event.date}:${teams.map(team => team.id || team.displayName).sort().join('|')}`;
+    matches.set(key, event);
+  }
+  return matches.size === 1 ? [...matches.values()][0] : null;
 }
 
 async function upcomingEventStatus(packet, options = {}) {

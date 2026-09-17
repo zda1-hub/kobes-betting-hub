@@ -272,3 +272,17 @@ test('model-call deferrals are audited and logged without advancing the source c
   assert.equal(nextState.image_rescan_version, 'source-routing-image-rescan-v3');
   assert.equal(nextState.upcoming_slate_rescan_version, 'upcoming-slate-rescan-v1');
 });
+
+test('exclusive recovery rescan remains eligible after a budget-limited partial pass', () => {
+  const options = {
+    sourceState: { since_id: '100', upcoming_slate_rescan_version: 'upcoming-slate-rescan-v1' },
+    userId: 'exclusive-source', date: '2026-09-17', lastProcessedId: '300',
+    handledPostIds: new Set(['150']), rescanImages: false, rescanUpcomingSlate: true,
+    upcomingSlateRescanVersion: 'upcoming-slate-rescan-v1-exclusive-team-v2'
+  };
+  const partial = sourceStateAfterPass({ ...options, completedSourcePass: false });
+  assert.equal(partial.upcoming_slate_rescan_version, undefined);
+  assert.equal(partial.since_id, '100');
+  const complete = sourceStateAfterPass({ ...options, completedSourcePass: true });
+  assert.equal(complete.upcoming_slate_rescan_version, options.upcomingSlateRescanVersion);
+});
