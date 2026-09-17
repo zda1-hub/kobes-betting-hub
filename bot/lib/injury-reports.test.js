@@ -59,3 +59,16 @@ test('source failure never sends a healthy/no-injury assertion', async t => {
   const h=await harness(t); h.options.fetchImpl=async()=>({ok:false}); const result=await createInjuryDelivery(h.options).run();
   assert.equal(h.sent.length,0); assert.equal(result[0].status,'NEEDS_ATTENTION');
 });
+test('missing channel permission is blocked before any delivery reservation',async t=>{
+  const h=await harness(t);h.channel.permissionsFor=()=>({has:()=>false});
+  await createInjuryDelivery(h.options).run();assert.equal(h.sent.length,0);
+  assert.equal((await fs.readdir(h.root)).length,0);
+});
+test('definite Discord rejection retains evidence and safely retries after repair',async t=>{
+  const h=await harness(t);const send=h.channel.send;
+  h.channel.send=async()=>{throw Object.assign(Error('Rejected'),{status:403})};
+  await createInjuryDelivery(h.options).run();
+  const state=JSON.parse(await fs.readFile(path.join(h.root,'2026-09-17-nfl.json'),'utf8'));
+  assert.equal(state.pages[0].rejectedHttpStatus,403);assert.equal(state.pages[0].reserved,false);
+  h.channel.send=send;await createInjuryDelivery(h.options).run();assert.equal(h.sent.length,1);
+});

@@ -3,6 +3,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { auditedFetch } = require('../../pipeline/api-client');
 const { pacificOperatingDate } = require('./pick-log');
+const { PermissionFlagsBits } = require('discord.js');
 
 const LEAGUES = Object.freeze({ nfl: 'football/nfl', mlb: 'baseball/mlb' });
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -85,6 +86,10 @@ function createInjuryDelivery({ root, routes, channelFor, fetchImpl = auditedFet
         catch (error) { if (error.code !== 'ENOENT') throw error; state = { channelId, pages: [] }; }
         if (state.channelId !== channelId) throw new Error('Injury destination changed; review old receipts first.');
         const channel = await channelFor(channelId);
+        if (channel.permissionsFor && !channel.permissionsFor(channel.client.user)?.has([
+          PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory
+        ])) throw new Error('Required injury-channel permissions are missing.');
         for (let index = 0; index < Math.max(report.pages.length, state.pages.length); index++) {
           if (stopping || report.date !== pacificOperatingDate(now())) break;
           const marker = `KBH injuries ${league} ${report.date} ${index + 1}`;
@@ -108,7 +113,17 @@ function createInjuryDelivery({ root, routes, channelFor, fetchImpl = auditedFet
             message = await channel.messages.edit(previous.messageId, payload);
           } else {
             state.pages[index] = { reserved: true }; await save(file, state);
-            message = await channel.send({ ...payload, nonce: hash(`${channelId}:${marker}`).slice(0, 24), enforceNonce: true });
+            try {
+              message = await channel.send({ ...payload, nonce: hash(`${channelId}:${marker}`).slice(0, 24), enforceNonce: true });
+            } catch (error) {
+              // Definite Discord rejection is not an uncertain accepted send.
+              // Retain its evidence but allow a later, repaired configuration.
+              if ([400, 401, 403, 404].includes(error.status)) {
+                state.pages[index] = { reserved: false, rejectedHttpStatus: error.status };
+                await save(file, state);
+              }
+              throw error;
+            }
           }
           if (!message?.id) throw new Error('Injury delivery receipt missing.');
           state.pages[index] = { messageId: message.id, fingerprint, reserved: false };
