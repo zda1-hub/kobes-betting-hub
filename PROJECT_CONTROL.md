@@ -22,6 +22,12 @@ The owners do not need to read every repository document. The operating chat sho
 
 ## Executive state
 
+### September 17 — launch-day evidence isolation hotfix
+
+Reproduced the owner's Josh Allen/Gibbs/DJ Moore cross-play breakdown contamination. Prepared a scoped fix requiring per-play source attribution, refusing parent/shared evidence inheritance, researching only each play's missing facts, blocking stale unsafe copy, and correcting/holding today's undecided private cards at startup. The locked pick-first format and matching approval/member copy are unchanged. Local release tests passed **222/222**; no migration or credential change is needed. See `docs/PICK_EVIDENCE_ISOLATION_2026-09-17.md` for rollout and rollback precautions. Runtime acceptance must be verified after auto-deploy.
+
+Read-only launch checks confirm the new starter member's Discord link and live membership role, with processed live-mode checkout/invoice and role-grant webhooks. Today's pick log contains three paid publications and no Free Pick; site/X delivery has no corresponding API/queue records today and the public current item still says September 15. Instagram's `kobeslocks` connection table is empty. These are explicit remaining delivery/access checks, not evidence that all marketing automation is ready.
+
 ### September 16 — pre-Thursday X repair
 
 Restored the missing original encrypted-token key, refreshed X authorization successfully and confirmed @kobesbettinghub. Aligned Render's existing delivery key through a dedicated X-only Publisher binding without changing other queue credentials. The production bot's X queue GET now returns 200, malformed POST returns 400 without a write, and that key cannot reconnect the X account. X account reconnection now requires the operator credential; daily/recap asynchronous authorization defects are fixed. Source release tests passed 217/217, exact-live-bundle checks passed 29 assertions and website smoke passed 5/5. Render restarted successfully and logged in as Kobe Bot.

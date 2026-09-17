@@ -16,7 +16,7 @@ const MARKET_STATS = [
   { pattern: /receiving\s+(?:touchdowns?|tds?)/i, names: ['receivingTouchdowns'], label: 'receiving touchdowns' },
   { pattern: /completions?/i, names: ['completions'], label: 'completions' },
   { pattern: /passing\s+attempts?/i, names: ['passingAttempts'], label: 'passing attempts' },
-  { pattern: /rushing\s+attempts?|carries/i, names: ['rushingAttempts'], label: 'rushing attempts' },
+  { pattern: /rush(?:ing)?\s+attempts?|carries/i, names: ['rushingAttempts'], label: 'rushing attempts' },
   { pattern: /interceptions?/i, names: ['interceptions'], label: 'interceptions' },
   { pattern: /total\s+bases?/i, names: ['totalBases'], label: 'total bases' },
   { pattern: /strikeouts?|\bk'?s\b/i, names: ['strikeouts', 'pitchingStrikeouts'], label: 'strikeouts' },

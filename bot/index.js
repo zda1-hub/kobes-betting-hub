@@ -1524,6 +1524,25 @@ async function refreshPendingResearchApprovals() {
     const research = await fillMissingEvidence(packet);
     if (!research.complete) {
       console.log(`Could not refresh ${packet.pick_id} into the locked writeup format: ${research.reason || 'insufficient verified evidence'}.`);
+      // A legacy split card may still display inherited evidence. Replace its
+      // stale copy and disable publishing rather than leave unsafe buttons live.
+      try {
+        packet.approval ||= {};
+        delete packet.approval.exact_final_copy;
+        delete packet.approval.exact_final_copy_sha256;
+        const presentationPacket = independentWriteupPacket(packet);
+        const message = await approvalChannel.messages.fetch(packet.discord_review_message_id);
+        await message.edit({
+          embeds: [buildSourcePickApprovalEmbed(presentationPacket, 'APPROVED PICK')],
+          components: reviewButtons(packet.pick_id, { testOnly: true, freeLabel: 'Verified research needed', paidLabel: 'Verified research needed' })
+        });
+        packet.status = 'RESEARCH_REQUIRED';
+        packet.approval_ready = false;
+        await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+        await recordWorkflowEvent(packet, { eventType: 'APPROVAL_CARD_RESEARCH_HELD', beforeState: 'PENDING_APPROVAL', afterState: 'RESEARCH_REQUIRED', details: { reason: research.reason || 'insufficient verified evidence' } });
+      } catch (error) {
+        console.error(`Could not hold unsafe approval card ${packet.pick_id}:`, error);
+      }
       continue;
     }
     const presentationPacket = independentWriteupPacket(packet);

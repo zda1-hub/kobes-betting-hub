@@ -13,6 +13,7 @@ const { auditedFetch } = require('./api-client');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { isSupportedSportPick, upcomingEventStatuses } = require('../bot/lib/event-timing');
 const { fillMissingEvidence } = require('../bot/lib/espn-pick-research');
+const { isolatePlayPacket } = require('../bot/lib/play-evidence');
 const {
   approvalCopySha256,
   assertCompleteWriteup,
@@ -658,23 +659,10 @@ async function queueSplitPlayPackets(packet, outputPath) {
   const baseId = packet.pick_id.replace(/-X$/, '');
   for (let index = 0; index < plays.length; index += 1) {
     const play = plays[index];
-    const single = structuredClone(packet);
+    const single = isolatePlayPacket(packet, play, plays);
     const suffix = String(index + 1).padStart(2, '0');
     single.pick_id = `${baseId}-${suffix}-X`;
     single.approval_number = Number(`${packet.approval_number}${index + 1}`);
-    single.analysis.extraction = {
-      ...extraction,
-      ...play,
-      plays: [play],
-      // Keep the source-visible breakdown on every split card. The public
-      // layout remains exact terms first, followed by the same clean bullets;
-      // removing them here would create the incomplete cards Kobe has been
-      // seeing.
-      source_claims: Array.isArray(extraction.source_claims) ? [...extraction.source_claims] : [],
-      supporting_notes: Array.isArray(play.supporting_notes)
-        ? [...play.supporting_notes]
-        : (Array.isArray(extraction.supporting_notes) ? [...extraction.supporting_notes] : [])
-    };
     const splitPath = path.join(path.dirname(outputPath), `${baseId}-${suffix}.json`);
     single.discord_review_message_id = await notifyApprovalChannel(single);
     await fs.writeFile(splitPath, `${JSON.stringify(single, null, 2)}\n`);
@@ -890,17 +878,18 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
         ? timing.playStatuses.filter((result) => result.status === 'UPCOMING')
         : [];
       if (packet.source?.publish_mode !== 'terms_only' && extractedPlays.length > 1 && validPlayStatuses.length > 0) {
+        const evidencePlays = structuredClone(extractedPlays);
         const validPlays = validPlayStatuses.map((result) => result.play);
         for (let index = 0; index < validPlayStatuses.length; index += 1) {
           const status = validPlayStatuses[index];
-          const single = structuredClone(packet);
-          single.analysis.extraction = { ...packet.analysis.extraction, ...status.play, plays: [status.play] };
+          const single = isolatePlayPacket(packet, status.play, evidencePlays);
           await fillMissingEvidence(single, {
             timing: { status: 'UPCOMING', playStatuses: [status], athlete: status.athlete }
           });
           status.play.supporting_notes = Array.isArray(single.analysis.extraction.supporting_notes)
             ? single.analysis.extraction.supporting_notes
             : [];
+          status.play.source_claims = single.analysis.extraction.source_claims;
         }
         packet.analysis.extraction.plays = validPlays;
         const validStarts = validPlayStatuses

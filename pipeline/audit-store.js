@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const MIGRATION_DIRECTORY = path.join(__dirname, 'migrations');
-const DEFAULT_PROMPT_VERSION = 'source-pick-extraction-v1';
+const DEFAULT_PROMPT_VERSION = 'source-pick-extraction-v2-play-evidence';
 let pool;
 let initialized = false;
 let initializationPromise;

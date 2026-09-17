@@ -47,14 +47,15 @@ const EXTRACTION_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['selection', 'player_name', 'line', 'odds_american', 'units', 'event'],
+        required: ['selection', 'player_name', 'line', 'odds_american', 'units', 'event', 'source_claims'],
         properties: {
           selection: { type: 'string' },
           player_name: { type: 'string' },
           line: { type: 'string' },
           odds_american: { type: 'string' },
           units: { type: 'string' },
-          event: { type: 'string' }
+          event: { type: 'string' },
+          source_claims: { type: 'array', items: { type: 'string' } }
         }
       }
     },
@@ -108,6 +109,7 @@ function sourceContent(packet, imageDetail = configuredImageDetail()) {
     'For every player prop, extract the player’s full name into player_name and keep that name in the selection. If the player name is not clearly visible, leave player_name empty and record the ambiguity; never guess it from outside knowledge.',
     'For a multi-game card or parlay, put the exact matchup for each play in that play’s event field (for example, "Eastern Michigan @ Michigan State"). Do not use a generic title such as "CFB Lotto" as the event for every play.',
     'source_claims must contain only short, concrete claims that are explicitly visible in the post text or image. Copy the claim faithfully; do not calculate, update, complete, paraphrase into a stronger claim, or add any statistic from memory or outside knowledge. Omit any claim that is not visibly present.',
+    'Each plays entry must have its own source_claims array containing ONLY claims explicitly belonging to that exact player, market, and matchup. Never copy a shared breakdown onto every play. Resolve pronouns only within that play’s own source section. Leave ambiguous or unassigned claims out of every play; an empty array is correct when the source has no analysis for that play. Do not attach Josh Allen passing analysis to Jahmyr Gibbs carries or DJ Moore receiving yards.',
     'Never use web search or any outside source for this extraction. Do not add ESPN, league, team, sportsbook, news, or other third-party statistics, citations, source names, or URLs.',
     'Use an empty string for an unknown single field. Put uncertainty in missing_or_ambiguous.',
     'This is source extraction only, not research, advice, or verification.',

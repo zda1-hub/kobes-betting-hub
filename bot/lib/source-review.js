@@ -1,5 +1,6 @@
 const { ButtonStyle, ComponentType } = require('discord.js');
 const crypto = require('node:crypto');
+const { isLegacySplit, legacyClaimAllowed } = require('./play-evidence');
 
 const MIN_WRITEUP_EVIDENCE = 4;
 const MAX_WRITEUP_EVIDENCE = 8;
@@ -286,12 +287,15 @@ function sourceEvidence(packet) {
   const pickTerms = publicPickTerms(packet);
   // Regular writeups may include focused research support. It is cleaned below
   // so the member-facing card contains facts, not source credits or URLs.
+  const playClaims = extraction.plays?.length === 1 && Array.isArray(extraction.plays[0].source_claims)
+    ? extraction.plays[0].source_claims : extraction.source_claims;
   const claims = [
-    ...(Array.isArray(extraction.source_claims) ? extraction.source_claims : []),
+    ...(Array.isArray(playClaims) ? playClaims : []),
     ...(Array.isArray(extraction.supporting_notes) ? extraction.supporting_notes.map((note) => note?.text) : [])
   ];
   return [...new Set(claims
     .filter((claim) => typeof claim === 'string' && claim.trim())
+    .filter((claim) => !isLegacySplit(packet) || legacyClaimAllowed(packet, claim))
     .map(cleanEvidenceClaim)
     .filter(Boolean)
     .filter((claim) => !/https?:\/\//i.test(claim)))]
