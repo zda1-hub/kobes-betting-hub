@@ -27,6 +27,9 @@ const {
 } = require('./lib/source-review');
 const { fillMissingEvidence } = require('./lib/espn-pick-research');
 const { createFreePickDelivery } = require('./lib/free-pick-delivery');
+const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
+const { createTelegramReader } = require('./lib/telegram-reader');
+const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { exclusiveSourceIsCurrent } = require('../pipeline/exclusive-text');
@@ -37,6 +40,7 @@ const { attachDiscordRestAudit, auditedFetch, recordDiscordPreResponseFailure } 
 const {
   auditConfigured,
   initializeAuditStore,
+  closeAuditStore,
   recordApprovalAction,
   recordGradeAttempt,
   recordPublicationAttempt,
@@ -103,6 +107,43 @@ let trendsInboxInProgress = false;
 let freeRecapTimer = null;
 let freeRecapInProgress = false;
 let freePickDeliveryTimer = null;
+let injuryTimer = null;
+let injuryDelivery = null;
+let telegramTimer = null;
+let telegramReader = null;
+
+function startTelegramReader() {
+  if (process.env.TELEGRAM_READER_ENABLED !== 'true' || telegramTimer) return;
+  let config;
+  try { config = telegramConfig(); }
+  catch { console.error('Telegram configuration needs attention; existing Discord services remain active.'); return; }
+  telegramReader = createTelegramReader({ config, channelFor: async () => {
+    const channel = await approvedTextChannel(pickApprovalChannelId);
+    if (channel.guildId !== process.env.DISCORD_GUILD_ID || !/pick.approvals/i.test(channel.name || '')) throw new Error('Unexpected private Telegram approval destination.');
+    return channel;
+  } });
+  const run = () => void telegramReader.run().then(receipts => console.log('Cloud Telegram receipts:', JSON.stringify(receipts)));
+  run(); telegramTimer = setInterval(run, 900000); telegramTimer.unref();
+  console.log('Laptop-independent Telegram reader enabled: selected CAPPERS FREE channel only, private approvals only; awaiting secure session if not logged in.');
+}
+
+function startInjuryReports() {
+  let config;
+  try { config = injuryConfig(); }
+  catch { console.error('Injury configuration needs attention; existing Discord services remain active.'); return; }
+  if (!config.enabled || !config.routes.length || injuryTimer) return;
+  injuryDelivery = createInjuryDelivery({
+    root: path.join(path.dirname(pickLogPath()), 'injury-reports'), routes: config.routes,
+    channelFor: async (id) => {
+      const channel = await approvedTextChannel(id);
+      if (channel.guildId !== process.env.DISCORD_GUILD_ID || !/injur/i.test(channel.name || '')) throw new Error('Unexpected injury destination.');
+      return channel;
+    }
+  });
+  const run = () => void injuryDelivery.run().then(receipts => console.log('Cloud injury receipts:', JSON.stringify(receipts)));
+  run(); injuryTimer = setInterval(run, 900000); injuryTimer.unref();
+  console.log('Laptop-independent injury reports active: NFL and MLB, 15-minute updates, persistent daily message receipts.');
+}
 
 function canonicalFreePacket(row) {
   return {
@@ -1619,6 +1660,8 @@ client.once(Events.ClientReady, async (readyClient) => {
   startTrendInbox();
   startFreeRecapSchedule();
   startFreePickDelivery();
+  startInjuryReports();
+  startTelegramReader();
 });
 
 async function registerCommandsOnStart() {
@@ -1959,6 +2002,27 @@ async function start() {
   await registerCommandsOnStart();
   await client.login(process.env.DISCORD_TOKEN);
 }
+
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log('Cloud worker stopping; durable delivery receipts are retained.');
+  for (const timer of [xMonitorIntervalTimer, xMonitorStopTimer, xMonitorDailyTimer,
+    trendsTimer, trendsInboxTimer, freeRecapTimer, freePickDeliveryTimer, injuryTimer, telegramTimer]) {
+    if (timer) clearTimeout(timer);
+  }
+  // Leave enough time for Discord receipt writes before Render's forced stop.
+  const deadline = setTimeout(() => process.exit(0), 25000);
+  try { await Promise.all([injuryDelivery?.stop(), telegramReader?.stop()]); }
+  catch { console.error('Cloud drain interrupted; uncertain sends will be reconciled on restart.'); }
+  client.destroy();
+  await closeAuditStore().catch(() => {});
+  clearTimeout(deadline);
+  process.exit(0);
+}
+process.once('SIGTERM', () => void shutdown());
+process.once('SIGINT', () => void shutdown());
 
 start().catch((error) => {
   console.error(error);
