@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 
 // Connection-only service: deliberately contains no media or publishing endpoint.
-const TARGET = 'bettinhub';
+const TARGET = 'kobeslocks';
 const SCOPES = ['instagram_business_basic', 'instagram_business_content_publish'];
 const CALLBACK = '/auth/instagram/callback';
 const COOKIE = '__Host-kbh-ig-state';
@@ -27,8 +27,8 @@ function json(value, status = 200) {
   return response(JSON.stringify(value), status, { 'content-type': 'application/json' });
 }
 function page(message, { invite, status = 200, cookie } = {}) {
-  const form = invite ? `<form method="post" action="/auth/instagram/start"><input type="hidden" name="invite" value="${invite}"><button>Authorize @bettinhub</button></form>` : '';
-  return response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Instagram connection · Kobe's Betting Hub</title><style>body{margin:0;background:#090909;color:#f4f0e8;font:18px/1.6 system-ui}main{max-width:620px;margin:10vh auto;padding:32px}h1{line-height:1.1}span{color:#ff6a00}button{background:#ff6a00;color:#090909;border:0;padding:18px 24px;font:700 18px system-ui;cursor:pointer}p{overflow-wrap:anywhere}</style><main><h1>Kobe's <span>Betting Hub</span></h1><h2>Instagram account connection</h2><p>${message}</p>${form}<p>Instagram posting remains off. This connection does not publish a Story, send messages, or connect Kobe's Locks.</p></main></html>`, status, {
+  const form = invite ? `<form method="post" action="/auth/instagram/start"><input type="hidden" name="invite" value="${invite}"><button>Authorize @${TARGET}</button></form>` : '';
+  return response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Instagram connection · Kobe's Betting Hub</title><style>body{margin:0;background:#090909;color:#f4f0e8;font:18px/1.6 system-ui}main{max-width:620px;margin:10vh auto;padding:32px}h1{line-height:1.1}span{color:#ff6a00}button{background:#ff6a00;color:#090909;border:0;padding:18px 24px;font:700 18px system-ui;cursor:pointer}p{overflow-wrap:anywhere}</style><main><h1>Kobe's <span>Betting Hub</span></h1><h2>Instagram account connection</h2><p>${message}</p>${form}<p>Instagram posting remains off. This connection is limited to @${TARGET}; it does not publish a Story, send messages, or connect @bettinhub.</p></main></html>`, status, {
     'content-type': 'text/html; charset=utf-8', ...(cookie ? { 'set-cookie': cookie } : {}),
   });
 }
@@ -73,7 +73,7 @@ async function schema(env) {
   await env.DB.batch([
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_connect_invites (digest TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, consumed_at INTEGER)`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_oauth_states (digest TEXT PRIMARY KEY, browser_digest TEXT NOT NULL, expires_at INTEGER NOT NULL, consumed_at INTEGER)`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_connections (target TEXT PRIMARY KEY CHECK (target = 'bettinhub'), account_id TEXT NOT NULL, encrypted_token TEXT NOT NULL, granted_scopes TEXT NOT NULL, issued_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, checked_at INTEGER NOT NULL)`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_connections (target TEXT PRIMARY KEY CHECK (target = '${TARGET}'), account_id TEXT NOT NULL, encrypted_token TEXT NOT NULL, granted_scopes TEXT NOT NULL, issued_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, checked_at INTEGER NOT NULL)`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_connection_audit (id TEXT PRIMARY KEY, operation_id TEXT NOT NULL, occurred_at INTEGER NOT NULL, event TEXT NOT NULL, endpoint_class TEXT, method TEXT, outcome TEXT NOT NULL, http_status INTEGER, latency_ms INTEGER, provider_request_id TEXT, response_shape_sha256 TEXT, worker_version TEXT)`),
     env.DB.prepare(`CREATE INDEX IF NOT EXISTS instagram_audit_operation ON instagram_connection_audit(operation_id, occurred_at)`),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS instagram_audit_no_update BEFORE UPDATE ON instagram_connection_audit BEGIN SELECT RAISE(ABORT, 'instagram audit is append-only'); END`),
@@ -167,7 +167,7 @@ function single(data) {
 }
 function identity(data, expectedId) {
   const profile = single(data);
-  if (typeof profile.username !== 'string' || profile.username.toLowerCase() !== TARGET) throw new SafeError('WRONG_INSTAGRAM_ACCOUNT_USE_BETTINHUB', 403);
+  if (typeof profile.username !== 'string' || profile.username.toLowerCase() !== TARGET) throw new SafeError('WRONG_INSTAGRAM_ACCOUNT_USE_KOBESLOCKS', 403);
   if (String(profile.account_type).toUpperCase() !== 'BUSINESS') throw new SafeError('INSTAGRAM_BUSINESS_ACCOUNT_REQUIRED', 403);
   if (typeof profile.user_id !== 'string' || !/^\d+$/.test(profile.user_id)) throw new SafeError('INSTAGRAM_ACCOUNT_ID_MISSING', 502);
   if (expectedId && String(profile.user_id) !== expectedId) throw new SafeError('INSTAGRAM_ACCOUNT_ID_CHANGED', 409);
@@ -219,7 +219,7 @@ async function connect(request, env, operation, fetchImpl) {
   const stored = await env.DB.prepare(`INSERT INTO instagram_connections (target, account_id, encrypted_token, granted_scopes, issued_at, expires_at, checked_at) SELECT ?, ?, ?, ?, ?, ?, ? FROM instagram_oauth_states WHERE digest = ? AND consumed_at = ? AND expires_at > ? ON CONFLICT(target) DO UPDATE SET encrypted_token = excluded.encrypted_token, granted_scopes = excluded.granted_scopes, issued_at = excluded.issued_at, expires_at = excluded.expires_at, checked_at = excluded.checked_at WHERE instagram_connections.account_id = excluded.account_id RETURNING target`).bind(TARGET, accountId, await encrypt(long.access_token, env), JSON.stringify(SCOPES), now, now + long.expires_in * 1000, now, stateDigest, claimedAt, now).first();
   if (!stored) throw new SafeError('INSTAGRAM_CONNECTION_CHANGED_RECHECK', 409);
   await audit(env, operation, 'ACCOUNT_CONNECTED', 'SUCCEEDED');
-  return page('Connected @bettinhub successfully. Let Zakai know so we can run the read-only account check before any publishing test.', { cookie: cookie('', 0) });
+  return page(`Connected @${TARGET} successfully. Let Zakai know so we can run the read-only account check before any publishing test.`, { cookie: cookie('', 0) });
 }
 
 /** @param {Request} request @param {Cloudflare.Env} env @param {typeof fetch} fetchImpl @returns {Promise<Response>} */
@@ -251,7 +251,7 @@ export async function handle(request, env, fetchImpl = fetch) {
       if (!/^[a-f0-9]{64}$/.test(invite)) throw new SafeError('INVALID_OR_EXPIRED_INSTAGRAM_INVITE', 403);
       const row = await env.DB.prepare('SELECT digest FROM instagram_connect_invites WHERE digest = ? AND consumed_at IS NULL AND expires_at > ?').bind(await hash(invite), Date.now()).first();
       if (!row) throw new SafeError('INVALID_OR_EXPIRED_INSTAGRAM_INVITE', 403);
-      return page('Kobe: authorize only your @bettinhub Business account. Instagram will ask for profile access and content-publishing permission. No password is shared with Zakai, and publishing remains off.', { invite });
+      return page(`Kobe: authorize only your @${TARGET} Business account. Instagram will ask for profile access and content-publishing permission. No password is shared with Zakai, and publishing remains off.`, { invite });
     }
     if (url.pathname === '/auth/instagram/start') {
       if (request.headers.get('origin') !== origin(env)) throw new SafeError('INVALID_INSTAGRAM_START_ORIGIN', 403);
@@ -307,7 +307,7 @@ export async function handle(request, env, fetchImpl = fetch) {
     if (configured(env)) {
       try { await audit(env, operation, 'OPERATION_FAILED', code); } catch { /* response still fails closed */ }
     }
-    return isCallback ? page('Connection was not completed. Ask Zakai for a new authorization link and ensure you select @bettinhub.', { status, cookie: cookie('', 0) }) : json({ error: code, operationId: operation }, status);
+    return isCallback ? page(`Connection was not completed. Ask Zakai for a new authorization link and ensure you select @${TARGET}.`, { status, cookie: cookie('', 0) }) : json({ error: code, operationId: operation }, status);
   }
 }
 async function readJsonForm(request) {

@@ -49,7 +49,7 @@ function request(path, { key, method = 'GET', body, cookie, origin } = {}) {
   });
 }
 function operatorRequest(path, method = 'POST') { return request(`/operator/instagram/${path}`, { key: secret, method }); }
-function providerMock({ username = 'bettinhub', type = 'Business', granted = __test.SCOPES.join(','), expires = 5184000, nested = true } = {}) {
+function providerMock({ username = 'kobeslocks', type = 'Business', granted = __test.SCOPES.join(','), expires = 5184000, nested = true } = {}) {
   const calls = [];
   return {
     calls,
@@ -123,7 +123,7 @@ test('invitation GET is preview-safe; POST starts consent with only two scopes a
 test('correct Business account stores only encrypted token and redacted append-only audit', async () => {
   const env = environment(); const { result, mock } = await connected(env);
   assert.equal(result.status, 200);
-  assert.match(await result.text(), /Connected @bettinhub successfully/);
+  assert.match(await result.text(), /Connected @kobeslocks successfully/);
   assert.equal(mock.calls.length, 3);
   assert.equal(mock.calls[0].body.get('grant_type'), 'authorization_code');
   assert.equal(mock.calls[0].body.get('redirect_uri'), `${ORIGIN}/auth/instagram/callback`);
@@ -146,8 +146,23 @@ test('root-shaped provider responses also connect without assuming data arrays',
   assert.equal((await connected(environment(), providerMock({ nested: false }))).result.status, 200);
 });
 
+test('owner account switch pins invites, consent, stored credentials and status to kobeslocks', async () => {
+  const env = environment();
+  const invite = await (await handle(operatorRequest('invite'), env)).json();
+  assert.equal(invite.target, 'kobeslocks');
+  const url = new URL(invite.authorizeUrl);
+  const consent = await (await handle(request(url.pathname + url.search), env)).text();
+  assert.match(consent, /Authorize @kobeslocks/);
+  assert.doesNotMatch(consent, /Authorize @bettinhub|or connect Kobe's Locks/);
+  assert.equal((await connected(env, providerMock({ username: 'KobesLocks' }))).result.status, 200);
+  assert.equal(env.DB.sql.prepare('SELECT target FROM instagram_connections').get().target, 'kobeslocks');
+  assert.equal((await (await handle(operatorRequest('status', 'GET'), env)).json()).target, 'kobeslocks');
+  assert.throws(() => __test.identity({ username: 'bettinhub', account_type: 'Business', user_id: '111' }), /USE_KOBESLOCKS/);
+  assert.throws(() => env.DB.sql.exec("UPDATE instagram_connections SET target='bettinhub'"), /CHECK constraint/);
+});
+
 test('wrong username, Creator account, missing grant and invalid expiration cannot install credentials', async () => {
-  for (const options of [{ username: 'kobeslocks' }, { type: 'Media_Creator' }, { granted: 'instagram_business_basic' }, { expires: undefined }, { expires: 0 }]) {
+  for (const options of [{ username: 'bettinhub' }, { type: 'Media_Creator' }, { granted: 'instagram_business_basic' }, { expires: undefined }, { expires: 0 }]) {
     const env = environment(); const mock = providerMock(options);
     // Undefined intentionally exercises a truly missing expiration field.
     if (Object.hasOwn(options, 'expires') && options.expires === undefined) {
@@ -184,7 +199,7 @@ test('denied authorization is consumed and never exchanges a code', async () => 
 test('failed reauthorization preserves the existing verified account and token', async () => {
   const env = environment(); await connected(env);
   const before = env.DB.sql.prepare('SELECT encrypted_token FROM instagram_connections').get().encrypted_token;
-  assert.equal((await connected(env, providerMock({ username: 'kobeslocks' }))).result.status, 403);
+  assert.equal((await connected(env, providerMock({ username: 'bettinhub' }))).result.status, 403);
   assert.equal(env.DB.sql.prepare('SELECT encrypted_token FROM instagram_connections').get().encrypted_token, before);
 });
 

@@ -1,15 +1,24 @@
-# Bettinhub Instagram connection — September 16, 2026
+# Kobe's Locks Instagram connection — September 16, 2026
 
 ## State and scope
 
-Prepared and locally verified, **not deployed or connected**. Target is **@bettinhub**, a Business account (939 followers per owner). Kobe's Locks is excluded. No Instagram, X, Discord or email content was sent. No membership, Stripe, tax or existing production runtime changed.
+Implemented and deployed as a separate connector, **not configured or connected**. Owner changed the target to **@kobeslocks**; **@bettinhub is excluded**. The actual Business account type remains to be verified through authorization; the connection rejects Creator/personal accounts. No Instagram, X, Discord or email content was sent. No membership, Stripe, tax or existing production runtime changed.
+
+### Meta setup and deployment checkpoint
+
+- Owner-authorized developer registration and app creation completed in regular Arc. Meta app **Bettinhub Story Connection**, app ID `1084670914325996`; separate Instagram app ID `1068122172774873`; contact `themartinventures@gmail.com`. No business portfolio linked; app remains unpublished.
+- Exact connector callback was entered and Save attempted. Reloaded Instagram setup displayed business-login instructions instead of the initial Set up button, but the saved exact URI still requires a settings-level verification.
+- The permission table still displayed **Add** for both intended Instagram scopes. They are **not verified added**. No comments/messages/ads permissions were added, no account role assigned, no token generated or secret revealed/copied.
+- Separate Worker deployed from source `3a33664`, version **`f04fe6fb-86e7-42b0-84a2-09db03c1c105`**, with the observed Instagram app ID provided through a deployment variable. Nineteen connection tests and production-config build dry run passed before upload.
+- Live `/health` returned `configured:false`, `publishingEnabled:false`, `mode:connection-only`, with that matching version. No Worker secrets installed and no remote database schema/data operation performed. No authorization invitation issued.
+- Blocker: regular Arc's Meta page stopped responding to automated page clicks, scrolling and Find despite accessible read-only content; native address-bar navigation still worked. Retried page reload, app selection and controller reset without completing permission actions. Human page focus/intervention is needed before continuing Meta setup and safely moving the app secret into protected Cloudflare storage. Do not present this partial deployment as ready for Kobe authorization.
 
 The separate connection-only Worker keeps this work out of the existing Discord approval, website, X and Story-artwork paths. It deliberately has **no publishing endpoint, queue consumer or cron**. A connected account is not proof that Story delivery works. The existing approved-Free-Pick artwork/email path is unchanged; API Story publishing remains the next implementation/acceptance boundary after owner authorization.
 
 ## Built
 
 - Operator-authenticated, 24-hour, single-use invitations. Opening the link or a messaging-service preview does not consume it; Kobe must press Authorize.
-- Meta Instagram Business Login requesting only `instagram_business_basic` and `instagram_business_content_publish`. No messaging, comments, advertising, personal-account or Kobe's Locks access.
+- Meta Instagram Business Login requesting only `instagram_business_basic` and `instagram_business_content_publish`. No messaging, comments, advertising, personal-account or @bettinhub access.
 - Ten-minute one-use OAuth state bound to the same browser with Secure/HttpOnly/SameSite cookie. Denial, expiry and replay fail closed.
 - Short-to-long-lived token exchange; permission checks; server verification of username, Business type and stable professional account ID. Account IDs are handled as strings without numeric rounding.
 - Independent AES-GCM key with random nonce and account-bound authenticated data. Tokens and app secrets never reach the client, logs, status response or audit ledger.
@@ -38,7 +47,7 @@ The separate connection-only Worker keeps this work out of the existing Discord 
 
 ## Kobe action and subsequent checks
 
-Kobe opens the invite **in one regular browser**, presses Authorize, logs in to **@bettinhub**, grants the two requested permissions, and waits for “Connected @bettinhub successfully.” He can then tell Zakai it completed. Do not send an authorization link before the Meta app and live callback are actually configured.
+Kobe opens the invite **in one regular browser**, presses Authorize, logs in to **@kobeslocks**, grants the two requested permissions, and waits for “Connected @kobeslocks successfully.” He can then tell Zakai it completed. Do not send an authorization link before the Meta app and live callback are actually configured.
 
 Afterward, authenticated GET `/operator/instagram/status` confirms encrypted connection metadata. POST `/operator/instagram/check` makes one profile GET and verifies the expected username, Business account and pinned ID, without posting. Inspect correlated `instagram_connection_audit` rows. Tokens remain secret.
 
