@@ -14,4 +14,7 @@ async function discordRateLimitedFetch(url, init, context, { fetchImpl, sleep = 
 function onlyRateLimitedApprovalAttempts(rows) {
   return rows.length > 0 && rows.every(row => row.response_status === 429 && row.outcome === 'HTTP_ERROR');
 }
-module.exports = { discordRateLimitedFetch, onlyRateLimitedApprovalAttempts };
+function recoverySendFailureStatus(error) {
+  return error?.responseStatus === 429 ? 'RECOVERY_RESERVED' : 'RECOVERY_SEND_UNCERTAIN';
+}
+module.exports = { discordRateLimitedFetch, onlyRateLimitedApprovalAttempts, recoverySendFailureStatus };

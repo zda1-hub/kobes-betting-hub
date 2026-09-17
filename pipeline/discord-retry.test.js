@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { discordRateLimitedFetch, onlyRateLimitedApprovalAttempts } = require('./discord-retry');
+const { discordRateLimitedFetch, onlyRateLimitedApprovalAttempts, recoverySendFailureStatus } = require('./discord-retry');
 test('waits for explicit Discord rate limit and records bounded retries', async () => {
   const attempts = [], waits = [];
   const result = await discordRateLimitedFetch('https://discord.com', { method: 'POST' }, {}, {
@@ -24,4 +24,10 @@ test('reservation recovery needs positive audit proof of only rejected 429 sends
   const rejected = { response_status: 429, outcome: 'HTTP_ERROR' };
   assert.equal(onlyRateLimitedApprovalAttempts([rejected, rejected]), true);
   for (const rows of [[], [{ response_status: 200, outcome: 'SUCCEEDED' }], [rejected, { response_status: null, outcome: 'NETWORK_ERROR' }], [{ response_status: 500, outcome: 'HTTP_ERROR' }]]) assert.equal(onlyRateLimitedApprovalAttempts(rows), false);
+});
+test('network or audit uncertainty quarantines recovery even after earlier rate limits', () => {
+  assert.equal(recoverySendFailureStatus({ responseStatus: 429 }), 'RECOVERY_RESERVED');
+  for (const error of [new Error('audit failed after provider success'), new TypeError('network uncertain'), { responseStatus: 500 }, { responseStatus: 200 }]) {
+    assert.equal(recoverySendFailureStatus(error), 'RECOVERY_SEND_UNCERTAIN');
+  }
 });

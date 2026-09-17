@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
 const { exclusiveTextExtraction, exclusiveSourceIsCurrent } = require('./exclusive-text');
-const { discordRateLimitedFetch } = require('./discord-retry');
+const { discordRateLimitedFetch, recoverySendFailureStatus } = require('./discord-retry');
 const {
   recordApprovalCard,
   approvalSendWasOnlyRateLimited,
@@ -347,7 +347,7 @@ async function existingSourcePostIds(date) {
       // A packet without a Discord review message was held before approval.
       // Leave it eligible for an explicit one-time rescan after a routing fix;
       // packets already sent to Kobe remain deduplicated.
-      if (postId && (packet.discord_review_message_id || packet.status === 'RECOVERY_RESERVED')) ids.add(String(postId));
+      if (postId && (packet.discord_review_message_id || ['RECOVERY_RESERVED', 'RECOVERY_SEND_PENDING', 'RECOVERY_SEND_UNCERTAIN'].includes(packet.status))) ids.add(String(postId));
     } catch {
       // A malformed historical packet must not stop the live collector.
     }
@@ -597,7 +597,9 @@ async function notifyApprovalChannel(packet) {
       afterState: 'APPROVAL_SEND_FAILED',
       details: { response_status: response.status, error: detail }
     });
-    throw new Error(`Discord approval notification failed (${response.status}): ${detail}`);
+    const error = new Error(`Discord approval notification failed (${response.status}): ${detail}`);
+    error.responseStatus = response.status;
+    throw error;
   }
   const messageId = (await response.json()).id;
   await recordApprovalCard(packet, { channelId, messageId, payload });
@@ -1076,6 +1078,22 @@ async function runCollector({ maxCandidates, maxModelCalls } = {}) {
 
 // Operator recovery reuses a successful audited extraction and delivers only
 // to private approval, through the normal rendering/audit path. No model call.
+async function deliverRecoveredApproval(packet, packetPath) {
+  // Quarantine a pending send before transmitting: an unrecorded success or
+  // network/audit failure must never turn into a blind resend.
+  packet.status = 'RECOVERY_SEND_PENDING';
+  await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+  try {
+    packet.discord_review_message_id = await notifyApprovalChannel(packet);
+    await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+  } catch (error) {
+    packet.status = recoverySendFailureStatus(error);
+    await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+    throw error;
+  }
+  return { status: packet.status, pick: packet.pick_id, post: packet.source.post_id, message: packet.discord_review_message_id };
+}
+
 async function recoverAuditedExclusive(row) {
   if (await pickWorkflowPaused()) throw new Error('Pick workflow is paused.');
   const source = (await readJson(SOURCES_PATH, [])).find(entry => entry.enabled && entry.handle === row.source_handle && entry.publish_mode === 'terms_only');
@@ -1088,13 +1106,14 @@ async function recoverAuditedExclusive(row) {
       const packetPath = path.join(directory, file);
       const reserved = await readJson(packetPath, {});
       if (reserved.source?.post_id !== row.external_post_id) continue;
+      if (['RECOVERY_SEND_PENDING', 'RECOVERY_SEND_UNCERTAIN'].includes(reserved.status)) {
+        throw new Error('Reserved send outcome is uncertain; reconcile before retrying.');
+      }
       if (reserved.status === 'RECOVERY_RESERVED' && !reserved.discord_review_message_id) {
         if (!await approvalSendWasOnlyRateLimited(reserved.pick_id)) throw new Error('Reserved send outcome is uncertain; reconcile before retrying.');
         if (!exclusiveSourceIsCurrent(reserved)) throw new Error('Reserved exclusive source is no longer current.');
         buildSourcePickApprovalEmbed(reserved, 'APPROVED PICK');
-        reserved.discord_review_message_id = await notifyApprovalChannel(reserved);
-        await fs.writeFile(packetPath, `${JSON.stringify(reserved, null, 2)}\n`);
-        return { status: reserved.status, pick: reserved.pick_id, post: row.external_post_id, message: reserved.discord_review_message_id };
+        return deliverRecoveredApproval(reserved, packetPath);
       }
     }
     return { status: 'ALREADY_QUEUED', post: row.external_post_id };
@@ -1124,9 +1143,7 @@ async function recoverAuditedExclusive(row) {
     catch (error) { if (error.code !== 'EEXIST') throw error; sequence += 1; }
   }
   // Keep the reservation after an uncertain send; never blindly duplicate it.
-  packet.discord_review_message_id = await notifyApprovalChannel(packet);
-  await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
-  return { status: packet.status, pick: packet.pick_id, post: row.external_post_id, message: packet.discord_review_message_id };
+  return deliverRecoveredApproval(packet, packetPath);
 }
 
 if (require.main === module) {
