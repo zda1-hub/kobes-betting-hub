@@ -16,7 +16,7 @@ function siteConfig(environment = process.env) {
   return { url, secret };
 }
 
-async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, environment = process.env, storyRenderer = renderInstagramStory } = {}) {
+async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, environment = process.env, storyRenderer = renderInstagramStory, copyImage = true, date = phoenixOperatingDate() } = {}) {
   const config = siteConfig(environment);
   if (!config) return { status: 'disabled' };
 
@@ -32,7 +32,7 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
     reason: sourceEvidence(packet).join(' • '),
   };
   const caption = ['FREE PLAY', ...publicPickTerms(packet)].join('\n').slice(0, 280);
-  const imageUrl = packet.approval?.image_url;
+  const imageUrl = copyImage ? packet.approval?.image_url : null;
   let imagePayload = null;
   let imageType = '';
   let storyPayload = null;
@@ -67,7 +67,7 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
     const form = new FormData();
     if (imagePayload) form.append('image', new Blob([imagePayload], { type: imageType }), 'free-pick.png');
     if (storyPayload) form.append('story', new Blob([storyPayload], { type: 'image/png' }), instagramStoryFilename(packet.pick_id));
-    Object.entries({ date: phoenixOperatingDate(), caption, ...details }).forEach(([key, value]) => form.append(key, String(value || '')));
+    Object.entries({ date, caption, ...details }).forEach(([key, value]) => form.append(key, String(value || '')));
     response = await auditedFetch(`${config.url}/api/free-pick/publish`, { method: 'POST', headers: { authorization: `Bearer ${config.secret}` }, body: form }, {
       service: 'cloudflare-worker',
       endpointClass: '/api/free-pick/publish',
@@ -80,7 +80,7 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
     response = await auditedFetch(`${config.url}/api/free-pick/publish`, {
       method: 'POST',
       headers: { authorization: `Bearer ${config.secret}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ date: phoenixOperatingDate(), caption, details }),
+      body: JSON.stringify({ date, caption, details }),
     }, {
       service: 'cloudflare-worker',
       endpointClass: '/api/free-pick/publish',

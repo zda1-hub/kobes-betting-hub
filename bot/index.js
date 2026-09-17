@@ -26,8 +26,7 @@ const {
   approvalCopySha256
 } = require('./lib/source-review');
 const { fillMissingEvidence } = require('./lib/espn-pick-research');
-const { shouldRunTextXFallback, syncApprovedFreePickToX } = require('./lib/free-pick-x');
-const { publishApprovedFreePickToSite } = require('./lib/free-pick-site');
+const { createFreePickDelivery } = require('./lib/free-pick-delivery');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { exclusiveSourceIsCurrent } = require('../pipeline/exclusive-text');
@@ -103,6 +102,61 @@ let trendsInboxTimer = null;
 let trendsInboxInProgress = false;
 let freeRecapTimer = null;
 let freeRecapInProgress = false;
+let freePickDeliveryTimer = null;
+
+function canonicalFreePacket(row) {
+  return {
+    pick_id: row.pick_id,
+    source: { publish_mode: 'independent_writeup' },
+    analysis: { extraction: {
+      sport: row.sport, league: row.league, event: row.event,
+      selection: row.selection, line: row.published_line,
+      odds_american: row.published_odds_american, units: row.units_risked,
+      source_claims: []
+    } }
+  };
+}
+
+const freePickDelivery = createFreePickDelivery({
+  root: path.join(path.dirname(pickLogPath()), 'free-pick-delivery'),
+  channelId: freePickChannelId,
+  readRows: readPickLog,
+  paused: pickWorkflowPaused,
+  loadPacket: async (row) => {
+    if (/^\d{8}-\d+-X$/.test(row.pick_id)) {
+      try {
+        const packet = JSON.parse(await fs.readFile(path.join(reviewQueueRoot, row.operating_date, `${row.pick_id.replace(/-X$/, '')}.json`), 'utf8'));
+        return independentWriteupPacket(packet);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
+    return canonicalFreePacket(row);
+  },
+  verifyPost: async (row) => {
+    const ref = row.post_reference.match(/\/channels\/(\d+)\/(\d+)\/(\d+)$/);
+    if (!ref || ref[2] !== freePickChannelId) return false;
+    const channel = await client.channels.fetch(ref[2]);
+    const message = await channel.messages.fetch(ref[3]);
+    return message.author.id === row.published_by;
+  },
+  notify: async (row, site) => queueRecapNotification({
+    id: `free-pick-social-${row.pick_id}`,
+    subject: `Kobe's Betting Hub — Instagram Story ready (${row.operating_date})`,
+    body: `The approved Free Pick social package is ready.\n\nInstagram Story PNG (1080×1920): ${site.storyUrl}\nApproved Discord post: ${row.post_reference}\n\nReview the visible terms and post manually from the official Instagram account. Do not edit the pick terms.`
+  })
+});
+
+function startFreePickDelivery() {
+  if (!freePickChannelId || freePickDeliveryTimer) return;
+  const run = () => freePickDelivery.run().then((results) => {
+    for (const receipt of results) console.log('Free Pick delivery receipt:', JSON.stringify(receipt));
+  }).catch(() => console.error('Free Pick delivery recovery failed safely.'));
+  void run();
+  freePickDeliveryTimer = setInterval(run, 60000);
+  freePickDeliveryTimer.unref();
+  console.log('Free Pick delivery recovery active: current-day approved canonical posts only; 60-second interval.');
+}
 
 // A shared kill switch for new public pick posts. The collector has its own
 // matching check, while this one protects existing Discord approval cards and
@@ -1360,49 +1414,11 @@ async function handleSourceReviewButton(interaction) {
     packet.status = 'PUBLISHED';
     packet.approval = approval;
     await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+    if (action === 'free') await freePickDelivery.remember(publicationPacket);
     const postReference = discordPostReference(channel, publishedMessage);
     await closeApprovalCard(interaction, { channel, postReference });
-    let siteNote = '';
-    let siteSync = null;
-    if (action === 'free') {
-      try {
-        siteSync = await publishApprovedFreePickToSite(packet);
-        siteNote = siteSync.status === 'disabled' ? ' Website sync is not configured.' : ` Website sync: ${siteSync.status}${siteSync.image ? ' with image.' : ' as a text card.'}`;
-        if (siteSync.storyUrl) {
-          const socialStatus = await queueRecapNotification({
-            id: `free-pick-social-${packet.pick_id}`,
-            subject: `Kobe's Betting Hub — Instagram Story ready (${pacificOperatingDate()})`,
-            body: [
-              'The approved Free Pick social package is ready.',
-              '',
-              `Instagram Story PNG (1080×1920): ${siteSync.storyUrl}`,
-              `Approved Discord post: ${postReference}`,
-              '',
-              'Download the PNG, review the visible line/odds, and post it manually from the official Instagram account. Do not edit the pick terms.'
-            ].join('\n')
-          });
-          siteNote += ` Instagram Story email: ${socialStatus.toLowerCase().replaceAll('_', ' ')}.`;
-        }
-      } catch (siteError) {
-        console.error('Approved Discord free pick was not synced to the website', { pickId: packet.pick_id, message: String(siteError) });
-        siteNote = ' Website sync needs attention.';
-      }
-    }
-    let xNote = '';
-    if (action === 'free') {
-      try {
-        if (!shouldRunTextXFallback(siteSync)) {
-          xNote = ' X sync: published with the approved image.';
-        } else {
-          const xSync = await syncApprovedFreePickToX(packet);
-          xNote = xSync.status === 'disabled' ? ' X text fallback is disabled.' : ` X sync: ${xSync.status}.`;
-        }
-      } catch (xError) {
-        console.error('Approved Discord free pick was not synced to X', { pickId: packet.pick_id, message: String(xError) });
-        xNote = ' Discord post is live; X sync needs attention.';
-      }
-    }
-    await interaction.editReply(`Published to ${channel}. [View official post](${postReference})${siteNote}${xNote}`);
+    if (action === 'free') void freePickDelivery.run().catch(() => console.error('Free Pick delivery recovery needs attention.'));
+    await interaction.editReply(`Published to ${channel}. [View official post](${postReference})${action === 'free' ? ' Website/X delivery is queued with automatic recovery; the delivery receipt confirms completion.' : ''}`);
     trace('interaction completed');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to complete this approval action.';
@@ -1602,6 +1618,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   startTrendsSchedule();
   startTrendInbox();
   startFreeRecapSchedule();
+  startFreePickDelivery();
 });
 
 async function registerCommandsOnStart() {
@@ -1911,7 +1928,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
         notes: 'Published with /publish-pick.'
       }
     });
-    await interaction.reply({ ephemeral: true, content: `Published to ${channel}.` });
+    if (channel.id === freePickChannelId) {
+      await freePickDelivery.remember({
+        ...canonicalFreePacket({ pick_id: pickId, sport: pickOptions.sport, league: pickOptions.league,
+          event: pickOptions.event, selection: pickOptions.pick, published_line: String(pickOptions.publishedLine),
+          published_odds_american: String(pickOptions.publishedOdds), units_risked: String(pickOptions.unitsRisked) }),
+        analysis: { extraction: {
+          sport: pickOptions.sport, league: pickOptions.league, event: pickOptions.event,
+          selection: pickOptions.pick, line: String(pickOptions.publishedLine),
+          odds_american: String(pickOptions.publishedOdds), units: String(pickOptions.unitsRisked),
+          source_claims: pickOptions.evidence.split(/\n/).map((line) => line.replace(/^\s*[-•]\s*/, '').trim()).filter(Boolean)
+        } }
+      });
+      void freePickDelivery.run().catch(() => console.error('Manual Free Pick delivery recovery needs attention.'));
+    }
+    await interaction.reply({ ephemeral: true, content: `Published to ${channel}.${channel.id === freePickChannelId ? ' Website/X delivery queued with automatic recovery.' : ''}` });
   } catch (error) {
     console.error(error);
     const message = error instanceof Error ? error.message : 'Unable to process this pick.';

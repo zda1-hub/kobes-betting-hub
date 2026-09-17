@@ -18,7 +18,9 @@ function buildFreePickXPost(packet) {
   // Keep the X copy to the approved pick terms only. The Discord post carries
   // the full writeup; omitting promotional filler prevents valid picks from
   // failing X's 280-character cap.
-  const body = ['FREE PLAY', ...terms].join('\n');
+  const termsBody = ['FREE PLAY', ...terms].join('\n');
+  const cta = '\n\nFull board → kobesbettinghub.com/join\n21+ | No guarantees.';
+  const body = termsBody.length + cta.length <= MAX_X_POST_LENGTH ? termsBody + cta : termsBody;
   if (body.length > MAX_X_POST_LENGTH) {
     throw new Error(`The approved free-pick post is ${body.length} characters; X allows ${MAX_X_POST_LENGTH}.`);
   }
@@ -64,10 +66,24 @@ async function syncApprovedFreePickToX(packet, { fetchImpl = fetch, environment 
     pickId: packet.pick_id
   }, fetchImpl);
   const payload = await response.json().catch(() => ({}));
+  if (payload.status === 'failed' || payload.status === 'publishing') {
+    throw new Error(`X delivery needs review (${payload.status}); do not submit a new post ID.`);
+  }
   if (response.status === 201 || response.status === 202 || response.status === 409) {
-    return { status: response.status === 409 ? 'already_requested' : payload.status || 'requested', postId: payload.id };
+    return { status: response.status === 409 ? 'already_requested' : payload.status || 'requested', postId: payload.id, xPostId: payload.xPostId || null };
   }
   throw new Error(`X free-pick sync failed (${response.status}): ${payload.error || 'Unknown error'}`);
 }
 
-module.exports = { buildFreePickXPost, freePickXPostId, freePickXSyncConfig, shouldRunTextXFallback, syncApprovedFreePickToX };
+async function readFreePickXReceipt(packet, { fetchImpl = fetch, environment = process.env } = {}) {
+  const config = freePickXSyncConfig(environment);
+  if (!config) return { status: 'disabled' };
+  const response = await auditedFetch(`${config.publisherUrl}/api/queue/x`, {
+    headers: { authorization: `Bearer ${config.secret}` }
+  }, { service: 'cloudflare-worker', endpointClass: '/api/queue/x', callerComponent: 'bot/lib/free-pick-x', triggerType: 'delivery_receipt', pickId: packet.pick_id }, fetchImpl);
+  if (!response.ok) throw new Error(`Cannot verify X delivery receipt (${response.status}).`);
+  const payload = await response.json();
+  return payload.posts?.find((post) => post.id === freePickXPostId(packet.pick_id)) || { status: 'not_requested' };
+}
+
+module.exports = { buildFreePickXPost, freePickXPostId, freePickXSyncConfig, shouldRunTextXFallback, syncApprovedFreePickToX, readFreePickXReceipt };
