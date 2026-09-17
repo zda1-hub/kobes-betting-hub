@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="home.css?v=20260917-vip-access" />
-    <link rel="stylesheet" href="membership.css?v=20260912-referrals" />
+    <link rel="stylesheet" href="membership.css?v=20260917-term-plans" />
   </head>
   <body>
     <header class="site-header" data-header>
@@ -54,9 +54,32 @@
             <button class="button offer-button" type="button" data-checkout="starter">Start for $10 / 7 days <span aria-hidden="true">→</span></button>
             <button class="button offer-button" type="button" data-checkout="trial_2_day">Try 2 days free <span aria-hidden="true">→</span></button>
           </div>
+          <section class="term-plans" data-term-plans aria-label="Longer membership plans">
+            <article class="term-plan">
+              <p class="term-kicker">6 MONTHS</p>
+              <p class="term-price">$134.99</p>
+              <p class="term-saving">Nearly 2 months free</p>
+              <p class="term-comparison">Save $62.95 vs. 6 monthly payments.</p>
+              <button class="button offer-button" type="button" data-checkout="six_month">Choose 6 months <span aria-hidden="true">→</span></button>
+              <p class="term-renewal">$134.99 today, then every 6 months until canceled. No trial.</p>
+            </article>
+            <article class="term-plan term-plan-best">
+              <p class="term-kicker">12 MONTHS · BEST VALUE</p>
+              <p class="term-price">$194.99</p>
+              <p class="term-saving">Over 6 months free</p>
+              <p class="term-comparison">Save $200.89 vs. 12 monthly payments.</p>
+              <button class="button offer-button" type="button" data-checkout="annual">Choose a year <span aria-hidden="true">→</span></button>
+              <p class="term-renewal">$194.99 today, then every year until canceled. No trial.</p>
+            </article>
+          </section>
+          <p class="term-footnote" data-term-note>Savings compare with $32.99/month, excluding introductory offers. All plans include the same member access.</p>
           <p class="offer-terms" data-checkout-message>Choose $10 today for 7 days, or 2 days free. Each automatically renews at $32.99/month when the intro period ends, until canceled. Cancel before the next renewal through Manage membership; access continues through the paid-through date. Charges are non-refundable except where required by law, card-network rules, or a written Hub exception.</p>
           <p class="membership-manage-link"><a class="text-link" href="cancel.html">Already a member? Manage membership →</a></p>
-          <p class="membership-manage-link"><a class="text-link referral-entry" href="refer.html">Member referral program — earn $10 cash →</a></p>
+          <section class="member-referral" aria-label="Member referral program">
+            <h2>Share the Hub. Earn $10.</h2>
+            <p>Active US members can earn $10 cash for each eligible new member’s first $32.99 payment, after verification and a seven-day hold.</p>
+            <a class="text-link referral-entry" href="refer.html">Member referral program →</a>
+          </section>
           <a class="checkout-alt discord-connect" data-discord-connect hidden>Connect Discord <span aria-hidden="true">→</span></a>
         </aside>
       </section>
@@ -78,6 +101,6 @@
     </main>
     <footer><span>© <span id="year"></span> KOBE'S BETTING HUB</span><span class="footer-nav"><a href="index.html">Home</a><a href="cancel.html">Manage membership</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></span><span class="footer-social"><a href="https://www.instagram.com/kobeslocks/" target="_blank" rel="noreferrer" aria-label="Instagram — @kobeslocks"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg></a><a href="https://x.com/kobesbettinghub" target="_blank" rel="noreferrer" aria-label="X — @kobesbettinghub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h4.8l4.3 5.8L18 3h2l-6.1 7.2L20 21h-4.8l-4.7-6.3L5.2 21H3.1l6.3-7.4L4 3Zm3.1 1.8L16.1 19.2h1L8.1 4.8Z"/></svg></a></span><span>21+ • WAGER RESPONSIBLY</span></footer>
     <script>window.__KBH_MEMBERSHIP_CONFIG__ = Object.freeze({"environment":"production","workerOrigin":"https://kobes-betting-hub-checkout.kobedirwin.workers.dev"});</script>
-    <script src="membership.js?v=20260912-referrals"></script>
+    <script src="membership.js?v=20260917-term-plans"></script>
   </body>
 </html>

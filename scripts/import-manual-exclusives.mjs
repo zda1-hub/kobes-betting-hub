@@ -8,7 +8,8 @@ const { pacificOperatingDate } = require('../bot/lib/pick-log');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { assertPublishableExtraction, reviewButtons } = require('../bot/lib/source-review');
 const { initializeAuditStore, recordSourcePost, upsertPickCandidate, recordApprovalCard, recordWorkflowEvent } = require('../pipeline/audit-store');
-const { discordRateLimitedFetch } = require('../pipeline/api-client');
+const { discordRateLimitedFetch } = require('../pipeline/discord-retry');
+if (typeof discordRateLimitedFetch !== 'function') throw new Error('Private import Discord transport is unavailable.');
 
 export function manualExclusiveGroups(text, date, receivedAt = new Date().toISOString()) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Explicit operating date is required.');

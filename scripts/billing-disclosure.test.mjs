@@ -47,8 +47,21 @@ test('join and membership routes use one complete recurring-billing disclosure',
   const checkoutOffers = (html) => [...html.matchAll(/data-checkout=["']([^"']+)["']/gi)]
     .map((match) => match[1])
     .sort();
-  assert.deepEqual(checkoutOffers(join), ['starter', 'trial_2_day']);
+  assert.deepEqual(checkoutOffers(join), ['annual', 'six_month', 'starter', 'trial_2_day']);
   assert.deepEqual(checkoutOffers(membership), checkoutOffers(join));
+  for (const html of [join, membership]) {
+    const text = visibleText(html);
+    assert.match(text, /\$134\.99 today, then every 6 months until canceled\. No trial\./);
+    assert.match(text, /\$194\.99 today, then every year until canceled\. No trial\./);
+    assert.match(text, /Nearly 2 months free/);
+    assert.match(text, /Over 6 months free/);
+    assert.match(text, /excluding introductory offers/);
+    assert.match(html, /class="member-referral"/);
+    assert.match(html, /href="refer\.html">Member referral program/);
+    assert.match(html, /href="cancel\.html">Already a member\? Manage membership/);
+    assert.ok(text.includes(`Save $${(3299 * 6 / 100 - 134.99).toFixed(2)}`));
+    assert.ok(text.includes(`Save $${(3299 * 12 / 100 - 194.99).toFixed(2)}`));
+  }
 });
 
 test('management and help routes preserve cancellation and mandatory refund exceptions', async () => {

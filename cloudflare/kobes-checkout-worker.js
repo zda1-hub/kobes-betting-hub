@@ -729,6 +729,12 @@ function retentionOfferUsed(customer, subscription, legacyCouponId = '') {
     || subscriptionHasCoupon(subscription, legacyCouponId);
 }
 
+function monthlyRetentionEligible(subscription, env) {
+  return Boolean(env.STRIPE_MONTHLY_PRICE_ID)
+    && subscription?.items?.data?.length === 1
+    && stripeId(subscription.items.data[0].price) === env.STRIPE_MONTHLY_PRICE_ID;
+}
+
 function portalSessionValues(membership, customer, subscription, env, memberCouponId = '') {
   const returnUrl = `${siteOrigin(env)}${SITE_PATH}/cancel.html?portal=returned`;
   const values = {
@@ -742,7 +748,7 @@ function portalSessionValues(membership, customer, subscription, env, memberCoup
   values['flow_data[subscription_cancel][subscription]'] = subscription.id;
   values['flow_data[after_completion][type]'] = 'redirect';
   values['flow_data[after_completion][redirect][return_url]'] = returnUrl;
-  if (memberCouponId && !retentionOfferUsed(customer, subscription, env.STRIPE_RETENTION_COUPON_ID)) {
+  if (monthlyRetentionEligible(subscription, env) && memberCouponId && !retentionOfferUsed(customer, subscription, env.STRIPE_RETENTION_COUPON_ID)) {
     values['flow_data[subscription_cancel][retention][type]'] = 'coupon_offer';
     values['flow_data[subscription_cancel][retention][coupon_offer][coupon]'] = memberCouponId;
   }
@@ -1107,7 +1113,7 @@ async function finishDiscordConnection(request, env) {
         ? await stripeGet(env, `/subscriptions/${encodeURIComponent(membership.current_subscription_id)}?expand[]=discounts`)
         : null;
       const redemptionRecorded = subscription ? await recordRetentionRedemption(env, subscription, null, customer) : false;
-      const memberCouponId = redemptionRecorded || retentionOfferUsed(customer, subscription, env.STRIPE_RETENTION_COUPON_ID)
+      const memberCouponId = !monthlyRetentionEligible(subscription, env) || redemptionRecorded || retentionOfferUsed(customer, subscription, env.STRIPE_RETENTION_COUPON_ID)
         ? ''
         : await ensurePerMemberRetentionCoupon(env, customer);
       const portalValues = portalSessionValues(membership, customer, subscription, env, memberCouponId);
@@ -1170,13 +1176,16 @@ async function finishDiscordConnection(request, env) {
 async function createCheckout(request, env, origin) {
   let data;
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
-  if (!['starter', 'trial_2_day', 'referral_trial'].includes(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
+  if (!['starter', 'trial_2_day', 'referral_trial', 'six_month', 'annual'].includes(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
+  const longTerm = ['six_month', 'annual'].includes(data.offer);
+  const priceId = data.offer === 'six_month' ? env.STRIPE_SIX_MONTH_PRICE_ID
+    : data.offer === 'annual' ? env.STRIPE_ANNUAL_PRICE_ID : env.STRIPE_MONTHLY_PRICE_ID;
   const suppliedRequestId = request.headers.get('X-Checkout-Request-Id');
   if (suppliedRequestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(suppliedRequestId)) {
     return json({ error: 'Invalid checkout request ID.' }, 400, origin);
   }
   const requestId = suppliedRequestId?.toLowerCase() || crypto.randomUUID();
-  if (!env.STRIPE_SECRET_KEY || !env.STRIPE_MONTHLY_PRICE_ID || (data.offer === 'starter' && !env.STRIPE_STARTER_PRICE_ID)) {
+  if (!env.STRIPE_SECRET_KEY || !priceId || (data.offer === 'starter' && !env.STRIPE_STARTER_PRICE_ID)) {
     return json({ error: 'Checkout is being finalized. Please try again shortly.' }, 503, origin);
   }
 
@@ -1196,13 +1205,15 @@ async function createCheckout(request, env, origin) {
     payment_method_collection: 'always',
     'payment_method_types[0]': 'card',
     billing_address_collection: 'auto',
-    'line_items[0][price]': env.STRIPE_MONTHLY_PRICE_ID,
+    'line_items[0][price]': priceId,
     'line_items[0][quantity]': 1,
     'metadata[offer]': data.offer,
     'subscription_data[metadata][offer]': data.offer,
-    'subscription_data[trial_period_days]': data.offer === 'starter' ? 7 : 2,
-    'subscription_data[trial_settings][end_behavior][missing_payment_method]': 'cancel',
   };
+  if (!longTerm) {
+    values['subscription_data[trial_period_days]'] = data.offer === 'starter' ? 7 : 2;
+    values['subscription_data[trial_settings][end_behavior][missing_payment_method]'] = 'cancel';
+  }
   if (referrerProfile) {
     values['metadata[referral_code]'] = referrerProfile.referral_code;
     values['metadata[referrer_discord_user_id]'] = referrerProfile.discord_user_id;
@@ -1586,6 +1597,7 @@ export const __test = {
   processReferralInvoicePaid,
   processReferralPayouts,
   portalSessionValues,
+  monthlyRetentionEligible,
   referralPayoutAmount,
   referralRecipientIsReady,
   retentionOfferUsed,

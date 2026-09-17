@@ -2,9 +2,9 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-17 15:14 MST (VIP benefits website panel live; 243 tests and 5/5 public smoke pass; exact production homepage, join page and stylesheet verified)
+**Last verified:** 2026-09-17 16:00 MST (live six-month/annual checkout buttons verified; referral and Manage membership visible; 254 tests and 5/5 smoke checks; 44 private cards / 139 supplied wager lines read back without mismatches)
 
-**Production runtime change set:** Render exclusive source-term intake/retry/quarantine fix `b076acfde65d82cf4af782d6d63f5ff2890ab7a6`, deploy `dep-dam69k4s728c73asmm00`, retains evidence-isolation fix `4d4b106`; Checkout health reports `e0535e7b-901e-45ad-a63c-3ff78863d86b`; Publisher Worker `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `e9e73764-5001-4a1f-88f3-981bc0926c62` (benefits commit `7b71810`). September 17 changes cover Node evidence isolation, exclusive recovery, homepage copy/layout, ticker-aware shared header offsets and consistent VIP benefit panels; Checkout, Publisher bindings, and billing were not changed. Requested $194.99 annual and $134.99 longer-term offers are not yet configured; the latter term requires confirmation.
+**Production runtime change set:** Render Free Pick durable recovery `44afd87404c75505c0d0d02ca02ea640ba2bd425`, live deploy `dep-dam6osrncjis73cb34hg`, retains evidence isolation and exclusive intake fixes; Checkout Worker `76d4ffc3-d7ed-471f-ac94-2412055b8ce5`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `e6c1d259-b1f0-4a0a-ae87-038a41bda41f`. Six-month $134.99 and annual $194.99 recurring Stripe offers are configured and verified through live website buttons. Both monthly intro offers remain. No existing subscription migration or Stripe Tax change was made.
 
 **Control-file owner:** Zakai Martin
 
@@ -21,6 +21,14 @@ This is the authoritative project brain for humans and coding agents. Read this 
 The owners do not need to read every repository document. The operating chat should use this file to answer: what is live, what talks to what, what costs money, what failed, what is next, and which decisions require an owner.
 
 ## Executive state
+
+### September 17 — longer plans, visible member links and private exclusive batch
+
+See `docs/MEMBERSHIP_PLANS_2026-09-17.md`. Live buttons open Stripe at $134.99 every six months and $194.99 every year, without trials or extra starter charges. Accurate savings, renewal terms, responsive cards, orange Manage membership link and a bordered referral panel are deployed. Black-on-black inherited link color is corrected. Monthly retention coupons are not offered to longer plans. No payment was submitted during acceptance checks.
+
+All 44 capper-grouped private cards / 139 exact wager lines were delivered and read back with zero term mismatches. At readback 39 cards showed Kobe's completed approval footer; the import itself made zero member publications. Incomplete market terms remain held rather than guessed.
+
+Free Pick recovery runs in the existing cloud bot with a stable X queue ID per pick and no historical replay. At the read-only check no September 17 Free Pick existed in the configured channel; the site legitimately retained September 15. A genuine current-day approval is still needed to verify live X publication. Instagram has no authorized connection; delivered Story email packages do not prove automatic Instagram posting. A final recap still needs verified grades; unsupported/missing-event markets are not fabricated. Telegram application creation is complete, but independent session authorization and the cloud reader are not complete.
 
 ### September 17 — exclusive recovery and expanded private intake
 

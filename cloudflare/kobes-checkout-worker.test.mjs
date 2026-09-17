@@ -143,9 +143,10 @@ test('portal cancellation flow offers the single-redemption member coupon only t
   const env = {
     STRIPE_RETENTION_COUPON_ID: 'coupon_retention',
     STRIPE_PORTAL_CONFIGURATION_ID: 'bpc_guarded',
+    STRIPE_MONTHLY_PRICE_ID: 'price_monthly',
   };
   const membership = { stripe_customer_id: 'cus_member', current_subscription_id: 'sub_member' };
-  const subscription = { id: 'sub_member', status: 'active', customer: 'cus_member', metadata: {}, discounts: [] };
+  const subscription = { id: 'sub_member', status: 'active', customer: 'cus_member', metadata: {}, discounts: [], items: { data: [{ price: { id: 'price_monthly' } }] } };
   const eligible = workerTest.portalSessionValues(membership, { metadata: {} }, subscription, env, 'coupon_member');
   assert.equal(eligible.configuration, 'bpc_guarded');
   assert.equal(eligible['flow_data[type]'], 'subscription_cancel');
@@ -155,6 +156,12 @@ test('portal cancellation flow offers the single-redemption member coupon only t
   const used = workerTest.portalSessionValues(membership, { metadata: { kbh_retention_offer_used: 'true' } }, subscription, env, 'coupon_member');
   assert.equal(used['flow_data[type]'], 'subscription_cancel');
   assert.equal(used['flow_data[subscription_cancel][retention][coupon_offer][coupon]'], undefined);
+  for (const price of ['price_six_month', 'price_annual']) {
+    const termSubscription = { ...subscription, items: { data: [{ price: { id: price } }] } };
+    const term = workerTest.portalSessionValues(membership, { metadata: {} }, termSubscription, env, 'coupon_member');
+    assert.equal(term['flow_data[type]'], 'subscription_cancel');
+    assert.equal(term['flow_data[subscription_cancel][retention][coupon_offer][coupon]'], undefined);
+  }
   assert.equal(workerTest.retentionOfferUsed(
     { metadata: { kbh_retention_offer_coupon: 'coupon_member' } },
     { ...subscription, discounts: [{ source: { coupon: 'coupon_member' } }] },
@@ -273,6 +280,36 @@ test('checkout offer composition matches the published intro pricing without cha
   assert.equal(trialForm.get('payment_method_collection'), 'always');
   assert.equal(requests[0].headers.get('Idempotency-Key'), 'fa8b14dd-1c67-4cbe-8308-52a750d0e534');
   assert.equal(requests[1].headers.get('Idempotency-Key'), 'f054a06e-a74b-439f-a56d-b0be5f6cc613');
+});
+
+test('longer plans select server-owned recurring prices with no trial or starter charge', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push(new URLSearchParams(options.body));
+    return Response.json({ url: 'https://checkout.stripe.test/session' });
+  };
+  const env = { STRIPE_SECRET_KEY: 'sk_test_local_only', STRIPE_SIX_MONTH_PRICE_ID: 'price_six_month', STRIPE_ANNUAL_PRICE_ID: 'price_annual' };
+  for (const [offer, price] of [['six_month', 'price_six_month'], ['annual', 'price_annual']]) {
+    const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
+      method: 'POST', body: JSON.stringify({ offer, price_id: 'price_attacker', amount: 1 }),
+    }), env);
+    assert.equal(response.status, 200);
+    const form = requests.at(-1);
+    assert.equal(form.get('mode'), 'subscription');
+    assert.equal(form.get('line_items[0][price]'), price);
+    assert.equal(form.get('metadata[offer]'), offer);
+    assert.equal(form.get('subscription_data[metadata][offer]'), offer);
+    assert.equal(form.has('subscription_data[trial_period_days]'), false);
+    assert.equal(form.has('line_items[1][price]'), false);
+    assert.equal(form.has('automatic_tax[enabled]'), false);
+  }
+  const missing = await worker.fetch(new Request('https://worker.test/create-checkout', {
+    method: 'POST', body: JSON.stringify({ offer: 'annual' }),
+  }), { STRIPE_SECRET_KEY: 'sk_test_local_only', STRIPE_MONTHLY_PRICE_ID: 'price_monthly' });
+  assert.equal(missing.status, 503);
+  assert.equal(requests.length, 2);
 });
 
 test('referral checkout is locked to the two-day monthly offer and records the stable Discord referrer ID', async (t) => {

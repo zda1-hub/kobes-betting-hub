@@ -39,6 +39,7 @@ function checkoutPage(fetchImpl, { config = productionConfig, search = '' } = {}
     addEventListener() {},
   };
   const window = {
+    addEventListener() {},
     __KBH_MEMBERSHIP_CONFIG__: config,
     crypto: globalThis.crypto,
     location: { search, assign: (url) => assignedUrls.push(url) },

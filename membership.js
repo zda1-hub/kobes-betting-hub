@@ -1,4 +1,12 @@
 const year = document.getElementById('year');
+// Wait until the shared header, styles and fonts are loaded before aligning
+// a direct pricing link. Browser scroll restoration can otherwise cover it.
+const alignOfferAnchor = () => {
+  if (window.location.hash !== '#offer') return;
+  document.getElementById('offer')?.scrollIntoView({ block: 'start' });
+};
+window.addEventListener('load', alignOfferAnchor);
+window.addEventListener('hashchange', alignOfferAnchor);
 if (year) year.textContent = new Date().getFullYear();
 const menuToggle = document.querySelector('[data-menu-toggle]');
 const menu = document.querySelector('[data-menu]');
@@ -71,6 +79,7 @@ if (referralCode && !checkoutState) {
   const offerBadge = document.querySelector('.offer-badge');
   const priceDescription = document.querySelector('.membership-price span');
   if (starterButton) starterButton.hidden = true;
+  document.querySelectorAll('[data-term-plans], [data-term-note]').forEach(element => { element.hidden = true; });
   if (trialButton) {
     trialButton.dataset.checkout = 'referral_trial';
     trialButton.innerHTML = 'Start with 2 days free <span aria-hidden="true">→</span>';
