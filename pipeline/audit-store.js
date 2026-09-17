@@ -474,7 +474,14 @@ async function closeAuditStore() {
   initializationPromise = undefined;
 }
 
+async function approvalSendWasOnlyRateLimited(pickId) {
+  const result = await query(`SELECT response_status, outcome FROM api_call_events
+    WHERE service='discord' AND method='POST' AND trigger_type='approval_card' AND pick_id=$1`, [pickId]);
+  return require('./discord-retry').onlyRateLimitedApprovalAttempts(result?.rows || []);
+}
+
 module.exports = {
+  approvalSendWasOnlyRateLimited,
   DEFAULT_PROMPT_VERSION,
   auditConfigured,
   auditRequired,

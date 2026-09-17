@@ -4,8 +4,10 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { enrichPacket } = require('./enrich-pick');
 const { exclusiveTextExtraction, exclusiveSourceIsCurrent } = require('./exclusive-text');
+const { discordRateLimitedFetch } = require('./discord-retry');
 const {
   recordApprovalCard,
+  approvalSendWasOnlyRateLimited,
   recordSourcePost,
   recordWorkflowEvent,
   upsertPickCandidate
@@ -571,7 +573,7 @@ async function notifyApprovalChannel(packet) {
     afterState: 'SENDING_APPROVAL_CARD',
     details: { channel_id: channelId }
   });
-  const response = await auditedFetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+  const response = await discordRateLimitedFetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: {
       Authorization: `Bot ${token}`,
@@ -1080,7 +1082,23 @@ async function recoverAuditedExclusive(row) {
   if (!source) throw new Error('Source is not an enabled exclusive feed.');
   const date = pacificDate();
   if (pacificDate(new Date(row.posted_at)) !== date) throw new Error('Recovery is limited to today’s source posts.');
-  if ((await existingSourcePostIds(date)).has(row.external_post_id)) return { status: 'ALREADY_QUEUED', post: row.external_post_id };
+  if ((await existingSourcePostIds(date)).has(row.external_post_id)) {
+    const directory = path.join(QUEUE_ROOT, date);
+    for (const file of (await fs.readdir(directory)).filter(name => name.endsWith('.json'))) {
+      const packetPath = path.join(directory, file);
+      const reserved = await readJson(packetPath, {});
+      if (reserved.source?.post_id !== row.external_post_id) continue;
+      if (reserved.status === 'RECOVERY_RESERVED' && !reserved.discord_review_message_id) {
+        if (!await approvalSendWasOnlyRateLimited(reserved.pick_id)) throw new Error('Reserved send outcome is uncertain; reconcile before retrying.');
+        if (!exclusiveSourceIsCurrent(reserved)) throw new Error('Reserved exclusive source is no longer current.');
+        buildSourcePickApprovalEmbed(reserved, 'APPROVED PICK');
+        reserved.discord_review_message_id = await notifyApprovalChannel(reserved);
+        await fs.writeFile(packetPath, `${JSON.stringify(reserved, null, 2)}\n`);
+        return { status: reserved.status, pick: reserved.pick_id, post: row.external_post_id, message: reserved.discord_review_message_id };
+      }
+    }
+    return { status: 'ALREADY_QUEUED', post: row.external_post_id };
+  }
   const extraction = exclusiveTextExtraction(source, row.raw_text) || row.raw_structured_output?.extraction;
   if (!extraction?.is_pick_candidate) throw new Error('No successful audited pick extraction is available.');
   const packet = createPacket({ date, sequence: 0, source,
