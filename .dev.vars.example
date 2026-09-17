@@ -1,0 +1,5 @@
+# Example keys for the separate Instagram Worker; never commit real values.
+# Use distinct credentials for staging and production.
+INSTAGRAM_APP_SECRET=
+INSTAGRAM_OPERATOR_SECRET=
+INSTAGRAM_TOKEN_ENCRYPTION_KEY=

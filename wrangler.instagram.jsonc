@@ -1,0 +1,44 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bettinghub-instagram",
+  "account_id": "f541faefbba2bcb7a22967292aa7fc85",
+  "main": "cloudflare/bettinghub-instagram.js",
+  "compatibility_date": "2026-09-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "observability": {
+    "enabled": true,
+    "logs": { "head_sampling_rate": 1, "invocation_logs": false },
+    "traces": { "enabled": false }
+  },
+  "triggers": { "crons": [] },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "bettinghub-publisher",
+    "database_id": "e691ccde-f288-4e18-b85b-f93a0aeba9be"
+  }],
+  "vars": {
+    "INSTAGRAM_PUBLIC_ORIGIN": "https://bettinghub-instagram.kobedirwin.workers.dev",
+    "INSTAGRAM_API_VERSION": "v25.0",
+    "INSTAGRAM_APP_ID": ""
+  },
+  "env": {
+    "staging": {
+      "name": "bettinghub-instagram-staging",
+      "triggers": { "crons": [] },
+      "version_metadata": { "binding": "CF_VERSION_METADATA" },
+      "vars": {
+        "INSTAGRAM_PUBLIC_ORIGIN": "https://bettinghub-instagram-staging.kobedirwin.workers.dev",
+        "INSTAGRAM_API_VERSION": "v25.0",
+        "INSTAGRAM_APP_ID": ""
+      },
+      "d1_databases": [{
+        "binding": "DB",
+        "database_name": "bettinghub-publisher-staging",
+        "database_id": "b75fa523-7bd9-4c65-b19d-10ea54a3f5c5"
+      }]
+    }
+  }
+}
