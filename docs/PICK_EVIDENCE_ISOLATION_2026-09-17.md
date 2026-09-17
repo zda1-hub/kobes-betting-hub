@@ -15,7 +15,7 @@ The owner screenshot shows Josh Allen/Bills passing analysis repeated on Jahmyr 
 
 ## Verification and rollout
 
-Local release suite: **222/222 passed**, including five new regression tests reproducing the screenshot and checking isolated ESPN athlete/market requests, source-first behavior, stale-copy refusal, and matching approval/member rendering. No public fixture, payment, membership mutation, or credential change was made.
+Local release suite: **223/223 passed**, including six new regression tests reproducing the screenshot and checking isolated ESPN athlete/market requests, source-first behavior, stale-copy refusal, wager-header/hashtag exclusion, and matching approval/member rendering. No public fixture, payment, membership mutation, or credential change was made.
 
 No database migration or environment change is required. Ship the scoped Node changes through main/Render auto-deploy. Verify the commit is live, the bot logs in, and today's undecided private cards refresh or hold. The next genuine Kobe approval remains the live content acceptance; transport success is not proof of factual correctness.
 

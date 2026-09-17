@@ -84,3 +84,14 @@ test('a complete per-play source writeup makes no research call', async () => {
   assert.equal(result.complete, true);
   assert.equal(result.espnCalls, 0);
 });
+
+test('wager headers and matchup hashtags are not research evidence', () => {
+  const leg = { ...plays[1], source_claims: [
+    'Jahmyr Gibbs Over 19.5 Rush Attempts vs Bills (-115 Bet365)',
+    '#OnePride vs #BillsMafia',
+    'Gibbs averaged over 14 rushing attempts per game last season',
+    'Over in 5 straight games'
+  ] };
+  const packet = isolatePlayPacket(parent([leg]), leg);
+  assert.deepEqual(sourceEvidence(packet), ['Gibbs averaged over 14 rushing attempts per game last season', 'Over in 5 straight games']);
+});

@@ -214,7 +214,7 @@ function looksLikeSelection(note) {
 
   // A copied betting selection is not a breakdown. Preserve factual lines
   // such as "Over in 5 straight" and "Went over 20 points in 6 games".
-  const hasHistoricalContext = /\b(?:in|of|over|last|past|previous|straight|games?|starts?|matchups?|attempts?|season|seasons|rate|average|averaged|allowed|rank(?:ed|s)?|without|since|against)\b/.test(normalized);
+  const hasHistoricalContext = /\b(?:in|of|last|past|previous|straight|games?|starts?|matchups?|season|seasons|rate|average|averaged|allowed|rank(?:ed|s)?|without|since|against)\b/.test(normalized);
   if (/\b(?:to hit|to score|to record|anytime)\b/.test(normalized) && !hasHistoricalContext) return true;
   if (/^(?:[a-z][a-z0-9'’-]*\s+){0,5}(?:over|under)\s+\d/.test(normalized) && !hasHistoricalContext) return true;
   if (/^(?:[a-z][a-z0-9'’-]*\s+){1,5}(?:o|u)\s*\d/.test(normalized) && !hasHistoricalContext) return true;
@@ -237,6 +237,7 @@ function looksLikeEngagementBait(note) {
 function isUsefulSupport(note, pickTerms, packet) {
   const normalized = normalizedText(note);
   if (!normalized) return false;
+  if (/^#[\w]+\s+(?:vs\.?\s+)?#[\w]+$/i.test(String(note || '').trim())) return false;
   if (looksLikeEngagementBait(note)) return false;
   if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|banger|bang bang|two leg|2 leg|parlays?|lets catch|let s catch|lets go|let s go|winner|profit|payout|refund|power play|ladder|make \d+\s*x|\d+\s*\$?\s*to\s+(?:win|one person)|you(?:'|’)ll love|you gonna love|like the demons|link on post|slide for|nfl is back|football is back|baseball is back|nba is back|nhl is back)\b/.test(normalized)) return false;
   if (/^\d{1,2}\s\d{2}\s*(?:am|pm)?\b/.test(normalized)) return false;
