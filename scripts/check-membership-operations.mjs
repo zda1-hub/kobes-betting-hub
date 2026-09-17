@@ -28,6 +28,7 @@ export function evaluateMembershipMetrics(row) {
     activeSubscriptions: Number(row.active_subscriptions || 0),
     lastReconciledAt: row.last_reconciled_at || null,
     reconciliationStale: Boolean(row.reconciliation_stale),
+    referralSafetyHolds: Number(row.referral_safety_holds || 0),
   };
   const alerts = [];
   if (metrics.activeWithoutDiscord) alerts.push(`${metrics.activeWithoutDiscord} active membership(s) remain unlinked after the grace window`);
@@ -35,6 +36,7 @@ export function evaluateMembershipMetrics(row) {
   if (metrics.failedWebhooks) alerts.push(`${metrics.failedWebhooks} Stripe webhook(s) failed processing in the lookback window`);
   if (metrics.stuckWebhooks) alerts.push(`${metrics.stuckWebhooks} Stripe webhook(s) remain RECEIVED beyond 15 minutes`);
   if (metrics.reconciliationStale) alerts.push('membership reconciliation is missing or older than the allowed window');
+  if (metrics.referralSafetyHolds) alerts.push(`${metrics.referralSafetyHolds} referral reward(s) require safety review or payout reconciliation`);
   return { ok: alerts.length === 0, alerts, metrics };
 }
 
@@ -73,6 +75,11 @@ export async function checkMembershipOperations(client, { lookbackHours, linkGra
           (SELECT COUNT(*)::int
              FROM membership_subscriptions
             WHERE status IN ('active', 'trialing')) AS active_subscriptions,
+          (SELECT COUNT(*)::int
+             FROM referral_rewards
+            WHERE status IN ('REVIEW_REQUIRED', 'PAYOUT_UNCERTAIN', 'PAYOUT_FAILED')
+               OR (status = 'READY' AND stripe_outbound_payment_id IS NULL
+                   AND payout_attempt_started_at < NOW() - INTERVAL '15 minutes')) AS referral_safety_holds,
           (SELECT MAX(occurred_at)
              FROM membership_events
             WHERE event_type = 'MEMBERSHIP_RECONCILED') AS last_reconciled_at

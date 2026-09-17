@@ -21,6 +21,8 @@ No program can guarantee prevention of every coordinated fraud attempt.
 - Provider receipts are retained even when a concurrent refund flags review.
 - Requests have 15-second deadlines. Only fingerprint hashes, not card details,
   are stored with referral rewards. Existing server-only RLS/grants remain in force.
+- The existing laptop-independent private operations alarm surfaces review holds,
+  unknown payout results, legacy failures, and stale in-flight attempts.
 
 ## Manual review / reconciliation
 

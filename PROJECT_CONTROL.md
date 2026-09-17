@@ -2,9 +2,9 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-17 15:58 MST (live six-month/annual checkout buttons verified; referral and Manage membership visible at desktop and 320/400px mobile widths; 254 tests and 5/5 smoke checks; 44 private cards / 139 supplied wager lines read back without mismatches; both connected subscribers have Discord VIP)
+**Last verified:** 2026-09-17 16:54 MST (313/313 release tests; 5/5 public smoke; live referral uniqueness/claim columns and server-only RLS/grants verified; Troy West's four original terms read back in private approvals; 3 distinct connected Discord accounts have VIP; 4 active/trialing subscription records remain unlinked after grace)
 
-**Production runtime change set:** Render `e595ecc0fd753f56da820d2ec507bd38bd8c1ccb`, live deploy `dep-dam6v28ae00c73ag35mg`, retains durable Free Pick recovery, evidence isolation and exclusive intake fixes and corrects manual-import transport wiring. Startup registered commands and logged in as Kobe Bot; Checkout Worker `76d4ffc3-d7ed-471f-ac94-2412055b8ce5`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `e6c1d259-b1f0-4a0a-ae87-038a41bda41f`. Six-month $134.99 and annual $194.99 recurring Stripe offers are configured and verified through live website buttons. Both monthly intro offers remain. No existing subscription migration or Stripe Tax change was made.
+**Production runtime change set:** Render `83d063be278bfb2e902b4eabc011f6feb6894a34`, live deploy `dep-dam7pe97lnhs73cd6a1g`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `bc4c6c39-0e01-437c-a1f3-6ad0e45a5c64`. Startup registered commands, logged in as Kobe Bot, resumed persistent injury receipts, and awaits Telegram login. Migration 010 is applied with three referral claim columns and three unique identity/card/charge indexes. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
 
 **Control-file owner:** Zakai Martin
 
@@ -21,6 +21,22 @@ This is the authoritative project brain for humans and coding agents. Read this 
 The owners do not need to read every repository document. The operating chat should use this file to answer: what is live, what talks to what, what costs money, what failed, what is next, and which decisions require an owner.
 
 ## Executive state
+
+### September 17 — laptop-independent operations, curated homepage and referral safety
+
+See `docs/CLOUD_READINESS_2026-09-17.md` and `docs/REFERRAL_SAFETY.md` for current receipts and remaining actions. The newest state here supersedes the earlier September 17 snapshots below.
+
+The homepage follows intro → historical wins → curation explanation/approach → exclusive directory → first reviews → value comparison → community → more wins/reviews. The public directory has 50 capper/rate rows, with AllBets, BL, SetPointBets, Shark and Spartan removed **only from the website**. Private intake is unchanged. The requested $8,000 claim remains unpublished because mixed weekly/monthly/one-time prices do not establish a verified comparison period.
+
+@BettingBuddyy is an enabled source-only exclusive intake feed. Its catch-up produced 22 private cards; channel readback included all 22 without missing receipts. A subsequent source-only teaser correction recovered Troy West's four original wagers into private card `20260917-250-X`, message `1550293158968172607`, and Discord GET returned 200 with the exact terms. No operator approval or member publication occurred. Already queued groups are deduplicated; unclear capper/market groups stay held.
+
+Football/baseball injury updates run in the existing Render worker every 15 minutes with durable disk receipts. Both daily boards are live (15 NFL pages/800 entries, 6 MLB pages/278 entries), and a subsequent cloud restart retained the same receipts. Bot permissions were granted only in the two authorized injury channels. Telegram API configuration and the selected-channel cloud reader are deployed; **the account session still requires the user's one-time hidden phone/code/2FA entry in Render Web Shell**.
+
+The $10 referral is hardened without changing qualification or the seven-day hold. Per-person/card/charge uniqueness, atomic one-winner claims, fresh refund/dispute/risk checks, self/shared-card review and non-retryable unknown payout states are deployed. Migration plan reports nothing pending; the three columns/indexes and protected grants/RLS are verified. No real cash payout was run as a test. The private operations alarm also surfaces referral safety holds. No absolute fraud-prevention guarantee is made; late disputes and coordinated distinct-card fraud remain risks.
+
+Live checks confirm VIP for all 3 distinct connected Discord accounts. The latest read-only membership alarm shows 9 active/trialing subscription records and 4 unlinked after grace, with zero reconciliation failures or failed/stuck webhooks. Subscription count is not a verified paying-person count; unlinked customers must finish the secure Connect Discord flow, and possible duplicate checkouts require owner review.
+
+The verified configured Free Pick channel has no current-day canonical publication. Website current still says September 15; X is connected and its cloud bridge is enabled, but today's public X write/media acceptance remains pending a genuine new Free Pick approval. Old draft wagers were not replayed. Instagram tester/authorization remains pending Kobe. Recap rows show pending-result notice states, not a completed final recap. Telegram authorization, genuine Free Pick acceptance, final verified grades, unlinked customers, Instagram authorization and seller tax applicability are the explicit remaining items.
 
 ### September 17 — longer plans, visible member links and private exclusive batch
 

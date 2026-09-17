@@ -56,3 +56,10 @@ test('membership operations check is one read-only transaction with no identifie
   assert.match(calls[1].sql, /NOT EXISTS/);
   assert.match(calls[1].sql, /recovered\.occurred_at > failed\.occurred_at/);
 });
+
+test('private operations alarm surfaces held or uncertain referral payouts', () => {
+  const report = evaluateMembershipMetrics({ referral_safety_holds: 2 });
+  assert.equal(report.ok, false);
+  assert.equal(report.metrics.referralSafetyHolds, 2);
+  assert.match(report.alerts[0], /safety review or payout reconciliation/);
+});
