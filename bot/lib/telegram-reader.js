@@ -72,7 +72,14 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       }
       if(!complete)throw new Error('Telegram current-day baseline exceeds safety limit; review before proceeding.');
       messages=[...new Map(messages.map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
-    } else messages=await telegram.getMessages(entity,{minId:state.cursor,reverse:true,limit:30});
+    } else {
+      messages=await telegram.getMessages(entity,{minId:state.cursor,reverse:true,limit:30});
+      const recoverIds=Object.entries(state.records).filter(([,record])=>record.status==='HELD_EXTRACTION_FAILED'&&record.media_download_version!==2).map(([id])=>Number(id)).filter(Number.isSafeInteger).slice(0,10);
+      if(recoverIds.length){
+        const held=await telegram.getMessages(entity,{ids:recoverIds});
+        messages=[...new Map([...held,...messages].filter(Boolean).map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
+      }
+    }
     const channel=await channelFor();const results=[];let modelCalls=0;
     for(const message of messages){
       if(stopping)break;
@@ -80,6 +87,13 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       if(!packet){state.cursor=Math.max(state.cursor,message.id);await save(file,state);continue;}
       const date=pacificOperatingDate(now()),packetFile=path.join(queueRoot,date,`${packet.pick_id}.json`);
       let previous=state.records[String(message.id)];
+      if(previous?.status==='HELD_EXTRACTION_FAILED' && previous.media_download_version!==2 && (message.photo||message.media?.photo)){
+        // Recover only never-delivered image extractions affected by the old
+        // negative thumbnail index. Delivered/uncertain cards are untouched.
+        delete state.records[String(message.id)];
+        if(state.extractionRetries)delete state.extractionRetries[String(message.id)];
+        previous=undefined;await save(file,state);
+      }
       if(previous?.status==='RESERVED'){
         const recent=await channel.messages.fetch({limit:100});
         const matches=[...recent.values()].filter(m=>m.author.id===channel.client.user.id
@@ -95,8 +109,10 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       else {
         if(modelCalls>=2){results.push({status:'DEFERRED_MODEL_CAP',messageId:message.id});break;}
         if(message.photo||message.media?.photo){
-          const bytes=await telegram.downloadMedia(message,{thumb:-1});
-          if(!Buffer.isBuffer(bytes)||bytes.length>10000000)throw new Error('Telegram image unavailable or oversized.');
+          // Omission selects the largest real photo; this library does not
+          // support Python-style negative thumbnail indexes.
+          const bytes=await telegram.downloadMedia(message);
+          if(!Buffer.isBuffer(bytes)||!bytes.length||bytes.length>10000000)throw new Error('Telegram image unavailable or oversized.');
           packet.source.media_urls=[`data:image/jpeg;base64,${bytes.toString('base64')}`];
         }
         packet.analysis=await enrich(packet,{beforeOpenAIRequest:()=>{if(modelCalls>=2)return false;modelCalls++;return true;}});
@@ -117,7 +133,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
           // message permanently block every later pick in the channel.
           packet.analysis={status:packet.analysis.status,source_only:true,extraction:null};
           packet.status='HELD_EXTRACTION_FAILED';await save(packetFile,packet);
-          state.records[String(message.id)]={status:'HELD_EXTRACTION_FAILED'};
+          state.records[String(message.id)]={status:'HELD_EXTRACTION_FAILED',media_download_version:2};
           state.cursor=Math.max(state.cursor,message.id);await save(file,state);
           results.push({status:'HELD_EXTRACTION_FAILED',messageId:message.id});continue;
         }

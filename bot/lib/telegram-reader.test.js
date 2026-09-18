@@ -91,6 +91,23 @@ test('configuration and budget deferrals are not mistaken for bad source content
   await createTelegramReader(h.options).run();
   assert.equal(h.sent.length,1);
 });
+test('downloads the default largest photo and never sends empty bytes for extraction',async t=>{
+  const h=await harness(t);h.messages[0]={...message(1,''),photo:{}};let models=0;
+  h.telegram.downloadMedia=async(...args)=>{assert.equal(args.length,1);return Buffer.alloc(0);};
+  h.options.enrich=async()=>{models++;return{status:'EXTRACTION_FAILED'};};
+  assert.equal((await createTelegramReader(h.options).run())[0].status,'NEEDS_ATTENTION');
+  assert.equal(models,0);assert.equal(h.sent.length,0);
+});
+test('recovers a never-delivered legacy photo hold behind the cursor without replaying delivered cards',async t=>{
+  const h=await harness(t);h.messages[0]={...message(1,''),photo:{}};h.messages.push(message(3));
+  h.telegram.getMessages=async(_,params)=>h.messages.filter(m=>params.ids?params.ids.includes(m.id):m.id>(params.minId||0));
+  await fs.writeFile(path.join(h.root,'reader-state.json'),JSON.stringify({channelId,cursor:3,
+    records:{'1':{status:'HELD_EXTRACTION_FAILED'},'3':{status:'DELIVERED',messageId:'already'}},extractionRetries:{'1':3}}));
+  h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:require('../../pipeline/exclusive-text').exclusiveTextExtraction({publish_mode:'terms_only'},'AnalyticsCapper\nAngels ML -110 (10U)')});
+  const result=await createTelegramReader(h.options).run();
+  assert.equal(result[0].status,'PRIVATE_APPROVAL_DELIVERED');assert.equal(h.sent.length,1);
+  await createTelegramReader(h.options).run();assert.equal(h.sent.length,1);
+});
 test('initial catch-up pages past 100 messages without losing older current-day picks',async t=>{
   const h=await harness(t);const offsets=[];
   h.telegram.getMessages=async(_,params)=>{
