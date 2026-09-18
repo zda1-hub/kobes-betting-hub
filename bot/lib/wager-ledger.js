@@ -30,6 +30,7 @@ function expandPublication(row, packet) {
       parent_pick_id: row.pick_id,
       pick_id: `${row.pick_id}-W${String(index + 1).padStart(3, '0')}`,
       wager_scope: 'individual',
+      league_from_group: plays.length > 1 && !play.league && !play.sport,
       selection,
       // Do not copy the first wager's terms or result onto any sibling.
       event: play.event || (plays.length === 1 ? extraction.event || row.event : '') || '',

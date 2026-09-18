@@ -2,7 +2,7 @@ const ESPN_BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports';
 const { auditedFetch } = require('../../pipeline/api-client');
 const { specialMarketGrade, number: verifiedNumber } = require('./espn-special-markets');
 const { matchTennisCompetition, gradeTennisMatch } = require('./espn-tennis-grading');
-const { normalizeSelection, combinationSelections } = require('./wager-terms');
+const { normalizeSelection, combinationSelections, playerNameMatches } = require('./wager-terms');
 
 const LEAGUES = {
   mlb: { path: 'baseball/mlb', url: 'https://www.espn.com/mlb/game/_/gameId/' },
@@ -22,10 +22,11 @@ const LEAGUES = {
 };
 
 function compact(value) {
-  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 function leagueFor(row) {
+  if (row.league_from_group) return null;
   const value = `${row.league || ''} ${row.sport || ''}`.toLowerCase();
   if (/\bmlb\b|baseball/.test(value)) return LEAGUES.mlb;
   if (/\bncaaf\b|\bcfb\b|college football/.test(value)) return LEAGUES.ncaaf;
@@ -81,14 +82,18 @@ function athleteEntries(summary) {
   return (summary.boxscore?.players || []).flatMap((team) => (team.statistics || []).flatMap((group) =>
     (group.athletes || []).map((athlete) => ({
       name: athlete.athlete?.displayName || '',
+      athleteId: athlete.athlete?.id || '',
       category: group.type || group.name || group.displayName || '',
       values: Object.fromEntries((group.keys || []).map((key, index) => [key, athlete.stats?.[index]]))
     }))
   ));
 }
 
+function selectedPlayerPrefix(row) {
+  return String(row.selection || '').split(/\b(?:over|under|longest|anytime|first TD|1st TD|first touchdown|passing|rushing|receiving|pass attempts|pass completions|carries|receptions|targets|field goals)\b|\s\d+(?:\.\d+)?\+/i)[0].trim();
+}
 function selectedPlayerName(row) {
-  return compact(String(row.selection || '').split(/\b(?:over|under|longest|anytime|first TD|1st TD|first touchdown|passing|rushing|receiving|pass attempts|pass completions|carries|receptions|targets|field goals)\b|\s\d+(?:\.\d+)?\+/i)[0]);
+  return compact(selectedPlayerPrefix(row));
 }
 
 function statSpec(row, entries) {
@@ -238,7 +243,7 @@ async function resolveStraightWager(row, fetchImpl) {
     for (const event of scoreboard.events || []) {
       const competitors = event.competitions?.[0]?.competitors || [];
       if (competitors.length !== 2) continue;
-      const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name].map(compact).filter(Boolean));
+      const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, league === LEAGUES.ncaaf ? c.team?.location : ''].map(compact).filter(Boolean));
       const matched = names.map(name => aliases.flatMap((values, index) => values.includes(name) ? [index] : []));
       if (!matched.every(indices => indices.length === 1) || new Set(matched.flat()).size !== names.length) continue;
       candidates.push({ league, event, market: moneyline ? 'Moneyline' : spread ? 'Spread' : firstInning ? 'First inning runs' : btts ? 'BTTS' : teamTotal ? 'Team total' : 'Full game total' });
@@ -253,7 +258,7 @@ async function resolvePlayerWager(row, fetchImpl) {
   const player = selectedPlayerName(row);
   if (player.length < 5) return null;
   const known = leagueFor(row);
-  const football = /passing|rushing|receiving|receptions|carries|touchdown|\bTD\b|field goals/i.test(row.selection);
+  const football = /passing|rushing|receiving|receptions?|carries|touchdown|\bTD\b|field goals|\bpass\b/i.test(row.selection);
   const baseball = /strikeout|\bKs\b|hits|total bases|RBIs|earned runs|outs/i.test(row.selection);
   const basketball = /points|rebounds|assists/i.test(row.selection);
   const leagues = known ? [known] : football ? [LEAGUES.nfl, LEAGUES.ncaaf] : baseball ? [LEAGUES.mlb] : basketball ? [LEAGUES.nba, LEAGUES.wnba, LEAGUES.ncaab] : [];
@@ -266,7 +271,8 @@ async function resolvePlayerWager(row, fetchImpl) {
     for (const event of events) {
       if (!event.id) continue;
       const summary = await getJson(`${ESPN_BASE_URL}/${league.path}/summary?event=${event.id}`, fetchImpl);
-      if (athleteEntries(summary).some(entry => compact(entry.name) === player)) candidates.push({ league, event, summary, market: row.market });
+      const matches = [...new Set(athleteEntries(summary).filter(entry => playerNameMatches(selectedPlayerPrefix(row), entry.name)).map(entry => entry.name))];
+      if (matches.length === 1) candidates.push({ league, event, summary, market: row.market, selection: row.selection.replace(selectedPlayerPrefix(row), matches[0]) });
     }
   }
   return candidates.length === 1 ? candidates[0] : null;
@@ -305,7 +311,7 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
     for (const selection of selections) {
       const totalOnly = /^\s*(?:over|under)\s+\d/i.test(selection);
       const firstLeg = legs.length === 0;
-      const leg = await gradePickFromEspn({ ...row, selection: selection.trim(), published_line: '', market: totalOnly ? 'Full game total' : /(?:^|\s)[+-]\d{1,2}(?:\.\d+)?(?=\s|$)/.test(selection) ? 'Spread' : '', event: totalOnly ? context?.event || row.event : firstLeg ? row.event : '', league: totalOnly ? context?.league || row.league : firstLeg ? row.league : '', sport: totalOnly ? context?.league || row.sport : firstLeg ? row.sport : '' }, { fetchImpl, includeContext: true, parlayLeg: true });
+      const leg = await gradePickFromEspn({ ...row, selection: selection.trim(), published_line: '', market: totalOnly ? 'Full game total' : /(?:^|\s)[+-]\d{1,2}(?:\.\d+)?(?=\s|$)/.test(selection) ? 'Spread' : '', event: totalOnly ? context?.event || row.event : firstLeg ? row.event : '', league: totalOnly ? context?.league || row.league : firstLeg ? row.league : '', sport: totalOnly ? context?.league || row.sport : firstLeg ? row.sport : '', league_from_group: totalOnly && context?.league ? false : row.league_from_group }, { fetchImpl, includeContext: true, parlayLeg: true });
       if (leg.status !== 'GRADED') return { status: 'PENDING', reason: `Parlay leg ${legs.length + 1}: ${leg.reason}` };
       if (['P', 'V'].includes(leg.result)) return { status: 'PENDING', reason: 'A pushed/voided parlay leg changes the payout; original sportsbook settlement is required.' };
       legs.push(leg);
@@ -332,7 +338,7 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
   catch (error) { return { status: 'PENDING', reason: error.message }; }
   if (resolved) {
     league = resolved.league;
-    row = { ...row, market: resolved.market };
+    row = { ...row, market: resolved.market, selection: resolved.selection || row.selection };
   }
   if (!league) {
     // Terms-only exclusive packets can omit a sport. A unique, date-filtered
@@ -362,7 +368,7 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
   if (!completed(summary, event)) return { status: 'PENDING', reason: 'The ESPN event is not final.' };
   const summaryId = summary.header?.competitions?.[0]?.id;
   if (summaryId && String(summaryId) !== String(event.id)) return { status: 'PENDING', reason: 'The summary does not match the exact requested event ID.' };
-  const source = `${league.url}${event.id}`;
+  let source = `${league.url}${event.id}`;
   const finish = grade => ({ status: 'GRADED', ...grade, source, ...(includeContext ? { context: { league: Object.keys(LEAGUES).find(key => LEAGUES[key] === league), event: (event.competitions?.[0]?.competitors || []).map(c => c.team?.displayName).join(' at ') } } : {}) });
   if (league.path.startsWith('soccer/')) {
     const competition = summary.header?.competitions?.[0];
@@ -389,7 +395,33 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
   if (!spec) return { status: 'PENDING', reason: 'No supported, exact player-stat match was found.' };
   const entry = athleteEntries(summary).find((candidate) => compact(candidate.name) === compact(spec.player.name) && (candidate.category === spec.category || spec.category === 'basketball' && league.path.startsWith('basketball/')));
   const components = spec.sum ? spec.key.map(key => statValue(entry, key)) : [];
-  const actual = spec.sum ? components.every(Number.isFinite) ? components.reduce((a,b)=>a+b,0) : NaN : spec.transform(statValue(entry, spec.key));
+  let actual = spec.sum ? components.every(Number.isFinite) ? components.reduce((a,b)=>a+b,0) : NaN : spec.transform(statValue(entry, spec.key));
+  if (!Number.isFinite(actual) && spec.player.athleteId && /^\d+$/.test(spec.player.athleteId)) {
+    // ESPN omits zero-catch receivers from the receiving table. An explicit
+    // zero in the exact athlete/event gamelog is evidence; a missing row is not.
+    const participation = athleteEntries(summary).some(candidate => compact(candidate.name) === compact(spec.player.name)
+      && Object.values(candidate.values).some(value => /^\d+(?:\.\d+)?(?:\/\d+)?$/.test(String(value)) && Number(String(value).split('/')[0]) > 0));
+    if (participation) {
+      const url = `https://site.web.api.espn.com/apis/common/v3/sports/${league.path}/athletes/${spec.player.athleteId}/gamelog?region=us&lang=en&contentorigin=espn&season=${row.operating_date.slice(0, 4)}`;
+      try {
+        const gamelog = await getJson(url, fetchImpl);
+        const metadata = gamelog.events?.[event.id];
+        const gameDate = metadata?.gameDate && new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(metadata.gameDate));
+        const records = (gamelog.seasonTypes || []).flatMap(season => (season.categories || []).flatMap(category => category.events || [])).filter(record => String(record.eventId) === String(event.id));
+        if (gameDate === row.operating_date && records.length === 1) {
+          const values = Object.fromEntries((gamelog.names || []).map((key, index) => [key, records[0].stats?.[index]]));
+          if (spec.key === 'totalBases' && values.totalBases == null) {
+            const counts = ['hits', 'doubles', 'triples', 'homeRuns'].map(key => verifiedNumber(values[key]));
+            if (counts.every(Number.isFinite) && counts[1] + counts[2] + counts[3] <= counts[0]) values.totalBases = String(counts[0] + counts[1] + 2 * counts[2] + 3 * counts[3]);
+          }
+          const fallback = { values };
+          const parts = spec.sum ? spec.key.map(key => statValue(fallback, key)) : [];
+          const value = spec.sum ? parts.every(Number.isFinite) ? parts.reduce((a,b)=>a+b,0) : NaN : spec.transform(statValue(fallback, spec.key));
+          if (Number.isFinite(value)) { actual = value; source += ` | ${url}`; }
+        }
+      } catch { /* Missing secondary evidence must remain pending, not zero. */ }
+    }
+  }
   if (!Number.isFinite(actual)) return { status: 'PENDING', reason: 'The final ESPN box score did not contain the required stat.' };
   return finish({
     result: compare(actual, comparison),

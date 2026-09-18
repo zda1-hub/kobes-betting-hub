@@ -30,6 +30,33 @@ function espnFetch(url) {
   return Promise.resolve(new Response(JSON.stringify(url.includes('/summary?') ? summary : { events: [event] }), { status: 200 }));
 }
 
+test('gamelog fallback requires exact event, date, participation and explicit numeric evidence', async () => {
+  const participated = structuredClone(summary);
+  participated.boxscore.players[0].statistics = [{ type: 'batting', keys: ['atBats'], athletes: [{ athlete: { id: '42', displayName: 'Tommy Pham' }, stats: ['3'] }] }];
+  const log = { names: ['hits', 'doubles', 'triples', 'homeRuns'], events: { '123': { gameDate: '2026-09-07T23:00:00Z' } }, seasonTypes: [{ categories: [{ events: [{ eventId: '123', stats: ['0', '0', '0', '0'] }] }] }] };
+  const row = { operating_date: '2026-09-07', league: 'MLB', event: 'Chicago Cubs at Milwaukee Brewers', selection: 'Tommy Pham Over 1.5 Total Bases', result: 'PENDING' };
+  const grade = async (box, gamelog) => gradePickFromEspn(row, { fetchImpl: async url => new Response(JSON.stringify(url.includes('/gamelog?') ? gamelog : url.includes('/summary?') ? box : { events: [event] })) });
+  const zero = await grade(participated, log);
+  assert.equal(zero.result, 'L');
+  assert.match(zero.outcome, /0 total bases/i);
+  assert.match(zero.source, /athletes\/42\/gamelog/);
+  for (const mutation of [
+    value => { value.events['123'].gameDate = '2026-09-08T23:00:00Z'; },
+    value => { value.seasonTypes[0].categories[0].events[0].eventId = '456'; },
+    value => { value.seasonTypes[0].categories[0].events[0].stats[0] = ''; },
+    value => { value.seasonTypes[0].categories[0].events.push(structuredClone(value.seasonTypes[0].categories[0].events[0])); }
+  ]) {
+    const invalid = structuredClone(log); mutation(invalid);
+    assert.equal((await grade(participated, invalid)).status, 'PENDING');
+  }
+  const absent = structuredClone(participated);
+  absent.boxscore.players[0].statistics[0].athletes[0].stats = ['0'];
+  assert.equal((await grade(absent, log)).status, 'PENDING');
+  const triple = structuredClone(log);
+  triple.seasonTypes[0].categories[0].events[0].stats = ['1', '0', '1', '0'];
+  assert.equal((await grade(participated, triple)).result, 'W');
+});
+
 test('grades a standard final MLB player prop from the ESPN box score', async () => {
   const grade = await gradePickFromEspn({
     operating_date: '2026-09-07', league: 'MLB', event: 'Chicago Cubs at Milwaukee Brewers',
