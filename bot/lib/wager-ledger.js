@@ -108,8 +108,8 @@ async function gradeWagerRows({ rows, date, root, file, grade, onAttempt = async
         await onAttempt(row.pick_id, child.pick_id, attempt);
         if (attempt.status === 'GRADED' && ['W', 'L', 'P', 'V'].includes(attempt.result) && attempt.source) {
           current = { ...child, result: attempt.result, status: 'GRADED', score_or_outcome: attempt.outcome,
-            result_verified_source: `ESPN final box score: ${attempt.source}`,
-            result_verified_at: new Date().toISOString(), graded_by: 'auto:espn' };
+            result_verified_source: `Verified final result: ${attempt.source}`,
+            result_verified_at: new Date().toISOString(), graded_by: attempt.source.includes('wtatennis.com/') ? 'reviewed:primary-source' : 'auto:espn' };
           const net = netUnitsFor(current);
           if (net !== null) current.net_units = net;
           ledger.wagers[child.pick_id] = { fingerprint, result: {

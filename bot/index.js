@@ -351,9 +351,9 @@ async function autoGradePendingOfficialPicks(date, fetchImpl = fetch) {
       result: grade.result,
       status: 'GRADED',
       score_or_outcome: grade.outcome,
-      result_verified_source: `ESPN final box score: ${grade.source}`,
+      result_verified_source: `Verified final result: ${grade.source}`,
       result_verified_at: new Date().toISOString(),
-      graded_by: 'auto:espn'
+      graded_by: grade.source.includes('wtatennis.com/') ? 'reviewed:primary-source' : 'auto:espn'
     });
     const net = netUnitsFor(updated);
     if (net !== null) await updateOfficialPick(row.pick_id, { net_units: net });
