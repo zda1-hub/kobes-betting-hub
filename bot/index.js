@@ -386,28 +386,32 @@ async function queueRecapParts({ id, subject, body }) {
 }
 
 async function queueNightlyRecapReview({ date, rows, attempts, state }) {
-  if (date !== pacificOperatingDate() || arizonaTimeNow() < '21:00') return;
+  const { reviewWindow } = require('./lib/recap-schedule');
+  const window = reviewWindow({ date, today: pacificOperatingDate(), yesterday: previousPacificOperatingDate(), time: arizonaTimeNow(), morningAt: process.env.RECAP_MORNING_REVIEW_AT || '07:00' });
+  if (!window) return;
+  const statusKey = window.key === 'nightly' ? 'review_status' : 'morning_review_status';
+  const snapshotKey = window.key === 'nightly' ? 'review_snapshot' : 'morning_review_snapshot';
   const prior = state.dates?.[date] || {};
-  if (prior.review_status === 'QUEUED') return;
+  if (prior[statusKey] === 'QUEUED') return;
   // Persist a fixed snapshot before delivery so partial-send retries cannot
   // mix different result snapshots under the same idempotency keys.
-  const review = prior.review_snapshot || buildRecapReview({ date, rows, attempts });
+  const review = prior[snapshotKey] || buildRecapReview({ date, rows, attempts });
   if (!review) return;
-  state.dates = { ...(state.dates || {}), [date]: { ...prior, review_snapshot: review, review_status: 'PREPARED' } };
+  state.dates = { ...(state.dates || {}), [date]: { ...prior, [snapshotKey]: review, [statusKey]: 'PREPARED' } };
   await saveFreeRecapState(state);
   for (let index = 0; index < review.parts.length; index += 1) {
     await queueRecapNotification({
-      id: `official-recap-review-${date}-part-${index + 1}`,
-      subject: `Kobe's Betting Hub — Private recap review (${date}) ${index + 1}/${review.parts.length}`,
+      id: `${window.id}-part-${index + 1}`,
+      subject: `Kobe's Betting Hub — Private ${window.label} recap review (${date}) ${index + 1}/${review.parts.length}`,
       body: review.parts[index]
     });
   }
   await recordRecapRun({ operatingDate: date, includedPickIds: review.includedPickIds,
     status: 'REVIEW_QUEUED', recipient: recapNotificationRecipient,
-    content: review.parts.join(''), details: { provisional: true, parts: review.parts.length } });
-  state.dates[date] = { ...state.dates[date], review_status: 'QUEUED', review_queued_at: new Date().toISOString() };
+    content: review.parts.join(''), details: { provisional: true, parts: review.parts.length, window: window.key } });
+  state.dates[date] = { ...state.dates[date], [statusKey]: 'QUEUED', [`${window.key}_review_queued_at`]: new Date().toISOString() };
   await saveFreeRecapState(state);
-  console.log(`Private nightly recap review for ${date} queued in ${review.parts.length} part(s); unresolved results remain explicitly pending.`);
+  console.log(`Private ${window.label} recap review for ${date} queued in ${review.parts.length} part(s); unresolved results remain explicitly pending.`);
 }
 
 async function publishDueFreeRecap(date) {
@@ -511,6 +515,7 @@ async function publishDueFreeRecap(date) {
       console.log(`Official recap for ${date} is waiting for ${pending.length} verified result(s).`);
       return;
     }
+    if (date === pacificOperatingDate() && arizonaTimeNow() < freeRecapCloseAt()) return;
     const embeds = buildLogRecapEmbeds({ date, rows });
     const content = recapEmailBody(embeds).replaceAll('**', '');
     const includedPickIds = picks.map((row) => row.pick_id);
@@ -560,6 +565,7 @@ function startFreeRecapSchedule() {
   run();
     console.log(`Automatic official-pick recap emails check every ${Math.round(interval / 60000)} minute(s), after the ${freeRecapCloseAt()} Arizona pick window closes, and email once every result is graded.`);
     console.log('Private unresolved recap review package becomes eligible at 21:00 Arizona; no invented results or automatic public recap posts.');
+    console.log(`Previous-day unresolved recap review becomes eligible at ${process.env.RECAP_MORNING_REVIEW_AT || '07:00'} Arizona; complete final recaps queue as soon as all published wagers are verified.`);
 }
 
 function trendsDailyTime() {

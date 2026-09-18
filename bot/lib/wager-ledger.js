@@ -31,7 +31,9 @@ function expandPublication(row, packet) {
       wager_scope: 'individual',
       selection,
       // Do not copy the first wager's terms or result onto any sibling.
-      event: play.event || extraction.event || '',
+      event: play.event || (plays.length === 1 ? extraction.event || row.event : '') || '',
+      league: play.league || extraction.league || (plays.length === 1 ? row.league : '') || '',
+      sport: play.sport || extraction.sport || (plays.length === 1 ? row.sport : '') || '',
       market: play.market || '',
       published_line: play.line || '',
       published_odds_american: play.odds_american || (odds.length === 1 ? odds[0].match(/[+-]\d+/)[0] : ''),

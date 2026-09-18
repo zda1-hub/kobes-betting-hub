@@ -8,6 +8,33 @@
 
 **Control-file owner:** Zakai Martin
 
+### September 17 — expanded grading and morning review prepared
+
+Added dedicated F5, football/basketball first-half, MLB NRFI/YRFI, football
+anytime/first-touchdown, explicit parlay, team-total and milestone graders.
+Additional ESPN routing covers NBA, WNBA, men's college basketball, eight soccer
+leagues, and date-filtered ATP/WTA singles moneylines/game/set handicaps. Exact
+player box-score resolution supports source terms without an opponent; multi-wager
+siblings no longer inherit the first wager's sport/event. Profit still uses only
+the original published combined/straight odds and risk, never provider prices.
+Missing odds/risk leave profit unknown, not invented. The previous-day unresolved
+private review becomes eligible at 07:00 Arizona using separate restart-safe IDs;
+complete final recaps remain result-driven. No public recap posting was enabled.
+
+Live read-only ESPN canaries passed for Yankees F5, Yankees/Marlins NRFI,
+Bills first-half spread, Chase Brown first touchdown, Bills ML/total parlay,
+and NYCFC 90-minute moneyline. No test wagers, customer changes or public posts.
+Release verification/deploy receipt must be recorded before calling this live.
+
+Explicit remaining grading exceptions: unavailable challenger/ITF results,
+nonstandard/retired tennis matches, teasers, second-half overtime rules not stated,
+parlay push/void payout adjustments, DNP without participation evidence, missing
+or ambiguous event/player identity, incomplete period/stat/scorer data, and
+markets outside these implementations. These remain PENDING and appear in the
+private review; they are not forced into a fabricated final recap. Automated
+social recap graphic rendering and welcome-queue credential/trigger activation
+remain separate unfinished work.
+
 ### September 17 — future-only customer onboarding prepared, activation pending
 
 Owner requested that new customers connect their own Discord accounts, confirmed
@@ -34,6 +61,35 @@ owner's action-time approval for the existing Google sender to receive verified
 customer email addresses and private connection links, a dedicated queue secret,
 installation of the new sender code and five-minute trigger, and live connection
 verification. Existing Stripe receipts/cancellation automation remain unchanged.
+
+September 17 approximately 20:00 Arizona follow-up: owner requested welcome-email
+activation. The tested sender is now saved as a separate MemberWelcome.gs file
+in the existing Google project 1qqkTvrCH1TF66urlVjeoqsxTxrcOG1gso3FHniCZiWCSCxR9U-hMHKgp;
+existing Code.gs and recap/Trends schedules were not overwritten. Google exposes
+testMemberWelcomeConnection, installMemberWelcomeEmails and
+deliverMemberWelcomeEmails. No welcome trigger installed, credential entered,
+customer email sent, checkout Worker deployed or migration 011 applied by this
+follow-up. Action-time Google customer-data access confirmation and user entry
+of the dedicated authentication key remain required before activation.
+Owner subsequently approved new-customer welcome email data access in chat.
+Arc is now open to this project's /settings page, with existing script properties
+untouched and credential values withheld from tool output. User entry of a new
+dedicated queue credential and matching Cloudflare configuration, migration 011,
+Worker deployment, connection test and trigger installation still remain.
+Generated one preview-only sample recap design using the built-in image generator;
+it is visibly labeled SAMPLE / NOT REAL RESULTS, contains no claimed numeric
+performance, and is not integrated with a live automated graphic renderer.
+Owner accepted 07:00 Arizona as a potential morning recap target; no new 07:00
+production schedule was installed by this follow-up. All-market automated grading
+remains unfinished and must not be represented as complete from waiting overnight.
+The 19:51 Arizona Render recap check still awaited the last ESPN final. Full
+recap delivery is result-driven (five-minute grading/queue checks and five-minute
+email checks), not a promised fixed evening finish time. The 21:00 review is
+not an all-results-final recap. Unsupported wagers remain pending.
+Instagram content publishing authorization does not authorize ad-account access;
+Instagram and paid advertising remain disabled. Unlinked members must use their
+private checkout confirmation to connect Discord; a public management link alone
+does not establish identity or access.
 
 ### September 17 — wager-ledger and Telegram follow-up
 

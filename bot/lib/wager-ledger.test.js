@@ -22,6 +22,8 @@ test('expands every exact source wager without copying first-wager results or un
   assert.equal(children[1].published_odds_american, '-110');
   assert.equal(children[2].published_odds_american, '');
   assert.equal(children[2].pick_id, `${row.pick_id}-W003`);
+  assert.equal(children[1].league, '', 'mixed-source siblings must not inherit first-wager MLB');
+  assert.equal(children[1].event, '');
 });
 
 test('does not reconstruct rewritten publications or identity/first-selection mismatches', () => {

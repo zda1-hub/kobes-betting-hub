@@ -66,10 +66,11 @@ test('resolves an exact straight-team wager from a unique same-day schedule with
 });
 
 test('missing opponent never converts a team or player total into a full-game total', async () => {
-  for (const selection of ['Brewers Over 3.5', 'Jacob Misiorowski Over 5.5 Strikeouts']) {
-    const grade = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB', selection, result: 'PENDING' }, { fetchImpl: espnFetch });
-    assert.equal(grade.status, 'PENDING');
-  }
+  const team = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB', selection: 'Brewers Over 3.5', result: 'PENDING' }, { fetchImpl: espnFetch });
+  assert.equal(team.status, 'PENDING');
+  const player = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB', selection: 'Jacob Misiorowski Over 5.5 Strikeouts', result: 'PENDING' }, { fetchImpl: espnFetch });
+  assert.equal(player.status, 'GRADED');
+  assert.equal(player.outcome, 'Jacob Misiorowski: 8 strikeouts');
 });
 
 test('per-run cache reuses ESPN payloads but returns independent readable responses', async () => {
@@ -94,7 +95,7 @@ test('converts baseball innings notation to outs', () => {
 });
 
 test('does not settle periods, parlays, or composite stats against full-game results', async () => {
-  for (const selection of ['Brewers F5 ML', 'Brewers 1H ML', 'Brewers ML / Cubs ML', 'Jacob Misiorowski Over 1.5 Hits+Runs+RBIs', 'Brewers ML Parlay']) {
+  for (const selection of ['Brewers F5 ML', 'Brewers 1H ML', 'Jacob Misiorowski Over 1.5 Hits+Runs+RBIs', 'Brewers ML Parlay']) {
     const grade = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB',
       event: 'Chicago Cubs at Milwaukee Brewers', selection, result: 'PENDING' }, { fetchImpl: espnFetch });
     assert.equal(grade.status, 'PENDING', selection);
@@ -152,7 +153,7 @@ test('recognizes additional common football prop keys without fuzzy arithmetic',
     { name: 'Josh Allen', category: 'rushing', values: {} },
     { name: 'Stefon Diggs', category: 'receiving', values: {} }
   ];
-  assert.deepEqual(statSpec({ selection: 'Josh Allen over 34.5 pass attempts' }, entries).key, ['passingAttempts', 'attempts']);
+  assert.deepEqual(statSpec({ selection: 'Josh Allen over 34.5 pass attempts' }, entries).key, ['passingAttempts', 'attempts', 'completions/passingAttempts']);
   assert.deepEqual(statSpec({ selection: 'Josh Allen over 7.5 carries' }, entries).key, ['rushingAttempts', 'attempts', 'carries']);
   assert.deepEqual(statSpec({ selection: 'Stefon Diggs over 7.5 targets' }, entries).key, ['receivingTargets', 'targets']);
 });
