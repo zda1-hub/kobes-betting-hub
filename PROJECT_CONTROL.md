@@ -10,6 +10,20 @@
 
 ### September 17, 20:35 Arizona — Stripe billing notices saved; welcome sender hand-off
 
+20:41 Arizona activation receipt: owner entered and saved the dedicated Google
+connection credential. testMemberWelcomeConnection completed successfully at
+20:39:24; installMemberWelcomeEmails completed at 20:39:59. The trigger table
+shows exactly one deliverMemberWelcomeEmails trigger. Its saved editor visually
+confirms Time-driven, Minutes timer, Every 5 minutes. A live manual sender check
+completed at 20:41:24 without errors. Authenticated production queue GET remains
+200 with zero queued messages. Existing recap/Trends triggers remain present and
+were not modified. Welcome confirmation is now activated for new eligible
+checkouts after the cutoff below, runs in Google/Cloudflare with the laptop off,
+and includes plan, total, next billing date, private Connect Discord and management
+links. No historical customer backfill or actual customer welcome delivery has
+been verified; next eligible real checkout supplies the end-to-end mail receipt.
+This activation receipt supersedes the pending hand-off notes immediately below.
+
 Saved and visually verified Stripe production customer emails for upcoming renewals
 (existing seven-day timing), expiring cards, failed card payments and failed bank
 debit payments. Enabled the subscription-management link to Stripe Customer Portal.
