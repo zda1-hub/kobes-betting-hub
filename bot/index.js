@@ -7,6 +7,8 @@ const commands = require('./commands');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { buildCapperRecap } = require('./lib/capper-recap');
+const { createRecapApprovals, recapApprovalGroups } = require('./lib/recap-approvals');
+const recapWorkflow = require('../data/recap-workflow.json');
 const { freePickRecapRows } = require('./lib/free-recap');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
@@ -60,6 +62,11 @@ for (const name of required) {
 
 const publisherRoleIds = listFromEnv(process.env.PUBLISHER_ROLE_IDS);
 const allowedChannelIds = listFromEnv(process.env.ALLOWED_CHANNEL_IDS);
+// Explicit repository-controlled recap route, not an arbitrary slash-command destination.
+if (recapWorkflow.enabled) {
+  allowedChannelIds.add(recapWorkflow.review_channel_id);
+  allowedChannelIds.add(recapWorkflow.destination_channel_id);
+}
 const defaultChannelId = process.env.PUBLISH_CHANNEL_ID;
 const recapChannelId = process.env.RECAP_CHANNEL_ID || defaultChannelId;
 const welcomeChannelId = process.env.WELCOME_CHANNEL_ID;
@@ -114,6 +121,57 @@ let injuryTimer = null;
 let injuryDelivery = null;
 let telegramTimer = null;
 let telegramReader = null;
+
+async function cachedRecapGroups(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Invalid recap date.');
+  const result = await gradeWagerRows({ rows: await readPickLog(), date, root: reviewQueueRoot,
+    file: path.join(path.dirname(pickLogPath()), `wager-results-${date}.json`),
+    grade: async () => ({ status: 'PENDING', reason: 'Verified result not yet available.' }) });
+  return recapApprovalGroups({ date, rows: result.rows, sourceChannelIds: recapWorkflow.source_channel_ids });
+}
+
+const recapApprovals = createRecapApprovals({
+  root: path.join(path.dirname(pickLogPath()), 'recap-approvals'), config: recapWorkflow,
+  loadGroups: cachedRecapGroups, paused: pickWorkflowPaused,
+  channelFor: async (id, purpose) => {
+    if (!allowedChannelIds.has(id)) throw new Error('Recap destination is not allowlisted.');
+    const channel = await client.channels.fetch(id, { force: true });
+    if (!channel?.isTextBased()) throw new Error('Recap destination is not a text channel.');
+    if (channel.guildId !== recapWorkflow.guild_id || channel.guildId !== process.env.DISCORD_GUILD_ID) throw new Error('Unexpected recap server.');
+    if (purpose === 'review') {
+      const everyone = channel.permissionOverwrites.cache.get(channel.guildId);
+      const vip = channel.permissionOverwrites.cache.get(recapWorkflow.website_vip_role_id);
+      if (!everyone?.deny.has(PermissionFlagsBits.ViewChannel) || vip?.allow.has(PermissionFlagsBits.ViewChannel)) {
+        throw new Error('Recap review channel must be private before any draft is delivered.');
+      }
+    }
+    const permissions = channel.permissionsFor(client.user);
+    if (![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory].every(flag => permissions?.has(flag))) {
+      throw new Error('Kobe Bot needs View Channel, Send Messages, Embed Links and Read Message History in the configured recap channel.');
+    }
+    return channel;
+  },
+  audit: (state, status) => recordRecapRun({ operatingDate: state.date, recapType: 'exclusive_discord_approval',
+    includedPickIds: state.includedPickIds, status, content: state.body,
+    providerMessageId: (status === 'PUBLISHED' ? state.publicReceipts : state.reviewReceipts).map(receipt => receipt?.id).filter(Boolean).join(','),
+    details: { capper: state.name, snapshot: state.digest, actor_id: state.actorId || null,
+      review_channel_id: recapWorkflow.review_channel_id, destination_channel_id: recapWorkflow.destination_channel_id } })
+});
+
+async function queueDiscordRecapApprovals(date, rows) {
+  if (!recapWorkflow.enabled) return;
+  const today = pacificOperatingDate(), time = arizonaTimeNow();
+  const groups = rows ? recapApprovalGroups({ date, rows, sourceChannelIds: recapWorkflow.source_channel_ids }) : await cachedRecapGroups(date);
+  const due = date === previousPacificOperatingDate() ? time >= (process.env.RECAP_MORNING_REVIEW_AT || '07:00')
+    : date === today && (time >= '21:00' || (time >= freeRecapCloseAt() && groups.length && groups.every(group => !group.pending)));
+  if (!due || !groups.length) return;
+  try {
+    const receipts = await recapApprovals.prepare(groups);
+    if (receipts.length) console.log('Private exclusive recap approval receipts:', JSON.stringify(receipts));
+  } catch (error) {
+    console.error('Private recap approval delivery needs attention:', error.message);
+  }
+}
 
 function startTelegramReader() {
   if (process.env.TELEGRAM_READER_ENABLED !== 'true' || telegramTimer) return;
@@ -416,12 +474,15 @@ async function queueNightlyRecapReview({ date, rows, attempts, state }) {
 }
 
 async function publishDueFreeRecap(date) {
-  if (freeRecapInProgress || !recapEmailConfigured()) return;
+  if (freeRecapInProgress || (!recapEmailConfigured() && !recapWorkflow.enabled)) return;
   freeRecapInProgress = true;
   try {
     const state = await readFreeRecapState();
     const prior = state.dates?.[date];
-    if (prior?.status === 'EMAIL_SENT') return;
+    if (prior?.status === 'EMAIL_SENT') {
+      await queueDiscordRecapApprovals(date);
+      return;
+    }
     if (prior?.status === 'PUBLISHED') {
       // A recap can be posted before the optional email queue is configured. Once
       // configured, catch that one up without reposting the Discord recap.
@@ -443,6 +504,7 @@ async function publishDueFreeRecap(date) {
         state.dates[date] = { ...prior, email_status: emailStatus, email_queued_at: new Date().toISOString() };
         await saveFreeRecapState(state);
       }
+      await queueDiscordRecapApprovals(date);
       return;
     }
     let rows = await readPickLog();
@@ -470,6 +532,9 @@ async function publishDueFreeRecap(date) {
     rows = wagers.rows;
     for (const [id, attempt] of wagers.attempts) gradingAttempts.set(id, attempt);
     picks = recapRows(rows, date);
+    await queueDiscordRecapApprovals(date, rows);
+    // Discord review remains operational if the optional email sender is absent.
+    if (!recapEmailConfigured()) return;
     await queueNightlyRecapReview({ date, rows, attempts: gradingAttempts, state });
     if (picks.some((row) => resultFor(row) === 'PENDING')) {
       const pending = picks.filter((row) => resultFor(row) === 'PENDING');
@@ -554,7 +619,7 @@ function startFreeRecapSchedule() {
     console.log('Automatic daily recaps are disabled. Set FREE_RECAP_ENABLED=true to resume them.');
     return;
   }
-  if (!recapEmailConfigured()) {
+  if (!recapEmailConfigured() && !recapWorkflow.enabled) {
     console.warn('Automatic daily recap emails are unavailable: configure the recap notification queue and Kobe recipient.');
     return;
   }
@@ -571,6 +636,7 @@ function startFreeRecapSchedule() {
     console.log(`Automatic official-pick recap emails check every ${Math.round(interval / 60000)} minute(s), after the ${freeRecapCloseAt()} Arizona pick window closes, and email once every result is graded.`);
     console.log('Private unresolved recap review package becomes eligible at 21:00 Arizona; no invented results or automatic public recap posts.');
     console.log(`Previous-day unresolved recap review becomes eligible at ${process.env.RECAP_MORNING_REVIEW_AT || '07:00'} Arizona; complete final recaps queue as soon as all published wagers are verified.`);
+    if (recapWorkflow.enabled) console.log('Exclusive recaps queue to private daily-recap as capper approval cards. Only Kobe’s exact-card approval can send to exclusive-wins; pending results stay blocked.');
 }
 
 function trendsDailyTime() {
@@ -1763,6 +1829,20 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isButton() && interaction.customId.startsWith('recap-review:')) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      const result = await recapApprovals.decide({ customId: interaction.customId, userId: interaction.user.id,
+        guildId: interaction.guildId, channelId: interaction.channelId, messageId: interaction.message.id });
+      await interaction.editReply(result.status === 'REJECTED' ? 'Recap rejected. Nothing was sent to exclusive wins.'
+        : result.status === 'ALREADY_PUBLISHED' ? 'This recap was already posted. No duplicate was sent.'
+        : `Approved recap sent to <#${recapWorkflow.destination_channel_id}>.`);
+    } catch (error) {
+      console.error('Recap approval action needs attention:', error.message);
+      await respondToInteractionFailure(interaction, error.message || 'Recap action needs attention. Check the card receipts before retrying.', 'Recap review interaction');
+    }
+    return;
+  }
   if (interaction.isButton() && interaction.customId.startsWith('trend-review:')) {
     try {
       await handleTrendReviewButton(interaction);
@@ -1982,20 +2062,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const isRecap = interaction.commandName === 'preview-recap' || interaction.commandName === 'publish-recap';
     const attachment = interaction.options.getAttachment('image');
     if (isRecap) {
-      const embeds = buildLogRecapEmbeds({
-        date: interaction.options.getString('date', true),
-        rows: await readPickLog(),
-        summary: interaction.options.getString('summary') || '',
-        imageUrl: interaction.options.getString('image_url') || undefined,
-        imageAttachmentUrl: attachment?.url
-      });
+      await interaction.deferReply({ ephemeral: true });
+      const groups = await cachedRecapGroups(interaction.options.getString('date', true));
+      if (!groups.length) throw new Error('No published exclusive wagers were found for that date.');
       if (interaction.commandName === 'preview-recap') {
-        await interaction.reply({ ephemeral: true, embeds });
+        await interaction.editReply({ content: 'Private capper-format preview; unresolved results are not eligible for posting.',
+          files: [{ attachment: Buffer.from(groups.map(group => group.body).join('\n\n')), name: 'recap-preview.txt' }] });
         return;
       }
-      const channel = await destinationFor(interaction, recapChannelId);
-      for (const embed of embeds) await channel.send({ embeds: [embed] });
-      await interaction.reply({ ephemeral: true, content: `Published the full ${interaction.options.getString('date', true)} recap to ${channel}.` });
+      // This command queues review only. No path bypasses the exact-card button approval.
+      await recapApprovals.prepare(groups);
+      await interaction.editReply(`Recap approval cards are ready in <#${recapWorkflow.review_channel_id}>. Kobe must approve each card before it can reach exclusive wins. Optional images/custom channels are not used by this verified recap flow.`);
       return;
     }
 
@@ -2090,7 +2167,7 @@ async function shutdown() {
   }
   // Leave enough time for Discord receipt writes before Render's forced stop.
   const deadline = setTimeout(() => process.exit(0), 25000);
-  try { await Promise.all([injuryDelivery?.stop(), telegramReader?.stop()]); }
+  try { await Promise.all([injuryDelivery?.stop(), telegramReader?.stop(), recapApprovals.stop()]); }
   catch { console.error('Cloud drain interrupted; uncertain sends will be reconciled on restart.'); }
   while (xCollectionInProgress || trendsPublicationInProgress || trendsInboxInProgress || freeRecapInProgress) {
     await new Promise(resolve => setTimeout(resolve, 250));

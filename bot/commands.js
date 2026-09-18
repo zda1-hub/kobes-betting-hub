@@ -171,7 +171,7 @@ module.exports = [
   recapOptions(
     new SlashCommandBuilder()
       .setName('publish-recap')
-      .setDescription('Publish the full daily recap built from pick-log.csv')
+      .setDescription('Queue verified exclusive recap cards for Kobe’s button approval')
   ),
   gradePickOptions,
   trendOptions(

@@ -8,6 +8,31 @@
 
 **Control-file owner:** Zakai Martin
 
+### September 18 — exclusive recap button-approval flow
+
+Owner requested the recap channel operate like private pick approvals, with Kobe
+making the final decision to send to exclusive wins. Prepared a persistent,
+per-capper recap review queue in the existing Render worker. Trusted routing is
+versioned in `data/recap-workflow.json`: private daily-recap
+`1539062059306848368`, exclusive-wins `1550535535041187920`, source publications
+from exclusives `1539055850075852911`, and reviewer Kobe `1209660006383755265`.
+Cards retain the requested capper record and original wager lines with ☘️/💥/
+↔️/🚫/⏳ results. Any unverified wager blocks that capper card's approval; it
+does not block another fully verified capper. Draft revisions edit the existing
+cards; stale buttons are rejected. Both private and public sends have durable
+per-part reservations and real Discord receipts. An uncertain send is reconciled,
+never blindly replayed. Public send recovery still requires Kobe's explicit click.
+Reject and repeat clicks do not publish; the legacy `/publish-recap` command now
+queues review only and cannot bypass the button gate. Existing recap emails remain
+unchanged and Instagram stays disabled.
+
+Read-only channel inspection found daily-recap still visible to Website VIP and
+the bot blocked from exclusive-wins (403). Asked the owner for action-time
+confirmation to make recap private and give only the existing bot the four needed
+channel permissions. Until those permissions are repaired, the private-channel
+preflight fails closed and no draft/member publication should be claimed.
+Deployment and real private-card acceptance are recorded below when verified.
+
 ### September 17, 20:35 Arizona — Stripe billing notices saved; welcome sender hand-off
 
 20:41 Arizona activation receipt: owner entered and saved the dedicated Google

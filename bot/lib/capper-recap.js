@@ -23,15 +23,20 @@ function buildCapperRecap({ date, rows, attempts = new Map() }) {
     if (verifiedResult(row) === 'PENDING') pending++;
   }
   const sections = [];
+  const reviews = [];
   for (const { name, wagers } of groups.values()) {
     const counts = { W: 0, L: 0, P: 0, V: 0, PENDING: 0 };
     for (const row of wagers) counts[verifiedResult(row)]++;
     const notes = [counts.P && `${counts.P} push`, counts.V && `${counts.V} void`, counts.PENDING && `${counts.PENDING} pending`].filter(Boolean);
-    sections.push(`${name} ${counts.W}-${counts.L}💸${notes.length ? ` (${notes.join(', ')})` : ''}\n\n` + wagers.map(row => {
+    const body = `${name} ${counts.W}-${counts.L}💸${notes.length ? ` (${notes.join(', ')})` : ''}\n\n` + wagers.map(row => {
       const result = verifiedResult(row);
       const selection = String(row.selection || 'Published terms missing').replace(/[\r\n]+/g, ' ');
       return `${selection} ${SYMBOLS[result]}`;
-    }).join('\n'));
+    }).join('\n');
+    sections.push(body);
+    reviews.push({ name, body, pending: counts.PENDING, total: wagers.length,
+      includedPickIds: wagers.map(row => row.pick_id),
+      evidence: wagers.map(row => [row.pick_id, verifiedResult(row), row.result_verified_source, row.post_reference]) });
   }
   const body = [
     `Kobe's Betting Hub — ${date}${pending ? ' — PRIVATE PARTIAL RECAP; NOT FINAL' : ''}`,
@@ -40,7 +45,7 @@ function buildCapperRecap({ date, rows, attempts = new Map() }) {
     ...(pending ? ['Unresolved picks — do not count or post these as settled:\n' + picks.filter(row => verifiedResult(row) === 'PENDING').map(row => `${row.source_name || 'Source not stated'} | ${row.selection}\n${attempts.get(row.pick_id)?.reason || 'Verified individual-wager result unavailable.'}\n${row.post_reference}`).join('\n\n')] : []),
     'Results use the original published wagers and verified final results. Parlays count as one wager. 21+; gambling involves risk.'
   ].join('\n\n');
-  return { body, pending, total: picks.length, includedPickIds: picks.map(row => row.pick_id) };
+  return { body, pending, total: picks.length, includedPickIds: picks.map(row => row.pick_id), reviews };
 }
 
 module.exports = { buildCapperRecap, verifiedResult };
