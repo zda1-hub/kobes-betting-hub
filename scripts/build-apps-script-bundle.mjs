@@ -6,13 +6,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sources = [
   path.join(root, 'cloudflare', 'kobe-daily-picks-email.gs'),
   path.join(root, 'cloudflare', 'kobe-trends-inbox.gs'),
+  path.join(root, 'cloudflare', 'member-welcome-email.gs'),
 ];
 const output = path.join(root, 'cloudflare', 'kobe-operations-bundle.gs');
 
 export async function buildAppsScriptBundle() {
   const content = await Promise.all(sources.map((source) => readFile(source, 'utf8')));
   const bundle = [
-    '// GENERATED FILE — edit the two version-controlled source files, then rebuild.',
+    '// GENERATED FILE — edit the version-controlled source files, then rebuild.',
     '// Paste this complete bundle into the installed Apps Script Code.gs file.',
     ...content,
   ].join('\n\n');

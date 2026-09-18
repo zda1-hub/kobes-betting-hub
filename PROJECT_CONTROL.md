@@ -8,6 +8,33 @@
 
 **Control-file owner:** Zakai Martin
 
+### September 17 — future-only customer onboarding prepared, activation pending
+
+Owner requested that new customers connect their own Discord accounts, confirmed
+Instagram should remain off, and accepted tomorrow's regularly scheduled Telegram
+card and X verification. The existing daily 10:30 Arizona desktop follow-up now
+includes September 18 Telegram-card and genuine current-day website/X receipts.
+It is an audit, not the production scheduler, and requires the app to be available;
+the existing Render/Cloudflare production services run with the laptop off.
+
+Prepared a separate Supabase member-welcome outbox (migration 011), verified fresh
+Stripe checkout/subscription terms, future-only activation cutoff, exact standard
+plan renewal price and billing date, private checkout-specific Connect Discord
+link, /managemembership and support/reply-to zakai@kaimaz.com. Zero-dollar trials
+are included. No old customers are backfilled and identities are never guessed.
+The new restricted queue cannot accept arbitrary recipients or message creation.
+Atomic claims, subscription-level deduplication, sender locks and quota checks
+protect against repeated sends. Unknown send/receipt outcomes are held for human
+review rather than automatically replayed; this favors duplicate safety over
+guaranteed delivery. The Kobe-only recap queue is unchanged.
+
+These welcome changes are prepared locally, NOT deployed or activated. Migration
+011 is NOT applied. No customer welcome has been sent. Activation requires the
+owner's action-time approval for the existing Google sender to receive verified
+customer email addresses and private connection links, a dedicated queue secret,
+installation of the new sender code and five-minute trigger, and live connection
+verification. Existing Stripe receipts/cancellation automation remain unchanged.
+
 ### September 17 — wager-ledger and Telegram follow-up
 
 Telegram authorization succeeded: an encrypted account session is on the existing

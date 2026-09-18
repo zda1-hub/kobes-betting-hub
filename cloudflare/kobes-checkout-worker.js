@@ -1571,6 +1571,131 @@ async function readTextWithLimit(request, maximumBytes) {
   return decode.decode(payload);
 }
 
+function memberWelcomeMessage(session, subscription, env) {
+  const customerId = stripeId(session?.customer);
+  if (!/^cs_(live|test)_[A-Za-z0-9_]+$/.test(session?.id || '')
+      || session.mode !== 'subscription' || session.status !== 'complete'
+      || !['paid', 'no_payment_required'].includes(session.payment_status)
+      || !ACTIVE_SUBSCRIPTION_STATUSES.has(subscription?.status)
+      || !customerId || customerId !== stripeId(subscription.customer)
+      || stripeId(session.subscription) !== subscription.id) return null;
+  if (session.payment_status === 'no_payment_required' && subscription.status !== 'trialing') return null;
+  const email = String(session.customer_details?.email || '');
+  if (email.length > 254 || !/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}$/.test(email)) return null;
+  const offer = session.metadata?.offer;
+  if (offer !== subscription.metadata?.offer) return null;
+  const plans = {
+    starter: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — $10 first 7 days'],
+    trial_2_day: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — 2 days free'],
+    referral_trial: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — 2 days free'],
+    six_month: [env.STRIPE_SIX_MONTH_PRICE_ID, 13499, 6, '6-month membership'],
+    annual: [env.STRIPE_ANNUAL_PRICE_ID, 19499, 12, 'Annual membership'],
+  };
+  const plan = plans[offer];
+  const items = subscription.items?.data;
+  if (!plan?.[0] || items?.length !== 1 || items[0].quantity !== 1) return null;
+  const price = items[0].price;
+  const months = price?.recurring?.interval === 'year' ? Number(price.recurring.interval_count) * 12
+    : price?.recurring?.interval === 'month' ? Number(price.recurring.interval_count) : null;
+  if (price?.id !== plan[0] || price.currency !== 'usd' || price.unit_amount !== plan[1] || months !== plan[2]) return null;
+  if (!Number.isSafeInteger(session.amount_total) || session.amount_total < 0 || session.currency !== 'usd') return null;
+  const nextAt = subscription.status === 'trialing' ? subscription.trial_end
+    : subscription.current_period_end || items[0].current_period_end;
+  if (!Number.isFinite(nextAt) || nextAt <= Date.now() / 1000 || subscription.cancel_at_period_end || subscription.cancel_at) return null;
+  const money = cents => '$' + (cents / 100).toFixed(2);
+  const date = new Date(nextAt * 1000).toLocaleDateString('en-US', { timeZone: 'America/Phoenix', month: 'long', day: 'numeric', year: 'numeric' });
+  const connection = `${siteOrigin(env)}/membership.html?checkout=success&session_id=${encodeURIComponent(session.id)}`;
+  const period = months === 1 ? 'month' : months === 12 ? 'year' : '6 months';
+  return {
+    recipient: email,
+    subject: 'Welcome to Kobe’s Betting Hub — connect your Discord',
+    body: [
+      'You’re in — welcome to Kobe’s Betting Hub!', '',
+      'Plan: ' + plan[3],
+      'Checkout total: ' + money(session.amount_total),
+      `Next billing date: ${date} (Arizona time).`,
+      `Standard renewal price: ${money(price.unit_amount)} every ${period}. Any applicable tax or discount is shown on your Stripe invoice.`,
+      'Your subscription automatically renews unless canceled before the next billing date.', '',
+      'One more step to unlock the member channels:',
+      'Open your private checkout confirmation below, tap Connect Discord, and authorize the Discord account you want to use.',
+      connection, '',
+      'Already connected? Use that same Discord account in Kobe’s server. Do not buy another membership to fix missing access.',
+      'Keep this connection link private — it belongs to your membership.', '',
+      'Manage billing or cancel: ' + siteOrigin(env) + '/managemembership',
+      'Need help connecting? Reply to this email or email zakai@kaimaz.com.', '',
+      'For adults 21+ where permitted. No betting outcome is guaranteed. Wager responsibly.',
+    ].join('\n'),
+  };
+}
+
+async function queueMemberWelcome(env, event) {
+  const start = Date.parse(env.MEMBER_WELCOME_START_AT || '');
+  // Both provider creation times prevent old checkouts being mailed on a late retry.
+  if (!Number.isFinite(start) || env.APP_ENV === 'staging' || event.livemode !== true
+      || !Number.isFinite(event.created) || event.created * 1000 < start) return false;
+  const original = event.data?.object;
+  if (!original?.id || !/^cs_live_[A-Za-z0-9_]+$/.test(original.id)) return false;
+  const session = await stripeGet(env, `/checkout/sessions/${encodeURIComponent(original.id)}`);
+  if (!Number.isFinite(session.created) || session.created * 1000 < start
+      || stripeId(session.customer) !== stripeId(original.customer)
+      || stripeId(session.subscription) !== stripeId(original.subscription)) return false;
+  const subscriptionId = stripeId(session.subscription);
+  if (!/^sub_[A-Za-z0-9_]+$/.test(subscriptionId)) return false;
+  const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+  if (!ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) || subscription.cancel_at_period_end || subscription.cancel_at) return false;
+  if (await membershipEntitlementBlock(env, subscriptionId)) return false;
+  const message = memberWelcomeMessage(session, subscription, env);
+  if (!message) throw new Error('Member welcome terms require review.');
+  await supabase(env, 'member_welcome_outbox?on_conflict=stripe_subscription_id', {
+    method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal',
+    body: { ...message, stripe_subscription_id: subscriptionId,
+      stripe_checkout_session_id: session.id, stripe_customer_id: stripeId(session.customer) },
+  });
+  return true;
+}
+
+async function handleMemberWelcomeQueue(request, env) {
+  const expected = String(env.MEMBER_WELCOME_QUEUE_SECRET || '');
+  if (!expected || !await secureEqual(request.headers.get('authorization') || '', `Bearer ${expected}`)) {
+    return Response.json({ error: 'Unauthorized.' }, { status: 401 });
+  }
+  const path = new URL(request.url).pathname;
+  const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
+  try {
+    if (request.method === 'GET' && path === '/ops/member-welcomes') {
+      // List identities only. Content is returned once, after an atomic claim.
+      const rows = await supabase(env, 'member_welcome_outbox?status=eq.QUEUED&select=id&order=created_at.asc&limit=10');
+      return reply({ notifications: rows || [] });
+    }
+    if (request.method !== 'POST' || !['/ops/member-welcomes/claim', '/ops/member-welcomes/deliver', '/ops/member-welcomes/hold'].includes(path)) return reply({ error: 'Not found.' }, 404);
+    const data = JSON.parse(await readTextWithLimit(request, 1000));
+    const uuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value || '');
+    if (!uuid(data.id)) return reply({ error: 'Invalid notification.' }, 400);
+    if (path.endsWith('/claim')) {
+      const token = crypto.randomUUID();
+      const rows = await supabase(env, `member_welcome_outbox?id=eq.${data.id}&status=eq.QUEUED`, {
+        method: 'PATCH', prefer: 'return=representation',
+        body: { status: 'SEND_STARTED', claim_token: token, send_started_at: new Date().toISOString() },
+      });
+      const row = rows?.[0];
+      if (!row) return reply({ error: 'Already claimed.' }, 409);
+      return reply({ id: row.id, claimToken: token, recipient: row.recipient, subject: row.subject, body: row.body });
+    }
+    if (!uuid(data.claimToken)) return reply({ error: 'Invalid claim.' }, 400);
+    const delivered = path.endsWith('/deliver');
+    const rows = await supabase(env, `member_welcome_outbox?id=eq.${data.id}&claim_token=eq.${data.claimToken}&status=eq.SEND_STARTED`, {
+      method: 'PATCH', prefer: 'return=representation',
+      body: { status: delivered ? 'DELIVERED' : 'REVIEW_REQUIRED', ...(delivered ? { delivered_at: new Date().toISOString() } : {}) },
+    });
+    if (!rows?.length) return reply({ error: 'Claim cannot be acknowledged.' }, 409);
+    return reply({ ok: true });
+  } catch {
+    // Never leak customer addresses, private links, or credentials into responses/logs.
+    console.error(JSON.stringify({ message: 'Member welcome queue operation failed', path }));
+    return reply({ error: 'Notification operation failed safely.' }, 503);
+  }
+}
+
 async function handleWebhook(request, env) {
   let payload;
   try { payload = await readTextWithLimit(request, 1_000_000); }
@@ -1590,6 +1715,7 @@ async function handleWebhook(request, env) {
       const customerId = stripeId(session?.customer);
       const subscriptionId = stripeId(session?.subscription);
       await persistCustomer(env, customerId, { subscriptionId });
+      await queueMemberWelcome(env, event);
       if (session?.metadata?.offer === 'referral_trial') {
         await createReferralAttribution(env, {
           referralCode: session.metadata.referral_code,
@@ -1642,6 +1768,9 @@ export default {
     if (request.method === 'GET' && url.pathname === '/health') {
       return json({ ok: true, version: env.CF_VERSION_METADATA?.id || null }, 200, origin);
     }
+    if (url.pathname.startsWith('/ops/member-welcomes')) {
+      return handleMemberWelcomeQueue(request, env);
+    }
     if (request.method === 'POST' && url.pathname === '/ops/reconcile-memberships') {
       if (!await authorizedOperationsRequest(request, env)) return json({ error: 'Unauthorized.' }, 401, origin);
       try { return json(await reconcileMemberships(env), 200, origin); }
@@ -1678,6 +1807,8 @@ export default {
 };
 
 export const __test = {
+  memberWelcomeMessage,
+  queueMemberWelcome,
   REFERRAL_REWARD_CENTS,
   authorizedOperationsRequest,
   claimDiscordLink,
