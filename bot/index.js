@@ -7,8 +7,9 @@ const commands = require('./commands');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { freePickRecapRows } = require('./lib/free-recap');
-const { gradePickFromEspn } = require('./lib/espn-grading');
+const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
+const { gradeWagerRows, sourcePacketPath } = require('./lib/wager-ledger');
 const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
 const {
@@ -309,7 +310,7 @@ async function queueRecapNotification({ id, subject, body }) {
   return 'QUEUED';
 }
 
-async function autoGradePendingOfficialPicks(date) {
+async function autoGradePendingOfficialPicks(date, fetchImpl = fetch) {
   const attempts = new Map();
   if (process.env.AUTO_GRADE_FREE_PICKS === 'false') return attempts;
   const rows = await readPickLog();
@@ -321,16 +322,16 @@ async function autoGradePendingOfficialPicks(date) {
   for (const row of pending) {
     await recordGradeAttempt({ pickId: row.pick_id, result: null, status: 'STARTED', provider: 'ESPN' });
     let groupedSourceReason = '';
-    if (/^\d{8}-\d+-X$/.test(row.pick_id)) {
-      const packetDate = `${row.pick_id.slice(0, 4)}-${row.pick_id.slice(4, 6)}-${row.pick_id.slice(6, 8)}`;
+    const packetPath = sourcePacketPath(reviewQueueRoot, row.pick_id);
+    if (packetPath) {
       try {
-        const packet = JSON.parse(await fs.readFile(path.join(reviewQueueRoot, packetDate, `${row.pick_id.replace(/-X$/, '')}.json`), 'utf8'));
+        const packet = JSON.parse(await fs.readFile(packetPath, 'utf8'));
         groupedSourceReason = publicationGradeHold(row, packet);
       } catch {
         groupedSourceReason = publicationGradeHold(row, null);
       }
     }
-    const grade = groupedSourceReason ? { status: 'PENDING', reason: groupedSourceReason } : await gradePickFromEspn(row);
+    const grade = groupedSourceReason ? { status: 'PENDING', reason: groupedSourceReason } : await gradePickFromEspn(row, { fetchImpl });
     attempts.set(row.pick_id, grade);
     if (grade.status !== 'GRADED') {
       await recordGradeAttempt({
@@ -446,8 +447,21 @@ async function publishDueFreeRecap(date) {
       console.log(`No successfully published official picks were logged for ${date}; no recap email was sent.`);
       return;
     }
-    const gradingAttempts = await autoGradePendingOfficialPicks(date);
+    const gradingFetch = createGradingFetch();
+    const gradingAttempts = await autoGradePendingOfficialPicks(date, gradingFetch);
     rows = await readPickLog();
+    const wagers = await gradeWagerRows({ rows, date, root: reviewQueueRoot,
+      file: path.join(path.dirname(pickLogPath()), `wager-results-${date}.json`),
+      grade: process.env.AUTO_GRADE_FREE_PICKS === 'false'
+        ? async () => ({ status: 'PENDING', reason: 'Automatic grading is disabled.' })
+        : row => gradePickFromEspn(row, { fetchImpl: gradingFetch }),
+      onAttempt: async (parentId, wagerId, attempt) => recordGradeAttempt({
+        pickId: parentId, result: attempt.result || null, status: attempt.status || 'PENDING',
+        provider: 'ESPN', sourceReference: attempt.source || null,
+        snapshot: { ...attempt, wager_id: wagerId }, errorDetail: attempt.reason || null
+      }) });
+    rows = wagers.rows;
+    for (const [id, attempt] of wagers.attempts) gradingAttempts.set(id, attempt);
     picks = recapRows(rows, date);
     await queueNightlyRecapReview({ date, rows, attempts: gradingAttempts, state });
     if (picks.some((row) => resultFor(row) === 'PENDING')) {

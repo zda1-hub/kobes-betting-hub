@@ -108,7 +108,9 @@ function statSpec(row, entries) {
 function statValue(entry, key) {
   const keys = Array.isArray(key) ? key : [key];
   for (const candidate of keys) {
-    const value = Number(entry?.values?.[candidate]);
+    const raw = entry?.values?.[candidate];
+    if (raw == null || String(raw).trim() === '' || raw === '--') continue;
+    const value = Number(raw);
     if (Number.isFinite(value)) return value;
   }
   return NaN;
@@ -177,18 +179,71 @@ async function getJson(url, fetchImpl) {
   return response.json();
 }
 
+async function resolveStraightWager(row, fetchImpl) {
+  if (row.event) return null;
+  const selection = String(row.selection || '').trim();
+  const moneyline = selection.match(/^(.+?)\s+(?:ML|moneyline)(?:\s|$)/i);
+  const spread = selection.match(/^(.+?)\s+([+-]\d{1,2}(?:\.\d+)?)(?=\s|$)/);
+  const total = selection.match(/^(.+?)\s+(?:over|under)\s+\d+(?:\.\d+)?/i);
+  const prefix = moneyline?.[1] || spread?.[1] || total?.[1];
+  if (!prefix) return null;
+  const names = prefix.split(/\s*(?:\/|\bvs\.?\b|\bat\b)\s*/i).map(compact);
+  // A total requires both teams; a team-total or player prop is not a game total.
+  if (total && !moneyline && !spread && names.length !== 2) return null;
+  if ((!total || moneyline || spread) && names.length !== 1) return null;
+  const known = leagueFor(row);
+  const candidates = [];
+  for (const league of known ? [known] : Object.values(LEAGUES)) {
+    const scoreboard = await getJson(`${ESPN_BASE_URL}/${league.path}/scoreboard?dates=${eventDate(row.operating_date)}&limit=100`, fetchImpl);
+    for (const event of scoreboard.events || []) {
+      const competitors = event.competitions?.[0]?.competitors || [];
+      if (competitors.length !== 2) continue;
+      const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation].map(compact).filter(Boolean));
+      const matched = names.map(name => aliases.flatMap((values, index) => values.includes(name) ? [index] : []));
+      if (!matched.every(indices => indices.length === 1) || new Set(matched.flat()).size !== names.length) continue;
+      candidates.push({ league, event, market: moneyline ? 'Moneyline' : spread ? 'Spread' : 'Full game total' });
+    }
+  }
+  // Ambiguous names and doubleheaders remain pending; no arbitrary first match.
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function createGradingFetch(fetchImpl = fetch) {
+  const responses = new Map();
+  return async (url, options) => {
+    const key = String(url);
+    if (!responses.has(key)) responses.set(key, Promise.resolve(fetchImpl(url, options)).then(response => {
+      if (!response.ok) responses.delete(key);
+      return response;
+    }).catch(error => { responses.delete(key); throw error; }));
+    return (await responses.get(key)).clone();
+  };
+}
+
 async function gradePickFromEspn(row, { fetchImpl = fetch } = {}) {
   if (String(row.result || 'PENDING').toUpperCase() !== 'PENDING') return { status: 'SKIPPED', reason: 'Pick is already graded.' };
-  const league = leagueFor(row);
+  const terms = `${row.selection || ''} ${row.market || ''} ${row.published_line || ''}`;
+  if (/\b(?:parlay|teaser|F5|1H|2H|first half|second half|first five|NRFI|YRFI|first TD|1st TD|anytime|lookahead)\b|\s\/\s|hits\s*\+\s*runs/i.test(terms)) {
+    return { status: 'PENDING', reason: 'This combination, period, or special market needs a dedicated verified grader.' };
+  }
+  let league = leagueFor(row);
   const date = eventDate(row.operating_date);
-  if (!league || !date) return { status: 'PENDING', reason: 'Unsupported league or missing operating date.' };
+  if (!date) return { status: 'PENDING', reason: 'Unsupported league or missing operating date.' };
+  let resolved;
+  try { resolved = await resolveStraightWager(row, fetchImpl); }
+  catch (error) { return { status: 'PENDING', reason: error.message }; }
+  if (resolved) {
+    league = resolved.league;
+    row = { ...row, market: resolved.market };
+  }
+  if (!league) return { status: 'PENDING', reason: 'Unsupported league or missing operating date.' };
   let scoreboard;
   try {
     scoreboard = await getJson(`${ESPN_BASE_URL}/${league.path}/scoreboard?dates=${date}&limit=100`, fetchImpl);
   } catch (error) {
     return { status: 'PENDING', reason: error.message };
   }
-  const event = matchingEvent(row, scoreboard.events);
+  const event = resolved?.event || matchingEvent(row, scoreboard.events);
   if (!event?.id) return { status: 'PENDING', reason: 'No matching ESPN event was found.' };
   let summary;
   try {
@@ -219,4 +274,4 @@ async function gradePickFromEspn(row, { fetchImpl = fetch } = {}) {
   };
 }
 
-module.exports = { gameTotalGrade, gradePickFromEspn, inningsToOuts, matchingEvent, spreadGrade, statSpec };
+module.exports = { createGradingFetch, gameTotalGrade, gradePickFromEspn, inningsToOuts, matchingEvent, spreadGrade, statSpec };

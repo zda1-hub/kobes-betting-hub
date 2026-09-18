@@ -4,7 +4,7 @@ const { resultFor } = require('./pick-log');
 // Stay below the existing 12 KiB notification limit without silently truncating.
 const MAX_BODY = 11000;
 function publicationGradeHold(row, packet) {
-  if (!/^\d{8}-\d+-X$/.test(row.pick_id)) return '';
+  if (!/^(?:\d{8}-\d+-X|tg-\d{8}-\d+-\d+)$/.test(row.pick_id)) return '';
   if (!packet) return 'Original publication packet unavailable; verify wager scope before grading.';
   if (packet.pick_id !== row.pick_id) return 'Original publication packet identity mismatch; verify manually.';
   if ((packet.analysis?.extraction?.plays || []).length > 1) return 'Multi-wager publication group requires per-wager verified grading; first-wager-only grading is blocked.';
@@ -32,8 +32,10 @@ function buildRecapReview({ date, rows, attempts = new Map() }) {
   const verified = published.filter(row => resultFor(row) !== 'PENDING' && row.result_verified_source);
   const lines = [
     `PRIVATE RECAP REVIEW — ${date} — NOT A FINAL RECAP`,
-    `${published.length} official publication entries; ${verified.length} verified settled entries; ${pending.length} unresolved entries.`,
-    'An entry may contain several wagers. These counts are NOT an individual-wager win/loss record or ROI.',
+    `${published.length} official recap entries; ${verified.length} verified settled entries; ${pending.length} unresolved entries.`,
+    published.every(row => row.wager_scope === 'individual')
+      ? 'Each entry represents one published wager; parlays remain one wager. Unresolved results are excluded from the settled record.'
+      : 'An entry may contain several wagers. These counts are NOT an individual-wager win/loss record or ROI.',
     'No overall profit or final record is claimed. Open each Discord post for the complete published wager group.',
     'Verified results:',
     ...verified.map(row => `${row.pick_id} | ${row.source_name || 'Source not stated'} | ${resultFor(row)} | ${row.selection}\nVerification: ${row.result_verified_source}\n${row.post_reference}`),

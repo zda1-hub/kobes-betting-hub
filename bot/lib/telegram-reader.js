@@ -102,7 +102,18 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         packet.analysis=await enrich(packet,{beforeOpenAIRequest:()=>{if(modelCalls>=2)return false;modelCalls++;return true;}});
         packet.source.media_urls=[]; // no source image in private/public cards or saved packets.
         if(packet.analysis.status!=='SOURCE_EXTRACTED'){
-          results.push({status:'DEFERRED_EXTRACTION',messageId:message.id});break;
+          state.extractionRetries=state.extractionRetries||{};
+          const retries=(state.extractionRetries[String(message.id)]||0)+1;
+          state.extractionRetries[String(message.id)]=retries;
+          await save(file,state);
+          if(retries<3){results.push({status:'DEFERRED_EXTRACTION',messageId:message.id});break;}
+          // Preserve an unreadable source for review, but don't let one poison
+          // message permanently block every later pick in the channel.
+          packet.analysis={status:packet.analysis.status,source_only:true,extraction:null};
+          packet.status='HELD_EXTRACTION_FAILED';await save(packetFile,packet);
+          state.records[String(message.id)]={status:'HELD_EXTRACTION_FAILED'};
+          state.cursor=Math.max(state.cursor,message.id);await save(file,state);
+          results.push({status:'HELD_EXTRACTION_FAILED',messageId:message.id});continue;
         }
       }
       await audit.recordSourcePost(packet);

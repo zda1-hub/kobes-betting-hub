@@ -67,6 +67,21 @@ test('missing session reports awaiting login without a Telegram connection',asyn
   const h=await harness(t);await fs.rename(h.config.sessionFile,`${h.config.sessionFile}.held`);
   const result=await createTelegramReader(h.options).run();assert.equal(result[0].status,'AWAITING_LOGIN');assert.equal(h.sent.length,0);
 });
+test('an unextractable message retries across restarts, is preserved, and cannot block later picks forever',async t=>{
+  const h=await harness(t);h.messages[0]={...message(1,''),photo:{}};
+  h.messages.push(message(2));
+  h.options.enrich=async()=>({status:'WAITING',detail:'private-provider-detail'});
+  assert.equal((await createTelegramReader(h.options).run())[0].status,'DEFERRED_EXTRACTION');
+  assert.equal((await createTelegramReader(h.options).run())[0].status,'DEFERRED_EXTRACTION');
+  const third=await createTelegramReader(h.options).run();
+  assert.equal(third[0].status,'HELD_EXTRACTION_FAILED');
+  assert.equal(third[1].status,'PRIVATE_APPROVAL_DELIVERED');
+  assert.equal(h.sent.length,1);
+  const held=JSON.parse(await fs.readFile(path.join(h.root,'queue','2026-09-17','tg-20260917-3593544389-1.json'),'utf8'));
+  assert.equal(held.status,'HELD_EXTRACTION_FAILED');
+  assert.ok(!JSON.stringify(held).includes('private-provider-detail'));
+  await createTelegramReader(h.options).run();assert.equal(h.sent.length,1);
+});
 test('initial catch-up pages past 100 messages without losing older current-day picks',async t=>{
   const h=await harness(t);const offsets=[];
   h.telegram.getMessages=async(_,params)=>{

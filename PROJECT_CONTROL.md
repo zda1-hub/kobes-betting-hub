@@ -8,6 +8,30 @@
 
 **Control-file owner:** Zakai Martin
 
+### September 17 — wager-ledger and Telegram follow-up
+
+Telegram authorization succeeded: an encrypted account session is on the existing
+Render persistent disk. Live polling at 01:11 and 01:26 UTC September 18 returned
+DEFERRED_EXTRACTION for message 27755; this confirms cloud connectivity but NOT
+successful approval delivery. Prepared bounded extraction retries: preserve the
+original unreadable message in a held review packet after three failures and
+continue later messages, without automatically publishing anything.
+
+Prepared separate persistent per-wager results for lossless source publications,
+with original terms, stable parent/child identities, term-change detection and
+atomic per-result checkpoints. Canonical publication CSV remains unchanged.
+Straight team moneylines/spreads and two-team totals can resolve an exact unique
+same-day MLB/NFL/NCAAF schedule without an opponent being supplied. Ambiguity,
+periods, parlays, special markets and blank box-score stats fail closed. ESPN
+responses are cached only within each grading batch. Nightly private review uses
+expanded entries; unsupported results remain pending, not invented profits.
+
+Welcome/trial/access lifecycle email delivery, fully automatic results across all
+exclusive markets, Instagram authorization, unlinked member identity confirmation,
+and a genuine new Free Pick social publication remain unfinished. Existing Stripe
+receipts do not constitute free-trial welcome emails. No Stripe Tax setting,
+existing subscription, refund or public pick was changed by this follow-up.
+
 **Business/content approver:** Kobe
 
 **Technical owner:** Zakai Martin

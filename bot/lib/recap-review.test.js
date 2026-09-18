@@ -41,4 +41,5 @@ test('missing and mismatched source packets are held without blocking ordinary m
   assert.match(publicationGradeHold({ pick_id: '20260917-1-X' }, null), /unavailable/);
   assert.match(publicationGradeHold({ pick_id: '20260917-1-X' }, { pick_id: 'different' }), /mismatch/);
   assert.equal(publicationGradeHold({ pick_id: '20260917-NFL-1' }, null), '');
+  assert.match(publicationGradeHold({ pick_id: 'tg-20260917-123-4' }, null), /unavailable/);
 });

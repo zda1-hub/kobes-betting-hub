@@ -55,6 +55,31 @@ test('grades a final moneyline and keeps unsupported props pending', async () =>
   assert.equal(unsupported.status, 'PENDING');
 });
 
+test('resolves an exact straight-team wager from a unique same-day schedule without an opponent', async () => {
+  const grade = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB',
+    selection: 'Brewers ML -110 (1U)', result: 'PENDING' }, { fetchImpl: espnFetch });
+  assert.equal(grade.result, 'W');
+  const ambiguous = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB',
+    selection: 'Brewers ML -110 (1U)', result: 'PENDING' }, { fetchImpl: async url =>
+    new Response(JSON.stringify(url.includes('/summary?') ? summary : { events: [event, { ...event, id: '456' }] })) });
+  assert.equal(ambiguous.status, 'PENDING');
+});
+
+test('missing opponent never converts a team or player total into a full-game total', async () => {
+  for (const selection of ['Brewers Over 3.5', 'Jacob Misiorowski Over 5.5 Strikeouts']) {
+    const grade = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB', selection, result: 'PENDING' }, { fetchImpl: espnFetch });
+    assert.equal(grade.status, 'PENDING');
+  }
+});
+
+test('per-run cache reuses ESPN payloads but returns independent readable responses', async () => {
+  let calls = 0;
+  const cached = require('./espn-grading').createGradingFetch(async () => { calls++; return new Response('{"ok":true}'); });
+  assert.deepEqual(await (await cached('url')).json(), { ok: true });
+  assert.deepEqual(await (await cached('url')).json(), { ok: true });
+  assert.equal(calls, 1);
+});
+
 test('uses the college-football ESPN endpoint for an NCAAF final', async () => {
   const grade = await gradePickFromEspn({
     operating_date: '2026-09-07', league: 'NCAAF', event: 'Chicago Cubs at Milwaukee Brewers',
@@ -66,6 +91,23 @@ test('uses the college-football ESPN endpoint for an NCAAF final', async () => {
 
 test('converts baseball innings notation to outs', () => {
   assert.equal(inningsToOuts('5.2'), 17);
+});
+
+test('does not settle periods, parlays, or composite stats against full-game results', async () => {
+  for (const selection of ['Brewers F5 ML', 'Brewers 1H ML', 'Brewers ML / Cubs ML', 'Jacob Misiorowski Over 1.5 Hits+Runs+RBIs', 'Brewers ML Parlay']) {
+    const grade = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB',
+      event: 'Chicago Cubs at Milwaukee Brewers', selection, result: 'PENDING' }, { fetchImpl: espnFetch });
+    assert.equal(grade.status, 'PENDING', selection);
+  }
+});
+
+test('blank final stats are unknown, not zero', async () => {
+  const blank = JSON.parse(JSON.stringify(summary));
+  blank.boxscore.players[0].statistics[0].athletes[0].stats[2] = '';
+  const grade = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB',
+    event: 'Chicago Cubs at Milwaukee Brewers', selection: 'Jacob Misiorowski Under 5.5 Strikeouts', result: 'PENDING' },
+  { fetchImpl: async url => new Response(JSON.stringify(url.includes('/summary?') ? blank : { events: [event] })) });
+  assert.equal(grade.status, 'PENDING');
 });
 
 test('recognizes longest-reception NFL props across ESPN stat-key variants', () => {
