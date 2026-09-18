@@ -4,7 +4,7 @@
 
 **Last verified:** 2026-09-17 approximately 17:35 MST (323/323 tests; 5/5 post-deploy public smoke; runtime confirms 16:00 cutoff, 21:00 private recap review and compact injury receipts. Real-data review covers 87 entries/two parts; recap queue GET 200. Fresh billing check: 9 active/trialing records, 6 unlinked, zero reconciliation/webhook failures. All 3 connected Discord accounts have VIP. Telegram phone prompt open; cloud session still missing.)
 
-**Production runtime change set:** Render `aa6c5cf49a323eb4f99dde387d21aa6c267dc23e`, live deploy `dep-dam8cclg1s2s73cqm820`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `bc4c6c39-0e01-437c-a1f3-6ad0e45a5c64`. Startup registered commands, logged in as Kobe Bot, resumed persistent compact injury receipts and awaits Telegram cloud login. Intake cutoff 16:00 and private unresolved-review eligibility 21:00 Arizona are active. Migration 010 is applied. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
+**Production runtime change set:** Render `c620d191610694fa631cef389a5e9af1cf311cb5`, live deploy `dep-dam8oass728c73auu4k0`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `739a4271-937e-4c3f-abcb-5b6fe4451a4e`. Worker logged in as Kobe Bot and awaits Telegram cloud login. Intake cutoff 16:00 and private unresolved-review eligibility 21:00 Arizona remain configured. Migration 010 is applied. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
 
 **Control-file owner:** Zakai Martin
 
@@ -21,6 +21,26 @@ This is the authoritative project brain for humans and coding agents. Read this 
 The owners do not need to read every repository document. The operating chat should use this file to answer: what is live, what talks to what, what costs money, what failed, what is next, and which decisions require an owner.
 
 ## Executive state
+
+### September 17 — management address and diagnostic fixes deployed
+
+Owner explicitly authorized stopping the failed Telegram attempt and deploying.
+The old raw-input process retried cancellation; a separate terminal validated
+PID 182's exact `node scripts/authorize-telegram.mjs` command before terminating
+only that process. Readback confirms `STALE_TELEGRAM_LOGIN_STOPPED`.
+Render deploy `dep-dam8oass728c73auu4k0` for `c620d191610694fa631cef389a5e9af1cf311cb5`
+is live at 00:56:43 UTC on tzzsf; bot login confirmed, no error-level logs in the
+initial verification window. Safe Telegram error diagnosis and distinct-opponent/
+ambiguous-event grading protections are live. Account authorization still pending.
+
+Static Worker `739a4271-937e-4c3f-abcb-5b6fe4451a4e` serves `/managemembership` (200).
+Public management links use that address. `/cancel`, `/cancel/` and `/cancel.html`
+permanently redirect there; live readback proves `?portal=returned` is preserved.
+The new page is generated from the same configured source, not a separately
+maintained portal implementation. Secure portal OAuth redirect returns 302 to
+Discord. Full local suite 326/326; post-deploy public smoke 5/5. No payment,
+cancellation, manual identity linkage or customer email was performed. Complete
+all-exclusive automatic recap and welcome lifecycle emails remain unfinished.
 
 ### September 17 — recap and Telegram follow-up prepared; not deployed
 
