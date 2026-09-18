@@ -6,6 +6,7 @@ const {TelegramClient,Api}=require('teleproto');
 const {StringSession}=require('teleproto/sessions');
 const {telegramConfig,saveTelegramSession,loadTelegramSession}=require('../bot/lib/telegram-session');
 const {Logger}=require('teleproto/extensions/Logger');
+const {telegramLoginError}=require('../bot/lib/telegram-login-error');
 
 // The account holder types directly into Render Web Shell. Never echo phone,
 // login code, password or session; never store credentials in command history.
@@ -33,7 +34,7 @@ try {
   await client.start({phoneNumber:()=>privateQuestion('Telegram phone number (include country code): '),
     phoneCode:()=>privateQuestion('Telegram login code: '),password:()=>privateQuestion('Telegram 2FA password (if enabled): '),
     firstAndLastNames:()=>{throw new Error('New account registration is not allowed.');},
-    onError:()=>{console.error('Telegram rejected this login step; retry manually.');return false;}});
+    onError:(error)=>{const diagnosis=telegramLoginError(error);console.error(diagnosis.message);return diagnosis.stop;}});
   const invite=await client.invoke(new Api.messages.CheckChatInvite({hash:'MSjz78jJJoQ5NzRi'}));
   if(String(invite.chat?.id)!==config.channelId || !invite.chat?.broadcast || !invite.chat?.accessHash)throw new Error('Already-joined CAPPERS FREE channel could not be verified.');
   await saveTelegramSession(config,client.session.save());

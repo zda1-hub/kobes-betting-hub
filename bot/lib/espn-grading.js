@@ -26,12 +26,15 @@ function eventDate(date) {
 function matchingEvent(row, events) {
   const sourceEvent = compact(row.event);
   if (!sourceEvent) return null;
-  return (events || []).find((event) => {
-    const names = (event.competitions?.[0]?.competitors || []).flatMap((competitor) => [
+  const matches = (events || []).filter((event) => {
+    const competitors = event.competitions?.[0]?.competitors || [];
+    // Multiple aliases of one team do not identify both sides of a matchup.
+    return competitors.length === 2 && competitors.every((competitor) => [
       competitor.team?.displayName, competitor.team?.shortDisplayName, competitor.team?.abbreviation
-    ]).map(compact).filter((name) => name.length >= 3);
-    return new Set(names.filter((name) => sourceEvent.includes(name))).size >= 2;
-  }) || null;
+    ].map(compact).filter((name) => name.length >= 3).some((name) => sourceEvent.includes(name)));
+  });
+  // Doubleheaders or duplicate event matches need an explicit event identity.
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function completed(summary, event) {

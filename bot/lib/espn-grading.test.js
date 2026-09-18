@@ -2,6 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { gradePickFromEspn, inningsToOuts } = require('./espn-grading');
 
+test('event matching requires both opponents, not two aliases of the same team', () => {
+  const { matchingEvent } = require('./espn-grading');
+  assert.equal(matchingEvent({ event: 'Chicago Cubs' }, [event]), null);
+  assert.equal(matchingEvent({ event: 'Chicago Cubs at Milwaukee Brewers' }, [event]), event);
+  assert.equal(matchingEvent({ event: 'Chicago Cubs at Milwaukee Brewers' }, [event, { ...event, id: 'doubleheader' }]), null);
+});
+
 const event = {
   id: '123',
   status: { type: { completed: true } },

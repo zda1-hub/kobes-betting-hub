@@ -22,6 +22,32 @@ The owners do not need to read every repository document. The operating chat sho
 
 ## Executive state
 
+### September 17 — recap and Telegram follow-up prepared; not deployed
+
+Owner clarified the Free Pick channel was newly created and currently empty.
+There is no current-day message to recover; wait for a genuine new approval,
+without replaying historical picks. Automatic results → private email to Kobe
+remains the intended recap workflow. The full all-exclusive automatic recap is
+unfinished: grouped publications need individual-wager tracking and unsupported
+markets need reliable result coverage. The 21:00 private review is only a fallback.
+
+Prepared a grading safety correction: both distinct matchup opponents must match,
+and multiple event matches stay pending rather than choosing the first event.
+Prepared safe Telegram login diagnosis using only allowlisted provider error
+codes; it explains phone/code/config failures without printing private inputs,
+and stops rate-limited/unknown attempts rather than looping blindly. Full local
+suite passes 326/326. These changes are NOT deployed: the active Render terminal
+still shows two generic login rejections and is waiting for hidden phone input.
+Stop/replace that attempt before restarting the worker. No account session was
+created or customer email sent during this follow-up.
+
+Welcome emails remain pending a separately restricted lifecycle delivery path.
+They must use the verified checkout email, cover zero-dollar trials as well as
+paid checkouts, show exact initial/renewal terms and include secure Discord
+connection, membership management and support. Do not widen the Kobe-only recap
+notification queue to arbitrary recipients. Existing Stripe payment receipts and
+cancellation confirmation stay enabled, but do not prove welcome delivery.
+
 ### September 17 — latest authorized rollout receipt (supersedes earlier snapshots)
 
 Current Render runtime is `aa6c5cf49a323eb4f99dde387d21aa6c267dc23e`, deploy
