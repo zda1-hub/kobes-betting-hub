@@ -3,6 +3,7 @@ const { auditedFetch } = require('../../pipeline/api-client');
 const { specialMarketGrade, number: verifiedNumber } = require('./espn-special-markets');
 const { matchTennisCompetition, gradeTennisMatch } = require('./espn-tennis-grading');
 const { normalizeSelection, combinationSelections, playerNameMatches } = require('./wager-terms');
+const { reviewedAdjudication } = require('./verified-adjudications');
 
 const LEAGUES = {
   mlb: { path: 'baseball/mlb', url: 'https://www.espn.com/mlb/game/_/gameId/' },
@@ -291,6 +292,8 @@ function createGradingFetch(fetchImpl = fetch) {
 }
 
 async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = false, parlayLeg = false } = {}) {
+  const reviewed = reviewedAdjudication(row);
+  if (reviewed) return reviewed;
   if (String(row.result || 'PENDING').toUpperCase() !== 'PENDING') return { status: 'SKIPPED', reason: 'Pick is already graded.' };
   row = { ...row, selection: normalizeSelection(row.selection) };
   // Split source publications are independent approval cards, not the original
