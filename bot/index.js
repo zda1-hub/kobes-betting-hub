@@ -1717,16 +1717,16 @@ client.once(Events.ClientReady, async (readyClient) => {
   // Independent boards/readers must not wait behind historical card research.
   startInjuryReports();
   startTelegramReader();
-  try {
-    await refreshPendingResearchApprovals();
-  } catch (error) {
-    console.error('Unable to refresh pending approval research:', error);
-  }
   startXMonitor();
   startTrendsSchedule();
   startTrendInbox();
   startFreeRecapSchedule();
   startFreePickDelivery();
+  try {
+    await refreshPendingResearchApprovals();
+  } catch (error) {
+    console.error('Unable to refresh pending approval research:', error);
+  }
 });
 
 async function registerCommandsOnStart() {

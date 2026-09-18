@@ -26,6 +26,13 @@ periods, parlays, special markets and blank box-score stats fail closed. ESPN
 responses are cached only within each grading batch. Nightly private review uses
 expanded entries; unsupported results remain pending, not invented profits.
 
+Wager-ledger rollout 4a17f82 is live in Render deploy dep-dam99gtg1s2s73crchlg.
+337 tests and five read-only production smoke checks passed. Fresh billing check
+confirms 9 active/trialing records, 6 unlinked, zero failed/stuck webhooks, zero
+reconciliation failures and zero referral safety holds. Bot login and fresh
+injury boards verified. Follow-up removes historical-research startup blocking:
+all independent services now start before awaiting approval-card refresh.
+
 Welcome/trial/access lifecycle email delivery, fully automatic results across all
 exclusive markets, Instagram authorization, unlinked member identity confirmation,
 and a genuine new Free Pick social publication remain unfinished. Existing Stripe
