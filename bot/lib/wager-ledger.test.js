@@ -35,6 +35,7 @@ test('does not reconstruct rewritten publications or identity/first-selection mi
 test('source paths support Telegram and X and reject traversal', () => {
   assert.equal(sourcePacketPath('/queue', row.pick_id), '/queue/2026-09-17/20260917-123.json');
   assert.equal(sourcePacketPath('/queue', 'tg-20260917-123-4'), '/queue/2026-09-17/tg-20260917-123-4.json');
+  assert.equal(sourcePacketPath('/queue', 'manual-20260917-aaaaaaaaaaaaaaaaaaaa'), '/queue/2026-09-17/manual-20260917-aaaaaaaaaaaaaaaaaaaa.json');
   assert.equal(sourcePacketPath('/queue', '../secret'), null);
 });
 

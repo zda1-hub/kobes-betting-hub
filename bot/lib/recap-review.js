@@ -1,10 +1,11 @@
 const { isPublishedRow } = require('./recap');
 const { resultFor } = require('./pick-log');
+const { buildCapperRecap } = require('./capper-recap');
 
 // Stay below the existing 12 KiB notification limit without silently truncating.
 const MAX_BODY = 11000;
 function publicationGradeHold(row, packet) {
-  if (!/^(?:\d{8}-\d+-X|tg-\d{8}-\d+-\d+)$/.test(row.pick_id)) return '';
+  if (!/^(?:\d{8}-\d+(?:-\d+)?-X|tg-\d{8}-\d+-\d+|manual-\d{8}-[a-f0-9]{20})$/.test(row.pick_id)) return '';
   if (!packet) return 'Original publication packet unavailable; verify wager scope before grading.';
   if (packet.pick_id !== row.pick_id) return 'Original publication packet identity mismatch; verify manually.';
   if ((packet.analysis?.extraction?.plays || []).length > 1) return 'Multi-wager publication group requires per-wager verified grading; first-wager-only grading is blocked.';
@@ -45,7 +46,7 @@ function buildRecapReview({ date, rows, attempts = new Map() }) {
     'Only grade against the exact published wager(s), with a trustworthy result source. Do not grade a multi-wager group from its first wager alone.',
     'The cloud worker continues checking supported markets and queues the complete final recap after every eligible entry is verified. Kobe reviews before public posting.'
   ];
-  return { includedPickIds: published.map(row => row.pick_id), parts: splitRecapBody(lines.join('\n\n')) };
+  return { includedPickIds: published.map(row => row.pick_id), parts: splitRecapBody(buildCapperRecap({ date, rows, attempts }).body + '\n\nPRIVATE VERIFICATION AUDIT\n\n' + lines.join('\n\n')) };
 }
 
 module.exports = { buildRecapReview, publicationGradeHold, splitRecapBody };

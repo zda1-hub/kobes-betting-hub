@@ -2,6 +2,7 @@ const ESPN_BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports';
 const { auditedFetch } = require('../../pipeline/api-client');
 const { specialMarketGrade, number: verifiedNumber } = require('./espn-special-markets');
 const { matchTennisCompetition, gradeTennisMatch } = require('./espn-tennis-grading');
+const { normalizeSelection, combinationSelections } = require('./wager-terms');
 
 const LEAGUES = {
   mlb: { path: 'baseball/mlb', url: 'https://www.espn.com/mlb/game/_/gameId/' },
@@ -27,7 +28,7 @@ function compact(value) {
 function leagueFor(row) {
   const value = `${row.league || ''} ${row.sport || ''}`.toLowerCase();
   if (/\bmlb\b|baseball/.test(value)) return LEAGUES.mlb;
-  if (/\bncaaf\b|college football/.test(value)) return LEAGUES.ncaaf;
+  if (/\bncaaf\b|\bcfb\b|college football/.test(value)) return LEAGUES.ncaaf;
   if (/\bnfl\b|football/.test(value)) return LEAGUES.nfl;
   if (/\bwnba\b/.test(value)) return LEAGUES.wnba;
   if (/\bncaab\b|college basketball/.test(value)) return LEAGUES.ncaab;
@@ -285,17 +286,26 @@ function createGradingFetch(fetchImpl = fetch) {
 
 async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = false, parlayLeg = false } = {}) {
   if (String(row.result || 'PENDING').toUpperCase() !== 'PENDING') return { status: 'SKIPPED', reason: 'Pick is already graded.' };
+  row = { ...row, selection: normalizeSelection(row.selection) };
+  // Split source publications are independent approval cards, not the original
+  // source's parent parlay. A stale parent market must not swallow their result.
+  if (/^\d{8}-\d+-\d+-X$/.test(row.pick_id || '') && /parlay/i.test(row.market || '') && combinationSelections(row.selection).length === 1) row.market = '';
   const terms = `${row.selection || ''} ${row.market || ''} ${row.published_line || ''}`;
-  if (/\b(?:ML|moneyline)\s*\/|\d\s*\/\s*[A-Za-z]/i.test(row.selection || '') && !/\s\/\s/.test(row.selection || '')) return { status: 'PENDING', reason: 'Compact combination syntax needs explicitly separated original legs.' };
-  if (/\b(?:parlay|teaser)\b|\s\/\s/i.test(terms)) {
-    if (parlayLeg || /\bteaser\b/i.test(terms)) return { status: 'PENDING', reason: 'Teaser/push settlement requires the original sportsbook rules.' };
-    const selections = String(row.selection || '').replace(/\s*\([^)]*\bparlay\b[^)]*\)\s*$/i, '').replace(/\bparlay\b/gi, '').trim().split(/\s+\/\s+|\s+\+\s+(?=[A-Za-z])/);
+  const combinations = combinationSelections(row.selection);
+  if (/\b(?:parlay|teaser)\b/i.test(terms) || combinations.length > 1) {
+    if (parlayLeg) return { status: 'PENDING', reason: 'Nested combinations require the original sportsbook settlement.' };
+    const teaser = /\bteaser\b/i.test(terms);
+    // Explicitly stated adjusted teaser lines can be evaluated when neither leg
+    // pushes/voids. Never apply the teaser adjustment a second time.
+    const teaserParts = teaser && row.selection.match(/^(.+?[+-]\d+(?:\.\d+)?)\s+(over|under)\s+(\d+(?:\.\d+)?)(?:\.|\s|$)/i);
+    const selections = teaserParts ? [teaserParts[1], `${teaserParts[2]} ${teaserParts[3]}`] : combinations.map(s => s.replace(/\s+\d+(?:\.\d+)?[- ]point\s+teaser.*$/i, '').trim());
     if (selections.length < 2 || selections.length > 12 || selections.some(s => !s.trim())) return { status: 'PENDING', reason: 'A parlay needs every original leg explicitly identified.' };
     const legs = [];
     let context;
     for (const selection of selections) {
       const totalOnly = /^\s*(?:over|under)\s+\d/i.test(selection);
-      const leg = await gradePickFromEspn({ ...row, selection: selection.trim(), published_line: '', market: totalOnly ? 'Full game total' : /(?:^|\s)[+-]\d{1,2}(?:\.\d+)?(?=\s|$)/.test(selection) ? 'Spread' : '', event: totalOnly ? context?.event || row.event : row.event, league: totalOnly ? context?.league || row.league : row.league }, { fetchImpl, includeContext: true, parlayLeg: true });
+      const firstLeg = legs.length === 0;
+      const leg = await gradePickFromEspn({ ...row, selection: selection.trim(), published_line: '', market: totalOnly ? 'Full game total' : /(?:^|\s)[+-]\d{1,2}(?:\.\d+)?(?=\s|$)/.test(selection) ? 'Spread' : '', event: totalOnly ? context?.event || row.event : firstLeg ? row.event : '', league: totalOnly ? context?.league || row.league : firstLeg ? row.league : '', sport: totalOnly ? context?.league || row.sport : firstLeg ? row.sport : '' }, { fetchImpl, includeContext: true, parlayLeg: true });
       if (leg.status !== 'GRADED') return { status: 'PENDING', reason: `Parlay leg ${legs.length + 1}: ${leg.reason}` };
       if (['P', 'V'].includes(leg.result)) return { status: 'PENDING', reason: 'A pushed/voided parlay leg changes the payout; original sportsbook settlement is required.' };
       legs.push(leg);

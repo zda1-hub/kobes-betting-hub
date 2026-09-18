@@ -6,6 +6,7 @@ const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes } =
 const commands = require('./commands');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
+const { buildCapperRecap } = require('./lib/capper-recap');
 const { freePickRecapRows } = require('./lib/free-recap');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
@@ -429,7 +430,9 @@ async function publishDueFreeRecap(date) {
         const rows = await readPickLog();
         const embeds = buildLogRecapEmbeds({ date, rows });
         const includedPickIds = recapRows(rows, date).map((row) => row.pick_id);
-        const content = recapEmailBody(embeds).replaceAll('**', '');
+        const legacyRecap = buildCapperRecap({ date, rows });
+        if (legacyRecap.pending) throw new Error('Legacy final recap requires verified individual-wager results before recovery.');
+        const content = legacyRecap.body;
         await recordRecapRun({ operatingDate: date, includedPickIds, status: 'EMAIL_SEND_STARTED', recipient: recapNotificationRecipient, content, details: { recovered_from_legacy_state: true } });
         const emailStatus = await queueRecapParts({
           id: `official-recap-final-${date}`,
@@ -517,7 +520,9 @@ async function publishDueFreeRecap(date) {
     }
     if (date === pacificOperatingDate() && arizonaTimeNow() < freeRecapCloseAt()) return;
     const embeds = buildLogRecapEmbeds({ date, rows });
-    const content = recapEmailBody(embeds).replaceAll('**', '');
+    const capperRecap = buildCapperRecap({ date, rows, attempts: gradingAttempts });
+    if (capperRecap.pending) throw new Error('Final recap blocked: unverified individual-wager results remain.');
+    const content = capperRecap.body;
     const includedPickIds = picks.map((row) => row.pick_id);
     let emailStatus;
     try {

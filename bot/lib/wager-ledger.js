@@ -3,11 +3,12 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { isPublishedRow } = require('./recap');
 const { netUnitsFor, resultFor } = require('./pick-log');
+const { publicationGradeHold } = require('./recap-review');
 
 function sourcePacketPath(root, id) {
-  const match = String(id).match(/^(?:(\d{8})-\d+-X|tg-(\d{8})-\d+-\d+)$/);
+  const match = String(id).match(/^(?:(\d{8})-\d+(?:-\d+)?-X|tg-(\d{8})-\d+-\d+|manual-(\d{8})-[a-f0-9]{20})$/);
   if (!match) return null;
-  const date = match[1] || match[2];
+  const date = match[1] || match[2] || match[3];
   return path.join(root, `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}`, `${id.replace(/-X$/, '')}.json`);
 }
 
@@ -83,7 +84,14 @@ async function gradeWagerRows({ rows, date, root, file, grade, onAttempt = async
       catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
     const children = expandPublication(row, packet);
-    if (!children) { expanded.push(row); continue; }
+    if (!children) {
+      const hold = publicationGradeHold(row, packet);
+      if (hold) {
+        attempts.set(row.pick_id, { status: 'PENDING', reason: hold });
+        expanded.push({ ...row, result: 'PENDING', result_verified_source: '', net_units: '' });
+      } else expanded.push({ ...row, wager_scope: 'individual' });
+      continue;
+    }
     for (const child of children) {
       const fingerprint = wagerFingerprint(child);
       const saved = ledger.wagers[child.pick_id];
