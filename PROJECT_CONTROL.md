@@ -10,6 +10,18 @@
 
 ### September 18 — exclusive recap button-approval flow
 
+Immediate delivery recovery: route recap review cards to existing private
+`pick-approvals` (`1539135477355905094`) while the intended daily-recap channel
+(`1539062059306848368`) remains member-visible. Do not weaken the privacy
+preflight or alter channel permissions. Exclusive-wins remains bot-inaccessible
+and requires owner permission repair before Kobe's approval can publish there.
+September 17 cached exclusive ledger contains 68 capper groups: 52 fully verified
+and 16 with 25 unresolved wagers. Unresolved groups must remain approval-disabled.
+The failed Membership operations alert run `35394710346` is a genuine warning:
+seven active memberships remain unlinked beyond the grace window; zero failed or
+stuck payment webhooks and zero reconciliation failures. Do not suppress this
+alert or guess customer Discord identities to make the check pass.
+
 Owner requested the recap channel operate like private pick approvals, with Kobe
 making the final decision to send to exclusive wins. Prepared a persistent,
 per-capper recap review queue in the existing Render worker. Trusted routing is
@@ -32,6 +44,17 @@ confirmation to make recap private and give only the existing bot the four neede
 channel permissions. Until those permissions are repaired, the private-channel
 preflight fails closed and no draft/member publication should be claimed.
 Deployment and real private-card acceptance are recorded below when verified.
+
+Deployment receipt: commit `038793ff3b406e70cc66675d82e594c72d666212`, Render
+`dep-damnr9oae00c73bmvlh0` LIVE at 2026-09-18 18:06:59 UTC. All 394 automated
+tests and five production read-only smoke checks passed. Bot startup confirms
+the new capper approval flow plus existing five-minute recap, 21:00 nightly,
+07:00 morning, Telegram and other cloud schedules. At 18:07:08 UTC the real
+private-channel preflight withheld drafts because Website VIP still has recap
+visibility. Yesterday retains 25 unresolved wagers; no result was guessed and
+no recap was sent to exclusive-wins. Permission confirmation/repair and a real
+private recap-card receipt remain outstanding; no owner approval or public
+recap acceptance has been performed by the operator.
 
 ### September 17, 20:35 Arizona — Stripe billing notices saved; welcome sender hand-off
 

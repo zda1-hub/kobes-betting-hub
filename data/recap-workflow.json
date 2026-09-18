@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "guild_id": "1215407647155683358",
-  "review_channel_id": "1539062059306848368",
+  "review_channel_id": "1539135477355905094",
   "destination_channel_id": "1550535535041187920",
   "source_channel_ids": ["1539055850075852911"],
   "reviewer_user_ids": ["1209660006383755265"],
