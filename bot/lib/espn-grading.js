@@ -223,7 +223,11 @@ async function getJson(url, fetchImpl) {
 async function resolveStraightWager(row, fetchImpl) {
   if (row.event) return null;
   const selection = String(row.selection || '').replace(/\b(?:F5|1H|2H|first half|second half|first five)\b/gi, '').replace(/\s+/g, ' ').trim();
-  const moneyline = selection.match(/^(.+?)\s+(?:ML|moneyline)(?:\s|$)/i);
+  // A standalone team followed only by a signed three/four-digit price is
+  // conventional moneyline shorthand, not a spread. Resolve the team uniquely
+  // on the exact date before accepting it; never treat bare team names as ML.
+  const moneyline = selection.match(/^(.+?)\s+(?:ML|moneyline)(?:\s|$)/i)
+    || selection.match(/^([A-Za-z .'-]+)\s+[+-]\d{3,4}(?:\s*\(\d+(?:\.\d+)?\s*U\))?$/i);
   const spread = selection.match(/^(.+?)\s+([+-]\d{1,2}(?:\.\d+)?)(?=\s|$)/);
   const total = selection.match(/^(.+?)\s+(?:over|under)\s+\d+(?:\.\d+)?/i);
   const firstInning = selection.match(/^(.+?)\s+(?:NRFI|YRFI)\b/i);
@@ -257,7 +261,7 @@ async function resolveStraightWager(row, fetchImpl) {
 async function resolvePlayerWager(row, fetchImpl) {
   if (row.event || !/\b(?:over|under|anytime|1st TD|first TD|first touchdown)\b|\s\d+\+\s/i.test(row.selection || '')) return null;
   const player = selectedPlayerName(row);
-  if (player.length < 5) return null;
+  if (player.length < 5 && !/^[A-Z]{3,4}$/.test(selectedPlayerPrefix(row))) return null;
   const known = leagueFor(row);
   const football = /passing|rushing|receiving|receptions?|carries|touchdown|\bTD\b|field goals|\bpass\b/i.test(row.selection);
   const baseball = /strikeout|\bKs\b|hits|total bases|RBIs|earned runs|outs/i.test(row.selection);

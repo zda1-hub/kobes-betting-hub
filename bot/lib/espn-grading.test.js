@@ -92,6 +92,21 @@ test('resolves an exact straight-team wager from a unique same-day schedule with
   assert.equal(ambiguous.status, 'PENDING');
 });
 
+test('accepts signed standalone moneyline prices but not an unspecified bare team', async () => {
+  for (const selection of ['Brewers -135 (3u)', 'Brewers +121']) {
+    assert.equal((await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB', selection }, { fetchImpl: espnFetch })).result, 'W');
+  }
+  assert.equal((await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB', selection: 'Brewers' }, { fetchImpl: espnFetch })).status, 'PENDING');
+});
+
+test('short player acronyms require a unique official full-name initials match', async () => {
+  const nflSummary = structuredClone(summary);
+  nflSummary.boxscore.players[0].statistics = [{ type: 'receiving', keys: ['receivingYards'], athletes: [{ athlete: { displayName: 'Amon-Ra St. Brown' }, stats: ['14'] }] }];
+  const result = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'NFL', selection: 'ARSB Over 12.5 Receiving Yards' }, { fetchImpl: async url => new Response(JSON.stringify(url.includes('/summary?') ? nflSummary : { events: [event] })) });
+  assert.equal(result.result, 'W');
+  assert.match(result.outcome, /Amon-Ra St. Brown/);
+});
+
 test('missing opponent never converts a team or player total into a full-game total', async () => {
   const team = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB', selection: 'Brewers Over 3.5', result: 'PENDING' }, { fetchImpl: espnFetch });
   assert.equal(team.status, 'PENDING');
