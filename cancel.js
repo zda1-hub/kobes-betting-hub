@@ -47,3 +47,7 @@ if (portalLogin && membershipConfig) {
 if (membershipConfig && params.get('portal') === 'returned' && message) {
   message.textContent = 'Your Stripe billing portal session is complete. Subscription changes will sync to Discord automatically.';
 }
+
+if (membershipConfig && params.get('portal') === 'connection_required' && message) {
+  message.textContent = 'This Discord account is not linked to a membership yet. Already paid? Do not purchase again. Open the private connection link in your welcome email or original checkout confirmation, tap Connect Discord, and authorize the account you use in Kobe’s server. If you cannot find that link, contact support with your checkout email.';
+}

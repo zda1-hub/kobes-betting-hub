@@ -45,6 +45,16 @@ const checkoutEndpoint = membershipConfig ? `${membershipConfig.workerOrigin}/cr
 const checkoutEnabled = Boolean(checkoutEndpoint);
 const checkoutMessage = document.querySelector('[data-checkout-message]');
 const discordConnect = document.querySelector('[data-discord-connect]');
+const connectionPanel = document.querySelector('[data-membership-confirmation]');
+const connectionTitle = document.querySelector('[data-connection-title]');
+const connectionMessage = document.querySelector('[data-connection-message]');
+const showConnectionPanel = (title, message) => {
+  if (connectionPanel) connectionPanel.hidden = false;
+  if (connectionTitle) connectionTitle.textContent = title;
+  if (connectionMessage) connectionMessage.textContent = message;
+  document.querySelectorAll('[data-membership-sales]').forEach(section => { section.hidden = true; });
+  document.querySelectorAll('[data-checkout]').forEach(button => { button.disabled = true; });
+};
 const setCheckoutMessage = (message) => { if (checkoutMessage) checkoutMessage.textContent = message; };
 const checkoutRequestStorageKey = (offer) => `kbh.checkout.request.${offer}`;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -90,18 +100,27 @@ if (referralCode && !checkoutState) {
 }
 
 if (checkoutState === 'success') {
-  setCheckoutMessage('Your membership is confirmed. Connect Discord now to receive member access.');
-  if (discordConnect && checkoutSession && membershipConfig) {
+  const validSession = /^cs_(live|test)_[A-Za-z0-9_]+$/.test(checkoutSession || '');
+  const message = validSession && membershipConfig
+    ? 'One more step: tap Connect Discord and authorize your account. Stripe verifies your membership before access is granted.'
+    : 'This connection link is incomplete. Open the private link in your welcome email or contact support with your checkout email. Do not purchase again.';
+  setCheckoutMessage(message);
+  showConnectionPanel('Connect your Discord.', message);
+  if (discordConnect && validSession && membershipConfig) {
     discordConnect.hidden = false;
     discordConnect.setAttribute('aria-hidden', 'false');
     discordConnect.href = `${membershipConfig.workerOrigin}/discord/connect?session_id=${encodeURIComponent(checkoutSession)}`;
-    window.setTimeout(() => discordConnect.classList.add('is-ready'), 150);
   }
 }
-if (checkoutState === 'connected') setCheckoutMessage('Discord is connected. Your member access is ready.');
+if (checkoutState === 'connected') {
+  const message = 'Discord authorization is complete. Open Kobe’s server using the same Discord account to see your member channels. If access is missing, contact support—do not pay again.';
+  setCheckoutMessage(message);
+  showConnectionPanel('Discord connected.', message);
+}
 if (checkoutState === 'cancel') setCheckoutMessage('Checkout was canceled. Your membership has not been started.');
 
 document.querySelectorAll('[data-checkout]').forEach((button) => button.addEventListener('click', async () => {
+  if (['success', 'connected'].includes(checkoutState)) return;
   if (!checkoutEnabled) {
     setCheckoutMessage('Checkout is unavailable because this site is not configured for a valid membership environment.');
     return;

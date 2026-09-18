@@ -67,6 +67,35 @@ test('billing portal fails closed until Discord and Supabase are configured', as
   assert.match(await response.text(), /being configured/);
 });
 
+test('unlinked portal login returns branded recovery without granting access or charging', async () => {
+  const env = {
+    DISCORD_CLIENT_ID: 'client_test', DISCORD_CLIENT_SECRET: 'secret_test',
+    DISCORD_BOT_TOKEN: 'bot_test', DISCORD_GUILD_ID: 'guild_test',
+    DISCORD_MEMBER_ROLE_ID: 'role_test', DISCORD_OAUTH_STATE_SECRET: 'state_test',
+    DISCORD_REDIRECT_URI: 'https://worker.test/discord/callback',
+    SUPABASE_URL: 'https://database.test', SUPABASE_SECRET_KEY: 'db_test',
+  };
+  const originalFetch = globalThis.fetch;
+  const requested = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const target = String(url);
+    requested.push({ target, method: options.method || 'GET' });
+    if (target.endsWith('/oauth2/token')) return Response.json({ access_token: 'oauth_test' });
+    if (target.endsWith('/users/@me')) return Response.json({ id: 'discord_test' });
+    if (target.includes('/membership_customers?')) return Response.json([]);
+    if (target.endsWith('/api_call_events') || target.endsWith('/oauth2/token/revoke')) return new Response(null, { status: 204 });
+    throw new Error('Unexpected external operation');
+  };
+  try {
+    const state = await workerTest.createDiscordState({ intent: 'portal' }, env);
+    const response = await worker.fetch(new Request(`https://worker.test/discord/callback?code=test&state=${encodeURIComponent(state)}`), env);
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get('location'), 'https://kobesbettinghub.com/managemembership?portal=connection_required');
+    assert.ok(requested.some(({target}) => target.endsWith('/oauth2/token/revoke')));
+    assert.ok(!requested.some(({target}) => target.includes('api.stripe.com') || target.includes('/guilds/')));
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test('oversized Stripe webhooks are rejected before buffering', async () => {
   const response = await worker.fetch(new Request('https://worker.test/stripe-webhook', {
     method: 'POST',
@@ -272,8 +301,8 @@ test('checkout offer composition matches the published intro pricing without cha
   assert.equal(starterForm.get('line_items[0][price]'), 'price_monthly');
   assert.equal(starterForm.get('line_items[1][price]'), 'price_starter');
   assert.equal(starterForm.get('subscription_data[trial_period_days]'), '7');
-  assert.equal(starterForm.get('success_url'), 'https://kobes-betting-hub-staging.kobedirwin.workers.dev/membership.html?checkout=success&session_id={CHECKOUT_SESSION_ID}');
-  assert.equal(starterForm.get('cancel_url'), 'https://kobes-betting-hub-staging.kobedirwin.workers.dev/membership.html?checkout=cancel');
+  assert.equal(starterForm.get('success_url'), 'https://kobes-betting-hub-staging.kobedirwin.workers.dev/join?checkout=success&session_id={CHECKOUT_SESSION_ID}#connect-discord');
+  assert.equal(starterForm.get('cancel_url'), 'https://kobes-betting-hub-staging.kobedirwin.workers.dev/join?checkout=cancel');
   assert.equal(trialForm.get('line_items[0][price]'), 'price_monthly');
   assert.equal(trialForm.has('line_items[1][price]'), false);
   assert.equal(trialForm.get('subscription_data[trial_period_days]'), '2');

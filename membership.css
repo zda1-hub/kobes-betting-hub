@@ -7,6 +7,14 @@
 .offer-card .offer-button[hidden] { display:none !important; }
 #offer { scroll-margin-top:175px; }
 .discord-connect[hidden] { display:none !important; }
+.membership-confirmation[hidden], [data-membership-sales][hidden] { display:none !important; }
+.membership-confirmation { width:min(100% - 48px,760px); margin:clamp(40px,6vw,80px) auto 80px; padding:clamp(26px,5vw,52px); border:1px solid var(--line); box-shadow:10px 10px 0 var(--orange); scroll-margin-top:150px; }
+.membership-confirmation h1 { margin:0 0 22px; font-size:clamp(38px,7vw,66px); line-height:1.04; letter-spacing:-.055em; }
+.membership-confirmation [data-connection-message] { font-size:18px; line-height:1.6; }
+.membership-confirmation .discord-connect { width:100%; margin:26px 0; min-width:0; background:var(--orange); color:var(--ink); }
+.membership-confirmation .connection-note { color:var(--muted); font-size:14px; line-height:1.65; }
+.membership-confirmation .connection-note a { color:var(--ink); text-underline-offset:3px; }
+@media (max-width:800px) { .membership-confirmation { scroll-margin-top:120px; }.membership-confirmation .discord-connect { padding:20px 16px; } }
 .member-referral { margin-top:24px; padding:18px; border:1px solid var(--orange); }
 .member-referral h2 { margin:0 0 10px; color:#fff; font-size:22px; line-height:1.25; letter-spacing:-.035em; }
 .member-referral p { margin:0 0 14px; color:#d2d2d2; font-size:13px; line-height:1.6; }

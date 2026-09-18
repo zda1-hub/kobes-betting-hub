@@ -1110,7 +1110,11 @@ async function finishDiscordConnection(request, env) {
     }
     if (state.intent === 'portal') {
       const membership = await membershipCustomerForDiscord(env, user.id);
-      if (!membership?.stripe_customer_id) throw new Error('No paid membership is linked to this Discord account. Connect Discord from the checkout confirmation first.');
+      if (!membership?.stripe_customer_id) {
+        // Do not infer a wallet customer's identity or offer another purchase.
+        // Initial account linking still requires their private checkout proof.
+        return redirect(`${siteOrigin(env)}${SITE_PATH}/managemembership?portal=connection_required`);
+      }
       const customer = await stripeGet(env, `/customers/${encodeURIComponent(membership.stripe_customer_id)}`);
       const subscription = membership.current_subscription_id
         ? await stripeGet(env, `/subscriptions/${encodeURIComponent(membership.current_subscription_id)}?expand[]=discounts`)
@@ -1152,7 +1156,7 @@ async function finishDiscordConnection(request, env) {
     });
     await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, { method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }) }, env, { memberId: user.id, triggerType: 'discord_membership_link' });
     await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, { method: 'PUT', headers: botHeaders }, env, { memberId: user.id, triggerType: 'discord_membership_link' });
-    return redirect(`${siteOrigin(env)}${SITE_PATH}/membership.html?checkout=connected`);
+    return redirect(`${siteOrigin(env)}${SITE_PATH}/join?checkout=connected#connect-discord`);
   } catch (error) {
     return new Response(error.message || 'Discord connection failed.', { status: 400 });
   } finally {
@@ -1200,10 +1204,12 @@ async function createCheckout(request, env, origin) {
     if (!referrerProfile || !await activeMembershipForDiscord(env, referrerProfile.discord_user_id)) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
   }
 
-  const membershipPage = `${siteOrigin(env)}${SITE_PATH}/membership.html`;
+  // Go straight to the canonical confirmation page, avoiding the legacy
+  // membership.html meta-refresh redirect between payment and Discord linking.
+  const membershipPage = `${siteOrigin(env)}${SITE_PATH}/join`;
   const values = {
     mode: 'subscription',
-    success_url: `${membershipPage}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${membershipPage}?checkout=success&session_id={CHECKOUT_SESSION_ID}#connect-discord`,
     cancel_url: `${membershipPage}?checkout=cancel`,
     payment_method_collection: 'always',
     'payment_method_types[0]': 'card',
@@ -1604,7 +1610,7 @@ function memberWelcomeMessage(session, subscription, env) {
   if (!Number.isFinite(nextAt) || nextAt <= Date.now() / 1000 || subscription.cancel_at_period_end || subscription.cancel_at) return null;
   const money = cents => '$' + (cents / 100).toFixed(2);
   const date = new Date(nextAt * 1000).toLocaleDateString('en-US', { timeZone: 'America/Phoenix', month: 'long', day: 'numeric', year: 'numeric' });
-  const connection = `${siteOrigin(env)}/membership.html?checkout=success&session_id=${encodeURIComponent(session.id)}`;
+  const connection = `${siteOrigin(env)}/join?checkout=success&session_id=${encodeURIComponent(session.id)}#connect-discord`;
   const period = months === 1 ? 'month' : months === 12 ? 'year' : '6 months';
   return {
     recipient: email,

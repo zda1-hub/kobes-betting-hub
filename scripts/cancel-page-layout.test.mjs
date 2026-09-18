@@ -10,7 +10,7 @@ test('manage-membership page uses shared site chrome and a bounded responsive la
   assert.match(cancelHtml, /class="site-header"/);
   assert.match(cancelHtml, /class="manage-copy"/);
   assert.match(cancelHtml, /class="manage-panel"/);
-  assert.match(cancelHtml, /membership\.css\?v=20260913-manage-layout/);
+  assert.match(cancelHtml, /membership\.css\?v=20260917-discord-handoff/);
   assert.match(membershipCss, /\.manage-shell\s*\{[^}]*grid-template-columns:/s);
   assert.match(membershipCss, /\.manage-shell\s*\{[^}]*padding:/s);
   assert.match(membershipCss, /@media \(max-width:800px\)[\s\S]*?\.manage-shell\s*\{[^}]*grid-template-columns:1fr/s);

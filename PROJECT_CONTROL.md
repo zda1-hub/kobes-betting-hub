@@ -875,6 +875,15 @@ Database direction: the existing free Supabase Postgres project is the first pro
 
 ## Owner answers still required
 
+### 2026-09-17 paid-member Discord handoff repair
+
+- Static production version `48f4f5c1-f82e-4d27-96c4-211f3296d25a` and Checkout Worker version `f2bb33a3-b02b-44ec-81bf-25ca0cedd251` are live. Existing Dashboard variables/secrets were preserved with `--keep-vars`.
+- Checkout success and future welcome links now land directly on `/join?...#connect-discord`. Paid-return screens put Discord authorization first, hide purchase offers, and independently prevent another checkout submission. Normal plan and referral pricing is unchanged.
+- A portal login for an unlinked Discord account returns to the branded management page with private-link recovery instructions instead of a plain-text error. It does not infer the member identity, charge again, or grant access. OAuth tokens still receive best-effort revocation.
+- Customer-specific Stripe inspection confirmed a successful $10 starter payment, a valid seven-day subscription period, and no linked Discord metadata. The original checkout passed the live subscription gate and returned a Discord authorization redirect with only `identify guilds.join`. The private recovery link was supplied to the owner for the affected customer only; identifiers and bearer links are deliberately omitted here.
+- All 374 automated tests passed, both deploy dry runs passed, and production read-only smoke passed 5/5. The deployed confirmation screen was visually checked and phone-width inspection showed no horizontal overflow (390px viewport/document); purchase offers were hidden and the connection button visible. The branded portal recovery message was visibly verified live.
+- Remaining acceptance: the affected customer must authorize their own intended Discord account, after which the VIP role and channel access must be confirmed. Neither a completed customer OAuth nor an Apple Pay purchase-to-access end-to-end run was performed by the operator. Do not claim either has passed yet.
+
 These cannot be learned safely from source code:
 
 1. OpenAI's temporary hard stops are already approved and live. What are the daily/monthly budgets and stop-versus-alert thresholds for X, Cloudflare, Render, and total infrastructure?

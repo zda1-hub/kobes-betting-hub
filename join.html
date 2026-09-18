@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="home.css?v=20260917-homeflow" />
-    <link rel="stylesheet" href="membership.css?v=20260917-term-plans" />
+    <link rel="stylesheet" href="membership.css?v=20260917-discord-handoff" />
   </head>
   <body>
     <div class="site-ticker" aria-label="Top picks. Real breakdowns. One focused community.">
@@ -36,7 +36,16 @@
       </nav>
     </header>
     <main>
-      <section class="membership-hero membership-hero-vip" aria-labelledby="join-title">
+      <section class="membership-confirmation" id="connect-discord" data-membership-confirmation hidden aria-labelledby="connection-title">
+        <p class="eyebrow">YOUR MEMBERSHIP · NEXT STEP</p>
+        <h1 id="connection-title" data-connection-title>Connect your Discord.</h1>
+        <p data-connection-message role="status" aria-live="polite">Use the Discord account you want to access the member channels with.</p>
+        <a class="button discord-connect" data-discord-connect hidden>Connect Discord <span aria-hidden="true">→</span></a>
+        <p class="connection-note">Already paid? Do not purchase again. Payment and Discord authorization are separate steps—even with Apple Pay. Your welcome email also includes this private connection link.</p>
+        <p class="connection-note">If Discord opens the wrong account, switch to the correct account before authorizing. Missing access afterward? <a href="mailto:zakai@kaimaz.com">Contact support</a> with your checkout email.</p>
+        <a class="text-link" href="/managemembership">Manage membership →</a>
+      </section>
+      <section class="membership-hero membership-hero-vip" data-membership-sales aria-labelledby="join-title">
         <div>
           <p class="eyebrow">KOBE'S BETTING HUB</p>
           <h1 id="join-title">The board, organized.</h1>
@@ -97,12 +106,11 @@
             <p>Active US members can earn $10 cash for each eligible new member’s first $32.99 payment, after verification and a seven-day hold.</p>
             <a class="text-link referral-entry" href="refer.html">Member referral program →</a>
           </section>
-          <a class="checkout-alt discord-connect" data-discord-connect hidden>Connect Discord <span aria-hidden="true">→</span></a>
         </aside>
       </section>
     </main>
     <footer><span>© <span id="year"></span> KOBE'S BETTING HUB</span><span class="footer-nav"><a href="index.html">Full site</a><a href="/managemembership">Manage membership</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></span><span>21+ • WAGER RESPONSIBLY</span></footer>
     <script>window.__KBH_MEMBERSHIP_CONFIG__ = Object.freeze({"environment":"production","workerOrigin":"https://kobes-betting-hub-checkout.kobedirwin.workers.dev"});</script>
-    <script src="membership.js?v=20260917-term-plans"></script>
+    <script src="membership.js?v=20260917-discord-handoff"></script>
   </body>
 </html>

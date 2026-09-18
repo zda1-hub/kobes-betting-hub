@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source = await fs.readFile(new URL('../cancel.js', import.meta.url), 'utf8');
 const productionOrigin = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
 
-function portalPage(config) {
+function portalPage(config, search = '') {
   const attributes = new Map();
   const portalLogin = {
     href: '',
@@ -25,7 +25,7 @@ function portalPage(config) {
   };
   const window = {
     __KBH_MEMBERSHIP_CONFIG__: config,
-    location: { search: '' },
+    location: { search },
   };
 
   vm.runInNewContext(source, { document, URL, URLSearchParams, window });
@@ -56,4 +56,11 @@ test('billing portal fails closed when staging points at production', () => {
   assert.equal(page.portalLogin.href, '');
   assert.equal(page.attributes.get('aria-disabled'), 'true');
   assert.match(page.message.textContent, /not configured for a valid membership environment/i);
+});
+
+test('unlinked customers receive private-link recovery instructions, not a second purchase', () => {
+  const page = portalPage({ environment: 'production', workerOrigin: productionOrigin }, '?portal=connection_required');
+  assert.match(page.message.textContent, /Do not purchase again/);
+  assert.match(page.message.textContent, /private connection link in your welcome email/);
+  assert.match(page.message.textContent, /contact support with your checkout email/);
 });
