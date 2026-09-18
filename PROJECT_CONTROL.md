@@ -8,6 +8,30 @@
 
 **Control-file owner:** Zakai Martin
 
+### September 17, 20:35 Arizona — Stripe billing notices saved; welcome sender hand-off
+
+Saved and visually verified Stripe production customer emails for upcoming renewals
+(existing seven-day timing), expiring cards, failed card payments and failed bank
+debit payments. Enabled the subscription-management link to Stripe Customer Portal.
+Payment-update links now use Stripe-hosted pages, replacing the legacy mixed setup
+whose custom URLs pointed at the homepage. Stripe warned this legacy migration
+cannot be reversed. The seven-day trial reminder remains off; it is not a welcome
+email. No subscriptions, prices, tax settings, retry policy or payment charges changed.
+
+Deployed prepared checkout welcome code with preserved production bindings:
+Worker `e803f13b-15bb-47a7-8117-45b963d14988`; future-only checkout/event cutoff
+`2026-09-18T03:35:15Z`. Dedicated MEMBER_WELCOME_QUEUE_SECRET is stored as a
+Cloudflare secret, not source/config. Health and authenticated queue GET both
+return 200, queue count zero, proving migration 011's table is available. All
+367 tests and five public production smoke checks pass. No customer welcome sent.
+
+Google's new property-name row is prepared in Arc; its secret Value is blank.
+Owner must enter the private connection credential and Save script properties.
+Do not have the UI agent enter or submit a new authentication credential. The
+five-minute welcome trigger, Google connection test and actual email delivery
+remain unfinished. Existing owner-only recap sender/schedules were not changed.
+This receipt supersedes the older prepared/not-deployed welcome notes below.
+
 ### September 17 — expanded grading and morning review prepared
 
 Added dedicated F5, football/basketball first-half, MLB NRFI/YRFI, football
