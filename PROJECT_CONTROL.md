@@ -24,7 +24,15 @@ complete final recaps remain result-driven. No public recap posting was enabled.
 Live read-only ESPN canaries passed for Yankees F5, Yankees/Marlins NRFI,
 Bills first-half spread, Chase Brown first touchdown, Bills ML/total parlay,
 and NYCFC 90-minute moneyline. No test wagers, customer changes or public posts.
-Release verification/deploy receipt must be recorded before calling this live.
+Release verified: 367/367 tests pass; Render commit
+`5cc40c2afccd15363e4e3fb1a383a170640ac439`, deploy
+`dep-damatp9srm7s73cvkcu0`, live 2026-09-18 03:24:47 UTC (20:24 Arizona).
+Startup confirms Kobe Bot login, laptop-independent Telegram reader, five-minute
+recap checks, 21:00 nightly and 07:00 previous-day review eligibility. All five
+read-only production smoke checks pass. Production grading is running and still
+reports live games, unmatched identities, unclear parlays and grouped parent
+holds; no claim is made that all of today's wagers have settled or that a final
+recap/graphic has been delivered. Per-wager grouped expansion runs separately.
 
 Explicit remaining grading exceptions: unavailable challenger/ITF results,
 nonstandard/retired tennis matches, teasers, second-half overtime rules not stated,
