@@ -70,7 +70,7 @@ test('missing session reports awaiting login without a Telegram connection',asyn
 test('an unextractable message retries across restarts, is preserved, and cannot block later picks forever',async t=>{
   const h=await harness(t);h.messages[0]={...message(1,''),photo:{}};
   h.messages.push(message(2));
-  h.options.enrich=async()=>({status:'WAITING',detail:'private-provider-detail'});
+  h.options.enrich=async()=>({status:'EXTRACTION_FAILED',detail:'private-provider-detail'});
   assert.equal((await createTelegramReader(h.options).run())[0].status,'DEFERRED_EXTRACTION');
   assert.equal((await createTelegramReader(h.options).run())[0].status,'DEFERRED_EXTRACTION');
   const third=await createTelegramReader(h.options).run();
@@ -81,6 +81,15 @@ test('an unextractable message retries across restarts, is preserved, and cannot
   assert.equal(held.status,'HELD_EXTRACTION_FAILED');
   assert.ok(!JSON.stringify(held).includes('private-provider-detail'));
   await createTelegramReader(h.options).run();assert.equal(h.sent.length,1);
+});
+test('configuration and budget deferrals are not mistaken for bad source content',async t=>{
+  const h=await harness(t);h.messages[0]={...message(1,''),photo:{}};
+  h.options.enrich=async()=>({status:'BUDGET_EXCEEDED'});
+  for(let i=0;i<4;i++)assert.equal((await createTelegramReader(h.options).run())[0].extractionStatus,'BUDGET_EXCEEDED');
+  h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:{lossless_text_terms:true,is_pick_candidate:true,
+    source_capper_name:'AnalyticsCapper',selection:'Angels ML -110',plays:[{selection:'Angels ML -110'}],missing_or_ambiguous:[]}});
+  await createTelegramReader(h.options).run();
+  assert.equal(h.sent.length,1);
 });
 test('initial catch-up pages past 100 messages without losing older current-day picks',async t=>{
   const h=await harness(t);const offsets=[];

@@ -102,11 +102,17 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         packet.analysis=await enrich(packet,{beforeOpenAIRequest:()=>{if(modelCalls>=2)return false;modelCalls++;return true;}});
         packet.source.media_urls=[]; // no source image in private/public cards or saved packets.
         if(packet.analysis.status!=='SOURCE_EXTRACTED'){
+          const extractionStatus=['EXTRACTION_FAILED','ENRICHMENT_OFF','WAITING_FOR_OPENAI_API_KEY','BUDGET_EXCEEDED','MODEL_CALL_LIMIT_REACHED'].includes(packet.analysis.status)?packet.analysis.status:'UNKNOWN';
+          // Configuration and spending limits are not bad source content.
+          // Retain the cursor so the source can recover after the limit clears.
+          if(extractionStatus!=='EXTRACTION_FAILED'){
+            results.push({status:'DEFERRED_EXTRACTION',extractionStatus,messageId:message.id});break;
+          }
           state.extractionRetries=state.extractionRetries||{};
           const retries=(state.extractionRetries[String(message.id)]||0)+1;
           state.extractionRetries[String(message.id)]=retries;
           await save(file,state);
-          if(retries<3){results.push({status:'DEFERRED_EXTRACTION',messageId:message.id});break;}
+          if(retries<3){results.push({status:'DEFERRED_EXTRACTION',extractionStatus,messageId:message.id});break;}
           // Preserve an unreadable source for review, but don't let one poison
           // message permanently block every later pick in the channel.
           packet.analysis={status:packet.analysis.status,source_only:true,extraction:null};
