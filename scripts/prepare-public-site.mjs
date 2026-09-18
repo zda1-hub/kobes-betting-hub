@@ -10,6 +10,7 @@ const membershipConfigFiles = ['join.html', 'membership.html', 'cancel.html'];
 const membershipConfigPattern = /window\.__KBH_MEMBERSHIP_CONFIG__ = Object\.freeze\(\{[^\n]*\}\);/g;
 
 const publicFiles = [
+  '_redirects',
   'index.html',
   'exclusives.html',
   'exclusives.css',
@@ -109,6 +110,9 @@ export async function preparePublicSite({ env = process.env } = {}) {
     const source = await readFile(outputPath, 'utf8');
     await writeFile(outputPath, injectMembershipConfig(source, membershipConfig, file));
   }));
+
+  // One source of truth, including environment-specific secure portal config.
+  await cp(path.join(outputRoot, 'cancel.html'), path.join(outputRoot, 'managemembership.html'));
 
   await cp(
     path.join(projectRoot, 'guides', 'how-to-choose-a-sports-betting-discord.html'),

@@ -26,7 +26,7 @@ test('homepage retains real gallery files, image viewer, membership and navigati
   assert.match(html, /data-dialog-close/);
   assert.match(html, /data-menu-toggle/);
   assert.match(html, /href="join.html#offer">Try 2 days free/);
-  assert.match(html, /href="cancel.html"/);
+  assert.match(html, /href="\/managemembership"/);
   assert.match(html, /No outcome is guaranteed/);
 });
 

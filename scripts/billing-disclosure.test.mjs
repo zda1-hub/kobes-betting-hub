@@ -58,7 +58,7 @@ test('join and membership routes use one complete recurring-billing disclosure',
     assert.match(text, /excluding introductory offers/);
     assert.match(html, /class="member-referral"/);
     assert.match(html, /href="refer\.html">Member referral program/);
-    assert.match(html, /href="cancel\.html">Already a member\? Manage membership/);
+    assert.match(html, /href="\/managemembership">Already a member\? Manage membership/);
     assert.ok(text.includes(`Save $${(3299 * 6 / 100 - 134.99).toFixed(2)}`));
     assert.ok(text.includes(`Save $${(3299 * 12 / 100 - 194.99).toFixed(2)}`));
   }

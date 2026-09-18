@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import {
   injectMembershipConfig,
@@ -59,4 +60,12 @@ test('membership configuration injection replaces exactly one browser config blo
 
 test('production site preparation includes every declared public asset', async () => {
   await preparePublicSite({ env: {} });
+  const alias = await readFile(new URL('../.public-site/managemembership.html', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../.public-site/cancel.html', import.meta.url), 'utf8');
+  assert.equal(alias, source);
+  assert.match(alias, /https:\/\/kobesbettinghub.com\/managemembership/);
+  assert.match(alias, /data-portal-login/);
+  const redirects = await readFile(new URL('../.public-site/_redirects', import.meta.url), 'utf8');
+  assert.match(redirects, /^\/cancel \/managemembership 301/m);
+  assert.match(redirects, /^\/cancel\.html \/managemembership 301/m);
 });
