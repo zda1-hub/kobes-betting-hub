@@ -2,7 +2,7 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-17 approximately 17:35 MST (323/323 tests; 5/5 post-deploy public smoke; runtime confirms 16:00 cutoff, 21:00 private recap review and compact injury receipts. Real-data review covers 87 entries/two parts; recap queue GET 200. Fresh billing check: 9 active/trialing records, 6 unlinked, zero reconciliation/webhook failures. All 3 connected Discord accounts have VIP. Telegram phone prompt open; cloud session still missing.)
+**Last verified:** 2026-09-17 approximately 17:58 MST (326/326 tests; 5/5 post-deploy public smoke; `/managemembership` 200, legacy redirects preserve portal return query, seven public routes contain the new management link. Render c620d19 live; bot login and compact cloud injury receipts confirmed. Fresh Telegram hidden phone prompt open; cloud session still pending. Last billing check at approximately 17:35: 9 active/trialing records, 6 unlinked, zero reconciliation/webhook failures; all 3 connected Discord accounts had VIP.)
 
 **Production runtime change set:** Render `c620d191610694fa631cef389a5e9af1cf311cb5`, live deploy `dep-dam8oass728c73auu4k0`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `739a4271-937e-4c3f-abcb-5b6fe4451a4e`. Worker logged in as Kobe Bot and awaits Telegram cloud login. Intake cutoff 16:00 and private unresolved-review eligibility 21:00 Arizona remain configured. Migration 010 is applied. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
 
@@ -32,6 +32,9 @@ Render deploy `dep-dam8oass728c73auu4k0` for `c620d191610694fa631cef389a5e9af1cf
 is live at 00:56:43 UTC on tzzsf; bot login confirmed, no error-level logs in the
 initial verification window. Safe Telegram error diagnosis and distinct-opponent/
 ambiguous-event grading protections are live. Account authorization still pending.
+The new hidden phone prompt is confirmed open on tzzsf (authorization PID 158).
+Do not deploy/restart again while this attempt is active. Injury readback after
+restart retains compact NFL 194/6 and MLB 278/4 daily receipts.
 
 Static Worker `739a4271-937e-4c3f-abcb-5b6fe4451a4e` serves `/managemembership` (200).
 Public management links use that address. `/cancel`, `/cancel/` and `/cancel.html`
