@@ -2,7 +2,7 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-17 approximately 17:22 MST (317/317 tests; 5/5 public smoke; eight public pages and actual portal/referral OAuth redirects pass; cloud injury refreshes verified through 00:20 UTC; recap loop active but 87 current-day logged entries remain pending; 16:00 intake cutoff saved, not activated. Latest billing evidence remains the 16:54 MST check: 3 distinct connected Discord users have VIP and 4 subscription records remain unlinked.)
+**Last verified:** 2026-09-17 approximately 17:35 MST (323/323 tests; 5/5 post-deploy public smoke; runtime confirms 16:00 cutoff, 21:00 private recap review and compact injury receipts. Real-data review covers 87 entries/two parts; recap queue GET 200. Fresh billing check: 9 active/trialing records, 6 unlinked, zero reconciliation/webhook failures. All 3 connected Discord accounts have VIP. Telegram phone prompt open; cloud session still missing.)
 
 **Production runtime change set:** Render `83d063be278bfb2e902b4eabc011f6feb6894a34`, live deploy `dep-dam7pe97lnhs73cd6a1g`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `bc4c6c39-0e01-437c-a1f3-6ad0e45a5c64`. Startup registered commands, logged in as Kobe Bot, resumed persistent injury receipts, and awaits Telegram login. Migration 010 is applied with three referral claim columns and three unique identity/card/charge indexes. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
 
@@ -21,6 +21,35 @@ This is the authoritative project brain for humans and coding agents. Read this 
 The owners do not need to read every repository document. The operating chat should use this file to answer: what is live, what talks to what, what costs money, what failed, what is next, and which decisions require an owner.
 
 ## Executive state
+
+### September 17 — latest authorized rollout receipt (supersedes earlier snapshots)
+
+Current Render runtime is `aa6c5cf49a323eb4f99dde387d21aa6c267dc23e`, deploy
+`dep-dam8cclg1s2s73cqm820`, live at 00:31:13 UTC on sbb9w. Cloudflare versions
+and migrations remain unchanged. Authorized restart activated 16:00 cutoff and
+compact injury formatting. Startup confirms next X intake 10:00 Arizona tomorrow,
+recap checks every five minutes and private unresolved-review eligibility at
+21:00 Arizona. NFL receipt is 194 relevant players/6 pages; MLB is 278/4.
+Superseded full-list pages are marked no longer needed, not deleted. Direct
+Discord readbacks confirm symbolized pages. All 323 tests and post-deploy 5/5
+public smoke pass. Real-data review includes 87 official publication entries in
+two parts (largest 10,953 characters). Queue read-only connection returns 200.
+Final recap still needs verified grades and inbox acceptance. Recent Sent mail
+proves September 15 recap-waiting and Story packages were delivered by the
+existing sender; this is not proof of tonight's future final recap delivery.
+
+Fresh membership DB read shows six missing Discord identities, none present in
+their subscription metadata; all three linked accounts independently have VIP.
+No billing was changed or identity guessed. Runtime bot/channel identity matches
+the read-only Free Pick lookup; actual channel history permissions are present,
+but latest 25 messages and today's canonical Free Pick ledger are empty. Owner
+must provide the claimed current-day message link before delivery recovery.
+Telegram browser login has not created a cloud session. The hidden cloud phone
+prompt is now open on sbb9w; owner enters phone/code/2FA directly, not chat.
+Do not restart again while this authorization is active. Welcome/access emails
+remain unfinished: no suitable activated transactional sender/lifecycle test and
+no welcome message sent. Existing payment receipts/cancellation automation stay
+enabled; they do not replace trial-access onboarding.
 
 ### September 17 — prioritized member access, nightly review and authorized restart
 

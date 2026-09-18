@@ -1,7 +1,7 @@
 # Cloud readiness — September 17, 2026
 
-Updated at approximately 17:22 Arizona time; billing-specific evidence remains
-from the 16:54 check. This is an evidence record, not a
+Updated at approximately 17:35 Arizona time with fresh billing checks and an
+authorized worker restart. This is an evidence record, not a
 claim that all launch items or every possible fraud attack are resolved.
 
 ## Completed
@@ -30,7 +30,7 @@ claim that all launch items or every possible fraud attack are resolved.
   verified. No real payout executed for testing. See REFERRAL_SAFETY.md.
 - All three distinct linked Discord accounts have the configured VIP role,
   verified by live member GETs; no failed role readback.
-- Fresh source test suite: 317/317. Public read-only production smoke: 5/5.
+- Fresh source test suite: 323/323. Post-deploy public production smoke: 5/5.
 - All eight public pages return HTTP 200 and contain the shared header. Actual
   Manage Membership (`/discord/login?intent=portal`) and referral login return
   Discord OAuth redirects. Prices and visible management/referral links are
@@ -43,6 +43,26 @@ claim that all launch items or every possible fraud attack are resolved.
   existing private operations alarm.
 
 ## Latest runtime checks and saved configuration
+
+The following latest receipt supersedes the earlier runtime snapshots below:
+Render `aa6c5cf49a323eb4f99dde387d21aa6c267dc23e` /
+`dep-dam8cclg1s2s73cqm820` is live at 00:31:13 UTC on sbb9w. **16:00 cutoff
+and compact symbolized injury boards are active.** Injury receipts at 00:32:47
+UTC confirm NFL 194 relevant entries/6 pages, MLB 278/4; superseded pages receive
+notices rather than deletion. Runtime confirms private unresolved-review
+eligibility at 21:00 Arizona and ongoing five-minute grading. Real-data review
+contains all 87 publication entries in two parts, max length 10,953. Recap queue
+GET returns 200. Final results and tonight's inbox delivery remain unverified.
+Multi-wager groups cannot be auto-graded from the first wager only. Notification
+bodies split losslessly. All 323 tests and post-deploy 5/5 public smoke pass.
+Fresh billing check has 6 unlinked of 9 active/trialing records, zero reconciliation
+failures or failed/stuck webhooks; all 3 connected Discord accounts have VIP.
+Telegram session is missing and the secure cloud phone prompt is open on sbb9w.
+Welcome emails remain unfinished. The actual Free Pick bot/channel identity and
+history permission match, but latest 25 messages and today's Free Pick log are
+empty; owner must provide the exact claimed message link.
+
+Earlier snapshots, retained for chronology:
 
 - Injury refresh receipts are present at 23:50, 00:05 and 00:20 UTC. No
   error-level app log entries were returned since the latest startup through
@@ -88,7 +108,7 @@ claim that all launch items or every possible fraud attack are resolved.
 3. Kobe accepts the pending `kobeslocks` Instagram tester invitation and finishes
    Instagram OAuth. No authorized connection is present yet, so no automatic
    Instagram Story publication is claimed.
-4. Four active/trialing subscriptions remain unlinked after grace. Latest
+4. Six active/trialing subscriptions remain unlinked after grace. Latest
    metrics show nine active/trialing subscription records, not nine paying
    people. Users must finish Connect Discord; investigate duplicates with the
    owner before changing billing. Three distinct connected users have VIP.
@@ -105,9 +125,10 @@ claim that all launch items or every possible fraud attack are resolved.
    headline from a mixed weekly/monthly/one-time price list.
 8. Seller still needs to resolve sales-tax applicability. No tax setting was
    silently enabled or treated as legal clearance. Paid Meta ads were not run.
-9. Finish or explicitly cancel the pending Telegram login before activating
-   the saved 4 PM cutoff and deploying compact injury boards. Then verify the
-   new runtime schedule and updated channel receipts.
+9. Finish cloud Telegram phone/code/optional 2FA in the hidden prompt now open
+   on sbb9w; browser login did not save that session. Then verify its first
+   selected-channel read/receipt. Cutoff and compact injuries are already live;
+   no further restart while authorization is in progress.
 10. Implement/test free-trial welcome/access emails and immediate acknowledgement
     when cancellation is scheduled. Payment receipts do not replace onboarding.
 
