@@ -2,7 +2,7 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-17 16:54 MST (313/313 release tests; 5/5 public smoke; live referral uniqueness/claim columns and server-only RLS/grants verified; Troy West's four original terms read back in private approvals; 3 distinct connected Discord accounts have VIP; 4 active/trialing subscription records remain unlinked after grace)
+**Last verified:** 2026-09-17 approximately 17:22 MST (317/317 tests; 5/5 public smoke; eight public pages and actual portal/referral OAuth redirects pass; cloud injury refreshes verified through 00:20 UTC; recap loop active but 87 current-day logged entries remain pending; 16:00 intake cutoff saved, not activated. Latest billing evidence remains the 16:54 MST check: 3 distinct connected Discord users have VIP and 4 subscription records remain unlinked.)
 
 **Production runtime change set:** Render `83d063be278bfb2e902b4eabc011f6feb6894a34`, live deploy `dep-dam7pe97lnhs73cd6a1g`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `bc4c6c39-0e01-437c-a1f3-6ad0e45a5c64`. Startup registered commands, logged in as Kobe Bot, resumed persistent injury receipts, and awaits Telegram login. Migration 010 is applied with three referral claim columns and three unique identity/card/charge indexes. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
 
@@ -21,6 +21,109 @@ This is the authoritative project brain for humans and coding agents. Read this 
 The owners do not need to read every repository document. The operating chat should use this file to answer: what is live, what talks to what, what costs money, what failed, what is next, and which decisions require an owner.
 
 ## Executive state
+
+### September 17 — prioritized member access, nightly review and authorized restart
+
+Owner authorized worker reset and requested member access → recap → Telegram →
+Free Pick → welcome emails priority. Fresh cloud DB inspection finds 9 active/
+trialing records, 6 without Discord identity, zero failed/stuck webhooks and zero
+reconciliation failures. All three actual connected accounts were independently
+read from Discord and have VIP. None of the six missing links has a Discord ID in
+Stripe subscription metadata; do not invent one or modify customer billing.
+They require verified Connect Discord completion. No cloud Telegram session file
+is present despite the browser account being signed in. Hidden phone/code/2FA
+authorization is still required. Owner's reset authorization supersedes the prior
+restart hold, but it does not turn browser login into cloud authorization.
+
+Prepared nightly private recap review at 21:00 Arizona when unresolved entries
+remain. It lists verified settled rows and explicitly unresolved original entries
+with complete-post links, never calls publication-group counts a wager record or
+claims final profit. Snapshot is persisted before idempotent per-part queueing.
+The complete final recap still requires verified results. Long review/final bodies
+are split losslessly below the notification limit rather than silently truncated.
+Multi-wager source publications are blocked from first-wager-only auto-grading.
+These changes are prepared for the authorized existing-worker deployment.
+Live ledger contains 87 September 17 official rows and no Free Pick rows. The
+source channel is the only matching Free Pick channel in the server inventory.
+A genuine message URL is needed if today's Free Pick was posted elsewhere.
+
+### September 17 — fresh verification, 4 PM saved and recap blockers
+
+Owner requested the daily intake cutoff move back to 16:00 Arizona and a fresh
+general readiness check. Render environment readback confirms
+`X_MONITOR_DAILY_STOP_AT=16:00` saved with **Save only**. The running process still
+has its earlier 15:00 value. Activation requires a restart, held because the
+existing Telegram authorization terminal is still at the hidden phone prompt.
+No new deployment or Telegram credential entry was performed. The recap close
+time has no separate environment override and will inherit the new cutoff after
+restart. Do not describe the new window or compact injury format as live yet.
+
+Fresh tests: 317/317; public production smoke: 5/5; `/`, `/join`, `/cancel`,
+`/refer`, `/exclusives`, `/support`, `/terms`, `/privacy`: HTTP 200 with shared
+header. Join contains both longer prices and visible management/referral links.
+The actual `/discord/login?intent=portal` and `/referrals/login` routes return
+Discord OAuth redirects. Private approval and both injury channels are readable.
+Cloud injury receipts refresh at 23:50, 00:05 and 00:20 UTC on the existing
+worker; no error-level app logs were returned for the latest startup window.
+These checks do not substitute for new real payments, cash payouts, inbox
+delivery or a genuine new social publication.
+
+Tonight's official recap checks are visibly running every five minutes. One
+complete 00:18–00:19 UTC grading cycle contains 87 pending logged entries:
+6 ESPN events not final, 10 no matching ESPN event, 71 unsupported league or
+missing operating date. Thus 81 entries need event/market metadata or verified
+manual grading, not merely waiting for games. Rows may group multiple wagers.
+Final recap deliberately waits for every eligible official entry to be graded;
+no result is invented. Its delivery target is Kobe's private review email,
+not automatic public Discord publication. Final email/inbox acceptance remains
+unverified. The Free Pick channel's latest-message read is empty; a new genuine
+Kobe approval is still needed for current-day website/X acceptance. Previous
+billing checks are retained with their timestamps, not represented as refreshed.
+
+### September 17 — recurring exclusive intake and follow-up verified
+
+Owner requested exclusives continue tomorrow and every day into Discord. Preserve
+the existing private-approval-only boundary; Kobe chooses member publication.
+Live Render logs from instance mxr4r explicitly schedule the next daily X intake
+for `2026-09-18T17:00:00.000Z` (10:00 Arizona), after today's 15:00 cutoff. The
+existing daily loop repeats and the collector paginates its first daily catch-up
+from Pacific midnight, then polls new source posts. This is a 10:00–15:00 Arizona
+window, not guaranteed 24-hour exclusive coverage. Original capper grouping,
+exact supplied terms, stale/ambiguous holds and durable dedupe remain unchanged.
+Focused exclusive/collector/recovery tests: 26/26 pass. No worker restart or
+member publication was performed for this verification.
+
+Created active thread heartbeat `daily-exclusive-approval-check` for 10:30 Arizona
+daily, starting tomorrow, to audit existing cloud intake and private delivery
+receipts, recover only safely deduplicated original private terms, and notify only
+meaningful failures/omissions/recoveries or owner actions. This Codex follow-up is
+not the production scheduler and must not be represented as laptop-independent
+delivery. The authoritative daily collector already runs on Render without the
+laptop. The old August-29 local collector automation remains paused; it was not
+revived or duplicated. Telegram intake is still awaiting owner login.
+
+### September 17 — customer receipt and cancellation emails enabled
+
+Owner requested membership and cancellation confirmations. In the existing live
+Kobesbettinghub Stripe account, Successful payments customer emails were disabled;
+they are now enabled, with the enabled switch visually read back. One live Billing
+automation, `Membership cancellation confirmation`, was created with trigger
+`Subscription is canceled` and its sole action `Send cancellation confirmation
+email` immediately after that trigger. The automation list reads **Active**. No
+billing, retry, refund, subscription, or customer-access state was changed and no
+test email or live transaction was submitted. Stripe's existing branded template
+uses the existing support/reply address `kobedirwin@gmail.com`.
+
+This is configuration verification, **not inbox-delivery acceptance**. Successful
+payment receipts are not free-trial welcome/access emails. Scheduled cancellation
+acknowledgement timing still requires an isolated acceptance check; do not claim
+the canceled trigger proves a message at the moment `cancel_at_period_end` is set.
+A welcome email with exact plan/trial/renewal terms and Connect Discord/Manage
+membership links, plus immediate scheduled-cancellation/access-end confirmation,
+remain pending a suitable transactional sender and isolated lifecycle testing.
+The existing recap sender is restricted to Kobe and must not be widened to member
+recipients without authorized secure configuration. These dashboard changes are
+already live and require no Render restart; local injury deployment remains held.
 
 ### September 17 — compact injury format prepared, deployment held
 

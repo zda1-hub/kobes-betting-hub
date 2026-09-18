@@ -1,6 +1,7 @@
 # Cloud readiness — September 17, 2026
 
-Verified at approximately 16:54 Arizona time. This is an evidence record, not a
+Updated at approximately 17:22 Arizona time; billing-specific evidence remains
+from the 16:54 check. This is an evidence record, not a
 claim that all launch items or every possible fraud attack are resolved.
 
 ## Completed
@@ -29,10 +30,36 @@ claim that all launch items or every possible fraud attack are resolved.
   verified. No real payout executed for testing. See REFERRAL_SAFETY.md.
 - All three distinct linked Discord accounts have the configured VIP role,
   verified by live member GETs; no failed role readback.
-- Final source test suite: 313/313. Public read-only production smoke: 5/5.
+- Fresh source test suite: 317/317. Public read-only production smoke: 5/5.
+- All eight public pages return HTTP 200 and contain the shared header. Actual
+  Manage Membership (`/discord/login?intent=portal`) and referral login return
+  Discord OAuth redirects. Prices and visible management/referral links are
+  present on `/join`. These are read-only checks, not new payment acceptance.
+- Successful-payment receipts are enabled in live Stripe. The cancellation
+  confirmation Billing automation is Active. No test transaction/cancellation
+  was submitted; inbox delivery and scheduled-cancellation timing are unproven.
 - Existing cloud Free Pick recovery, official grading/recap loop and the private
   operations alarm do not need the laptop. Safety holds are surfaced by the
   existing private operations alarm.
+
+## Latest runtime checks and saved configuration
+
+- Injury refresh receipts are present at 23:50, 00:05 and 00:20 UTC. No
+  error-level app log entries were returned since the latest startup through
+  the inspected 00:20 UTC window. This is a snapshot, not an uptime guarantee.
+- `X_MONITOR_DAILY_STOP_AT=16:00` is saved in Render using Save only and read back.
+  The current runtime remains at 15:00 until restart. No separate recap close
+  override is set; its default will inherit the new cutoff after restart.
+- Local commit `5c0b2bf` prepares compact symbolized injury boards with no AI
+  calls. It is not deployed. Both this rollout and cutoff activation are held
+  while Telegram authorization remains at the hidden phone-number prompt.
+- Recap checks ran at 23:53, 23:58, 00:03, 00:08, 00:13 and 00:18 UTC. A complete
+  grading cycle has 87 pending official logged entries: 6 non-final events,
+  10 unmatched events and 71 unsupported league/missing operating date. The
+  last 81 need metadata or verified manual grades. Logged rows can contain
+  several wagers. A complete final recap is not ready or confirmed delivered.
+- The latest Free Pick channel read is empty; the public item remains September
+  15. X transport connection is not proof of a new current-day X publication.
 
 ## Deployment receipts
 
@@ -65,16 +92,27 @@ claim that all launch items or every possible fraud attack are resolved.
    metrics show nine active/trialing subscription records, not nine paying
    people. Users must finish Connect Discord; investigate duplicates with the
    owner before changing billing. Three distinct connected users have VIP.
-5. Final recap requires verified completed results. Existing September 15 recap
+5. Final recap requires verified completed results and resolution of the 81
+   current-day metadata/unsupported-market entries above. Existing September 15 recap
    records are `PENDING_NOTICE_SEND_STARTED` and `PENDING_RESULTS_QUEUED`;
    delivered final-summary acceptance is not established. Unsupported or
    incomplete source markets need manual verified grades rather than guesses.
+   The final recap goes to Kobe privately for review, not automatic public
+   Discord publication. No final recap inbox delivery has been established.
 6. Source groups lacking clear capper/market context remain held. Complete terms
    or an owner-confirmed correction are required; no invented odds/opponents.
 7. Confirm the requested $8,000 comparison period/basis before publishing a
    headline from a mixed weekly/monthly/one-time price list.
 8. Seller still needs to resolve sales-tax applicability. No tax setting was
    silently enabled or treated as legal clearance. Paid Meta ads were not run.
+9. Finish or explicitly cancel the pending Telegram login before activating
+   the saved 4 PM cutoff and deploying compact injury boards. Then verify the
+   new runtime schedule and updated channel receipts.
+10. Implement/test free-trial welcome/access emails and immediate acknowledgement
+    when cancellation is scheduled. Payment receipts do not replace onboarding.
+
+The existing membership alarm's failed-step behavior can skip later pick checks;
+do not claim independent acceptance of every alarm branch from one job run.
 
 No referral program is absolutely abuse-proof. A refund/dispute after money has
 already been transferred can still cause loss. Unknown transfers require

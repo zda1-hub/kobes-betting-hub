@@ -8,6 +8,7 @@ const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { freePickRecapRows } = require('./lib/free-recap');
 const { gradePickFromEspn } = require('./lib/espn-grading');
+const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
 const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
 const {
@@ -319,7 +320,17 @@ async function autoGradePendingOfficialPicks(date) {
   ));
   for (const row of pending) {
     await recordGradeAttempt({ pickId: row.pick_id, result: null, status: 'STARTED', provider: 'ESPN' });
-    const grade = await gradePickFromEspn(row);
+    let groupedSourceReason = '';
+    if (/^\d{8}-\d+-X$/.test(row.pick_id)) {
+      const packetDate = `${row.pick_id.slice(0, 4)}-${row.pick_id.slice(4, 6)}-${row.pick_id.slice(6, 8)}`;
+      try {
+        const packet = JSON.parse(await fs.readFile(path.join(reviewQueueRoot, packetDate, `${row.pick_id.replace(/-X$/, '')}.json`), 'utf8'));
+        groupedSourceReason = publicationGradeHold(row, packet);
+      } catch {
+        groupedSourceReason = publicationGradeHold(row, null);
+      }
+    }
+    const grade = groupedSourceReason ? { status: 'PENDING', reason: groupedSourceReason } : await gradePickFromEspn(row);
     attempts.set(row.pick_id, grade);
     if (grade.status !== 'GRADED') {
       await recordGradeAttempt({
@@ -361,6 +372,43 @@ function recapEmailBody(embeds) {
   return embeds.map((embed) => embed.description || '').filter(Boolean).join('\n\n');
 }
 
+async function queueRecapParts({ id, subject, body }) {
+  const parts = splitRecapBody(body);
+  for (let index = 0; index < parts.length; index += 1) {
+    await queueRecapNotification({
+      id: parts.length === 1 ? id : `${id}-part-${index + 1}`,
+      subject: parts.length === 1 ? subject : `${subject} (${index + 1}/${parts.length})`,
+      body: parts[index]
+    });
+  }
+  return 'QUEUED';
+}
+
+async function queueNightlyRecapReview({ date, rows, attempts, state }) {
+  if (date !== pacificOperatingDate() || arizonaTimeNow() < '21:00') return;
+  const prior = state.dates?.[date] || {};
+  if (prior.review_status === 'QUEUED') return;
+  // Persist a fixed snapshot before delivery so partial-send retries cannot
+  // mix different result snapshots under the same idempotency keys.
+  const review = prior.review_snapshot || buildRecapReview({ date, rows, attempts });
+  if (!review) return;
+  state.dates = { ...(state.dates || {}), [date]: { ...prior, review_snapshot: review, review_status: 'PREPARED' } };
+  await saveFreeRecapState(state);
+  for (let index = 0; index < review.parts.length; index += 1) {
+    await queueRecapNotification({
+      id: `official-recap-review-${date}-part-${index + 1}`,
+      subject: `Kobe's Betting Hub — Private recap review (${date}) ${index + 1}/${review.parts.length}`,
+      body: review.parts[index]
+    });
+  }
+  await recordRecapRun({ operatingDate: date, includedPickIds: review.includedPickIds,
+    status: 'REVIEW_QUEUED', recipient: recapNotificationRecipient,
+    content: review.parts.join(''), details: { provisional: true, parts: review.parts.length } });
+  state.dates[date] = { ...state.dates[date], review_status: 'QUEUED', review_queued_at: new Date().toISOString() };
+  await saveFreeRecapState(state);
+  console.log(`Private nightly recap review for ${date} queued in ${review.parts.length} part(s); unresolved results remain explicitly pending.`);
+}
+
 async function publishDueFreeRecap(date) {
   if (freeRecapInProgress || !recapEmailConfigured()) return;
   freeRecapInProgress = true;
@@ -378,7 +426,7 @@ async function publishDueFreeRecap(date) {
         const includedPickIds = recapRows(rows, date).map((row) => row.pick_id);
         const content = recapEmailBody(embeds).replaceAll('**', '');
         await recordRecapRun({ operatingDate: date, includedPickIds, status: 'EMAIL_SEND_STARTED', recipient: recapNotificationRecipient, content, details: { recovered_from_legacy_state: true } });
-        const emailStatus = await queueRecapNotification({
+        const emailStatus = await queueRecapParts({
           id: `official-recap-final-${date}`,
           subject: `Kobe's Betting Hub — Daily Recap (${date})`,
           body: content
@@ -401,6 +449,7 @@ async function publishDueFreeRecap(date) {
     const gradingAttempts = await autoGradePendingOfficialPicks(date);
     rows = await readPickLog();
     picks = recapRows(rows, date);
+    await queueNightlyRecapReview({ date, rows, attempts: gradingAttempts, state });
     if (picks.some((row) => resultFor(row) === 'PENDING')) {
       const pending = picks.filter((row) => resultFor(row) === 'PENDING');
       const isCurrentOperatingDay = date === pacificOperatingDate();
@@ -442,7 +491,7 @@ async function publishDueFreeRecap(date) {
           content: pendingContent,
           details: { pending_ids: pendingIds }
         });
-        state.dates = { ...(state.dates || {}), [date]: { status: 'PENDING_RESULTS', pending_ids: pendingIds, notified_at: new Date().toISOString(), email_status: emailStatus } };
+        state.dates = { ...(state.dates || {}), [date]: { ...state.dates?.[date], status: 'PENDING_RESULTS', pending_ids: pendingIds, notified_at: new Date().toISOString(), email_status: emailStatus } };
         await saveFreeRecapState(state);
       }
       console.log(`Official recap for ${date} is waiting for ${pending.length} verified result(s).`);
@@ -454,7 +503,7 @@ async function publishDueFreeRecap(date) {
     let emailStatus;
     try {
       await recordRecapRun({ operatingDate: date, includedPickIds, status: 'EMAIL_SEND_STARTED', recipient: recapNotificationRecipient, content });
-      emailStatus = await queueRecapNotification({
+      emailStatus = await queueRecapParts({
         id: `official-recap-final-${date}`,
         subject: `Kobe's Betting Hub — Daily Recap (${date})`,
         body: content
@@ -496,6 +545,7 @@ function startFreeRecapSchedule() {
   freeRecapTimer = setInterval(run, interval);
   run();
     console.log(`Automatic official-pick recap emails check every ${Math.round(interval / 60000)} minute(s), after the ${freeRecapCloseAt()} Arizona pick window closes, and email once every result is graded.`);
+    console.log('Private unresolved recap review package becomes eligible at 21:00 Arizona; no invented results or automatic public recap posts.');
 }
 
 function trendsDailyTime() {
