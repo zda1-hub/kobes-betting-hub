@@ -19,6 +19,24 @@ function injuryConfig(env = process.env) {
   return { enabled: env.INJURY_REPORTS_ENABLED === 'true', routes };
 }
 
+function injuryCategory(status) {
+  const normalized = String(status || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+  if (['questionable', 'doubtful', 'day to day'].includes(normalized)) return 'uncertain';
+  if (['out', 'inactive', 'injured reserve', 'ir', 'suspended', 'suspension'].includes(normalized)
+      || /^(?:7|10|15|60) day (?:il|injured list)$/.test(normalized)) return 'unavailable';
+  // Active/probable/unknown statuses must not be promoted into an injury alert.
+  return null;
+}
+
+function questionableNote(entry) {
+  const detail = clean(entry.details?.type);
+  const injury = detail && detail !== 'Not Specified' ? `${detail} issue` : 'Injury details not specified';
+  const dated = Number.isFinite(Date.parse(entry.date || '')) ? String(entry.date).slice(0, 10) : 'undated';
+  // Source fields only: no model charge, inferred practice participation,
+  // return-date promise, or unrelated performance commentary.
+  return `${injury}; availability unconfirmed. Report: ${dated}.`;
+}
+
 function injuryPages(league, data, now = new Date()) {
   if (!LEAGUES[league] || !Array.isArray(data?.injuries)) throw new Error('Unexpected ESPN injury response.');
   const sourceTime = Date.parse(data.timestamp || '');
@@ -26,23 +44,43 @@ function injuryPages(league, data, now = new Date()) {
     throw new Error('ESPN injury feed is stale or undated.');
   }
   const lines = [], seen = new Set();
-  let count = 0;
+  let count = 0, uncertainCount = 0, unavailableCount = 0;
   for (const team of [...data.injuries].sort((a, b) => String(a.displayName).localeCompare(String(b.displayName)))) {
     if (!Array.isArray(team.injuries)) throw new Error('Incomplete ESPN injury team response.');
-    const entries = [];
+    const entries = [], unavailable = [];
     for (const entry of team.injuries) {
       const name = clean(entry.athlete?.displayName), status = clean(entry.status);
       if (!name || !status) throw new Error('ESPN injury entry lacks player or status.');
+      const category = injuryCategory(status);
+      if (!category) continue;
       const key = `${team.id}:${entry.athlete?.id || name}`;
       if (seen.has(key)) continue;
       seen.add(key); count++;
-      const detail = clean(entry.details?.type), position = clean(entry.athlete?.position?.abbreviation);
-      const dated = Number.isFinite(Date.parse(entry.date || '')) ? String(entry.date).slice(0, 10) : 'undated';
-      entries.push(`• ${name}${position ? ` (${position})` : ''} — **${status}**${detail && detail !== 'Not Specified' ? ` · ${detail}` : ''} · report ${dated}`);
+      if (category === 'unavailable') {
+        unavailableCount++;
+        unavailable.push(`${name} (${status})`);
+      } else {
+        uncertainCount++;
+        const position = clean(entry.athlete?.position?.abbreviation);
+        const symbol = /^doubtful$/i.test(status) ? '🟠' : '🟡';
+        entries.push(`${symbol} **${name}**${position ? ` (${position})` : ''} — **${status}**\n↳ ${questionableNote(entry)}`);
+      }
     }
-    if (entries.length) lines.push(`\n**${clean(team.displayName)}**`, ...entries);
+    if (entries.length || unavailable.length) {
+      lines.push(`\n**${clean(team.displayName)}**`, ...entries);
+      if (unavailable.length) {
+        lines.push('🔴 **Out / unavailable**');
+        // Compact list preserves every name and exact status, without summaries.
+        let row = '';
+        for (const player of unavailable) {
+          if (row && row.length + player.length + 3 > 800) { lines.push(row); row = ''; }
+          row += `${row ? ' · ' : ''}${player}`;
+        }
+        if (row) lines.push(row);
+      }
+    }
   }
-  if (!count) lines.push('ESPN returned no listed injury entries. This is not confirmation that every player is healthy.');
+  if (!count) lines.push('No questionable, doubtful, day-to-day or out/unavailable players were listed in this source snapshot. This does not confirm that every player is healthy or active.');
   const bodies = []; let body = '';
   for (const line of lines) {
     if (line.length > 900) throw new Error('Oversized ESPN injury entry.');
@@ -51,10 +89,10 @@ function injuryPages(league, data, now = new Date()) {
   }
   if (body) bodies.push(body);
   const date = pacificOperatingDate(now), sourceUrl = `https://www.espn.com/${league}/injuries`;
-  return { date, count, sourceTime: new Date(sourceTime).toISOString(), pages: bodies.map((description, index) => ({
+  return { date, count, uncertainCount, unavailableCount, sourceTime: new Date(sourceTime).toISOString(), pages: bodies.map((description, index) => ({
     color: 0xFF7900,
     title: `${league.toUpperCase()} injury watch · ${date} · ${index + 1}/${bodies.length}`,
-    description: `ESPN-reported statuses, not confirmed game-day availability. Older report dates are shown; verify with the team before wagering.\n[Check ESPN’s latest list](${sourceUrl})\n\n${description}`,
+    description: `🟡 Questionable / day-to-day · 🟠 Doubtful · 🔴 Out / unavailable\nESPN-reported statuses, not confirmed game-day availability. Verify the latest team report.\n[Source: ESPN](${sourceUrl})\n\n${description}`,
     timestamp: new Date(sourceTime).toISOString(),
     footer: { text: `KBH injuries ${league} ${date} ${index + 1} · refreshes every 15 minutes` }
   })) };
@@ -146,4 +184,4 @@ function createInjuryDelivery({ root, routes, channelFor, fetchImpl = auditedFet
   };
 }
 
-module.exports = { createInjuryDelivery, injuryConfig, injuryPages };
+module.exports = { createInjuryDelivery, injuryConfig, injuryPages, injuryCategory, questionableNote };

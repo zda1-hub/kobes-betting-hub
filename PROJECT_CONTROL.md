@@ -22,6 +22,26 @@ The owners do not need to read every repository document. The operating chat sho
 
 ## Executive state
 
+### September 17 — compact injury format prepared, deployment held
+
+Owner requested symbolized injury boards with short questionable-player notes and
+no summaries for confirmed unavailable players. Local formatting now omits Active
+and Probable, retains exact Questionable/Doubtful/Day-To-Day labels, and groups
+Out/Inactive/IR/IL/suspension as name/status-only lists. Uncertain-player notes use
+only the injury type and dated source report, with availability explicitly
+unconfirmed; no model is called, so AI summary cost is $0. Unrelated ESPN
+performance commentary and projected return dates are not copied into notes.
+
+Latest read-only real-feed formatting check: NFL 800 source entries → 194 relevant
+players (133 uncertain, 61 unavailable), 6 pages instead of 15; MLB 278 relevant
+players (12 uncertain, 266 unavailable), 4 pages instead of 6. All descriptions fit
+Discord limits. Existing durable edit/dedupe behavior and 15-minute cadence remain.
+The 14 focused injury tests pass. **These compact changes are not deployed yet:**
+Render Web Shell is still at the Telegram phone prompt. Per the Render worker
+restart-safety guidance, do not restart/deploy the worker during that login.
+Finish or explicitly cancel authorization first, then publish and read back the
+updated daily boards. Current production still uses the earlier full-list format.
+
 ### September 17 — laptop-independent operations, curated homepage and referral safety
 
 See `docs/CLOUD_READINESS_2026-09-17.md` and `docs/REFERRAL_SAFETY.md` for current receipts and remaining actions. The newest state here supersedes the earlier September 17 snapshots below.

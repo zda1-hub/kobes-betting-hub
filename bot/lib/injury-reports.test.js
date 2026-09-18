@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { injuryPages, injuryConfig, createInjuryDelivery } = require('./injury-reports');
+const { injuryPages, injuryConfig, createInjuryDelivery, injuryCategory } = require('./injury-reports');
 const now = new Date('2026-09-17T23:00:00Z');
 const data = () => ({ timestamp: now.toISOString(), injuries: [{ id: '1', displayName: 'A Team', injuries: [
   { athlete: { displayName: 'A Player', position: { abbreviation: 'WR' } }, status: 'Questionable', date: '2026-09-16T20:00Z', details: { type: 'Ankle' } }
@@ -11,8 +11,40 @@ const data = () => ({ timestamp: now.toISOString(), injuries: [{ id: '1', displa
 test('source facts retain status and old report dates without inferred availability', () => {
   const report = injuryPages('nfl', data(), now);
   assert.equal(report.count, 1);
-  assert.match(report.pages[0].description, /A Player \(WR\).*Questionable.*Ankle.*2026-09-16/);
+  assert.match(report.pages[0].description, /A Player.*\(WR\).*Questionable.*Ankle.*2026-09-16/s);
   assert.match(report.pages[0].description, /not confirmed game-day/);
+});
+test('active/probable players are omitted and unavailable players have names/statuses only', () => {
+  const input=data();
+  input.injuries[0].injuries.push(
+    {athlete:{displayName:'Active Person'},status:'Active'},
+    {athlete:{displayName:'Probable Person'},status:'Probable'},
+    {athlete:{displayName:'Out Person'},status:'Out',date:'2026-09-01',details:{type:'Shoulder'},shortComment:'Do not copy this'},
+    {athlete:{displayName:'Reserve Person'},status:'Injured Reserve',details:{type:'Elbow'}}
+  );
+  const report=injuryPages('nfl',input,now), text=report.pages.map(x=>x.description).join('\n');
+  assert.equal(report.count,3);assert.equal(report.uncertainCount,1);assert.equal(report.unavailableCount,2);
+  assert.doesNotMatch(text,/Active Person|Probable Person|Shoulder|Elbow|Do not copy this|2026-09-01/);
+  assert.match(text,/🔴 \*\*Out \/ unavailable\*\*[\s\S]*Out Person \(Out\) · Reserve Person \(Injured Reserve\)/);
+});
+test('uncertain summaries are brief source facts, not unrelated comments or projected return dates',()=>{
+  const input=data();Object.assign(input.injuries[0].injuries[0],{shortComment:'Credited with a win, five strikeouts',details:{type:'Ankle',returnDate:'2026-09-20'}});
+  const text=injuryPages('nfl',input,now).pages[0].description;
+  assert.match(text,/🟡[\s\S]*Ankle issue; availability unconfirmed\. Report: 2026-09-16\./);
+  assert.doesNotMatch(text,/strikeouts|2026-09-20|game.time decision|will play/i);
+});
+test('doubtful/day-to-day stay uncertain, while IL/suspension remain unavailable',()=>{
+  for(const status of ['Questionable','Doubtful','Day-To-Day'])assert.equal(injuryCategory(status),'uncertain');
+  for(const status of ['Out','Inactive','Injured Reserve','60-Day-IL','15-Day-IL','10-Day-IL','7-Day IL','Suspension'])assert.equal(injuryCategory(status),'unavailable');
+  for(const status of ['Active','Probable','Unknown','Healthy'])assert.equal(injuryCategory(status),null);
+  const input=data();input.injuries[0].injuries[0].status='Doubtful';
+  assert.match(injuryPages('nfl',input,now).pages[0].description,/🟠[^\n]+Doubtful/);
+});
+test('an empty filtered list does not claim healthy rosters',()=>{
+  const input=data();input.injuries[0].injuries[0].status='Active';
+  const report=injuryPages('nfl',input,now);
+  assert.equal(report.count,0);assert.equal(report.pages.length,1);
+  assert.match(report.pages[0].description,/does not confirm that every player is healthy/);
 });
 test('stale, undated and incomplete injury feeds fail closed', () => {
   for (const invalid of [{...data(), timestamp:'2026-09-10T00:00Z'}, {...data(),timestamp:null}, {...data(), injuries:[{injuries:[{status:'Out'}]}]}]) {
