@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { createRecapApprovals, recapApprovalGroups } = require('./recap-approvals');
+const { createRecapApprovals, recapApprovalGroups, reviewButtons } = require('./recap-approvals');
 
 const config = { enabled: true, guild_id: 'guild', review_channel_id: 'review', destination_channel_id: 'wins',
   source_channel_ids: ['222'], reviewer_user_ids: ['kobe'] };
@@ -12,6 +12,16 @@ const row = { pick_id: 'manual-20260917-aaaaaaaaaaaaaaaaaaaa-W001', parent_pick_
   post_reference: 'https://discord.com/channels/111/222/333', source_name: 'Codycoverspreads', selection: 'Reds ML -110 (1U)',
   result: 'W', result_verified_source: 'https://www.espn.com/game/1' };
 const groupsFor = rows => recapApprovalGroups({ date: row.operating_date, rows, sourceChannelIds: config.source_channel_ids });
+
+test('separates writeup and exclusive recap button identities', () => {
+  const writeup = reviewButtons({ workflowId: 'writeup', approveLabel: 'Post to writeup recaps',
+    key: 'a'.repeat(20), digest: 'b'.repeat(20), pending: 0 })[0].components[0];
+  const exclusive = reviewButtons({ workflowId: 'exclusive', approveLabel: 'Post to exclusive wins',
+    key: 'a'.repeat(20), digest: 'b'.repeat(20), pending: 0 })[0].components[0];
+  assert.equal(writeup.label, 'Post to writeup recaps');
+  assert.match(writeup.custom_id, /^recap-review:writeup:approve:/);
+  assert.match(exclusive.custom_id, /^recap-review:exclusive:approve:/);
+});
 
 async function fixture(rows = [row]) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-recap-approval-'));

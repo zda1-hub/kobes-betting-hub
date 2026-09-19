@@ -22,9 +22,10 @@ function recapApprovalGroups({ date, rows, sourceChannelIds }) {
 }
 
 function reviewButtons(state, disabled = false) {
+  const workflowId = state.workflowId || 'exclusive';
   return [{ type: 1, components: [
-    { type: 2, style: 3, label: 'Post to exclusive wins', custom_id: `recap-review:approve:${state.key}:${state.digest}`, disabled: disabled || state.pending > 0 },
-    { type: 2, style: 4, label: 'Reject', custom_id: `recap-review:reject:${state.key}:${state.digest}`, disabled }
+    { type: 2, style: 3, label: state.approveLabel || 'Post to exclusive wins', custom_id: `recap-review:${workflowId}:approve:${state.key}:${state.digest}`, disabled: disabled || state.pending > 0 },
+    { type: 2, style: 4, label: 'Reject', custom_id: `recap-review:${workflowId}:reject:${state.key}:${state.digest}`, disabled }
   ] }];
 }
 
@@ -32,7 +33,7 @@ function payload(state, index, publicPost = false) {
   const terminal = ['PUBLISHED', 'REJECTED'].includes(state.status);
   return { allowedMentions: noMentions,
     embeds: [{ color: publicPost ? 0xD4AF37 : 0xFF7900,
-      title: `${publicPost ? 'Exclusive recap' : 'Recap approval'} · ${state.date} · ${index + 1}/${state.parts.length}`,
+      title: `${publicPost ? (state.publicTitle || 'Exclusive recap') : `${state.reviewTitle || 'Recap approval'}`} · ${state.date} · ${index + 1}/${state.parts.length}`,
       description: state.parts[index],
       footer: { text: publicPost
         ? `KBH recap-public ${state.key} ${state.digest} ${index} · Verified results; 21+; gambling involves risk.`
@@ -45,6 +46,7 @@ function payload(state, index, publicPost = false) {
 // reconciled against a real message rather than blindly retried after restart.
 function createRecapApprovals({ root, config, channelFor, loadGroups, audit = async () => {}, paused = async () => false }) {
   let tail = Promise.resolve(), stopping = false;
+  const workflowId = config.workflow_id || 'exclusive';
   const serialize = fn => {
     if (stopping) return Promise.reject(new Error('Recap worker is stopping.'));
     const result = tail.then(fn);
@@ -117,7 +119,11 @@ function createRecapApprovals({ root, config, channelFor, loadGroups, audit = as
         if (state?.reviewReceipts?.some(receipt => receipt?.pending)) await refresh(state, channel);
         const previousParts = state?.parts.length || 0;
         const revisionChanged = state?.digest !== group.digest;
-        state = { ...state, ...group, status: revisionChanged ? 'AWAITING_APPROVAL' : state.status,
+        state = { ...state, ...group, workflowId,
+          approveLabel: config.approve_label || 'Post to exclusive wins',
+          publicTitle: config.public_title || 'Exclusive recap',
+          reviewTitle: config.review_title || 'Recap approval',
+          status: revisionChanged ? 'AWAITING_APPROVAL' : state.status,
           reviewReceipts: state?.reviewReceipts || [], publicReceipts: [] };
         await save(state); // Old buttons become stale before the edits.
         await refresh(state, channel);
@@ -137,9 +143,15 @@ function createRecapApprovals({ root, config, channelFor, loadGroups, audit = as
       if (!config.enabled || guildId !== config.guild_id || channelId !== config.review_channel_id
         || !config.reviewer_user_ids.includes(userId)) throw new Error('Only Kobe can review recaps in the configured private recap channel.');
       if (await paused()) throw new Error('The workflow is paused. No recap was posted.');
-      const match = String(customId).match(/^recap-review:(approve|reject):([a-f0-9]{20}):([a-f0-9]{20})$/);
+      const currentMatch = String(customId).match(/^recap-review:([a-z0-9_-]+):(approve|reject):([a-f0-9]{20}):([a-f0-9]{20})$/);
+      const legacyMatch = workflowId === 'exclusive'
+        ? String(customId).match(/^recap-review:(approve|reject):([a-f0-9]{20}):([a-f0-9]{20})$/)
+        : null;
+      const match = currentMatch
+        ? currentMatch[1] === workflowId && [currentMatch[2], currentMatch[3], currentMatch[4]]
+        : legacyMatch && [legacyMatch[1], legacyMatch[2], legacyMatch[3]];
       if (!match) throw new Error('Invalid recap action.');
-      const [, action, key, digest] = match, state = await read(key);
+      const [action, key, digest] = match, state = await read(key);
       if (!state || state.digest !== digest || state.reviewReceipts.at(-1)?.id !== messageId) throw new Error('This recap card is stale. Use the latest bot recap card.');
       if (state.status === 'PUBLISHED') return { status: 'ALREADY_PUBLISHED', messageIds: state.publicReceipts.map(receipt => receipt.id) };
       if (state.status === 'REJECTED') return { status: 'REJECTED', messageIds: [] };

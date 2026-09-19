@@ -79,6 +79,7 @@ test('uses one scoreboard lookup for a current-day match and concurrent roster l
     now: new Date('2026-09-13T12:00:00.000Z'), fetchImpl
   });
   assert.equal(result.status, 'UPCOMING');
+  assert.equal(result.playerTeam, 'New York Giants');
   assert.equal(calls.filter((url) => url.includes('/scoreboard?')).length, 1);
   assert.equal(calls.filter((url) => url.includes('/roster')).length, 2);
 });
@@ -152,6 +153,7 @@ test('allows a player prop when the player is listed on an event team', async ()
     now: new Date('2026-09-09T22:00:00.000Z'), fetchImpl
   });
   assert.equal(result.status, 'UPCOMING');
+  assert.equal(result.playerTeam, 'New England Patriots');
 });
 
 test('rejects a college-football pick that has no game scheduled today', async () => {

@@ -933,6 +933,7 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
         const validPlays = validPlayStatuses.map((result) => result.play);
         for (let index = 0; index < validPlayStatuses.length; index += 1) {
           const status = validPlayStatuses[index];
+          if (status.playerTeam) status.play.verified_team_name = status.playerTeam;
           const single = isolatePlayPacket(packet, status.play, evidencePlays);
           await fillMissingEvidence(single, {
             timing: { status: 'UPCOMING', playStatuses: [status], athlete: status.athlete }
@@ -988,6 +989,13 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
         continue;
       }
 
+      const verifiedPlayStatus = timing.playStatuses?.find((result) => result.status === 'UPCOMING');
+      if (verifiedPlayStatus?.playerTeam) {
+        if (Array.isArray(packet.analysis.extraction.plays) && packet.analysis.extraction.plays.length === 1) {
+          packet.analysis.extraction.plays[0].verified_team_name = verifiedPlayStatus.playerTeam;
+        }
+        packet.analysis.extraction.verified_team_name = verifiedPlayStatus.playerTeam;
+      }
       await fillMissingEvidence(packet, { timing });
 
       await recordGateDecision(packet, { code: 'ELIGIBLE', reason: 'Source extraction and event gates passed.', status: 'ELIGIBLE' });

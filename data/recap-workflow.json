@@ -1,9 +1,21 @@
 {
   "enabled": true,
   "guild_id": "1215407647155683358",
-  "review_channel_id": "1539135477355905094",
+  "workflow_id": "exclusive",
+  "review_channel_id": "1550992219555762216",
   "destination_channel_id": "1550535535041187920",
   "source_channel_ids": ["1539055850075852911"],
   "reviewer_user_ids": ["1209660006383755265"],
-  "website_vip_role_id": "1542668360985088070"
+  "website_vip_role_id": "1542668360985088070",
+  "approve_label": "Post to exclusive wins",
+  "public_title": "Exclusive recap",
+  "writeup": {
+    "enabled": true,
+    "workflow_id": "writeup",
+    "review_channel_id": "1550992474367983677",
+    "destination_channel_id": "1539062059306848368",
+    "source_channel_ids": ["1539055413633228881", "1487451739459293336"],
+    "approve_label": "Post to writeup recaps",
+    "public_title": "Writeup recap"
+  }
 }

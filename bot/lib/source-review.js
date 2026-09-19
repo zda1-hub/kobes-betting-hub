@@ -327,10 +327,47 @@ function publicPickTerms(packet) {
     .filter(Boolean);
 }
 
+function escapeDiscordInline(value) {
+  return String(value || '').replace(/([\\`*_~|>])/g, '\\$1');
+}
+
+function withoutLeadingPlayer(term, playerName) {
+  if (!term || !playerName) return term;
+  const escaped = playerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const remainder = term.replace(new RegExp(`^${escaped}(?![A-Za-z])\\s*(?:[-–—:]\\s*)?`, 'i'), '').trim();
+  return remainder || term;
+}
+
+function formattedWriteupTerms(packet) {
+  const extraction = packet.analysis?.extraction || {};
+  const plays = Array.isArray(extraction.plays) && extraction.plays.length
+    ? extraction.plays
+    : [extraction];
+  return plays.flatMap((play) => {
+    const term = publicPlayTerm({
+      selection: typeof play.selection === 'string' ? play.selection.trim() : '',
+      playerName: typeof play.player_name === 'string' ? play.player_name.trim() : '',
+      line: typeof play.line === 'string' ? play.line.trim() : '',
+      oddsAmerican: typeof play.odds_american === 'string' ? play.odds_american.trim() : '',
+      event: typeof play.event === 'string' ? play.event.trim() : '',
+      sourceClaims: extraction.source_claims
+    });
+    const playerName = playerNameFromPlay({ ...play, sourceClaims: extraction.source_claims });
+    const teamName = typeof play.verified_team_name === 'string' ? play.verified_team_name.trim()
+      : typeof extraction.verified_team_name === 'string' ? extraction.verified_team_name.trim() : '';
+    if (!term || !playerName || !teamName) return term ? [term] : [];
+    return [
+      `**${escapeDiscordInline(playerName)}**`,
+      `*${escapeDiscordInline(teamName)}*`,
+      withoutLeadingPlayer(term, playerName)
+    ];
+  });
+}
+
 function writeupDescription(packet) {
   // This is the single source of truth for regular approval and member posts:
   // exact prop terms first, then a blank line, then only relevant reasons.
-  const terms = publicPickTerms(packet);
+  const terms = formattedWriteupTerms(packet);
   const evidence = sourceEvidence(packet);
   return [
     ...terms,

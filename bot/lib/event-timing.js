@@ -146,10 +146,15 @@ async function verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl) {
     const failed = responses.find((response) => !response.ok);
     if (failed) return { status: 'UNVERIFIABLE', reason: `ESPN roster verification returned ${failed.status}.` };
     const rosters = await Promise.all(responses.map((response) => response.json()));
-    const athletes = rosters.flatMap(rosterAthletes);
+    const rosterEntries = rosters.flatMap((roster, index) => {
+      const teamId = teamIds[index];
+      const competitor = competitors.find((entry) => String(entry.team?.id) === String(teamId));
+      const teamName = competitor?.team?.displayName || competitor?.team?.shortDisplayName || '';
+      return rosterAthletes(roster).map((athlete) => ({ athlete, teamName }));
+    });
 
-    const matchedAthletes = playerNames.map((playerName) => athletes.find((athlete) => athleteMatchesName(athlete, playerName)));
-    const missingIndex = matchedAthletes.findIndex((athlete) => !athlete);
+    const matchedEntries = playerNames.map((playerName) => rosterEntries.find(({ athlete }) => athleteMatchesName(athlete, playerName)));
+    const missingIndex = matchedEntries.findIndex((entry) => !entry);
     const missing = missingIndex >= 0 ? playerNames[missingIndex] : null;
     if (missing) {
       return {
@@ -157,7 +162,12 @@ async function verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl) {
         reason: `${missing} is not listed on either team in the matched ESPN event.`
       };
     }
-    return { athletes: matchedAthletes, athlete: matchedAthletes[0] || null };
+    return {
+      athletes: matchedEntries.map((entry) => entry.athlete),
+      athlete: matchedEntries[0]?.athlete || null,
+      playerTeams: matchedEntries.map((entry) => entry.teamName),
+      playerTeam: matchedEntries[0]?.teamName || null
+    };
   } catch {
     return { status: 'UNVERIFIABLE', reason: 'ESPN roster verification was unavailable.' };
   }
@@ -256,7 +266,9 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
       source: playerVerification?.athlete ? 'ESPN schedule and roster' : 'ESPN schedule',
       seasonYear: Number(event.season?.year) || start.getUTCFullYear(),
       athlete: playerVerification?.athlete || null,
-      athletes: playerVerification?.athletes || []
+      athletes: playerVerification?.athletes || [],
+      playerTeam: playerVerification?.playerTeam || null,
+      playerTeams: playerVerification?.playerTeams || []
     });
   }
 
@@ -269,6 +281,7 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
     source: 'ESPN schedule',
     seasonYear: playStatuses[0]?.seasonYear || earliestStart.getUTCFullYear(),
     athlete: playStatuses[0]?.athlete || null,
+    playerTeam: playStatuses[0]?.playerTeam || null,
     playStatuses
   };
 }

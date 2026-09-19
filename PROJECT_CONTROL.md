@@ -8,6 +8,40 @@
 
 **Control-file owner:** Zakai Martin
 
+### September 19 — four private approval lanes, verified player teams and referral entry
+
+Created two private Discord channels by duplicating the existing private
+approval-channel permissions: `exclusive-recap-approvals`
+(`1550992219555762216`) and `writeup-recap-approvals`
+(`1550992474367983677`). The cloud bot routes exclusive recap drafts only to
+the first and football/baseball writeup recap drafts only to the second.
+Exclusive approvals can publish only to `vip-expert-wins`; writeup approvals
+can publish only to `vip-write-up-recaps`. Both retain the exact-card Kobe-only
+Approve/Reject gate, privacy preflight, pending-result block, durable receipts,
+stale-button protection and no automatic member publication. Existing private
+pick and exclusive-pick approval channels are unchanged, producing four distinct
+approval lanes in total.
+
+Future regular player-prop writeups place the verified player team directly
+under the bold player name and above the exact wager terms. Team identity comes
+only from the matched ESPN event roster; unavailable verification preserves the
+old exact wager line and never guesses a team. The approval/member copy lock is
+unchanged, so a post-verification edit requires a fresh approval.
+
+The existing abuse-resistant $10 referral backend and website remain the
+authority. The bot now maintains one simple information card in
+`refer-and-earn` (`1550942922520928256`) with secure Get my referral link and
+Check earnings buttons. It does not copy the reference server's 20% terms.
+Self-referrals, duplicates, reused qualifying payments, refunds, disputes and
+fraud remain ineligible; the first $32.99 payment and seven-day review still
+control reward eligibility.
+
+Meta's `Bettinhub Story Connection` app was opened in Arc for the owner. The
+intended connection is the `@kobeslocks` professional Instagram account with
+only basic/profile and content-publishing access. Ad-account, messaging,
+comments and broader business access remain outside scope, and Instagram
+publishing remains disabled pending real account authorization.
+
 ### September 19 — injury report typography
 
 Future NFL and MLB injury boards keep each team heading bold and now render

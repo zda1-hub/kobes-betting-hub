@@ -44,8 +44,8 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
     // mark chats read. No unrelated dialog history is inspected.
     const peer=JSON.parse(await fs.readFile(path.join(config.root,'channel-peer.json'),'utf8'));
     if(peer.channelId!==config.channelId || !/^-?\d+$/.test(peer.accessHash||''))throw new Error('Telegram peer configuration missing.');
-    const {Api}=require('teleproto'),bigInt=require('big-integer');
-    entity=await telegram.getEntity(new Api.InputPeerChannel({channelId:bigInt(config.channelId),accessHash:bigInt(peer.accessHash)}));
+    const {Api,helpers}=require('teleproto');
+    entity=await telegram.getEntity(new Api.InputPeerChannel({channelId:helpers.returnBigInt(config.channelId),accessHash:helpers.returnBigInt(peer.accessHash)}));
     if(String(entity.id)!==config.channelId || !entity.broadcast)throw new Error('Telegram channel identity mismatch.');
     return true;
   }
@@ -173,7 +173,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
   }
   return {run(){if(!running&&!stopping)running=drain().catch(error=>{
       const seconds=Number(error?.seconds);retryAt=now().getTime()+(Number.isFinite(seconds)?Math.min(Math.max(seconds,60),86400):300)*1000;
-      logger.error('Cloud Telegram reader needs attention; no Telegram messages or automatic member posts were sent.');return[{status:'NEEDS_ATTENTION'}];
+      logger.error('Cloud Telegram reader needs attention; no Telegram messages or automatic member posts were sent.', error?.message || error);return[{status:'NEEDS_ATTENTION'}];
     }).finally(()=>{running=null;});return running||Promise.resolve([]);},
     async stop(){stopping=true;if(running)await running;if(telegram)await telegram.disconnect();}};
 }

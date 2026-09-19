@@ -57,6 +57,23 @@ test('formats a writeup source in Kobe’s pick-first layout', () => {
   assert.equal(embed.image.url, 'https://example.com/player-photo.png');
 });
 
+test('places a verified player team directly under the player name without guessing from the matchup', () => {
+  const teamPacket = structuredClone(packet);
+  teamPacket.analysis.extraction.plays = [{
+    selection: 'Jacob Misiorowski OVER 6.5 strikeouts',
+    player_name: 'Jacob Misiorowski',
+    verified_team_name: 'Milwaukee Brewers',
+    line: '6.5 strikeouts',
+    odds_american: '-115',
+    units: '1u'
+  }];
+  const description = buildSourcePickEmbed(teamPacket, 'FREE PICK').description;
+  assert.match(description, /^\*\*Jacob Misiorowski\*\*\n\*Milwaukee Brewers\*\nOVER 6\.5 strikeouts \(-115\)/);
+
+  delete teamPacket.analysis.extraction.plays[0].verified_team_name;
+  assert.match(buildSourcePickEmbed(teamPacket, 'FREE PICK').description, /^Jacob Misiorowski OVER 6\.5 strikeouts \(-115\)/);
+});
+
 test('keeps the approval card exactly identical to the member post with no source URL', () => {
   const approval = buildSourcePickApprovalEmbed({ ...packet, source: { ...packet.source, post_url: 'https://x.com/ExampleSource/status/123' } }, 'FREE PICK');
   const memberPost = buildSourcePickEmbed(packet, 'FREE PICK');

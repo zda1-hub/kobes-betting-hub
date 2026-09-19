@@ -171,7 +171,7 @@ module.exports = [
   recapOptions(
     new SlashCommandBuilder()
       .setName('publish-recap')
-      .setDescription('Queue verified exclusive recap cards for Kobe’s button approval')
+      .setDescription('Queue verified writeup and exclusive recap cards for Kobe’s approval')
   ),
   gradePickOptions,
   trendOptions(
