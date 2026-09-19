@@ -1912,6 +1912,16 @@ client.once(Events.ClientReady, async (readyClient) => {
   startTrendInbox();
   startFreeRecapSchedule();
   startFreePickDelivery();
+  if (process.env.PRIVATE_EXCLUSIVE_IMPORT_FILE && process.env.PRIVATE_EXCLUSIVE_IMPORT_DATE) {
+    void import('../scripts/import-manual-exclusives.mjs')
+      .then(({ runManualExclusiveImport }) => runManualExclusiveImport({
+        file: path.resolve(process.env.PRIVATE_EXCLUSIVE_IMPORT_FILE),
+        date: process.env.PRIVATE_EXCLUSIVE_IMPORT_DATE,
+        send: true
+      }))
+      .then(receipt => console.log('Private exclusive recovery import receipt:', JSON.stringify(receipt)))
+      .catch(error => console.error('Private exclusive recovery import needs attention:', error.message));
+  }
   try {
     const referralReceipt = await ensureReferralInfoCard();
     console.log('Referral information card receipt:', JSON.stringify(referralReceipt));

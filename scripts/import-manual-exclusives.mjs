@@ -45,18 +45,15 @@ export function manualExclusiveGroups(text, date, receivedAt = new Date().toISOS
   });
 }
 
-async function main() {
-  require('dotenv').config();
-  const args = process.argv.slice(2);
-  const file = args.find(value => value.endsWith('.txt'));
-  const date = args.find(value => /^\d{4}-\d{2}-\d{2}$/.test(value));
-  if (!file || !date) throw new Error('Usage: node scripts/import-manual-exclusives.mjs FILE.txt YYYY-MM-DD [--send]');
+export async function runManualExclusiveImport({ file, date, send = true } = {}) {
+  if (!file || !date) throw new Error('An exact source file and operating date are required.');
   const groups = manualExclusiveGroups(await fs.readFile(file, 'utf8'), date);
-  console.log(JSON.stringify({ groups: groups.length, picks: groups.reduce((sum, group) => sum + group.picks.length, 0),
-    needsClarification: groups.filter(group => group.packet.manual_review_required).map(group => group.packet.analysis.extraction.source_capper_name) }));
-  if (!args.includes('--send')) return;
+  const summary = { groups: groups.length, picks: groups.reduce((sum, group) => sum + group.picks.length, 0),
+    needsClarification: groups.filter(group => group.packet.manual_review_required).map(group => group.packet.analysis.extraction.source_capper_name) };
+  console.log(JSON.stringify(summary));
+  if (!send) return { ...summary, sent: 0, existing: 0, publicPosts: 0 };
   if (date !== pacificOperatingDate()) throw new Error('Refusing to import a stale operating day.');
-  const channel = process.env.PICK_APPROVAL_CHANNEL_ID;
+  const channel = process.env.EXCLUSIVE_PICK_APPROVAL_CHANNEL_ID || process.env.PICK_APPROVAL_CHANNEL_ID;
   if (!channel || !process.env.DISCORD_TOKEN) throw new Error('Production private approval configuration is required.');
   await initializeAuditStore();
   const fetchDiscord = (url, options, id) => discordRateLimitedFetch(url, options, {
@@ -66,7 +63,10 @@ async function main() {
   const check = await fetchDiscord(`https://discord.com/api/v10/channels/${channel}`, { headers });
   if (!check.ok) throw new Error('Cannot verify private approval destination.');
   const channelDetails = await check.json();
-  if (channelDetails.guild_id !== process.env.DISCORD_GUILD_ID || !/pick.approvals/i.test(channelDetails.name || '')) throw new Error('Unexpected approval destination.');
+  const expectedName = process.env.EXCLUSIVE_PICK_APPROVAL_CHANNEL_ID
+    ? /exclusive.*pick.*approvals/i
+    : /pick.approvals/i;
+  if (channelDetails.guild_id !== process.env.DISCORD_GUILD_ID || !expectedName.test(channelDetails.name || '')) throw new Error('Unexpected approval destination.');
   const dir = path.join(reviewQueuePath(), date);
   await fs.mkdir(dir, { recursive: true });
   let sent = 0, existing = 0;
@@ -93,7 +93,18 @@ async function main() {
     sent++;
     console.log(JSON.stringify({ capper: packet.analysis.extraction.source_capper_name, messageId: message.id, privateOnly: true }));
   }
-  console.log(JSON.stringify({ sent, existing, publicPosts: 0 }));
+  const result = { ...summary, sent, existing, publicPosts: 0 };
+  console.log(JSON.stringify(result));
+  return result;
+}
+
+async function main() {
+  require('dotenv').config();
+  const args = process.argv.slice(2);
+  const file = args.find(value => value.endsWith('.txt'));
+  const date = args.find(value => /^\d{4}-\d{2}-\d{2}$/.test(value));
+  if (!file || !date) throw new Error('Usage: node scripts/import-manual-exclusives.mjs FILE.txt YYYY-MM-DD [--send]');
+  return runManualExclusiveImport({ file, date, send: args.includes('--send') });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

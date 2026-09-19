@@ -24,3 +24,13 @@ test('stable content IDs prevent repeated import; edits produce new review IDs',
   assert.equal(one[0].packet.pick_id, two[0].packet.pick_id);
   assert.notEqual(one[0].packet.pick_id, manualExclusiveGroups('Capper\nLions +5.5 -120 (1U)', '2026-09-17')[0].packet.pick_id);
 });
+
+test('today\'s Telegram recovery preserves Cody and Duck terms without inventing prices', async () => {
+  const text = await fs.readFile(new URL('../data/manual-exclusives-2026-09-19-recovery.txt', import.meta.url), 'utf8');
+  const groups = manualExclusiveGroups(text, '2026-09-19', '2026-09-19T23:00:00Z');
+  assert.equal(groups.length, 2);
+  assert.equal(groups.reduce((sum, group) => sum + group.picks.length, 0), 15);
+  assert.deepEqual(groups.map(group => group.packet.analysis.extraction.source_capper_name), ['CodyCoverSpreads', 'DuckInvestments']);
+  assert.deepEqual(groups.filter(group => group.packet.manual_review_required), []);
+  assert.ok(groups.every(group => !/[+-]\d{3}\b/.test(group.payload.embeds[0].description)));
+});

@@ -2,7 +2,7 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-17 approximately 18:46 MST (341/341 tests; latest Render 01d8a5a live. Owner authorized daily extraction request cap 50→100; runtime verifies 100, monthly requests 500, daily budget $1 and monthly budget $15. Audit attributes the prior 51 requests to 51 distinct successful Twitter/X extractions, estimated $0.0391992, not Telegram retries. Telegram full-photo download fixed; zero-byte images cannot reach extraction. Cloud recovered never-delivered messages 27755/27756, which are now HELD_UNCLEAR_TERMS; 27757 deferred by the two-model-calls-per-run safety cap, not a broken connection. No Telegram approval delivery claimed yet. Recap polling and 21:00 Arizona review eligibility confirmed; today awaits final results. Last billing check: 9 active/trialing records, 6 unlinked, no failed/stuck webhooks, reconciliation failures or referral safety holds. Welcome lifecycle emails and all-market grading remain unfinished.)
+**Last verified:** 2026-09-19 approximately 16:00 MST (Telegram and X both used the authorized 08:00–16:00 Arizona one-day window and Telegram stopped exactly at the shared cutoff. Telegram access and polling were healthy; current image posts were held by exact-term validation rather than lost. A private-only, deduplicated recovery for the exact current-day CodyCoverSpreads and DuckInvestments source cards is prepared with 15 supplied selections and no invented odds or stakes. Production receipt remains required before delivery is claimed.)
 
 **Production runtime change set:** Render `01d8a5a39dd468f3d7728442a58b68279fae732f`, live deploy `dep-dam9fdrtqb8s73bh7g90`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `739a4271-937e-4c3f-abcb-5b6fe4451a4e`. Telegram cloud session and image extraction work; unclear terms remain privately held and model work is bounded per run. Per-wager lossless-source ledger deployed, with unsupported markets pending. Intake cutoff 16:00 and private unresolved-review eligibility 21:00 Arizona remain configured. Migration 010 is applied. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
 
@@ -20,6 +20,18 @@ recovered before later posts instead of being silently skipped. Its bounded
 per-run image extraction cap now follows the already-configured X model-call
 cap, falling back to two when no cap is set. Telegram remains laptop-independent
 on the existing Render worker and routes only to `exclusive-pick-approvals`.
+
+Runtime verification at the September 19 cutoff confirmed Telegram remained
+enabled through the same 16:00 Arizona stop used by X. Messages 28021–28030 were
+read and durably held as unclear rather than skipped; there were no private
+approval receipts from that batch. Exact source review identified complete
+current-day CodyCoverSpreads and DuckInvestments cards. A cloud-side recovery
+file preserves their 15 supplied selections, grouped by capper, and deliberately
+adds no absent prices or stakes. The importer targets only the private exclusive
+approval channel, preflights its identity, uses stable content IDs, records
+Discord receipts and cannot publish to a member or social destination. The MMA
+validator now accepts explicit `By KO/TKO`, `By TKO`, `By Submission` and
+`By Decision` markets without relaxing player/team or source-term validation.
 
 ### September 19 — four private approval lanes, verified player teams and referral entry
 
