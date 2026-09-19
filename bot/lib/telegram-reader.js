@@ -26,7 +26,9 @@ function telegramPacket(message, channelId, now=new Date()) {
 }
 
 function createTelegramReader({config, channelFor, now=()=>new Date(), logger=console, clientFactory,
-  enrich=enrichPacket, audit={recordSourcePost,upsertPickCandidate,recordApprovalCard,recordWorkflowEvent}, queueRoot=reviewQueuePath()}) {
+  enrich=enrichPacket, audit={recordSourcePost,upsertPickCandidate,recordApprovalCard,recordWorkflowEvent},
+  queueRoot=reviewQueuePath(), maxModelCalls=2}) {
+  if(!Number.isInteger(maxModelCalls)||maxModelCalls<1)throw new Error('Telegram model-call limit must be a positive integer.');
   let running=null, stopping=false, telegram=null, entity=null, retryAt=0;
   async function connect() {
     if(telegram?.connected && entity)return true;
@@ -107,7 +109,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       let analysis=exclusiveTextExtraction(packet.source,packet.source.text);
       if(analysis)packet.analysis={status:'SOURCE_EXTRACTED',source_only:true,extraction:analysis};
       else {
-        if(modelCalls>=2){results.push({status:'DEFERRED_MODEL_CAP',messageId:message.id});break;}
+        if(modelCalls>=maxModelCalls){results.push({status:'DEFERRED_MODEL_CAP',messageId:message.id});break;}
         if(message.photo||message.media?.photo){
           // Omission selects the largest real photo; this library does not
           // support Python-style negative thumbnail indexes.
@@ -115,7 +117,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
           if(!Buffer.isBuffer(bytes)||!bytes.length||bytes.length>10000000)throw new Error('Telegram image unavailable or oversized.');
           packet.source.media_urls=[`data:image/jpeg;base64,${bytes.toString('base64')}`];
         }
-        packet.analysis=await enrich(packet,{beforeOpenAIRequest:()=>{if(modelCalls>=2)return false;modelCalls++;return true;}});
+        packet.analysis=await enrich(packet,{beforeOpenAIRequest:()=>{if(modelCalls>=maxModelCalls)return false;modelCalls++;return true;}});
         packet.source.media_urls=[]; // no source image in private/public cards or saved packets.
         if(packet.analysis.status!=='SOURCE_EXTRACTED'){
           const extractionStatus=['EXTRACTION_FAILED','ENRICHMENT_OFF','WAITING_FOR_OPENAI_API_KEY','BUDGET_EXCEEDED','MODEL_CALL_LIMIT_REACHED'].includes(packet.analysis.status)?packet.analysis.status:'UNKNOWN';

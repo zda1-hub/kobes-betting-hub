@@ -134,6 +134,8 @@ let freePickDeliveryTimer = null;
 let injuryTimer = null;
 let injuryDelivery = null;
 let telegramTimer = null;
+let telegramStopTimer = null;
+let telegramDailyTimer = null;
 let telegramReader = null;
 
 async function ensureReferralInfoCard() {
@@ -224,8 +226,65 @@ async function queueDiscordRecapApprovals(date, rows) {
   }
 }
 
+function stopTelegramMonitor(reason) {
+  if (telegramTimer) {
+    clearInterval(telegramTimer);
+    telegramTimer = null;
+  }
+  if (telegramStopTimer) {
+    clearTimeout(telegramStopTimer);
+    telegramStopTimer = null;
+  }
+  console.log(`Telegram exclusive monitoring stopped: ${reason}`);
+  const dailyAt = xMonitorDailyAt();
+  if (dailyAt && process.env.TELEGRAM_READER_ENABLED === 'true' && !telegramDailyTimer) {
+    const nextStart = nextArizonaDailyStartMs(dailyAt);
+    telegramDailyTimer = setTimeout(() => {
+      telegramDailyTimer = null;
+      beginDailyTelegramMonitor();
+    }, Math.max(0, nextStart - Date.now()));
+    telegramDailyTimer.unref();
+    console.log(`Telegram exclusive monitoring will resume at ${new Date(nextStart).toISOString()} for the next X-aligned daily window.`);
+  }
+}
+
+function beginDailyTelegramMonitor() {
+  const dailyAt = xMonitorDailyAt();
+  if (!dailyAt || process.env.TELEGRAM_READER_ENABLED !== 'true' || !telegramReader) return;
+  const now = new Date();
+  const currentTime = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Phoenix', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).format(now);
+  if (currentTime < dailyAt) {
+    const startAt = nextArizonaDailyStartMs(dailyAt, now);
+    telegramDailyTimer = setTimeout(() => {
+      telegramDailyTimer = null;
+      beginDailyTelegramMonitor();
+    }, Math.max(0, startAt - now.getTime()));
+    telegramDailyTimer.unref();
+    console.log(`Telegram exclusive monitoring is scheduled to begin at ${new Date(startAt).toISOString()} (${dailyAt} Arizona time).`);
+    return;
+  }
+  const dailyStopAt = xMonitorDailyStopAt();
+  if (dailyStopAt && currentTime >= dailyStopAt) {
+    stopTelegramMonitor(`today's X-aligned cutoff of ${dailyStopAt} Arizona time has passed`);
+    return;
+  }
+  const interval = xMonitorIntervalMs();
+  const run = () => void telegramReader.run().then(receipts => console.log('Cloud Telegram receipts:', JSON.stringify(receipts)));
+  run();
+  telegramTimer = setInterval(run, interval);
+  telegramTimer.unref();
+  console.log(`Telegram exclusive monitoring enabled at ${currentTime} Arizona time: checking every ${Math.round(interval / 60000)} minute(s) in the same ${dailyAt}-${dailyStopAt || 'open'} window as X; private approvals only.`);
+  if (dailyStopAt) {
+    const stopAtMs = arizonaDailyTimestampMs(dailyStopAt);
+    telegramStopTimer = setTimeout(() => stopTelegramMonitor(`X-aligned daily cutoff of ${dailyStopAt} Arizona time reached`), Math.max(0, stopAtMs - Date.now()));
+    telegramStopTimer.unref();
+  }
+}
+
 function startTelegramReader() {
-  if (process.env.TELEGRAM_READER_ENABLED !== 'true' || telegramTimer) return;
+  if (process.env.TELEGRAM_READER_ENABLED !== 'true' || telegramReader) return;
   let config;
   try { config = telegramConfig(); }
   catch { console.error('Telegram configuration needs attention; existing Discord services remain active.'); return; }
@@ -235,10 +294,15 @@ function startTelegramReader() {
     const expectedName = usesLegacyFallback ? /pick.approvals/i : /exclusive.*pick.*approvals/i;
     if (channel.guildId !== process.env.DISCORD_GUILD_ID || !expectedName.test(channel.name || '')) throw new Error('Unexpected private Telegram approval destination.');
     return channel;
-  } });
+  }, maxModelCalls: xMonitorModelCallLimit() ?? 2 });
+  if (xMonitorDailyAt()) {
+    beginDailyTelegramMonitor();
+    return;
+  }
   const run = () => void telegramReader.run().then(receipts => console.log('Cloud Telegram receipts:', JSON.stringify(receipts)));
-  run(); telegramTimer = setInterval(run, 900000); telegramTimer.unref();
-  console.log('Laptop-independent Telegram reader enabled: selected CAPPERS FREE channel only, private approvals only; awaiting secure session if not logged in.');
+  const interval = xMonitorIntervalMs();
+  run(); telegramTimer = setInterval(run, interval); telegramTimer.unref();
+  console.log(`Laptop-independent Telegram reader enabled: selected CAPPERS FREE channel only, private approvals only; checking every ${Math.round(interval / 60000)} minute(s).`);
 }
 
 function startInjuryReports() {
@@ -2226,7 +2290,8 @@ async function shutdown() {
   shuttingDown = true;
   console.log('Cloud worker stopping; durable delivery receipts are retained.');
   for (const timer of [xMonitorIntervalTimer, xMonitorStopTimer, xMonitorDailyTimer,
-    trendsTimer, trendsInboxTimer, freeRecapTimer, freePickDeliveryTimer, injuryTimer, telegramTimer]) {
+    trendsTimer, trendsInboxTimer, freeRecapTimer, freePickDeliveryTimer, injuryTimer,
+    telegramTimer, telegramStopTimer, telegramDailyTimer]) {
     if (timer) clearTimeout(timer);
   }
   // Leave enough time for Discord receipt writes before Render's forced stop.

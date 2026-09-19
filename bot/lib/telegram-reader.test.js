@@ -91,6 +91,23 @@ test('configuration and budget deferrals are not mistaken for bad source content
   await createTelegramReader(h.options).run();
   assert.equal(h.sent.length,1);
 });
+test('configured model-call cap can match the X collector without losing the next message',async t=>{
+  const h=await harness(t);
+  h.messages.splice(0,1,
+    {...message(1,''),photo:{}}, {...message(2,''),photo:{}}, {...message(3,''),photo:{}});
+  h.options.maxModelCalls=2;
+  h.options.enrich=async (packet,{beforeOpenAIRequest})=>{
+    assert.equal(beforeOpenAIRequest(),true);
+    return {status:'SOURCE_EXTRACTED',extraction:{lossless_text_terms:true,is_pick_candidate:true,
+      source_capper_name:`Capper ${packet.source.post_id}`,selection:'Angels ML -110',
+      plays:[{selection:'Angels ML -110'}],missing_or_ambiguous:[]}};
+  };
+  const first=await createTelegramReader(h.options).run();
+  assert.equal(first.at(-1).status,'DEFERRED_MODEL_CAP');
+  assert.equal(h.sent.length,2);
+  await createTelegramReader(h.options).run();
+  assert.equal(h.sent.length,3);
+});
 test('downloads the default largest photo and never sends empty bytes for extraction',async t=>{
   const h=await harness(t);h.messages[0]={...message(1,''),photo:{}};let models=0;
   h.telegram.downloadMedia=async(...args)=>{assert.equal(args.length,1);return Buffer.alloc(0);};

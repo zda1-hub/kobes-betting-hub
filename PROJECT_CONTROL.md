@@ -8,6 +8,19 @@
 
 **Control-file owner:** Zakai Martin
 
+### September 19 — Telegram exclusives aligned to the X monitoring window
+
+The cloud Telegram CAPPERS FREE reader now uses the same Arizona start time,
+daily cutoff and polling interval as the X monitor. It remains an independent
+private-approval intake: X's daily Free Pick publication limit cannot stop
+Telegram exclusives, no Telegram message is sent or marked read, and no member
+channel is published without Kobe's existing approval button. The reader keeps
+its durable oldest-first cursor and exact-term checks, so a deferred image is
+recovered before later posts instead of being silently skipped. Its bounded
+per-run image extraction cap now follows the already-configured X model-call
+cap, falling back to two when no cap is set. Telegram remains laptop-independent
+on the existing Render worker and routes only to `exclusive-pick-approvals`.
+
 ### September 19 — four private approval lanes, verified player teams and referral entry
 
 Created two private Discord channels by duplicating the existing private
