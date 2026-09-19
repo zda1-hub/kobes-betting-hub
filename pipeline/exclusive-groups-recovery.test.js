@@ -15,7 +15,7 @@ test('group recovery is private-only, cross-feed deduplicated, resumable and hol
       let sent=[];global.fetch=async(url,init={})=>{
         assert.ok(String(url).startsWith('https://discord.com/api/v10/channels/'));
         if(init.method==='POST'){
-          assert.equal(String(url),'https://discord.com/api/v10/channels/private-approvals/messages');
+          assert.equal(String(url),'https://discord.com/api/v10/channels/exclusive-private-approvals/messages');
           const body=JSON.parse(init.body);assert.equal(body.components[0].components[0].disabled,true);
           sent.push(body);return new Response(JSON.stringify({id:'receipt-'+sent.length}),{status:200,headers:{'content-type':'application/json'}});
         }
@@ -39,7 +39,8 @@ test('group recovery is private-only, cross-feed deduplicated, resumable and hol
     const result = spawnSync(process.execPath, ['-e', code], {
       cwd: path.join(__dirname, '..'), encoding: 'utf8', timeout: 10000,
       env: { ...process.env, DATABASE_URL: '', AUDIT_DATABASE_REQUIRED: 'false', X_REVIEW_QUEUE_PATH: root,
-        PICK_APPROVAL_CHANNEL_ID: 'private-approvals', DISCORD_TOKEN: 'test-only-token', FREE_PICK_CHANNEL_ID: 'free', EXCLUSIVES_CHANNEL_ID: 'paid' }
+        PICK_APPROVAL_CHANNEL_ID: 'private-approvals', EXCLUSIVE_PICK_APPROVAL_CHANNEL_ID: 'exclusive-private-approvals',
+        DISCORD_TOKEN: 'test-only-token', FREE_PICK_CHANNEL_ID: 'free', EXCLUSIVES_CHANNEL_ID: 'paid' }
     });
     assert.equal(result.status, 0, result.stderr + result.stdout);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }

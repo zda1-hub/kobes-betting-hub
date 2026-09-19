@@ -14,6 +14,7 @@ const {
 } = require('./audit-store');
 const { auditedFetch } = require('./api-client');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
+const { approvalChannelIdForPacket } = require('../bot/lib/approval-routing');
 const { isSupportedSportPick, upcomingEventStatuses } = require('../bot/lib/event-timing');
 const { fillMissingEvidence } = require('../bot/lib/espn-pick-research');
 const { isolatePlayPacket } = require('../bot/lib/play-evidence');
@@ -509,7 +510,7 @@ async function approvalButtonLabels(packet) {
 }
 
 async function notifyApprovalChannel(packet) {
-  const channelId = process.env.PICK_APPROVAL_CHANNEL_ID;
+  const channelId = approvalChannelIdForPacket(packet);
   const token = process.env.DISCORD_TOKEN;
   if (!channelId || !token) {
     await upsertPickCandidate(packet, { status: 'HELD_NOT_READY', rejectionCodes: ['APPROVAL_CHANNEL_NOT_CONFIGURED'] });

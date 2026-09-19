@@ -36,6 +36,7 @@ const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
 const { createTelegramReader } = require('./lib/telegram-reader');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
+const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { exclusiveSourceIsCurrent } = require('../pipeline/exclusive-text');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -79,6 +80,7 @@ const freeRecapStatePath = path.join(path.dirname(pickLogPath()), 'free-recap-st
 // older Render environment has not yet added the variable.
 const exclusivesChannelId = process.env.EXCLUSIVES_CHANNEL_ID || '1539055850075852911';
 const pickApprovalChannelId = process.env.PICK_APPROVAL_CHANNEL_ID;
+const exclusivePickApprovalChannelId = exclusiveApprovalChannelId();
 const sourcesPath = path.join(__dirname, '..', 'data', 'twitter-sources.json');
 const pickWorkflowPath = path.join(__dirname, '..', 'data', 'pick-workflow.json');
 const trendsChannelMap = new Map(
@@ -179,8 +181,10 @@ function startTelegramReader() {
   try { config = telegramConfig(); }
   catch { console.error('Telegram configuration needs attention; existing Discord services remain active.'); return; }
   telegramReader = createTelegramReader({ config, channelFor: async () => {
-    const channel = await approvedTextChannel(pickApprovalChannelId);
-    if (channel.guildId !== process.env.DISCORD_GUILD_ID || !/pick.approvals/i.test(channel.name || '')) throw new Error('Unexpected private Telegram approval destination.');
+    const channel = await approvedTextChannel(exclusivePickApprovalChannelId);
+    const usesLegacyFallback = exclusivePickApprovalChannelId === pickApprovalChannelId;
+    const expectedName = usesLegacyFallback ? /pick.approvals/i : /exclusive.*pick.*approvals/i;
+    if (channel.guildId !== process.env.DISCORD_GUILD_ID || !expectedName.test(channel.name || '')) throw new Error('Unexpected private Telegram approval destination.');
     return channel;
   } });
   const run = () => void telegramReader.run().then(receipts => console.log('Cloud Telegram receipts:', JSON.stringify(receipts)));
