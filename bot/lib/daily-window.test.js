@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { datedTimeOverride } = require('./daily-window');
+const { datedTimeOverride, nextArizonaDailyStartMs } = require('./daily-window');
 
 test('uses a dated Arizona start override only on the matching day', () => {
   const beforeMidnightArizona = new Date('2026-09-20T06:59:00Z');
@@ -18,4 +18,15 @@ test('uses a dated Arizona start override only on the matching day', () => {
 test('falls back to the recurring time when a dated override is incomplete', () => {
   const now = new Date('2026-09-19T13:00:00Z');
   assert.equal(datedTimeOverride({ now, overrideDate: '2026-09-19', overrideAt: '', recurringAt: '10:00' }), '10:00');
+});
+
+test('schedules today before the Arizona start and tomorrow after it', () => {
+  assert.equal(
+    new Date(nextArizonaDailyStartMs('08:00', new Date('2026-09-19T13:00:00Z'))).toISOString(),
+    '2026-09-19T15:00:00.000Z'
+  );
+  assert.equal(
+    new Date(nextArizonaDailyStartMs('08:00', new Date('2026-09-19T16:00:00Z'))).toISOString(),
+    '2026-09-20T15:00:00.000Z'
+  );
 });

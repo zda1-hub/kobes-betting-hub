@@ -37,7 +37,7 @@ const { createTelegramReader } = require('./lib/telegram-reader');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
-const { datedTimeOverride } = require('./lib/daily-window');
+const { datedTimeOverride, nextArizonaDailyStartMs } = require('./lib/daily-window');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { exclusiveSourceIsCurrent } = require('../pipeline/exclusive-text');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -884,11 +884,6 @@ function arizonaDailyTimestampMs(time, now = new Date()) {
   return new Date(`${values.year}-${values.month}-${values.day}T${time}:00-07:00`).getTime();
 }
 
-function nextArizonaDailyStartMs(time, now = new Date()) {
-  const today = new Date(arizonaDailyTimestampMs(time, now));
-  return now < today ? today.getTime() : today.getTime() + 24 * 60 * 60 * 1000;
-}
-
 function xMonitorModelCallLimit() {
   const raw = (process.env.X_MONITOR_MAX_MODEL_CALLS_PER_RUN || process.env.X_MONITOR_MAX_CANDIDATES || '').trim();
   if (!raw) return null;
@@ -967,13 +962,12 @@ async function beginDailyXMonitor() {
   const now = new Date();
   const todayParts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
   const currentTime = `${todayParts.find((part) => part.type === 'hour').value}:${todayParts.find((part) => part.type === 'minute').value}`;
-  const startToday = startAt - 24 * 60 * 60 * 1000;
   if (currentTime < dailyAt) {
     xMonitorDailyTimer = setTimeout(() => {
       xMonitorDailyTimer = null;
       void beginDailyXMonitor();
-    }, startToday - now.getTime());
-    console.log(`X monitoring is scheduled to begin at ${new Date(startToday).toISOString()} (${dailyAt} Arizona time).`);
+    }, startAt - now.getTime());
+    console.log(`X monitoring is scheduled to begin at ${new Date(startAt).toISOString()} (${dailyAt} Arizona time).`);
     return;
   }
   const limit = dailyFreePickLimit();
