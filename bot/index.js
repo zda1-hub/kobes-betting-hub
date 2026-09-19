@@ -199,7 +199,7 @@ function recapApprovalEngine(workflow, directory, recapType) {
 }
 
 const recapApprovalWorkflows = [
-  { config: exclusiveRecapWorkflow, label: 'exclusive', engine: recapApprovalEngine(exclusiveRecapWorkflow, 'recap-approvals', 'exclusive_discord_approval') },
+  { config: exclusiveRecapWorkflow, label: 'exclusive', engine: recapApprovalEngine(exclusiveRecapWorkflow, 'exclusive-recap-approvals', 'exclusive_discord_approval') },
   ...(writeupRecapWorkflow.enabled
     ? [{ config: writeupRecapWorkflow, label: 'writeup', engine: recapApprovalEngine(writeupRecapWorkflow, 'writeup-recap-approvals', 'writeup_discord_approval') }]
     : [])
