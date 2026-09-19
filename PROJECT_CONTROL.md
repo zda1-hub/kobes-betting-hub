@@ -2,7 +2,7 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-19 approximately 16:00 MST (Telegram and X both used the authorized 08:00–16:00 Arizona one-day window and Telegram stopped exactly at the shared cutoff. Telegram access and polling were healthy; current image posts were held by exact-term validation rather than lost. A private-only, deduplicated recovery for the exact current-day CodyCoverSpreads and DuckInvestments source cards is prepared with 15 supplied selections and no invented odds or stakes. Production receipt remains required before delivery is claimed.)
+**Last verified:** 2026-09-19 approximately 16:55 MST (Telegram and X both used the authorized 08:00–16:00 Arizona one-day window and stopped at the shared cutoff. Production commit `5e1d1de` recovered the exact current-day CodyCoverSpreads and DuckInvestments source cards into two pending private exclusive-approval cards: 15 supplied selections, no invented odds/stakes, and zero public posts. Both cards were visibly verified in Discord. The one-time recovery flags were cleared; cleanup deploy `dep-dani1brm8hqs73bd5a90` is live, Kobe Bot is logged in, and Telegram/X both report the same next-window start.)
 
 **Production runtime change set:** Render `01d8a5a39dd468f3d7728442a58b68279fae732f`, live deploy `dep-dam9fdrtqb8s73bh7g90`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `739a4271-937e-4c3f-abcb-5b6fe4451a4e`. Telegram cloud session and image extraction work; unclear terms remain privately held and model work is bounded per run. Per-wager lossless-source ledger deployed, with unsupported markets pending. Intake cutoff 16:00 and private unresolved-review eligibility 21:00 Arizona remain configured. Migration 010 is applied. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
 
@@ -32,6 +32,16 @@ approval channel, preflights its identity, uses stable content IDs, records
 Discord receipts and cannot publish to a member or social destination. The MMA
 validator now accepts explicit `By KO/TKO`, `By TKO`, `By Submission` and
 `By Decision` markets without relaxing player/team or source-term validation.
+
+Production receipt: deploy `dep-dani09jm8hqs73bd1nng` sent exactly two private
+cards, one for CodyCoverSpreads and one for DuckInvestments, with summary
+`groups=2`, `picks=15`, `needsClarification=[]`, `sent=2`, `publicPosts=0`.
+Discord visibly showed both pending cards and their owner-only Post/Reject
+controls in `exclusive-pick-approvals`; neither control was clicked. The
+one-time import variables were then cleared. Cleanup deploy
+`dep-dani1brm8hqs73bd5a90` is live and logged the bot in normally without
+rerunning the import. Telegram and X both report their next window beginning at
+08:00 Arizona on September 20 and retain the shared 16:00 cutoff.
 
 ### September 19 — four private approval lanes, verified player teams and referral entry
 
