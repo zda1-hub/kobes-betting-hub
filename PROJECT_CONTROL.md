@@ -8,6 +8,16 @@
 
 **Control-file owner:** Zakai Martin
 
+### September 19 — injury report typography
+
+Future NFL and MLB injury boards keep each team heading bold and now render
+every player name in italics, including both questionable/doubtful/day-to-day
+entries and the compact out/inactive list. Status labels, symbols, source-only
+summaries, 15-minute refreshes and fail-closed delivery behavior are unchanged.
+The changed content fingerprint causes the next scheduled refresh to edit the
+existing daily board in place rather than creating another report. Focused
+formatting, pagination, edit/deduplication and failure-safety tests pass 14/14.
+
 ### September 19 — evidence-led Free Pick X format
 
 Owner requested future approved Free Pick posts use a concise, recognizable X

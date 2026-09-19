@@ -58,12 +58,12 @@ function injuryPages(league, data, now = new Date()) {
       seen.add(key); count++;
       if (category === 'unavailable') {
         unavailableCount++;
-        unavailable.push(`${name} (${status})`);
+        unavailable.push(`*${name}* (${status})`);
       } else {
         uncertainCount++;
         const position = clean(entry.athlete?.position?.abbreviation);
         const symbol = /^doubtful$/i.test(status) ? '🟠' : '🟡';
-        entries.push(`${symbol} **${name}**${position ? ` (${position})` : ''} — **${status}**\n↳ ${questionableNote(entry)}`);
+        entries.push(`${symbol} *${name}*${position ? ` (${position})` : ''} — **${status}**\n↳ ${questionableNote(entry)}`);
       }
     }
     if (entries.length || unavailable.length) {

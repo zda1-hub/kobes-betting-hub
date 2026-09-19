@@ -11,7 +11,7 @@ const data = () => ({ timestamp: now.toISOString(), injuries: [{ id: '1', displa
 test('source facts retain status and old report dates without inferred availability', () => {
   const report = injuryPages('nfl', data(), now);
   assert.equal(report.count, 1);
-  assert.match(report.pages[0].description, /A Player.*\(WR\).*Questionable.*Ankle.*2026-09-16/s);
+  assert.match(report.pages[0].description, /\*\*A Team\*\*[\s\S]*🟡 \*A Player\* \(WR\) — \*\*Questionable\*\*[\s\S]*Ankle.*2026-09-16/);
   assert.match(report.pages[0].description, /not confirmed game-day/);
 });
 test('active/probable players are omitted and unavailable players have names/statuses only', () => {
@@ -25,7 +25,7 @@ test('active/probable players are omitted and unavailable players have names/sta
   const report=injuryPages('nfl',input,now), text=report.pages.map(x=>x.description).join('\n');
   assert.equal(report.count,3);assert.equal(report.uncertainCount,1);assert.equal(report.unavailableCount,2);
   assert.doesNotMatch(text,/Active Person|Probable Person|Shoulder|Elbow|Do not copy this|2026-09-01/);
-  assert.match(text,/🔴 \*\*Out \/ unavailable\*\*[\s\S]*Out Person \(Out\) · Reserve Person \(Injured Reserve\)/);
+  assert.match(text,/🔴 \*\*Out \/ unavailable\*\*[\s\S]*\*Out Person\* \(Out\) · \*Reserve Person\* \(Injured Reserve\)/);
 });
 test('uncertain summaries are brief source facts, not unrelated comments or projected return dates',()=>{
   const input=data();Object.assign(input.injuries[0].injuries[0],{shortComment:'Credited with a win, five strikeouts',details:{type:'Ankle',returnDate:'2026-09-20'}});
