@@ -1,6 +1,7 @@
 const DEFAULT_PUBLISHER_URL = 'https://bettinghub-publisher.kobedirwin.workers.dev';
-const { publicPickTerms, sourceEvidence } = require('./source-review');
+const { sourceEvidence } = require('./source-review');
 const { auditedFetch } = require('../../pipeline/api-client');
+const { buildFreePickXPost } = require('./free-pick-x');
 const { instagramStoryFilename, renderInstagramStory } = require('./instagram-story');
 
 function phoenixOperatingDate() {
@@ -31,7 +32,9 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
     units: firstPlay.units || extraction.units || '',
     reason: sourceEvidence(packet).join(' • '),
   };
-  const caption = ['FREE PLAY', ...publicPickTerms(packet)].join('\n').slice(0, 280);
+  // Image-backed and text-only Free Picks use one X copy builder so a source
+  // image cannot silently fall back to the old caption format.
+  const caption = buildFreePickXPost(packet);
   const imageUrl = copyImage ? packet.approval?.image_url : null;
   let imagePayload = null;
   let imageType = '';

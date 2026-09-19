@@ -1,8 +1,12 @@
 const { createHash } = require('node:crypto');
-const { sourceTerms } = require('./source-review');
+const { sourceEvidence, sourceTerms } = require('./source-review');
 const { auditedFetch } = require('../../pipeline/api-client');
 
 const MAX_X_POST_LENGTH = 280;
+const MAX_X_EVIDENCE_POINTS = 4;
+const X_HEADER = '🚨 TODAY’S FREE PLAY';
+const X_ENGAGEMENT = 'WHO’S RIDING WITH THE HUB? 👀';
+const X_CTA = 'Full board → kobesbettinghub.com/join\n21+ | Bet responsibly. No guarantees.';
 
 function freePickXPostId(pickId) {
   if (typeof pickId !== 'string' || !pickId.trim()) {
@@ -15,16 +19,29 @@ function buildFreePickXPost(packet) {
   const terms = sourceTerms(packet);
   if (!terms.length) throw new Error('The free pick has no publishable terms for X.');
 
-  // Keep the X copy to the approved pick terms only. The Discord post carries
-  // the full writeup; omitting promotional filler prevents valid picks from
-  // failing X's 280-character cap.
-  const termsBody = ['FREE PLAY', ...terms].join('\n');
-  const cta = '\n\nFull board → kobesbettinghub.com/join\n21+ | No guarantees.';
-  const body = termsBody.length + cta.length <= MAX_X_POST_LENGTH ? termsBody + cta : termsBody;
+  // Exact approved wager terms are mandatory. Verified evidence is optional
+  // and is added only as complete bullets; a claim is never shortened into a
+  // potentially misleading fragment just to fit X's character limit.
+  const fixedSections = [X_HEADER, terms.join('\n'), X_ENGAGEMENT, X_CTA];
+  let body = fixedSections.join('\n\n');
   if (body.length > MAX_X_POST_LENGTH) {
-    throw new Error(`The approved free-pick post is ${body.length} characters; X allows ${MAX_X_POST_LENGTH}.`);
+    body = [X_HEADER, terms.join('\n'), X_CTA].join('\n\n');
   }
-  return body;
+  if (body.length > MAX_X_POST_LENGTH) {
+    throw new Error(`The approved free-pick post is ${body.length} characters before evidence; X allows ${MAX_X_POST_LENGTH}.`);
+  }
+
+  const evidence = sourceEvidence(packet).slice(0, MAX_X_EVIDENCE_POINTS);
+  const acceptedEvidence = [];
+  for (const claim of evidence) {
+    const candidateEvidence = [...acceptedEvidence, `• ${claim}`];
+    const candidate = [X_HEADER, terms.join('\n'), candidateEvidence.join('\n'), X_ENGAGEMENT, X_CTA].join('\n\n');
+    if (candidate.length <= MAX_X_POST_LENGTH) acceptedEvidence.push(`• ${claim}`);
+  }
+
+  return acceptedEvidence.length
+    ? [X_HEADER, terms.join('\n'), acceptedEvidence.join('\n'), X_ENGAGEMENT, X_CTA].join('\n\n')
+    : body;
 }
 
 function freePickXSyncConfig(environment = process.env) {

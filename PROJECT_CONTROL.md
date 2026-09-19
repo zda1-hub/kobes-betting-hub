@@ -8,6 +8,24 @@
 
 **Control-file owner:** Zakai Martin
 
+### September 19 — evidence-led Free Pick X format
+
+Owner requested future approved Free Pick posts use a concise, recognizable X
+format modeled on strong sports-pick accounts without copying unsupported hype:
+alert header, exact approved wager terms, as many as four complete verified
+evidence bullets that fit, one engagement question, the Hub link, and a 21+
+responsible-gambling/no-guarantees footer. Text-only fallback and image-backed
+website/X publication now share the same builder, so the two paths cannot drift.
+Evidence is never cut mid-claim; approved terms and the safety footer are never
+removed to make room. Oversized mandatory copy fails closed. Stable per-pick X
+IDs and the existing image/text duplicate guard are unchanged.
+
+No existing X post was deleted, repeated or replaced. The September 19 Free Pick
+remains the canonical post; any expanded same-day commentary belongs in a reply,
+not a second standalone duplicate. Focused X/site/publisher/recovery tests pass
+19/19. The wider suite passes 394/402; the same eight date-sensitive Telegram
+reader fixtures described below remain unrelated to this copy-only change.
+
 ### September 19 — one-day 8 AM intake window live
 
 Owner requested the existing production collector run from 08:00 through its

@@ -13,8 +13,41 @@ const packet = {
 };
 
 test('formats the approved free pick as a compact X post', () => {
-  assert.equal(buildFreePickXPost(packet), 'FREE PLAY\nArizona Diamondbacks ML -115\n\nFull board → kobesbettinghub.com/join\n21+ | No guarantees.');
+  assert.equal(buildFreePickXPost(packet), '🚨 TODAY’S FREE PLAY\n\nArizona Diamondbacks ML -115\n\nWHO’S RIDING WITH THE HUB? 👀\n\nFull board → kobesbettinghub.com/join\n21+ | Bet responsibly. No guarantees.');
   assert.match(freePickXPostId(packet.pick_id), /^free-x-[a-f0-9]{40}$/);
+});
+
+test('adds complete verified evidence bullets when they fit', () => {
+  const evidencePacket = structuredClone(packet);
+  evidencePacket.analysis.extraction.plays[0].source_claims = [
+    'Arizona has won 7 of its last 10 games',
+    'The starter allowed two or fewer earned runs in four straight starts',
+    'This deliberately long supporting claim should be omitted in full rather than cut into a misleading fragment because the post has no remaining room for it at all'
+  ];
+
+  const body = buildFreePickXPost(evidencePacket);
+  assert.match(body, /• Arizona has won 7 of its last 10 games/);
+  assert.match(body, /• The starter allowed two or fewer earned runs in four straight starts/);
+  assert.doesNotMatch(body, /deliberately long/);
+  assert.ok(body.length <= 280);
+});
+
+test('never truncates evidence or removes approved wager terms to fit X', () => {
+  const longEvidencePacket = structuredClone(packet);
+  const longClaim = `Arizona ${'recorded a verified matchup advantage '.repeat(8)}`.trim();
+  longEvidencePacket.analysis.extraction.plays[0].source_claims = [longClaim];
+
+  const body = buildFreePickXPost(longEvidencePacket);
+  assert.match(body, /Arizona Diamondbacks ML -115/);
+  assert.doesNotMatch(body, /matchup advantage/);
+  assert.match(body, /21\+ \| Bet responsibly\. No guarantees\./);
+  assert.ok(body.length <= 280);
+});
+
+test('fails closed when mandatory approved terms cannot fit safely', () => {
+  const oversizedPacket = structuredClone(packet);
+  oversizedPacket.analysis.extraction.plays[0].selection = `Arizona ${'Diamondbacks '.repeat(30)}ML`;
+  assert.throws(() => buildFreePickXPost(oversizedPacket), /before evidence/);
 });
 
 test('leaves X sync disabled unless explicitly enabled', () => {
