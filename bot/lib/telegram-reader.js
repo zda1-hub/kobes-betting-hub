@@ -124,7 +124,12 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
           // Configuration and spending limits are not bad source content.
           // Retain the cursor so the source can recover after the limit clears.
           if(extractionStatus!=='EXTRACTION_FAILED'){
-            results.push({status:'DEFERRED_EXTRACTION',extractionStatus,messageId:message.id});break;
+            results.push({
+              status:'DEFERRED_EXTRACTION',
+              extractionStatus,
+              extractionDetail:packet.analysis.detail||null,
+              messageId:message.id
+            });break;
           }
           state.extractionRetries=state.extractionRetries||{};
           const retries=(state.extractionRetries[String(message.id)]||0)+1;
