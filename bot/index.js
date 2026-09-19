@@ -37,6 +37,7 @@ const { createTelegramReader } = require('./lib/telegram-reader');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
+const { datedTimeOverride } = require('./lib/daily-window');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { exclusiveSourceIsCurrent } = require('../pipeline/exclusive-text');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -846,25 +847,27 @@ function xMonitorStopAtMs() {
   return timestamp;
 }
 
-function xMonitorDailyAt() {
-  const raw = process.env.X_MONITOR_DAILY_AT?.trim();
+function xMonitorDailyAt(now = new Date()) {
+  const raw = datedTimeOverride({
+    now,
+    overrideDate: process.env.X_MONITOR_DAILY_START_OVERRIDE_DATE,
+    overrideAt: process.env.X_MONITOR_DAILY_START_OVERRIDE_AT,
+    recurringAt: process.env.X_MONITOR_DAILY_AT
+  });
   if (!raw) return null;
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
-    console.warn('Ignoring invalid X_MONITOR_DAILY_AT. Use HH:MM in Arizona time, for example 11:00.');
+    console.warn('Ignoring invalid X monitor daily start time. Use HH:MM in Arizona time, for example 10:00.');
     return null;
   }
   return raw;
 }
 
 function xMonitorDailyStopAt() {
-  const overrideDate = (process.env.X_MONITOR_DAILY_STOP_OVERRIDE_DATE || '').trim();
-  const overrideAt = (process.env.X_MONITOR_DAILY_STOP_OVERRIDE_AT || '').trim();
-  const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit'
-  }).format(new Date());
-  const raw = overrideDate === today && overrideAt
-    ? overrideAt
-    : (process.env.X_MONITOR_DAILY_STOP_AT || '15:00').trim();
+  const raw = datedTimeOverride({
+    overrideDate: process.env.X_MONITOR_DAILY_STOP_OVERRIDE_DATE,
+    overrideAt: process.env.X_MONITOR_DAILY_STOP_OVERRIDE_AT,
+    recurringAt: process.env.X_MONITOR_DAILY_STOP_AT || '15:00'
+  });
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
     console.warn('Ignoring invalid X_MONITOR_DAILY_STOP_AT. Use HH:MM in Arizona time, for example 15:00.');
     return null;
@@ -957,7 +960,7 @@ async function beginDailyXMonitor() {
       xMonitorDailyTimer = null;
       void beginDailyXMonitor();
     }, firstStartAt - Date.now());
-    console.log(`X monitoring is scheduled to begin at ${new Date(firstStartAt).toISOString()} before entering the daily 11:00 AM Arizona schedule.`);
+    console.log(`X monitoring is scheduled to begin at ${new Date(firstStartAt).toISOString()} before entering the daily ${dailyAt} Arizona schedule.`);
     return;
   }
   const startAt = nextArizonaDailyStartMs(dailyAt);
@@ -970,7 +973,7 @@ async function beginDailyXMonitor() {
       xMonitorDailyTimer = null;
       void beginDailyXMonitor();
     }, startToday - now.getTime());
-    console.log(`X monitoring is scheduled to begin at ${new Date(startToday).toISOString()} (11:00 AM Arizona time).`);
+    console.log(`X monitoring is scheduled to begin at ${new Date(startToday).toISOString()} (${dailyAt} Arizona time).`);
     return;
   }
   const limit = dailyFreePickLimit();

@@ -78,6 +78,10 @@ services:
         sync: false
       - key: X_MONITOR_STOP_AT
         sync: false
+      - key: X_MONITOR_DAILY_START_OVERRIDE_DATE
+        sync: false
+      - key: X_MONITOR_DAILY_START_OVERRIDE_AT
+        sync: false
       - key: X_MONITOR_MAX_CANDIDATES
         sync: false
       - key: X_MONITOR_MAX_MODEL_CALLS_PER_RUN
