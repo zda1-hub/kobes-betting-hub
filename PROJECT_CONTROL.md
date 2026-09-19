@@ -8,6 +8,20 @@
 
 **Control-file owner:** Zakai Martin
 
+### September 19 — one-day 8 AM intake window live
+
+Owner requested the existing production collector run from 08:00 through its
+regular 16:00 Arizona cutoff on September 19 only. Commit `2c7aec3` added a
+date-bound start override. Its first live startup exposed a pre-existing
+before-window scheduling bug that repeatedly logged a past start time without
+scanning or publishing. Commit `85bda75` corrected the calculation and added
+focused coverage. Render deploy `dep-dan8pnff3r2c73dq90qg` is live; its startup
+receipt states `2026-09-19T15:00:00.000Z (08:00 Arizona time)`. The stop remains
+16:00. The dated override expires after September 19, so the recurring 10:00
+Arizona start returns automatically. Focused schedule tests pass 3/3 and syntax
+validation passes. The full suite is 388/396; the eight failures are unrelated,
+date-sensitive Telegram reader fixtures that rolled past their hardcoded day.
+
 ### September 18 — exclusive recap button-approval flow
 
 Immediate delivery recovery: route recap review cards to existing private
