@@ -46,6 +46,7 @@ const { createFreePickDelivery } = require('./lib/free-pick-delivery');
 const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
 const { createTelegramReader } = require('./lib/telegram-reader');
 const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/daily-writeup-board');
+const { createFreeWriteupBoard } = require('./lib/free-writeup-board');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
@@ -89,6 +90,7 @@ const freePickChannelId = process.env.FREE_PICK_CHANNEL_ID;
 const freeRecapChannelId = process.env.FREE_RECAP_CHANNEL_ID || recapChannelId;
 const freeRecapStatePath = path.join(path.dirname(pickLogPath()), 'free-recap-state.json');
 const dailyWriteupsChannelId = process.env.DAILY_WRITEUPS_CHANNEL_ID;
+const configuredFreeWriteupsChannelId = process.env.FREE_WRITEUPS_CHANNEL_ID;
 if (dailyWriteupsChannelId) allowedChannelIds.add(dailyWriteupsChannelId);
 let manualFootballWriteupRows = [];
 let newestFootballWriteupMessageId = null;
@@ -127,12 +129,18 @@ async function readManualFootballWriteups() {
   }
   return manualFootballWriteupRows;
 }
+
+async function allWriteupRows() {
+  return [...await readPickLog(), ...await readManualFootballWriteups()];
+}
+
 const dailyWriteupBoard = dailyWriteupsChannelId ? createDailyWriteupBoard({
   channelFor: () => approvedTextChannel(dailyWriteupsChannelId),
-  rowsFor: async () => [...await readPickLog(), ...await readManualFootballWriteups()],
+  rowsFor: allWriteupRows,
   stateFile: path.join(path.dirname(pickLogPath()), 'daily-writeups-board.json'),
   operatingDate: () => dailyPickOperatingDate(new Date())
 }) : null;
+let freeWriteupBoard = null;
 // Every source-only approval now has one member destination: #expert-picks.
 // PUBLISH_CHANNEL_ID is the established production expert-picks route; the
 // explicit alias allows a future rename without reintroducing alternatives.
@@ -160,7 +168,20 @@ const sportChannelMap = new Map(
     .filter(([sport, channelId]) => sport && channelId)
     .map(([sport, channelId]) => [sport.toLowerCase(), channelId])
 );
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });
+
+async function ensureFreeWriteupsChannel() {
+  if (configuredFreeWriteupsChannelId) return approvedTextChannel(configuredFreeWriteupsChannelId);
+  if (!freePickChannelId) throw new Error('FREE_PICK_CHANNEL_ID is required to create the public Free Writeups channel safely.');
+  const source = await approvedTextChannel(freePickChannelId);
+  const channels = await source.guild.channels.fetch();
+  const existing = channels.find((channel) => channel?.isTextBased?.() && channel.name === 'free-writeups');
+  if (existing) return existing;
+  const created = await source.clone({ name: 'free-writeups', reason: 'Owner requested a separate public writeup-preview channel.' });
+  await created.setTopic('Free previews of today’s writeups. Exact plays, lines, odds, and full reasoning remain inside VIP.');
+  console.log(`Created public Free Writeups channel ${created.id} from the existing Free Pick permissions.`);
+  return created;
+}
 attachDiscordRestAudit(client.rest, {
   callerComponent: 'bot/index',
   triggerType: 'discord_bot'
@@ -1429,6 +1450,14 @@ async function postAndLogOfficialPick({ channel, payload, entry, packet = null }
       console.error('Daily writeups board needs attention:', error instanceof Error ? error.message : String(error));
     }
   }
+  if (freeWriteupBoard && /writeups?/i.test(entry.destination || '')) {
+    try {
+      const receipt = await freeWriteupBoard.refresh();
+      console.log('Free writeups preview receipt:', JSON.stringify(receipt));
+    } catch (error) {
+      console.error('Free writeups preview needs attention:', error instanceof Error ? error.message : String(error));
+    }
+  }
   return message;
 }
 
@@ -2030,6 +2059,20 @@ client.once(Events.ClientReady, async (readyClient) => {
       .then(receipt => console.log('Daily writeups board receipt:', JSON.stringify(receipt)))
       .catch(error => console.error('Daily writeups board needs attention:', error.message));
     setInterval(() => void dailyWriteupBoard.refresh().catch(error => console.error('Daily writeups board needs attention:', error.message)), 60000);
+  }
+  try {
+    const channel = await ensureFreeWriteupsChannel();
+    freeWriteupBoard = createFreeWriteupBoard({
+      channelFor: () => Promise.resolve(channel),
+      rowsFor: allWriteupRows,
+      stateFile: path.join(path.dirname(pickLogPath()), 'free-writeups-board.json'),
+      operatingDate: () => dailyPickOperatingDate(new Date())
+    });
+    const receipt = await freeWriteupBoard.refresh();
+    console.log('Free writeups preview receipt:', JSON.stringify({ ...receipt, channelId: channel.id }));
+    setInterval(() => void freeWriteupBoard.refresh().catch(error => console.error('Free writeups preview needs attention:', error.message)), 60000);
+  } catch (error) {
+    console.error('Free writeups preview setup needs attention:', error.message);
   }
   try {
     await refreshPendingTermsOnlyApprovals();

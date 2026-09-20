@@ -26,6 +26,8 @@ services:
         sync: false
       - key: RECAP_CHANNEL_ID
         sync: false
+      - key: FREE_WRITEUPS_CHANNEL_ID
+        sync: false
       - key: ALLOWED_CHANNEL_IDS
         sync: false
       - key: SPORT_CHANNEL_MAP
