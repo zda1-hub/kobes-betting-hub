@@ -38,6 +38,20 @@ test('indexes Kobe manual football writeups while rejecting chat and bot message
   assert.equal(manualFootballWriteupRow({ id: '3', author: { bot: true }, content: 'Player Over 4.5 Receptions (-110)' }, dateFor), null);
 });
 
+test('indexes split-line and unparenthesized manual NFL pick formats', () => {
+  const dateFor = () => '2026-09-19';
+  const split = manualFootballWriteupRow({
+    id: '4', author: { bot: false }, createdAt: new Date(),
+    content: 'Kayshon Boutte\nOver 38.5 Receiving Yards -115\n\n• matchup note',
+  }, dateFor);
+  assert.equal(split.selection, 'Kayshon Boutte Over 38.5 Receiving Yards -115');
+  const unicode = manualFootballWriteupRow({
+    id: '5', author: { bot: false }, createdAt: new Date(),
+    content: 'Stefon Diggs O5.5 Receptions (−110 FD):\nBills matchup',
+  }, dateFor);
+  assert.equal(unicode.selection, 'Stefon Diggs O5.5 Receptions (-110 FD)');
+});
+
 test('builds a deduplicated previous-day NFL archive and excludes college football', () => {
   const rows = [
     { operating_date: '2026-09-19', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', league: 'NFL', selection: 'David Montgomery', published_line: 'Over 15.5 rushing attempts', published_odds_american: '-110' },

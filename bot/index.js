@@ -93,6 +93,7 @@ if (dailyWriteupsChannelId) allowedChannelIds.add(dailyWriteupsChannelId);
 let manualFootballWriteupRows = [];
 let newestFootballWriteupMessageId = null;
 let manualFootballHistoryLoaded = false;
+let manualFootballArchiveStartId = null;
 
 async function readManualFootballWriteups() {
   const channelId = sportChannelMap.get('football');
@@ -114,8 +115,14 @@ async function readManualFootballWriteups() {
     const messages = await channel.messages.fetch({ limit: 100, after: newestFootballWriteupMessageId });
     collected.push(...messages.values());
   }
-  for (const message of collected) {
+  const chronological = collected.sort((a, b) => a.id.localeCompare(b.id));
+  if (!manualFootballArchiveStartId) {
+    const anchor = chronological.find((message) => /\b(?:boutte|boute)\b/i.test(message.content || ''));
+    if (anchor) manualFootballArchiveStartId = anchor.id;
+  }
+  for (const message of chronological) {
     if (!newestFootballWriteupMessageId || BigInt(message.id) > BigInt(newestFootballWriteupMessageId)) newestFootballWriteupMessageId = message.id;
+    if (manualFootballArchiveStartId && BigInt(message.id) < BigInt(manualFootballArchiveStartId)) continue;
     if (!authorIds.has(message.author?.id)) continue;
     const row = manualFootballWriteupRow(message, dailyPickOperatingDate);
     if (row && !manualFootballWriteupRows.some((entry) => entry.source_message_id === row.source_message_id)) manualFootballWriteupRows.push(row);

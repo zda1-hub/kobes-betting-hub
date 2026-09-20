@@ -34,16 +34,28 @@ function normalizedWager(value) {
 
 function manualFootballWriteupRow(message, operatingDate) {
   if (!message?.id || !message?.content || message.author?.bot) return null;
-  const firstLine = String(message.content).split(/\r?\n/).map((line) => line.trim()).find(Boolean) || '';
-  const selection = firstLine.replace(/:\s*$/, '').trim();
-  const hasPrice = /\([+-]\d{3,4}(?:\s+[A-Z0-9.-]+)?\)/i.test(selection);
-  const hasMarket = /\b(over|under|receptions?|attempts?|yards?|touchdowns?|tds?|completions?|interceptions?|sacks?|moneyline|ml)\b|\b[ou]\s*\d|\b[ou]\d/i.test(selection);
+  const lines = String(message.content).split(/\r?\n/)
+    .map((line) => line.trim().replace(/^[-•]\s*/, ''))
+    .filter(Boolean);
+  const pricePattern = /(?:\(|\s|^)[+−-]\d{3,4}(?:\s+[A-Z0-9.-]+)?\)?(?:\s|:|$)/i;
+  const marketPattern = /\b(over|under|receptions?|rec(?:eiving)?\.?\s*yards?|rush(?:ing)?\.?\s*(?:yards?|attempts?)|attempts?|carries|yards?|touchdowns?|tds?|completions?|interceptions?|sacks?|targets?|longest\s+(?:reception|rush)|anytime\s+(?:touchdown|td)|to\s+score|moneyline|ml)\b|\b[ou]\s*\d|\b[ou]\d/i;
+  const firstMarketIndex = lines.slice(0, 4).findIndex((line) => marketPattern.test(line));
+  if (firstMarketIndex < 0) return null;
+  let selection = lines[firstMarketIndex];
+  if (firstMarketIndex > 0 && !marketPattern.test(lines[0]) && lines[0].length <= 80) selection = `${lines[0]} ${selection}`;
+  if (!pricePattern.test(selection)) {
+    const priceLine = lines.slice(firstMarketIndex + 1, firstMarketIndex + 3).find((line) => pricePattern.test(line));
+    if (priceLine && priceLine.length <= 40) selection = `${selection} ${priceLine}`;
+  }
+  selection = selection.replace(/:\s*$/, '').replaceAll('−', '-').trim();
+  const hasPrice = pricePattern.test(` ${selection} `);
+  const hasMarket = marketPattern.test(selection);
   if (!hasPrice || !hasMarket || selection.length > 256) return null;
   return {
     pick_id: `discord-manual-${message.id}`,
     operating_date: operatingDate(message.createdAt || message.createdTimestamp),
     status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', league: 'NFL',
-    selection, published_line: '', published_odds_american: '', source_message_id: message.id,
+    selection, published_line: '', published_odds_american: '', source_message_id: message.id, source_type: 'discord_manual',
   };
 }
 
@@ -153,7 +165,9 @@ function createDailyWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate
     }
     if (!payload) {
       await writeState(stateFile, state);
-      return { status: 'EMPTY', date, archiveMessages: state.archive_message_ids?.length || 0 };
+      return { status: 'EMPTY', date, archiveMessages: state.archive_message_ids?.length || 0,
+        archiveEntries: archivePayloads.reduce((count, item) => count + (item.embeds[0].description.match(/^• /gm) || []).length, 0),
+        manualEntries: rows.filter((row) => row.source_type === 'discord_manual').length };
     }
 
     const current = state.date === date && state.message_id
@@ -161,7 +175,9 @@ function createDailyWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate
       : null;
     const message = current ? await current.edit(payload) : await channel.send(payload);
     await writeState(stateFile, { ...state, date, message_id: message.id, updated_at: new Date().toISOString() });
-    return { status: current ? 'UPDATED' : 'CREATED', date, messageId: message.id, archiveMessages: state.archive_message_ids?.length || 0 };
+    return { status: current ? 'UPDATED' : 'CREATED', date, messageId: message.id, archiveMessages: state.archive_message_ids?.length || 0,
+      archiveEntries: archivePayloads.reduce((count, item) => count + (item.embeds[0].description.match(/^• /gm) || []).length, 0),
+      manualEntries: rows.filter((row) => row.source_type === 'discord_manual').length };
   }
   return { refresh };
 }
