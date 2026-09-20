@@ -498,13 +498,13 @@ async function discordChannelLabel(channelId, fallback) {
 async function approvalButtonLabels(packet) {
   const free = await discordChannelLabel(process.env.FREE_PICK_CHANNEL_ID, '#daily-free-play');
   const paidChannelId = packet.source?.publish_mode === 'terms_only'
-    ? (process.env.EXCLUSIVES_CHANNEL_ID || '1539055850075852911')
+    ? (process.env.EXPERT_PICKS_CHANNEL_ID || process.env.PUBLISH_CHANNEL_ID)
     : sportChannelId(packet);
-  const paidFallback = packet.source?.publish_mode === 'terms_only' ? '#exclusives' : '#paid-sport';
+  const paidFallback = packet.source?.publish_mode === 'terms_only' ? '#expert-picks' : '#paid-sport';
   const paid = await discordChannelLabel(paidChannelId, paidFallback);
   return {
     freeDisabled: packet.source?.publish_mode === 'terms_only',
-    freeLabel: packet.source?.publish_mode === 'terms_only' ? 'Free unavailable for exclusives' : `Post to ${free}`,
+    freeLabel: packet.source?.publish_mode === 'terms_only' ? 'Free unavailable for expert picks' : `Post to ${free}`,
     paidLabel: `Post to ${paid}`
   };
 }

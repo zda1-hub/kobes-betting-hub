@@ -133,10 +133,10 @@ const dailyWriteupBoard = dailyWriteupsChannelId ? createDailyWriteupBoard({
   stateFile: path.join(path.dirname(pickLogPath()), 'daily-writeups-board.json'),
   operatingDate: () => dailyPickOperatingDate(new Date())
 }) : null;
-// The approved #exclusives destination is kept configurable for future moves.
-// The fallback preserves the currently approved server destination when an
-// older Render environment has not yet added the variable.
-const exclusivesChannelId = process.env.EXCLUSIVES_CHANNEL_ID || '1539055850075852911';
+// Every source-only approval now has one member destination: #expert-picks.
+// PUBLISH_CHANNEL_ID is the established production expert-picks route; the
+// explicit alias allows a future rename without reintroducing alternatives.
+const expertPicksChannelId = process.env.EXPERT_PICKS_CHANNEL_ID || defaultChannelId;
 const pickApprovalChannelId = process.env.PICK_APPROVAL_CHANNEL_ID;
 const exclusivePickApprovalChannelId = exclusiveApprovalChannelId();
 const sourcesPath = path.join(__dirname, '..', 'data', 'twitter-sources.json');
@@ -1716,7 +1716,7 @@ async function handleSourceReviewButton(interaction) {
     }
     const channel = action === 'free'
       ? await approvedTextChannel(freePickChannelId)
-      : await approvedTextChannel(configuredTermsOnly ? exclusivesChannelId : (sport ? sportChannelMap.get(sport) : undefined));
+      : await approvedTextChannel(configuredTermsOnly ? expertPicksChannelId : (sport ? sportChannelMap.get(sport) : undefined));
     const label = action === 'free' ? 'FREE PICK' : 'PAID PICK';
     const extraction = publicationPacket.analysis.extraction;
     const firstPlay = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;
@@ -1869,6 +1869,49 @@ async function channelLabel(channelId, fallback) {
   }
 }
 
+async function refreshPendingTermsOnlyApprovals() {
+  if (!exclusivePickApprovalChannelId) return;
+  const directory = path.join(reviewQueueRoot, pacificClock().date);
+  let files;
+  try {
+    files = (await fs.readdir(directory)).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  const approvalChannel = await client.channels.fetch(exclusivePickApprovalChannelId);
+  if (!approvalChannel?.isTextBased() || !approvalChannel.messages) return;
+  const paidLabel = `Post to ${await channelLabel(expertPicksChannelId, '#expert-picks')}`;
+  let refreshed = 0;
+  for (const file of files) {
+    let packet;
+    try {
+      packet = JSON.parse(await fs.readFile(path.join(directory, file), 'utf8'));
+    } catch {
+      continue;
+    }
+    if (
+      packet.source?.publish_mode !== 'terms_only'
+      || !packet.discord_review_message_id
+      || packet.approval?.decision
+    ) continue;
+    try {
+      const message = await approvalChannel.messages.fetch(packet.discord_review_message_id);
+      await message.edit({
+        components: reviewButtons(packet.pick_id, {
+          freeDisabled: true,
+          freeLabel: 'Free unavailable for expert picks',
+          paidLabel
+        })
+      });
+      refreshed += 1;
+    } catch (error) {
+      console.error(`Could not refresh expert-picks approval card ${packet.pick_id}:`, error);
+    }
+  }
+  if (refreshed) console.log(`Refreshed ${refreshed} pending approval card(s) to the expert-picks-only route.`);
+}
+
 async function refreshPendingResearchApprovals() {
   if (!pickApprovalChannelId) return;
   const date = pacificClock().date;
@@ -1987,6 +2030,11 @@ client.once(Events.ClientReady, async (readyClient) => {
       .then(receipt => console.log('Daily writeups board receipt:', JSON.stringify(receipt)))
       .catch(error => console.error('Daily writeups board needs attention:', error.message));
     setInterval(() => void dailyWriteupBoard.refresh().catch(error => console.error('Daily writeups board needs attention:', error.message)), 60000);
+  }
+  try {
+    await refreshPendingTermsOnlyApprovals();
+  } catch (error) {
+    console.error('Unable to refresh pending expert-picks approval cards:', error);
   }
   try {
     await refreshPendingResearchApprovals();

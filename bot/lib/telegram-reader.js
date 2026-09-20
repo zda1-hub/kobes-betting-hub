@@ -159,7 +159,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         packet.approval.exact_final_copy=embed.description;
         packet.approval.exact_final_copy_sha256=approvalCopySha256(packet.approval.exact_final_copy);
         packet.approval_ready=true;packet.status='READY_FOR_APPROVAL';
-        payload={embeds:[embed],components:reviewButtons(packet.pick_id,{freeDisabled:true,freeLabel:'Free unavailable for exclusives',paidLabel:'Post to #exclusives'}),allowedMentions:{parse:[]}};
+        payload={embeds:[embed],components:reviewButtons(packet.pick_id,{freeDisabled:true,freeLabel:'Free unavailable for expert picks',paidLabel:'Post to #expert-picks'}),allowedMentions:{parse:[]}};
         previous={status:'RESERVED',fingerprint,payload};
       }catch{
         packet.status='HELD_UNCLEAR_TERMS';await save(packetFile,packet);

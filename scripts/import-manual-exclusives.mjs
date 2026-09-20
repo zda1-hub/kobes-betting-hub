@@ -35,7 +35,7 @@ export function manualExclusiveGroups(text, date, receivedAt = new Date().toISOS
       holdReason = 'Market is missing on at least one supplied wager; Kobe must clarify before publication.';
     }
     packet.manual_review_required = holdReason;
-    const components = reviewButtons(id, { freeDisabled: true, freeLabel: 'Free unavailable for exclusives', paidLabel: 'Post to #exclusives' });
+    const components = reviewButtons(id, { freeDisabled: true, freeLabel: 'Free unavailable for expert picks', paidLabel: 'Post to #expert-picks' });
     if (holdReason) components[0].components[1].disabled = true;
     const description = [name, ...picks.map(pick => `• ${pick}`)].join('\n');
     if (description.length > 4096) throw new Error('Capper group exceeds Discord card capacity.');

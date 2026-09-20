@@ -18,6 +18,8 @@ services:
         sync: false
       - key: PUBLISH_CHANNEL_ID
         sync: false
+      - key: EXPERT_PICKS_CHANNEL_ID
+        sync: false
       - key: PICK_APPROVAL_CHANNEL_ID
         sync: false
       - key: EXCLUSIVE_PICK_APPROVAL_CHANNEL_ID
