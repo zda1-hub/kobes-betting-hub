@@ -2,7 +2,7 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-20 approximately 09:37 MST (Render deploy `dep-dao0n0favr4c73aqhh80`, commit `cb00c2e`, is live. The `all-writeups` startup receipt updated today's existing board message `1551262124645548154` and reports one dated previous-day NFL archive message. Manual Kobe posts from `football-writeups` now merge with canonical bot-published writeups; ordinary chat, bot duplicates, and NCAAF archive entries are excluded. The recurring X and Telegram monitoring window remains 08:00–16:00 Arizona.)
+**Last verified:** 2026-09-20 approximately 10:50 MST (Render deploy `dep-dao1p5jtqb8s73av7r40`, commit `7e0f778`, is live and Kobe Bot logged in normally. The NFL archive contains five canonical historical entries. Discord currently withholds human message text because the application-level Message Content Intent is disabled; a controlled enablement attempt returned `Used disallowed intents` and was immediately rolled back. The recurring X and Telegram monitoring window remains 08:00–16:00 Arizona.)
 
 **Production runtime change set:** Render `01d8a5a39dd468f3d7728442a58b68279fae732f`, live deploy `dep-dam9fdrtqb8s73bh7g90`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `739a4271-937e-4c3f-abcb-5b6fe4451a4e`. Telegram cloud session and image extraction work; unclear terms remain privately held and model work is bounded per run. Per-wager lossless-source ledger deployed, with unsupported markets pending. Intake cutoff 16:00 and private unresolved-review eligibility 21:00 Arizona remain configured. Migration 010 is applied. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
 
@@ -51,6 +51,17 @@ College-football rows are excluded from the NFL archive. Deploy
 `dep-dao0n0favr4c73aqhh80` / commit `cb00c2e` is live; its first receipt reports
 `status=UPDATED`, today's existing message ID, and `archiveMessages=1`. The full
 suite passes 413/413.
+
+Follow-up evidence: broader split-line, unparenthesized-price and Unicode-minus
+parsing passes the full 414-test suite and is deployed, but live receipts still
+report `manualEntries=0`. Enabling the corresponding gateway intent in code
+proved the Discord application-level Message Content Intent is off: Discord
+closed the connection with `Used disallowed intents`. Commit `7e0f778` and
+deploy `dep-dao1p5jtqb8s73av7r40` immediately restored the prior safe intent set;
+Kobe Bot logged in and the 08:00–16:00 monitors resumed. Historical manual
+backfill remains blocked until the owner enables Message Content Intent for the
+Kobe Bot application in Discord Developer Portal. Do not claim the Boutte-forward
+manual entries are present before a nonzero production receipt is observed.
 
 ### September 19 — Telegram exclusives aligned to the X monitoring window
 
