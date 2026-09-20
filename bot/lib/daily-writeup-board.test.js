@@ -30,6 +30,7 @@ test('indexes Kobe manual football writeups while rejecting chat and bot message
   const dateFor = () => '2026-09-20';
   const row = manualFootballWriteupRow({
     id: '1551', createdAt: new Date('2026-09-20T16:10:00Z'), author: { bot: false },
+    attachments: { size: 1 },
     content: 'Bijan Robinson O4.5 Receptions (-150 FD):\nFalcons vs. Panthers\n\n• supporting fact',
   }, dateFor);
   assert.equal(row.selection, 'Bijan Robinson O4.5 Receptions (-150 FD)');
@@ -42,11 +43,13 @@ test('indexes split-line and unparenthesized manual NFL pick formats', () => {
   const dateFor = () => '2026-09-19';
   const split = manualFootballWriteupRow({
     id: '4', author: { bot: false }, createdAt: new Date(),
+    attachments: { size: 1 },
     content: 'Kayshon Boutte\nOver 38.5 Receiving Yards -115\n\n• matchup note',
   }, dateFor);
   assert.equal(split.selection, 'Kayshon Boutte Over 38.5 Receiving Yards -115');
   const unicode = manualFootballWriteupRow({
     id: '5', author: { bot: false }, createdAt: new Date(),
+    attachments: { size: 1 },
     content: 'Stefon Diggs O5.5 Receptions (−110 FD):\nBills matchup',
   }, dateFor);
   assert.equal(unicode.selection, 'Stefon Diggs O5.5 Receptions (-110 FD)');

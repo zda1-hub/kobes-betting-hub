@@ -99,7 +99,6 @@ async function readManualFootballWriteups() {
   const channelId = sportChannelMap.get('football');
   if (!channelId) return [];
   const channel = await approvedTextChannel(channelId);
-  const authorIds = new Set([...pickApproverUserIds, ...(recapWorkflow.reviewer_user_ids || []), channel.guild?.ownerId].filter(Boolean));
   const collected = [];
   if (!manualFootballHistoryLoaded) {
     let before;
@@ -123,7 +122,6 @@ async function readManualFootballWriteups() {
   for (const message of chronological) {
     if (!newestFootballWriteupMessageId || BigInt(message.id) > BigInt(newestFootballWriteupMessageId)) newestFootballWriteupMessageId = message.id;
     if (manualFootballArchiveStartId && BigInt(message.id) < BigInt(manualFootballArchiveStartId)) continue;
-    if (!authorIds.has(message.author?.id)) continue;
     const row = manualFootballWriteupRow(message, dailyPickOperatingDate);
     if (row && !manualFootballWriteupRows.some((entry) => entry.source_message_id === row.source_message_id)) manualFootballWriteupRows.push(row);
   }

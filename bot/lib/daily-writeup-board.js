@@ -34,7 +34,11 @@ function normalizedWager(value) {
 
 function manualFootballWriteupRow(message, operatingDate) {
   if (!message?.id || !message?.content || message.author?.bot) return null;
-  const lines = String(message.content).split(/\r?\n/)
+  const rawLines = String(message.content).split(/\r?\n/);
+  const evidenceCount = rawLines.filter((line) => /^\s*[-•]\s*\S/.test(line)).length;
+  const attachmentCount = Number(message.attachments?.size || message.attachments?.length || 0);
+  if (evidenceCount < 2 && attachmentCount < 1) return null;
+  const lines = rawLines
     .map((line) => line.trim().replace(/^[-•]\s*/, ''))
     .filter(Boolean);
   const pricePattern = /(?:\(|\s|^)[+−-]\d{3,4}(?:\s+[A-Z0-9.-]+)?\)?(?:\s|:|$)/i;
