@@ -1929,8 +1929,7 @@ async function refreshPendingTermsOnlyApprovals() {
       const message = await approvalChannel.messages.fetch(packet.discord_review_message_id);
       await message.edit({
         components: reviewButtons(packet.pick_id, {
-          freeDisabled: true,
-          freeLabel: 'Free unavailable for expert picks',
+          paidOnly: true,
           paidLabel
         })
       });
