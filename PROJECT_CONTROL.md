@@ -2,11 +2,21 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-20 approximately 10:50 MST (Render deploy `dep-dao1p5jtqb8s73av7r40`, commit `7e0f778`, is live and Kobe Bot logged in normally. The NFL archive contains five canonical historical entries. Discord currently withholds human message text because the application-level Message Content Intent is disabled; a controlled enablement attempt returned `Used disallowed intents` and was immediately rolled back. The recurring X and Telegram monitoring window remains 08:00–16:00 Arizona.)
+**Last verified:** 2026-09-20 approximately 11:07 MST (Render deploy `dep-dao1vmcs728c73b9ccn0`, commit `b678cad`, is live and Kobe Bot logged in normally. Terms-only source approvals now have one member destination, `expert-picks`; startup refreshed 39 pending approval cards to that route. The NFL archive contains five canonical historical entries. Discord currently withholds human message text because the application-level Message Content Intent is disabled; a controlled enablement attempt returned `Used disallowed intents` and was immediately rolled back. The recurring X and Telegram monitoring window remains 08:00–16:00 Arizona.)
 
 **Production runtime change set:** Render `01d8a5a39dd468f3d7728442a58b68279fae732f`, live deploy `dep-dam9fdrtqb8s73bh7g90`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `739a4271-937e-4c3f-abcb-5b6fe4451a4e`. Telegram cloud session and image extraction work; unclear terms remain privately held and model work is bounded per run. Per-wager lossless-source ledger deployed, with unsupported markets pending. Intake cutoff 16:00 and private unresolved-review eligibility 21:00 Arizona remain configured. Migration 010 is applied. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
 
 **Control-file owner:** Zakai Martin
+
+### September 20 — expert-picks-only source approvals
+
+Removed `exclusives` as a publication choice from terms-only X, Telegram and
+manual-source approval cards. New cards show only `Post to #expert-picks`, and
+the server resolves every paid action—including clicks on legacy cards—to the
+configured expert-picks destination. Deploy `dep-dao1vmcs728c73b9ccn0` is live,
+Kobe Bot logged in normally, and its startup migration relabeled 39 pending
+cards without changing their wager content or approval state. The full suite
+passes 415/415.
 
 ### September 19 — requested operating-list completion
 
