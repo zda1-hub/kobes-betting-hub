@@ -160,11 +160,7 @@ const sportChannelMap = new Map(
     .filter(([sport, channelId]) => sport && channelId)
     .map(([sport, channelId]) => [sport.toLowerCase(), channelId])
 );
-const client = new Client({ intents: [
-  GatewayIntentBits.Guilds,
-  GatewayIntentBits.GuildMessages,
-  GatewayIntentBits.MessageContent,
-] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 attachDiscordRestAudit(client.rest, {
   callerComponent: 'bot/index',
   triggerType: 'discord_bot'
