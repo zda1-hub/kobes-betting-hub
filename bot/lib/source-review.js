@@ -544,6 +544,22 @@ function reviewButtons(pickId, { testOnly = false, freeDisabled = false, paidOnl
   }];
 }
 
+function expertOnlyButtonsFromMessage(rows) {
+  const buttons = (rows || []).flatMap((row) => row?.components || row?.data?.components || [])
+    .map((button) => button?.toJSON?.() || button?.data || button || {});
+  const idFor = (button) => button.custom_id || button.customId || '';
+  const paid = buttons.find((button) => /^source-review:.+:paid$/.test(idFor(button)));
+  const reject = buttons.find((button) => /^source-review:.+:reject$/.test(idFor(button)));
+  if (!paid || !reject) return null;
+  return [{
+    type: ComponentType.ActionRow,
+    components: [
+      { type: ComponentType.Button, style: ButtonStyle.Primary, label: buttonLabel(paid.label, 'Post to #expert-picks'), custom_id: idFor(paid), disabled: Boolean(paid.disabled) },
+      { type: ComponentType.Button, style: ButtonStyle.Danger, label: 'Reject', custom_id: idFor(reject), disabled: Boolean(reject.disabled) }
+    ]
+  }];
+}
+
 module.exports = {
   MAX_WRITEUP_EVIDENCE,
   MIN_WRITEUP_EVIDENCE,
@@ -553,6 +569,7 @@ module.exports = {
   assertFreePickEligible,
   assertPublishableExtraction,
   buildSourcePickApprovalEmbed,
+  expertOnlyButtonsFromMessage,
   buildSourcePickEmbed,
   hasNamedPlayer,
   independentWriteupPacket,

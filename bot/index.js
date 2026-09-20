@@ -33,6 +33,7 @@ const {
   assertPublishableExtraction,
   buildSourcePickApprovalEmbed,
   buildSourcePickEmbed,
+  expertOnlyButtonsFromMessage,
   independentWriteupPacket,
   isTermsOnlyMode,
   reviewButtons,
@@ -1941,6 +1942,23 @@ async function refreshPendingTermsOnlyApprovals() {
   if (refreshed) console.log(`Refreshed ${refreshed} pending approval card(s) to the expert-picks-only route.`);
 }
 
+async function refreshVisibleTermsOnlyApprovalControls() {
+  if (!exclusivePickApprovalChannelId) return 0;
+  const channel = await client.channels.fetch(exclusivePickApprovalChannelId);
+  if (!channel?.isTextBased() || !channel.messages) return 0;
+  const messages = await channel.messages.fetch({ limit: 100 });
+  let refreshed = 0;
+  for (const message of messages.values()) {
+    if (message.author?.id !== client.user?.id) continue;
+    const components = expertOnlyButtonsFromMessage(message.components);
+    if (!components || message.components?.[0]?.components?.length === 2) continue;
+    await message.edit({ components });
+    refreshed += 1;
+  }
+  if (refreshed) console.log(`Simplified ${refreshed} visible expert-picks approval card(s).`);
+  return refreshed;
+}
+
 async function refreshPendingResearchApprovals() {
   if (!pickApprovalChannelId) return;
   const date = pacificClock().date;
@@ -2076,6 +2094,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   }
   try {
     await refreshPendingTermsOnlyApprovals();
+    await refreshVisibleTermsOnlyApprovalControls();
   } catch (error) {
     console.error('Unable to refresh pending expert-picks approval cards:', error);
   }

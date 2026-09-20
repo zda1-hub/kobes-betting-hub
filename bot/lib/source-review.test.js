@@ -403,6 +403,10 @@ test('uses destination names directly on approval buttons', () => {
     paidLabel: 'Post to #expert-picks'
   });
   assert.deepEqual(expertOnly[0].components.map((button) => button.label), ['Post to #expert-picks', 'Reject']);
+
+  const normalized = require('./source-review').expertOnlyButtonsFromMessage(monitoringOnly);
+  assert.deepEqual(normalized[0].components.map((button) => button.label), ['Post terms to #nfl-writeups', 'Reject']);
+  assert.equal(normalized[0].components[0].disabled, false);
 });
 
 test('does not treat a leaked-source account as the original capper', () => {
