@@ -18,7 +18,13 @@ function sportLabel(row) {
 }
 
 function wagerLine(row) {
-  return [row.selection, row.published_line, row.published_odds_american].map(value => String(value || '').trim()).filter(Boolean).join(' ');
+  const selection = String(row.selection || '').trim();
+  const line = String(row.published_line || '').trim();
+  const odds = String(row.published_odds_american || '').trim();
+  const normalizedSelection = selection.toLowerCase().replace(/[^a-z0-9.+-]+/g, ' ').trim();
+  const normalizedLine = line.toLowerCase().replace(/[^a-z0-9.+-]+/g, ' ').trim();
+  const visibleLine = normalizedLine && !normalizedSelection.includes(normalizedLine) ? line : '';
+  return [selection, visibleLine, odds].filter(Boolean).join(' ');
 }
 
 function dailyWriteupBoardPayload(rows, date) {
