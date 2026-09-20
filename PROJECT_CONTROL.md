@@ -2,11 +2,43 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-19 approximately 16:55 MST (Telegram and X both used the authorized 08:00–16:00 Arizona one-day window and stopped at the shared cutoff. Production commit `5e1d1de` recovered the exact current-day CodyCoverSpreads and DuckInvestments source cards into two pending private exclusive-approval cards: 15 supplied selections, no invented odds/stakes, and zero public posts. Both cards were visibly verified in Discord. The one-time recovery flags were cleared; cleanup deploy `dep-dani1brm8hqs73bd5a90` is live, Kobe Bot is logged in, and Telegram/X both report the same next-window start.)
+**Last verified:** 2026-09-19 approximately 17:17 MST (Render deploy `dep-danibp8jo6nc739j6ngg`, commit `9f62fa0`, is live. Kobe Bot logged in with no current-deploy error logs. Telegram and X remain aligned to resume at 08:00 Arizona on September 20. The private `all-writeups` board visibly renders the current day grouped by sport from the canonical published-writeup ledger, without repeated line text. The referral program remains one merged bot card with both buttons. The two recovered exclusive cards remain pending Kobe action; nothing was approved or published by the operator.)
 
 **Production runtime change set:** Render `01d8a5a39dd468f3d7728442a58b68279fae732f`, live deploy `dep-dam9fdrtqb8s73bh7g90`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `739a4271-937e-4c3f-abcb-5b6fe4451a4e`. Telegram cloud session and image extraction work; unclear terms remain privately held and model work is bounded per run. Per-wager lossless-source ledger deployed, with unsupported markets pending. Intake cutoff 16:00 and private unresolved-review eligibility 21:00 Arizona remain configured. Migration 010 is applied. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
 
 **Control-file owner:** Zakai Martin
+
+### September 19 — requested operating-list completion
+
+The gap after 12:44 was traced to omitted Telegram source intake, not a Discord
+publishing outage. The existing deduplicated recovery path had already restored
+the two complete current-day groups at 16:52: CodyCoverSpreads and
+DuckInvestments, 15 exact supplied selections total. Both remain pending in the
+private exclusive approval lane; the operator did not press Post or Reject.
+
+The referral channel now visibly contains one merged bot-owned information card,
+not two competing messages. It preserves the approved $10 terms, eligibility and
+fraud safeguards, plus `Get my referral link` and `Check earnings` buttons. Live
+startup receipt updated the same message `1550997694372118529`.
+
+Future approved Free Pick website/X copy now uses the owner-requested recognizable
+format: `HOW DOES THIS PICK NOT HIT?`, exact approved terms, the 150-like second-play
+prompt, `WHY I LOVE IT` with as many complete verified evidence bullets as fit,
+the Discord CTA, and the unchanged 21+/responsible-gambling/no-guarantees footer.
+The 280-character guard still fails closed and never cuts a claim or wager term.
+No existing X post was altered or repeated.
+
+Created private Discord channel `all-writeups` (`1551023719114080366`) by
+duplicating the existing football-writeup access. Render setting
+`DAILY_WRITEUPS_CHANNEL_ID` points only to that channel. One bot message is built
+from the canonical current-day `PUBLISHED` writeup ledger, grouped by sport and
+showing selection/prop plus exact recorded odds. Each future Kobe-approved
+writeup updates that same message. On the Arizona date change the old message is
+deleted and the channel remains empty until the first new writeup. Exclusives,
+Free Picks, drafts and failed posts are excluded. Live receipt created and then
+updated message `1551024116805669059`; direct Discord readback verified the
+cleaned baseball and football lists. Full automated suite passed 411/411 before
+the formatting cleanup; its focused board suite passed 3/3 afterward.
 
 ### September 19 — Telegram exclusives aligned to the X monitoring window
 
