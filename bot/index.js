@@ -91,6 +91,7 @@ const freeRecapChannelId = process.env.FREE_RECAP_CHANNEL_ID || recapChannelId;
 const freeRecapStatePath = path.join(path.dirname(pickLogPath()), 'free-recap-state.json');
 const dailyWriteupsChannelId = process.env.DAILY_WRITEUPS_CHANNEL_ID;
 const configuredFreeWriteupsChannelId = process.env.FREE_WRITEUPS_CHANNEL_ID;
+if (configuredFreeWriteupsChannelId) allowedChannelIds.add(configuredFreeWriteupsChannelId);
 if (dailyWriteupsChannelId) allowedChannelIds.add(dailyWriteupsChannelId);
 let manualFootballWriteupRows = [];
 let newestFootballWriteupMessageId = null;
