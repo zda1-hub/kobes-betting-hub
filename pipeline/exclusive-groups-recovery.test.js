@@ -16,7 +16,7 @@ test('group recovery is private-only, cross-feed deduplicated, resumable and hol
         assert.ok(String(url).startsWith('https://discord.com/api/v10/channels/'));
         if(init.method==='POST'){
           assert.equal(String(url),'https://discord.com/api/v10/channels/exclusive-private-approvals/messages');
-          const body=JSON.parse(init.body);assert.equal(body.components[0].components[0].disabled,true);
+          const body=JSON.parse(init.body);assert.deepEqual(body.components[0].components.map(button=>button.label),['Post to #expert-picks','Reject']);
           sent.push(body);return new Response(JSON.stringify({id:'receipt-'+sent.length}),{status:200,headers:{'content-type':'application/json'}});
         }
         return new Response(JSON.stringify({name:'exclusives'}),{status:200});

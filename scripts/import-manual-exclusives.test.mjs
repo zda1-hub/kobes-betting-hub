@@ -12,7 +12,8 @@ test('every supplied line appears exactly once in its own capper card without ad
   for (const group of groups) {
     assert.equal(group.payload.embeds[0].description, [group.packet.analysis.extraction.source_capper_name, ...group.picks.map(pick => `• ${pick}`)].join('\n'));
     assert.equal(group.packet.approval.decision, null);
-    assert.equal(group.payload.components[0].components[0].disabled, true);
+    assert.deepEqual(group.payload.components[0].components.map(button => button.label), ['Post to #expert-picks', 'Reject']);
+    assert.equal(group.payload.components[0].components[0].disabled, Boolean(group.packet.manual_review_required));
     assert.equal(group.packet.analysis.extraction.plays.length, group.picks.length);
   }
   assert.equal(groups.find(group => group.packet.analysis.extraction.source_capper_name === 'DommyLocked').picks.filter(pick => pick.startsWith('Mika Brunold')).length, 2);

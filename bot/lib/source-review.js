@@ -529,14 +529,18 @@ function buttonLabel(value, fallback) {
   return label.slice(0, 80);
 }
 
-function reviewButtons(pickId, { testOnly = false, freeDisabled = false, freeLabel, paidLabel } = {}) {
+function reviewButtons(pickId, { testOnly = false, freeDisabled = false, paidOnly = false, freeLabel, paidLabel } = {}) {
+  const components = [];
+  if (!paidOnly) {
+    components.push({ type: ComponentType.Button, style: ButtonStyle.Success, label: buttonLabel(freeLabel, 'Post to #daily-free-play'), custom_id: `source-review:${pickId}:free`, disabled: testOnly || freeDisabled });
+  }
+  components.push(
+    { type: ComponentType.Button, style: ButtonStyle.Primary, label: buttonLabel(paidLabel, 'Post to paid channel'), custom_id: `source-review:${pickId}:paid`, disabled: testOnly },
+    { type: ComponentType.Button, style: ButtonStyle.Danger, label: 'Reject', custom_id: `source-review:${pickId}:reject` }
+  );
   return [{
     type: ComponentType.ActionRow,
-    components: [
-      { type: ComponentType.Button, style: ButtonStyle.Success, label: buttonLabel(freeLabel, 'Post to #daily-free-play'), custom_id: `source-review:${pickId}:free`, disabled: testOnly || freeDisabled },
-      { type: ComponentType.Button, style: ButtonStyle.Primary, label: buttonLabel(paidLabel, 'Post to paid channel'), custom_id: `source-review:${pickId}:paid`, disabled: testOnly },
-      { type: ComponentType.Button, style: ButtonStyle.Danger, label: 'Reject', custom_id: `source-review:${pickId}:reject` }
-    ]
+    components
   }];
 }
 

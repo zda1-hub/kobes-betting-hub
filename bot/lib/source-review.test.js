@@ -397,6 +397,12 @@ test('uses destination names directly on approval buttons', () => {
   });
   assert.equal(monitoringOnly[0].components[0].disabled, true);
   assert.equal(monitoringOnly[0].components[1].disabled, false);
+
+  const expertOnly = require('./source-review').reviewButtons('20260907-003-X', {
+    paidOnly: true,
+    paidLabel: 'Post to #expert-picks'
+  });
+  assert.deepEqual(expertOnly[0].components.map((button) => button.label), ['Post to #expert-picks', 'Reject']);
 });
 
 test('does not treat a leaked-source account as the original capper', () => {

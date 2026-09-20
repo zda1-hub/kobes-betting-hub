@@ -43,7 +43,7 @@ test('session file requires private permissions',async t=>{
 test('lossless Telegram terms go only to private grouped approvals and restart does not repeat',async t=>{
   const h=await harness(t);await createTelegramReader(h.options).run();await createTelegramReader(h.options).run();
   assert.equal(h.sent.length,1);assert.equal(h.sent[0].embeds[0].description,'AnalyticsCapper\n• Angels ML -110 (10U)');
-  assert.equal(h.sent[0].components[0].components[0].disabled,true);assert.equal(h.sent[0].enforceNonce,true);
+  assert.deepEqual(h.sent[0].components[0].components.map(button=>button.label),['Post to #expert-picks','Reject']);assert.equal(h.sent[0].enforceNonce,true);
   const packet=JSON.parse(await fs.readFile(path.join(h.root,'queue','2026-09-17', 'tg-20260917-3593544389-1.json'),'utf8'));
   assert.equal(typeof packet.approval.exact_final_copy,'string');
 });

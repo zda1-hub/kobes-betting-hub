@@ -503,6 +503,7 @@ async function approvalButtonLabels(packet) {
   const paidFallback = packet.source?.publish_mode === 'terms_only' ? '#expert-picks' : '#paid-sport';
   const paid = await discordChannelLabel(paidChannelId, paidFallback);
   return {
+    paidOnly: packet.source?.publish_mode === 'terms_only',
     freeDisabled: packet.source?.publish_mode === 'terms_only',
     freeLabel: packet.source?.publish_mode === 'terms_only' ? 'Free unavailable for expert picks' : `Post to ${free}`,
     paidLabel: `Post to ${paid}`
