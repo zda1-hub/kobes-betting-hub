@@ -1949,13 +1949,12 @@ async function refreshVisibleTermsOnlyApprovalControls() {
   const messages = await channel.messages.fetch({ limit: 100 });
   let refreshed = 0;
   for (const message of messages.values()) {
-    if (message.author?.id !== client.user?.id) continue;
     const components = expertOnlyButtonsFromMessage(message.components);
     if (!components || message.components?.[0]?.components?.length === 2) continue;
     await message.edit({ components });
     refreshed += 1;
   }
-  if (refreshed) console.log(`Simplified ${refreshed} visible expert-picks approval card(s).`);
+  console.log(`Expert-picks approval control receipt: ${JSON.stringify({ scanned: messages.size, refreshed })}`);
   return refreshed;
 }
 
