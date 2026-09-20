@@ -13,7 +13,7 @@ const packet = {
 };
 
 test('formats the approved free pick as a compact X post', () => {
-  assert.equal(buildFreePickXPost(packet), '🚨 TODAY’S FREE PLAY\n\nArizona Diamondbacks ML -115\n\nWHO’S RIDING WITH THE HUB? 👀\n\nFull board → kobesbettinghub.com/join\n21+ | Bet responsibly. No guarantees.');
+  assert.equal(buildFreePickXPost(packet), '🔨 HOW DOES THIS PICK NOT HIT?\n\nArizona Diamondbacks ML -115\n\n🔥 150 LIKES AND I’LL DROP A 2ND FREE PLAY!\n\n💎 WANT MORE PLAYS LIKE THIS?\nJoin the Discord → kobesbettinghub.com/join\n21+ | Bet responsibly. No guarantees.');
   assert.match(freePickXPostId(packet.pick_id), /^free-x-[a-f0-9]{40}$/);
 });
 
@@ -27,7 +27,8 @@ test('adds complete verified evidence bullets when they fit', () => {
 
   const body = buildFreePickXPost(evidencePacket);
   assert.match(body, /• Arizona has won 7 of its last 10 games/);
-  assert.match(body, /• The starter allowed two or fewer earned runs in four straight starts/);
+  assert.match(body, /WHY I LOVE IT:/);
+  assert.doesNotMatch(body, /• The starter allowed two or fewer earned runs in four straight starts/);
   assert.doesNotMatch(body, /deliberately long/);
   assert.ok(body.length <= 280);
 });

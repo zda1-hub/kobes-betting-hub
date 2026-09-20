@@ -4,9 +4,10 @@ const { auditedFetch } = require('../../pipeline/api-client');
 
 const MAX_X_POST_LENGTH = 280;
 const MAX_X_EVIDENCE_POINTS = 4;
-const X_HEADER = '🚨 TODAY’S FREE PLAY';
-const X_ENGAGEMENT = 'WHO’S RIDING WITH THE HUB? 👀';
-const X_CTA = 'Full board → kobesbettinghub.com/join\n21+ | Bet responsibly. No guarantees.';
+const X_HEADER = '🔨 HOW DOES THIS PICK NOT HIT?';
+const X_ENGAGEMENT = '🔥 150 LIKES AND I’LL DROP A 2ND FREE PLAY!';
+const X_EVIDENCE_HEADER = 'WHY I LOVE IT:';
+const X_CTA = '💎 WANT MORE PLAYS LIKE THIS?\nJoin the Discord → kobesbettinghub.com/join\n21+ | Bet responsibly. No guarantees.';
 
 function freePickXPostId(pickId) {
   if (typeof pickId !== 'string' || !pickId.trim()) {
@@ -35,12 +36,12 @@ function buildFreePickXPost(packet) {
   const acceptedEvidence = [];
   for (const claim of evidence) {
     const candidateEvidence = [...acceptedEvidence, `• ${claim}`];
-    const candidate = [X_HEADER, terms.join('\n'), candidateEvidence.join('\n'), X_ENGAGEMENT, X_CTA].join('\n\n');
+    const candidate = [X_HEADER, terms.join('\n'), X_ENGAGEMENT, X_EVIDENCE_HEADER, candidateEvidence.join('\n'), X_CTA].join('\n\n');
     if (candidate.length <= MAX_X_POST_LENGTH) acceptedEvidence.push(`• ${claim}`);
   }
 
   return acceptedEvidence.length
-    ? [X_HEADER, terms.join('\n'), acceptedEvidence.join('\n'), X_ENGAGEMENT, X_CTA].join('\n\n')
+    ? [X_HEADER, terms.join('\n'), X_ENGAGEMENT, X_EVIDENCE_HEADER, acceptedEvidence.join('\n'), X_CTA].join('\n\n')
     : body;
 }
 

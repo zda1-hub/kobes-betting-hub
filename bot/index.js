@@ -45,6 +45,7 @@ const { fillMissingEvidence } = require('./lib/espn-pick-research');
 const { createFreePickDelivery } = require('./lib/free-pick-delivery');
 const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
 const { createTelegramReader } = require('./lib/telegram-reader');
+const { createDailyWriteupBoard } = require('./lib/daily-writeup-board');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
@@ -87,6 +88,14 @@ const welcomeRoleId = process.env.WELCOME_ROLE_ID;
 const freePickChannelId = process.env.FREE_PICK_CHANNEL_ID;
 const freeRecapChannelId = process.env.FREE_RECAP_CHANNEL_ID || recapChannelId;
 const freeRecapStatePath = path.join(path.dirname(pickLogPath()), 'free-recap-state.json');
+const dailyWriteupsChannelId = process.env.DAILY_WRITEUPS_CHANNEL_ID;
+if (dailyWriteupsChannelId) allowedChannelIds.add(dailyWriteupsChannelId);
+const dailyWriteupBoard = dailyWriteupsChannelId ? createDailyWriteupBoard({
+  channelFor: () => approvedTextChannel(dailyWriteupsChannelId),
+  rowsFor: () => readPickLog(),
+  stateFile: path.join(path.dirname(pickLogPath()), 'daily-writeups-board.json'),
+  operatingDate: () => dailyPickOperatingDate(new Date())
+}) : null;
 // The approved #exclusives destination is kept configurable for future moves.
 // The fallback preserves the currently approved server destination when an
 // older Render environment has not yet added the variable.
@@ -1375,6 +1384,14 @@ async function postAndLogOfficialPick({ channel, payload, entry, packet = null }
   } catch (error) {
     console.error('Published pick was not synced to Daily Picks; retry is safe because the queue is idempotent.', { pickId: entry.pick_id, message: error instanceof Error ? error.message : String(error) });
   }
+  if (dailyWriteupBoard && /writeups?/i.test(entry.destination || '')) {
+    try {
+      const receipt = await dailyWriteupBoard.refresh();
+      console.log('Daily writeups board receipt:', JSON.stringify(receipt));
+    } catch (error) {
+      console.error('Daily writeups board needs attention:', error instanceof Error ? error.message : String(error));
+    }
+  }
   return message;
 }
 
@@ -1927,6 +1944,12 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.log('Referral information card receipt:', JSON.stringify(referralReceipt));
   } catch (error) {
     console.error('Referral information card needs attention:', error.message);
+  }
+  if (dailyWriteupBoard) {
+    void dailyWriteupBoard.refresh()
+      .then(receipt => console.log('Daily writeups board receipt:', JSON.stringify(receipt)))
+      .catch(error => console.error('Daily writeups board needs attention:', error.message));
+    setInterval(() => void dailyWriteupBoard.refresh().catch(error => console.error('Daily writeups board needs attention:', error.message)), 60000);
   }
   try {
     await refreshPendingResearchApprovals();
