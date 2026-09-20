@@ -2,7 +2,7 @@
 
 **Status:** PUBLIC BETA GO recorded 2026-09-14 21:51 MST; production is open for monitored organic invitations
 
-**Last verified:** 2026-09-20 approximately 07:36 MST (Render deploy `dep-danuu5mk1f9s73a29ecg`, commit `bfec1ba`, is live. The recurring `X_MONITOR_DAILY_AT` setting is `08:00`; fresh startup receipts schedule both X and Telegram monitoring for 08:00 Arizona on September 20. The shared 16:00 cutoff is unchanged.)
+**Last verified:** 2026-09-20 approximately 09:37 MST (Render deploy `dep-dao0n0favr4c73aqhh80`, commit `cb00c2e`, is live. The `all-writeups` startup receipt updated today's existing board message `1551262124645548154` and reports one dated previous-day NFL archive message. Manual Kobe posts from `football-writeups` now merge with canonical bot-published writeups; ordinary chat, bot duplicates, and NCAAF archive entries are excluded. The recurring X and Telegram monitoring window remains 08:00–16:00 Arizona.)
 
 **Production runtime change set:** Render `01d8a5a39dd468f3d7728442a58b68279fae732f`, live deploy `dep-dam9fdrtqb8s73bh7g90`; Checkout Worker `1fbd7477-1158-4461-bb05-4bc813b7f20c`; Publisher remains `2f3418de-62bc-4f36-b169-e8521d77d815`; static website Worker `739a4271-937e-4c3f-abcb-5b6fe4451a4e`. Telegram cloud session and image extraction work; unclear terms remain privately held and model work is bounded per run. Per-wager lossless-source ledger deployed, with unsupported markets pending. Intake cutoff 16:00 and private unresolved-review eligibility 21:00 Arizona remain configured. Migration 010 is applied. Six-month $134.99 and annual $194.99 recurring Stripe offers and both monthly intros remain. No existing subscription migration or Stripe Tax change was made.
 
@@ -39,6 +39,18 @@ Free Picks, drafts and failed posts are excluded. Live receipt created and then
 updated message `1551024116805669059`; direct Discord readback verified the
 cleaned baseball and football lists. Full automated suite passed 411/411 before
 the formatting cleanup; its focused board suite passed 3/3 afterward.
+
+September 20 extension: the same board now reads Kobe's qualifying manual posts
+from `football-writeups` in addition to the canonical publication ledger. A
+manual post must be authored by the configured owner/reviewer, contain an
+explicit football market and American price, and is reduced to its first
+pick/prop/odds line; ordinary chat and bot messages are ignored. Exact same-day
+terms are deduplicated. Previous-day NFL entries are kept in dated archive
+message(s) in `all-writeups`, while today's live board still resets daily.
+College-football rows are excluded from the NFL archive. Deploy
+`dep-dao0n0favr4c73aqhh80` / commit `cb00c2e` is live; its first receipt reports
+`status=UPDATED`, today's existing message ID, and `archiveMessages=1`. The full
+suite passes 413/413.
 
 ### September 19 — Telegram exclusives aligned to the X monitoring window
 
