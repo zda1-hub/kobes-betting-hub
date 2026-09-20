@@ -198,7 +198,7 @@ test('portal cancellation flow offers the single-redemption member coupon only t
   ), true);
 });
 
-test('retention provisioning creates one 75-percent once coupon capped to one redemption per customer', async (t) => {
+test('retention provisioning creates distinct one-use 50 and 75 percent coupons per customer', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
   const requests = [];
@@ -207,7 +207,7 @@ test('retention provisioning creates one 75-percent once coupon capped to one re
     requests.push({ path: requestUrl.pathname, body: new URLSearchParams(options.body), idempotencyKey: new Headers(options.headers).get('Idempotency-Key') });
     if (requestUrl.pathname === '/v1/coupons') return Response.json({ id: 'coupon_member' });
     if (requestUrl.pathname.startsWith('/v1/customers/')) {
-      return Response.json({ id: requestUrl.pathname.split('/').at(-1), metadata: { kbh_retention_offer_coupon: 'coupon_member' } });
+      return Response.json({ id: requestUrl.pathname.split('/').at(-1), metadata: { kbh_retention_offer_50_coupon: 'coupon_member' } });
     }
     throw new Error(`Unexpected request: ${requestUrl}`);
   };
@@ -220,17 +220,23 @@ test('retention provisioning creates one 75-percent once coupon capped to one re
   assert.equal(await workerTest.ensurePerMemberRetentionCoupon(env, { id: 'cus_member', metadata: {} }), 'coupon_member');
   assert.equal(requests.length, 2);
   assert.equal(requests[0].path, '/v1/coupons');
-  assert.equal(requests[0].body.get('percent_off'), '75');
+  assert.equal(requests[0].body.get('percent_off'), '50');
   assert.equal(requests[0].body.get('duration'), 'once');
   assert.equal(requests[0].body.get('max_redemptions'), '1');
-  assert.equal(requests[0].idempotencyKey, 'kbh-retention-coupon-cus_member');
-  assert.equal(requests[1].body.get('metadata[kbh_retention_offer_coupon]'), 'coupon_member');
+  assert.equal(requests[0].idempotencyKey, 'kbh-retention-50-coupon-cus_member');
+  assert.equal(requests[1].body.get('metadata[kbh_retention_offer_50_coupon]'), 'coupon_member');
 
   requests.length = 0;
   assert.equal(await workerTest.ensurePerMemberRetentionCoupon(env, {
-    id: 'cus_member', metadata: { kbh_retention_offer_coupon: 'coupon_member' },
+    id: 'cus_member', metadata: { kbh_retention_offer_50_coupon: 'coupon_member' },
   }), 'coupon_member');
   assert.equal(requests.length, 0);
+
+  requests.length = 0;
+  assert.equal(await workerTest.ensurePerMemberRetentionCoupon(env, { id: 'cus_member', metadata: {} }, 75), 'coupon_member');
+  assert.equal(requests[0].body.get('percent_off'), '75');
+  assert.equal(requests[0].idempotencyKey, 'kbh-retention-75-coupon-cus_member');
+  assert.equal(requests[1].body.get('metadata[kbh_retention_offer_75_coupon]'), 'coupon_member');
 
   requests.length = 0;
   assert.equal(await workerTest.ensurePerMemberRetentionCoupon(

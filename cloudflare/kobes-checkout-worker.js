@@ -42,6 +42,8 @@ const REFERRAL_REWARD_CENTS = 1000;
 const REFERRAL_HOLD_DAYS = 7;
 const RETENTION_USED_METADATA_KEY = 'kbh_retention_offer_used';
 const RETENTION_COUPON_METADATA_KEY = 'kbh_retention_offer_coupon';
+const RETENTION_50_COUPON_METADATA_KEY = 'kbh_retention_offer_50_coupon';
+const RETENTION_75_COUPON_METADATA_KEY = 'kbh_retention_offer_75_coupon';
 
 const headers = (origin) => ({
   'Access-Control-Allow-Origin': ALLOWED_SITE_ORIGINS.has(origin) ? origin : SITE_ORIGIN,
@@ -651,7 +653,7 @@ async function readDiscordState(state, env) {
   const [body, signature, ...extra] = state.split('.');
   if (!body || !signature || extra.length || !await secureEqual(await sign(body, env.DISCORD_OAUTH_STATE_SECRET), signature)) throw new Error('Invalid Discord connection request.');
   const value = JSON.parse(decode.decode(fromBase64Url(body)));
-  if (!['connect', 'portal', 'referral'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
+  if (!['connect', 'portal', 'referral', 'retention75'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
   if (value.intent === 'connect' && !value.sessionId) throw new Error('That Discord connection request is incomplete.');
   return value;
 }
@@ -725,10 +727,14 @@ function subscriptionHasCoupon(subscription, couponId) {
 }
 
 function retentionOfferUsed(customer, subscription, legacyCouponId = '') {
-  const memberCouponId = customer?.metadata?.[RETENTION_COUPON_METADATA_KEY] || '';
+  const memberCouponIds = [
+    customer?.metadata?.[RETENTION_COUPON_METADATA_KEY],
+    customer?.metadata?.[RETENTION_50_COUPON_METADATA_KEY],
+    customer?.metadata?.[RETENTION_75_COUPON_METADATA_KEY],
+  ].filter(Boolean);
   return customer?.metadata?.[RETENTION_USED_METADATA_KEY] === 'true'
     || subscription?.metadata?.retention_offer_used === 'true'
-    || subscriptionHasCoupon(subscription, memberCouponId)
+    || memberCouponIds.some((couponId) => subscriptionHasCoupon(subscription, couponId))
     || subscriptionHasCoupon(subscription, legacyCouponId);
 }
 
@@ -758,22 +764,25 @@ function portalSessionValues(membership, customer, subscription, env, memberCoup
   return values;
 }
 
-async function ensurePerMemberRetentionCoupon(env, customer) {
+async function ensurePerMemberRetentionCoupon(env, customer, percent = 50) {
   if (!env.STRIPE_RETENTION_COUPON_ID || !customer?.id || customer.metadata?.[RETENTION_USED_METADATA_KEY] === 'true') return '';
-  const existingCouponId = customer.metadata?.[RETENTION_COUPON_METADATA_KEY];
+  if (![50, 75].includes(percent)) throw new Error('Invalid retention discount.');
+  const metadataKey = percent === 50 ? RETENTION_50_COUPON_METADATA_KEY : RETENTION_75_COUPON_METADATA_KEY;
+  const existingCouponId = customer.metadata?.[metadataKey];
   if (existingCouponId) return existingCouponId;
   const coupon = await stripe(env, '/coupons', {
-    percent_off: 75,
+    percent_off: percent,
     duration: 'once',
     max_redemptions: 1,
-    name: '75% off next membership invoice',
+    name: `${percent}% off next membership invoice`,
     'metadata[kbh_retention_customer]': customer.id,
+    'metadata[kbh_retention_percent]': percent,
     'metadata[kbh_retention_template]': env.STRIPE_RETENTION_COUPON_ID,
-  }, { idempotencyKey: `kbh-retention-coupon-${customer.id}` });
+  }, { idempotencyKey: `kbh-retention-${percent}-coupon-${customer.id}` });
   if (!coupon?.id) throw new Error('Stripe did not create the member retention coupon.');
   await stripe(env, `/customers/${encodeURIComponent(customer.id)}`, {
-    [`metadata[${RETENTION_COUPON_METADATA_KEY}]`]: coupon.id,
-  }, { idempotencyKey: `kbh-retention-coupon-link-${customer.id}` });
+    [`metadata[${metadataKey}]`]: coupon.id,
+  }, { idempotencyKey: `kbh-retention-${percent}-coupon-link-${customer.id}` });
   return coupon.id;
 }
 
@@ -782,7 +791,12 @@ async function recordRetentionRedemption(env, subscription, eventId = null, know
   const customerId = stripeId(subscription.customer);
   if (!customerId) return false;
   const customer = knownCustomer || await stripeGet(env, `/customers/${encodeURIComponent(customerId)}`);
-  const couponIds = [customer?.metadata?.[RETENTION_COUPON_METADATA_KEY], env.STRIPE_RETENTION_COUPON_ID].filter(Boolean);
+  const couponIds = [
+    customer?.metadata?.[RETENTION_COUPON_METADATA_KEY],
+    customer?.metadata?.[RETENTION_50_COUPON_METADATA_KEY],
+    customer?.metadata?.[RETENTION_75_COUPON_METADATA_KEY],
+    env.STRIPE_RETENTION_COUPON_ID,
+  ].filter(Boolean);
   let observedSubscription = subscription;
   let couponId = couponIds.find((candidate) => subscriptionHasCoupon(observedSubscription, candidate)) || '';
   if (!couponId && subscriptionDiscounts(observedSubscription).some((discount) => typeof discount === 'string')) {
@@ -804,6 +818,34 @@ async function recordRetentionRedemption(env, subscription, eventId = null, know
     subscriptionId: subscription.id,
     discordUserId: await discordUserForSubscription(env, subscription),
     details: { coupon_id: couponId },
+  });
+  return true;
+}
+
+async function acceptLastChanceRetention(env, membership, customer, subscription, discordUserId) {
+  if (!subscription?.id || !ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status)) throw new Error('This membership is not eligible for the last-chance offer.');
+  if (!monthlyRetentionEligible(subscription, env)) throw new Error('The last-chance offer is only available for monthly memberships.');
+  if (!subscription.cancel_at_period_end) throw new Error('Complete the cancellation in Stripe before using the last-chance offer.');
+  if (retentionOfferUsed(customer, subscription, env.STRIPE_RETENTION_COUPON_ID)) throw new Error('The one-time retention offer has already been used.');
+  const couponId = await ensurePerMemberRetentionCoupon(env, customer, 75);
+  if (!couponId) throw new Error('The last-chance offer is unavailable.');
+  const now = new Date().toISOString();
+  await stripe(env, `/subscriptions/${encodeURIComponent(subscription.id)}`, {
+    cancel_at_period_end: false,
+    'discounts[0][coupon]': couponId,
+    'metadata[retention_offer_used]': 'true',
+    'metadata[retention_offer_percent]': 75,
+    'metadata[retention_offer_redeemed_at]': now,
+  }, { idempotencyKey: `kbh-retention-75-accept-${subscription.id}` });
+  await stripe(env, `/customers/${encodeURIComponent(customer.id)}`, {
+    [`metadata[${RETENTION_USED_METADATA_KEY}]`]: 'true',
+    [`metadata[${RETENTION_75_COUPON_METADATA_KEY}]`]: couponId,
+    'metadata[kbh_retention_offer_event]': 'last_chance_acceptance',
+  }, { idempotencyKey: `kbh-retention-75-used-${customer.id}` });
+  await recordMembershipEvent(env, {
+    eventType: 'RETENTION_OFFER_REDEEMED', actorType: 'discord_user', actorId: discordUserId,
+    customerId: customer.id, subscriptionId: subscription.id, discordUserId,
+    details: { coupon_id: couponId, percent: 75, stage: 'last_chance' },
   });
   return true;
 }
@@ -1067,8 +1109,8 @@ async function startPayoutOnboarding(request, env) {
 async function startPortalLogin(request, env) {
   if (!discordReady(env) || !supabaseReady(env)) return new Response('Membership management is being configured. Please check back shortly.', { status: 503 });
   const intent = new URL(request.url).searchParams.get('intent');
-  if (intent !== 'portal') return new Response('Invalid membership-management request.', { status: 400 });
-  const state = await createDiscordState({ intent: 'portal' }, env);
+  if (!['portal', 'retention75'].includes(intent)) return new Response('Invalid membership-management request.', { status: 400 });
+  const state = await createDiscordState({ intent }, env);
   return redirect(discordAuthorizationUrl(state, env, 'portal'));
 }
 
@@ -1135,6 +1177,14 @@ async function finishDiscordConnection(request, env) {
         details: { retention_offer_included: offersRetention },
       });
       return redirect(portal.url);
+    }
+    if (state.intent === 'retention75') {
+      const membership = await membershipCustomerForDiscord(env, user.id);
+      if (!membership?.stripe_customer_id || !membership.current_subscription_id) throw new Error('No connected membership was found.');
+      const customer = await stripeGet(env, `/customers/${encodeURIComponent(membership.stripe_customer_id)}`);
+      const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(membership.current_subscription_id)}?expand[]=discounts`);
+      await acceptLastChanceRetention(env, membership, customer, subscription, user.id);
+      return redirect(`${siteOrigin(env)}${SITE_PATH}/managemembership?portal=retained75`);
     }
 
     const subscription = await activeSubscription(state.sessionId, env);
@@ -1823,6 +1873,7 @@ export const __test = {
   discordAuthorizationUrl,
   discordRoleReadiness,
   ensurePerMemberRetentionCoupon,
+  acceptLastChanceRetention,
   invoiceSubscriptionId,
   listStripeSubscriptions,
   processReferralInvoicePaid,

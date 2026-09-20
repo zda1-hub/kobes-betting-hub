@@ -49,6 +49,7 @@
 .manage-panel .manage-step > p:not(.card-kicker) { margin:0 0 29px; color:#c9c9c9; font-size:14px; line-height:1.65; }
 .manage-actions .button { width:100%; min-width:0; padding:20px 22px; background:var(--orange); color:var(--ink); }
 .manage-actions .button:hover { background:#fff; color:var(--ink); }
+.manage-actions + .manage-actions { margin-top:12px; }
 .manage-message { margin:18px 0 0; padding:13px 14px; border-left:3px solid var(--orange); color:#d6d6d6; font-size:12px; line-height:1.5; }
 .manage-message:empty { display:none; }
 .manage-policy { grid-column:1/-1; max-width:880px; margin:0; padding-top:24px; border-top:1px solid var(--line); font-size:12px; line-height:1.7; }

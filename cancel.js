@@ -21,6 +21,8 @@ document.addEventListener('click', (event) => {
 const params = new URLSearchParams(window.location.search);
 const message = document.querySelector('[data-message]');
 const portalLogin = document.querySelector('[data-portal-login]');
+const lastChance = document.querySelector('[data-last-chance]');
+const retention75 = document.querySelector('[data-retention-75]');
 const productionMembershipWorkerOrigin = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
 const membershipConfig = (() => {
   const config = window.__KBH_MEMBERSHIP_CONFIG__;
@@ -45,7 +47,13 @@ if (portalLogin && membershipConfig) {
 }
 
 if (membershipConfig && params.get('portal') === 'returned' && message) {
-  message.textContent = 'Your Stripe billing portal session is complete. Subscription changes will sync to Discord automatically.';
+  message.textContent = 'Your Stripe billing portal session is complete. If you declined the 50% offer and finished canceling, you can accept one final 75% discount below. Eligibility is verified securely before any change is made.';
+  if (lastChance) lastChance.hidden = false;
+  if (retention75) retention75.href = `${membershipConfig.workerOrigin}/discord/login?intent=retention75`;
+}
+
+if (membershipConfig && params.get('portal') === 'retained75' && message) {
+  message.textContent = 'Your cancellation was stopped and 75% off your next monthly membership invoice was applied. This one-time offer cannot be used again.';
 }
 
 if (membershipConfig && params.get('portal') === 'connection_required' && message) {
