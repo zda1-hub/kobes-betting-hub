@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { dailyWriteupBoardPayload } = require('./daily-writeup-board');
+const { dailyWriteupBoardPayload, manualFootballWriteupRow, nflArchivePayloads } = require('./daily-writeup-board');
 
 test('groups only current published writeups by sport and preserves exact terms', () => {
   const payload = dailyWriteupBoardPayload([
@@ -24,4 +24,30 @@ test('does not repeat a line already present in the selection', () => {
 
 test('returns no board before the first writeup of the day', () => {
   assert.equal(dailyWriteupBoardPayload([], '2026-09-19'), null);
+});
+
+test('indexes Kobe manual football writeups while rejecting chat and bot messages', () => {
+  const dateFor = () => '2026-09-20';
+  const row = manualFootballWriteupRow({
+    id: '1551', createdAt: new Date('2026-09-20T16:10:00Z'), author: { bot: false },
+    content: 'Bijan Robinson O4.5 Receptions (-150 FD):\nFalcons vs. Panthers\n\n• supporting fact',
+  }, dateFor);
+  assert.equal(row.selection, 'Bijan Robinson O4.5 Receptions (-150 FD)');
+  assert.equal(row.league, 'NFL');
+  assert.equal(manualFootballWriteupRow({ id: '2', author: { bot: false }, content: 'Good luck today' }, dateFor), null);
+  assert.equal(manualFootballWriteupRow({ id: '3', author: { bot: true }, content: 'Player Over 4.5 Receptions (-110)' }, dateFor), null);
+});
+
+test('builds a deduplicated previous-day NFL archive and excludes college football', () => {
+  const rows = [
+    { operating_date: '2026-09-19', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', league: 'NFL', selection: 'David Montgomery', published_line: 'Over 15.5 rushing attempts', published_odds_american: '-110' },
+    { operating_date: '2026-09-19', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', league: 'NFL', selection: 'David Montgomery Over 15.5 rushing attempts (-110)' },
+    { operating_date: '2026-09-18', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', league: 'NCAAF', selection: 'College Pick -110' },
+    { operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', league: 'NFL', selection: 'Today Pick -110' },
+  ];
+  const payloads = nflArchivePayloads(rows, '2026-09-20');
+  assert.equal(payloads.length, 1);
+  assert.match(payloads[0].embeds[0].description, /2026-09-19[\s\S]*David Montgomery/);
+  assert.equal((payloads[0].embeds[0].description.match(/David Montgomery/g) || []).length, 1);
+  assert.doesNotMatch(payloads[0].embeds[0].description, /College Pick|Today Pick/);
 });

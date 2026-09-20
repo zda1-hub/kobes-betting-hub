@@ -45,7 +45,7 @@ const { fillMissingEvidence } = require('./lib/espn-pick-research');
 const { createFreePickDelivery } = require('./lib/free-pick-delivery');
 const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
 const { createTelegramReader } = require('./lib/telegram-reader');
-const { createDailyWriteupBoard } = require('./lib/daily-writeup-board');
+const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/daily-writeup-board');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
@@ -90,9 +90,41 @@ const freeRecapChannelId = process.env.FREE_RECAP_CHANNEL_ID || recapChannelId;
 const freeRecapStatePath = path.join(path.dirname(pickLogPath()), 'free-recap-state.json');
 const dailyWriteupsChannelId = process.env.DAILY_WRITEUPS_CHANNEL_ID;
 if (dailyWriteupsChannelId) allowedChannelIds.add(dailyWriteupsChannelId);
+let manualFootballWriteupRows = [];
+let newestFootballWriteupMessageId = null;
+let manualFootballHistoryLoaded = false;
+
+async function readManualFootballWriteups() {
+  const channelId = sportChannelMap.get('football');
+  if (!channelId) return [];
+  const channel = await approvedTextChannel(channelId);
+  const authorIds = new Set([...pickApproverUserIds, ...(recapWorkflow.reviewer_user_ids || []), channel.guild?.ownerId].filter(Boolean));
+  const collected = [];
+  if (!manualFootballHistoryLoaded) {
+    let before;
+    for (let page = 0; page < 100; page += 1) {
+      const messages = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+      if (!messages.size) break;
+      collected.push(...messages.values());
+      before = messages.last().id;
+      if (messages.size < 100) break;
+    }
+    manualFootballHistoryLoaded = true;
+  } else if (newestFootballWriteupMessageId) {
+    const messages = await channel.messages.fetch({ limit: 100, after: newestFootballWriteupMessageId });
+    collected.push(...messages.values());
+  }
+  for (const message of collected) {
+    if (!newestFootballWriteupMessageId || BigInt(message.id) > BigInt(newestFootballWriteupMessageId)) newestFootballWriteupMessageId = message.id;
+    if (!authorIds.has(message.author?.id)) continue;
+    const row = manualFootballWriteupRow(message, dailyPickOperatingDate);
+    if (row && !manualFootballWriteupRows.some((entry) => entry.source_message_id === row.source_message_id)) manualFootballWriteupRows.push(row);
+  }
+  return manualFootballWriteupRows;
+}
 const dailyWriteupBoard = dailyWriteupsChannelId ? createDailyWriteupBoard({
   channelFor: () => approvedTextChannel(dailyWriteupsChannelId),
-  rowsFor: () => readPickLog(),
+  rowsFor: async () => [...await readPickLog(), ...await readManualFootballWriteups()],
   stateFile: path.join(path.dirname(pickLogPath()), 'daily-writeups-board.json'),
   operatingDate: () => dailyPickOperatingDate(new Date())
 }) : null;
