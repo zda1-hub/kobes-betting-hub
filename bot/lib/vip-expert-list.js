@@ -25,6 +25,10 @@ function baselineNames(message) {
     .map(cleanName).filter(Boolean);
 }
 
+function listMonth(message) {
+  return messageText(message).match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+20\d{2}\b/i)?.[0] || '';
+}
+
 function expertName(message) {
   const lines = messageText(message).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (lines.length < 2 || !/^[-•*]\s+\S/.test(lines[1])) return '';
@@ -40,7 +44,7 @@ function namesFromMessages(messages, baseline = []) {
   return [...names.values()].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
 }
 
-function payloadFor(names, originalCount) {
+function payloadFor(names, originalCount, title = 'VIP Expert List') {
   if (!names.length) throw new Error('Cannot publish an empty VIP expert list.');
   const lines = names.map((name, index) => `${String(index + 1).padStart(2, '0')}. ${name}`);
   const chunks = [];
@@ -53,9 +57,9 @@ function payloadFor(names, originalCount) {
     allowedMentions: { parse: [] },
     embeds: chunks.map((description, index) => ({
       color: 0xFF7900,
-      title: `📋 VIP Expert List${chunks.length > 1 ? ` (${index + 1}/${chunks.length})` : ''}`,
+      title,
       description,
-      footer: { text: `${MARKER} · ${names.length} sources · Updates from #expert-picks` }
+      footer: { text: `${MARKER} · ${names.length} sources · Updates from #expert-picks${chunks.length > 1 ? ` · ${index + 1}/${chunks.length}` : ''}` }
     })),
     content: `Current expert lineup: **${names.length} sources**. ${Math.max(0, names.length - originalCount)} added since Kobe’s original list. Prices in the earlier list are historical reference only; new sources have no verified standalone price.`
   };
@@ -86,13 +90,16 @@ async function fetchHistory(channel, maxPages) {
 function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile }) {
   let initialized = false;
   let baseline = [];
+  let title = '';
   let discovered = [];
   async function refresh() {
     const [source, destination] = await Promise.all([sourceChannelFor(), listChannelFor()]);
     const state = await readState(stateFile);
     if (!initialized) {
       const listMessages = await destination.messages.fetch({ limit: 100 });
-      baseline = [...listMessages.values()].map(baselineNames).find((names) => names.length >= 20) || [];
+      const original = [...listMessages.values()].find((message) => baselineNames(message).length >= 20);
+      baseline = original ? baselineNames(original) : [];
+      title = original ? listMonth(original) : '';
       if (!baseline.length) throw new Error('Kobe’s original VIP expert list was not found; no replacement posted.');
       if (!state.message_id) {
         const managed = [...listMessages.values()].find((message) => message.embeds?.some((embed) => embed.footer?.text?.includes(MARKER)));
@@ -104,8 +111,8 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile }) {
     const messages = await fetchHistory(source, state.message_id ? 1 : 20);
     const names = namesFromMessages(messages, [...baseline, ...discovered]);
     discovered = names.filter((name) => !baseline.some((item) => keyFor(item) === keyFor(name)));
-    const payload = payloadFor(names, baseline.length);
-    const signature = JSON.stringify([names, baseline.length]);
+    const payload = payloadFor(names, baseline.length, title || 'VIP Expert List');
+    const signature = JSON.stringify([names, baseline.length, title]);
     const current = state.message_id ? await destination.messages.fetch(state.message_id).catch(() => null) : null;
     if (state.signature === signature && current) return { status: 'UNCHANGED', count: names.length, messageId: state.message_id };
     const message = current ? await current.edit(payload) : await destination.send(payload);
@@ -115,4 +122,4 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile }) {
   return { refresh };
 }
 
-module.exports = { MARKER, baselineNames, cleanName, createVipExpertList, expertName, namesFromMessages, payloadFor };
+module.exports = { MARKER, baselineNames, cleanName, createVipExpertList, expertName, listMonth, namesFromMessages, payloadFor };
