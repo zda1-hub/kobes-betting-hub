@@ -21,6 +21,7 @@ const writeupRecapWorkflow = {
 };
 const recapWorkflowConfigs = [exclusiveRecapWorkflow, writeupRecapWorkflow].filter((config) => config.enabled);
 const { freePickRecapRows } = require('./lib/free-recap');
+const { buildFreePickResults } = require('./lib/free-pick-results');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
 const { gradeWagerRows, sourcePacketPath } = require('./lib/wager-ledger');
@@ -507,6 +508,42 @@ function startFreePickDelivery() {
   freePickDeliveryTimer = setInterval(run, 60000);
   freePickDeliveryTimer.unref();
   console.log('Free Pick delivery recovery active: current-day approved canonical posts only; 60-second interval.');
+}
+
+function startFreePickResultsSync() {
+  const secret = process.env.FREE_PICK_SITE_PUBLISH_SECRET;
+  if (!freePickChannelId || !secret) {
+    console.warn('Verified Free Pick results website sync is not configured.');
+    return;
+  }
+  const origin = (process.env.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
+  let lastContent = '';
+  let running = false;
+  const run = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const snapshot = buildFreePickResults(await readPickLog(), dailyPickOperatingDate(new Date()), freePickChannelId);
+      const content = JSON.stringify({ ...snapshot, generatedAt: null });
+      if (content === lastContent) return;
+      const response = await fetch(`${origin}/api/free-pick/results`, {
+        method: 'PUT',
+        headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
+        body: JSON.stringify(snapshot),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error(`website returned ${response.status}`);
+      lastContent = content;
+      console.log('Verified Free Pick results updated on the website.');
+    } catch (error) {
+      console.error('Verified Free Pick results sync needs attention:', error.message);
+    } finally {
+      running = false;
+    }
+  };
+  void run();
+  const timer = setInterval(() => void run(), 60000);
+  timer.unref();
 }
 
 // A shared kill switch for new public pick posts. The collector has its own
@@ -2201,6 +2238,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   startTrendInbox();
   startFreeRecapSchedule();
   startFreePickDelivery();
+  startFreePickResultsSync();
   if (process.env.PRIVATE_EXCLUSIVE_IMPORT_FILE && process.env.PRIVATE_EXCLUSIVE_IMPORT_DATE) {
     void import('../scripts/import-manual-exclusives.mjs')
       .then(({ runManualExclusiveImport }) => runManualExclusiveImport({

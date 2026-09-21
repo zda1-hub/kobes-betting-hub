@@ -19,7 +19,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="home.css?v=20260917-homeflow" />
-    <link rel="stylesheet" href="free-pick.css?v=20260826" />
+    <link rel="stylesheet" href="free-pick.css?v=20260921-results" />
   </head>
   <body>
     <header class="site-header" data-header>
@@ -58,12 +58,28 @@
           </div>
         </div>
       </section>
+      <section class="free-results" aria-labelledby="free-results-title" data-free-results hidden>
+        <div class="free-results-heading">
+          <div><p class="eyebrow">VERIFIED FREE PICK RESULTS</p><h2 id="free-results-title">The record, not just the highlights.</h2></div>
+          <span class="free-results-updated" data-results-updated></span>
+        </div>
+        <div class="free-results-metrics">
+          <article><span>Overall settled</span><strong data-results-overall>—</strong><small data-results-overall-note></small></article>
+          <article><span>Today’s verified wins</span><strong data-results-today>—</strong><small data-results-today-note></small></article>
+          <article><span>Results still pending</span><strong data-results-pending>—</strong><small>Never counted as wins</small></article>
+        </div>
+        <div class="free-results-lists">
+          <div><h3>Recent verified wins</h3><div data-results-recent class="free-results-list"></div></div>
+          <div><h3>Best verified wins</h3><div data-results-best class="free-results-list"></div></div>
+        </div>
+        <p class="free-results-disclaimer">Only officially posted free picks with a recorded result source are included. Every verified loss, push, and void remains in the overall record. “Best” is ranked by net units, not a guarantee of future performance.</p>
+      </section>
     </main>
     <footer>
       <span>© <span id="year"></span> KOBE'S BETTING HUB</span>
       <span class="footer-nav"><a href="index.html">Full site</a><a href="join.html">Membership</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></span>
       <span>21+ • WAGER RESPONSIBLY</span>
     </footer>
-    <script src="free-pick.js?v=20260911-r2"></script>
+    <script src="free-pick.js?v=20260921-results"></script>
   </body>
 </html>
