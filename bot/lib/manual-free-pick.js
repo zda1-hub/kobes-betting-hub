@@ -41,6 +41,7 @@ function manualFreePickRecord(message, { operatingDate, guildId, channelId, appr
     packet: {
       pick_id: pickId,
       source: { publish_mode: 'independent_writeup', post_url: postReference },
+      approval: { exact_evidence: evidence },
       analysis: { extraction: { sport: 'football', league: 'NFL', event, selection, line, odds_american: odds, units: '', source_claims: evidence } },
     },
   };

@@ -23,6 +23,9 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
 
   const extraction = packet.analysis?.extraction || {};
   const firstPlay = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;
+  const approvedEvidence = Array.isArray(packet.approval?.exact_evidence)
+    ? packet.approval.exact_evidence.filter((claim) => typeof claim === 'string' && claim.trim() && !/https?:\/\//i.test(claim))
+    : sourceEvidence(packet);
   const details = {
     sport: extraction.sport || '',
     event: extraction.event || '',
@@ -30,7 +33,7 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
     line: firstPlay.line || extraction.line || '',
     odds: firstPlay.odds_american || extraction.odds_american || '',
     units: firstPlay.units || extraction.units || '',
-    reason: sourceEvidence(packet).join(' • '),
+    reason: approvedEvidence.join(' • '),
   };
   // Image-backed and text-only Free Picks use one X copy builder so a source
   // image cannot silently fall back to the old caption format.

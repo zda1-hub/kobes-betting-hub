@@ -17,6 +17,7 @@ test('turns an authorized manual Free Pick into one canonical delivery packet', 
   assert.equal(result.row.published_line, '5.5');
   assert.equal(result.row.published_odds_american, '-124');
   assert.equal(result.packet.analysis.extraction.source_claims.length, 2);
+  assert.deepEqual(result.packet.approval.exact_evidence, result.packet.analysis.extraction.source_claims);
   assert.equal(result.row.post_reference, 'https://discord.com/channels/guild/free/123');
 });
 
