@@ -49,6 +49,7 @@ const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
 const { createTelegramReader } = require('./lib/telegram-reader');
 const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/daily-writeup-board');
 const { createFreeWriteupBoard } = require('./lib/free-writeup-board');
+const { createVipExpertList } = require('./lib/vip-expert-list');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
@@ -93,6 +94,8 @@ const freeRecapChannelId = process.env.FREE_RECAP_CHANNEL_ID || recapChannelId;
 const freeRecapStatePath = path.join(path.dirname(pickLogPath()), 'free-recap-state.json');
 const dailyWriteupsChannelId = process.env.DAILY_WRITEUPS_CHANNEL_ID;
 const configuredFreeWriteupsChannelId = process.env.FREE_WRITEUPS_CHANNEL_ID;
+const vipExpertListChannelId = process.env.VIP_EXPERT_LIST_CHANNEL_ID;
+if (vipExpertListChannelId) allowedChannelIds.add(vipExpertListChannelId);
 if (configuredFreeWriteupsChannelId) allowedChannelIds.add(configuredFreeWriteupsChannelId);
 if (dailyWriteupsChannelId) allowedChannelIds.add(dailyWriteupsChannelId);
 let manualFootballWriteupRows = [];
@@ -161,6 +164,11 @@ let freeWriteupBoard = null;
 // PUBLISH_CHANNEL_ID is the established production expert-picks route; the
 // explicit alias allows a future rename without reintroducing alternatives.
 const expertPicksChannelId = process.env.EXPERT_PICKS_CHANNEL_ID || defaultChannelId;
+const vipExpertList = vipExpertListChannelId ? createVipExpertList({
+  sourceChannelFor: () => approvedTextChannel(expertPicksChannelId),
+  listChannelFor: () => approvedTextChannel(vipExpertListChannelId),
+  stateFile: path.join(path.dirname(pickLogPath()), 'vip-expert-list.json')
+}) : null;
 const pickApprovalChannelId = process.env.PICK_APPROVAL_CHANNEL_ID;
 const exclusivePickApprovalChannelId = exclusiveApprovalChannelId();
 const sourcesPath = path.join(__dirname, '..', 'data', 'twitter-sources.json');
@@ -1507,6 +1515,14 @@ async function postAndLogOfficialPick({ channel, payload, entry, packet = null }
       console.error('Free writeups preview needs attention:', error instanceof Error ? error.message : String(error));
     }
   }
+  if (vipExpertList && channel.id === expertPicksChannelId) {
+    try {
+      const receipt = await vipExpertList.refresh();
+      console.log('VIP expert list receipt:', JSON.stringify(receipt));
+    } catch (error) {
+      console.error('VIP expert list needs attention:', error instanceof Error ? error.message : String(error));
+    }
+  }
   return message;
 }
 
@@ -2137,6 +2153,14 @@ client.once(Events.ClientReady, async (readyClient) => {
     setInterval(() => void freeWriteupBoard.refresh().catch(error => console.error('Free writeups preview needs attention:', error.message)), 60000);
   } catch (error) {
     console.error('Free writeups preview setup needs attention:', error.message);
+  }
+  if (vipExpertList) {
+    void vipExpertList.refresh()
+      .then((receipt) => console.log('VIP expert list receipt:', JSON.stringify(receipt)))
+      .catch((error) => console.error('VIP expert list needs attention:', error.message));
+    setInterval(() => void vipExpertList.refresh()
+      .then((receipt) => { if (receipt.status !== 'UNCHANGED') console.log('VIP expert list receipt:', JSON.stringify(receipt)); })
+      .catch((error) => console.error('VIP expert list needs attention:', error.message)), 300000);
   }
   try {
     await refreshPendingTermsOnlyApprovals();

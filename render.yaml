@@ -20,6 +20,8 @@ services:
         sync: false
       - key: EXPERT_PICKS_CHANNEL_ID
         sync: false
+      - key: VIP_EXPERT_LIST_CHANNEL_ID
+        value: "1550273195079114792"
       - key: PICK_APPROVAL_CHANNEL_ID
         sync: false
       - key: EXCLUSIVE_PICK_APPROVAL_CHANNEL_ID
