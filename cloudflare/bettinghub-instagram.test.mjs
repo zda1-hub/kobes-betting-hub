@@ -291,7 +291,7 @@ nodeTest('OAuth config disables URL-bearing logs, isolates staging, and schedule
   assert.deepEqual(config.triggers.crons, ['*/5 * * * *']);
   assert.deepEqual(config.env.staging.triggers.crons, []);
   assert.notEqual(config.d1_databases[0].database_id, config.env.staging.d1_databases[0].database_id);
-  assert.equal(config.vars.INSTAGRAM_APP_ID, '');
+  assert.equal(config.vars.INSTAGRAM_APP_ID, '1068122172774873');
   for (const secretName of ['INSTAGRAM_APP_SECRET', 'INSTAGRAM_OPERATOR_SECRET', 'INSTAGRAM_TOKEN_ENCRYPTION_KEY']) assert.equal(Object.hasOwn(config.vars, secretName), false);
 });
 
