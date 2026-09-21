@@ -50,7 +50,7 @@ function namesFromMessages(messages, baseline = []) {
   return [...names.values()].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
 }
 
-function payloadFor(names, originalCount, title = 'VIP Expert List') {
+function payloadFor(names, originalCount, title = 'September 2026 List') {
   if (!names.length) throw new Error('Cannot publish an empty VIP expert list.');
   const lines = names.map((name, index) => `${String(index + 1).padStart(2, '0')}. ${name}`);
   const chunks = [];
@@ -106,7 +106,7 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile }) {
       const original = [...listMessages.values()].find((message) => baselineNames(message).length >= 20);
       const managed = [...listMessages.values()].find((message) => managedNames(message).length >= 20);
       baseline = original ? baselineNames(original) : managed ? managedNames(managed) : [];
-      title = original ? listMonth(original) : managed ? listMonth(managed) : '';
+      title = `${original ? listMonth(original) : managed ? listMonth(managed) : 'September 2026'} List`;
       if (!baseline.length) throw new Error('VIP expert list source was not found; no replacement posted.');
       if (!state.message_id) {
         if (managed) state.message_id = managed.id;
@@ -117,7 +117,7 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile }) {
     const messages = await fetchHistory(source, state.message_id ? 1 : 20);
     const names = namesFromMessages(messages, [...baseline, ...discovered]);
     discovered = names.filter((name) => !baseline.some((item) => keyFor(item) === keyFor(name)));
-    const payload = payloadFor(names, baseline.length, title || 'September 2026');
+    const payload = payloadFor(names, baseline.length, title);
     const signature = JSON.stringify([names, baseline.length, title]);
     const current = state.message_id ? await destination.messages.fetch(state.message_id).catch(() => null) : null;
     if (state.signature === signature && current) return { status: 'UNCHANGED', count: names.length, messageId: state.message_id };
