@@ -53,7 +53,7 @@ test('apply requires the exact confirmation bound to production', () => {
   }), { apply: true }));
 });
 
-test('loads only pinned migrations 007 through 010 in order', async () => {
+test('loads only pinned production migrations through the long-term dashboard in order', async () => {
   const migrations = await loadApprovedMigrations();
   assert.deepEqual(migrations.map((migration) => migration.name), APPROVED_MIGRATIONS.map((migration) => migration.name));
   assert.deepEqual(migrations.map((migration) => migration.version), APPROVED_MIGRATIONS.map((migration) => migration.version));

@@ -153,7 +153,7 @@ test('staging checkout only calls the configured staging Worker', async () => {
   });
 
   await page.buttons[0].click();
-  assert.deepEqual(requests, ['https://kobes-betting-hub-checkout-staging.example.workers.dev/create-checkout']);
+  assert.deepEqual(requests, ['https://kobes-betting-hub-checkout-staging.example.workers.dev/checkout/prepare']);
 });
 
 test('staging checkout fails closed when configured with the production Worker', async () => {

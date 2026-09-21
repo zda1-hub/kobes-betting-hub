@@ -50,6 +50,16 @@
             <p>Already paid but missing member channels? First use <strong>Connect Discord</strong> in your welcome email’s private link or original checkout confirmation. This billing portal does not make that first connection. <strong>Do not purchase again.</strong> Need your link? <a href="mailto:zakai@kaimaz.com">Contact support</a> with your checkout email.</p>
             <div class="manage-actions"><a class="button" data-portal-login>Open Stripe billing portal <span aria-hidden="true">→</span></a></div>
             <div class="manage-actions" data-last-chance hidden><a class="button" data-retention-75>Accept 75% last-chance offer <span aria-hidden="true">→</span></a></div>
+            <div data-feedback hidden>
+              <h3>Help us improve</h3>
+              <p>Your answer does not change or delay your cancellation.</p>
+              <a class="text-link" data-feedback-login>Sign in to leave a cancellation reason</a>
+              <form data-feedback-form hidden>
+                <label>Primary reason <select name="reason" required><option value="">Choose one</option><option value="price">Price</option><option value="not_using">Not using it enough</option><option value="results">Results or value</option><option value="technical">Technical/access issue</option><option value="billing">Billing issue</option><option value="community">Community experience</option><option value="other">Other</option></select></label>
+                <label>Optional details <textarea name="details" maxlength="500"></textarea></label>
+                <button class="button" type="submit">Send feedback</button>
+              </form>
+            </div>
           </div>
           <p class="manage-message" data-message role="status" aria-live="polite"></p>
         </aside>

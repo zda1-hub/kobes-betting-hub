@@ -44,6 +44,7 @@ const {
 } = require('./lib/source-review');
 const { fillMissingEvidence } = require('./lib/espn-pick-research');
 const { createFreePickDelivery } = require('./lib/free-pick-delivery');
+const { manualFreePickRecord } = require('./lib/manual-free-pick');
 const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
 const { createTelegramReader } = require('./lib/telegram-reader');
 const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/daily-writeup-board');
@@ -405,12 +406,40 @@ function canonicalFreePacket(row) {
   };
 }
 
+const manualFreePackets = new Map();
+
+async function ingestManualFreePicks(date) {
+  if (!freePickChannelId || !process.env.DISCORD_GUILD_ID || pickApproverUserIds.size === 0) return;
+  const channel = await approvedTextChannel(freePickChannelId);
+  const messages = await channel.messages.fetch({ limit: 100 });
+  const existingIds = new Set((await readPickLog()).map((row) => row.pick_id));
+  const records = [...messages.values()]
+    .map((message) => manualFreePickRecord(message, {
+      operatingDate: dailyPickOperatingDate,
+      guildId: process.env.DISCORD_GUILD_ID,
+      channelId: freePickChannelId,
+      approverIds: pickApproverUserIds,
+    }))
+    .filter((record) => record?.row.operating_date === date)
+    .sort((a, b) => a.row.published_at.localeCompare(b.row.published_at));
+  for (const record of records) {
+    manualFreePackets.set(record.row.pick_id, record.packet);
+    if (!existingIds.has(record.row.pick_id)) {
+      await appendOfficialPick(record.row);
+      existingIds.add(record.row.pick_id);
+      console.log(`Indexed authorized manual Free Pick ${record.row.pick_id} for website/X delivery.`);
+    }
+  }
+}
+
 const freePickDelivery = createFreePickDelivery({
   root: path.join(path.dirname(pickLogPath()), 'free-pick-delivery'),
   channelId: freePickChannelId,
   readRows: readPickLog,
+  ingest: ingestManualFreePicks,
   paused: pickWorkflowPaused,
   loadPacket: async (row) => {
+    if (manualFreePackets.has(row.pick_id)) return manualFreePackets.get(row.pick_id);
     if (/^\d{8}-\d+-X$/.test(row.pick_id)) {
       try {
         const packet = JSON.parse(await fs.readFile(path.join(reviewQueueRoot, row.operating_date, `${row.pick_id.replace(/-X$/, '')}.json`), 'utf8'));

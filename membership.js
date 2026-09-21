@@ -39,7 +39,7 @@ const membershipConfig = (() => {
     return null;
   }
 })();
-const checkoutEndpoint = membershipConfig ? `${membershipConfig.workerOrigin}/create-checkout` : null;
+const checkoutEndpoint = membershipConfig ? `${membershipConfig.workerOrigin}/checkout/prepare` : null;
 // Live Stripe checkout is enabled. Discord access is granted only after the
 // customer completes Stripe Checkout and explicitly connects their account.
 const checkoutEnabled = Boolean(checkoutEndpoint);
@@ -128,15 +128,20 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
   const buttons = [...document.querySelectorAll('[data-checkout]')];
   const originalText = button.innerHTML;
   buttons.forEach((item) => { item.disabled = true; });
-  button.textContent = 'Opening secure checkout…';
-  setCheckoutMessage('Opening Stripe’s secure checkout…');
+  button.textContent = 'Connecting Discord…';
+  setCheckoutMessage('Step 1 of 2: connect the Discord account you want to use for Kobe’s VIP. No VIP access is granted until Stripe confirms your eligible payment.');
   const offer = button.dataset.checkout;
   const requestId = checkoutRequestId(offer);
   try {
     const response = await fetch(checkoutEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Checkout-Request-Id': requestId },
-      body: JSON.stringify({ offer, ...(offer === 'referral_trial' ? { referral_code: referralCode } : {}) }),
+      body: JSON.stringify({
+        offer,
+        ...(offer === 'referral_trial' ? { referral_code: referralCode } : {}),
+        analytics_session_id: window.KBHAnalytics?.sessionId || null,
+        attribution: window.KBHAnalytics?.attribution || {},
+      }),
     });
     const result = await response.json();
     if (!response.ok || !result.url) {

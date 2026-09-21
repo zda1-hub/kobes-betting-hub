@@ -39,12 +39,13 @@ function packetMatchesRow(packet, row) {
 // idempotency key and a verifiable receipt, even after an ambiguous response.
 function createFreePickDelivery({ root, readRows, loadPacket, verifyPost, paused = async () => false,
   publishSite = publishApprovedFreePickToSite, publishX = syncApprovedFreePickToX,
-  readX = readFreePickXReceipt, notify = async () => {}, channelId,
+  readX = readFreePickXReceipt, notify = async () => {}, ingest = async () => {}, channelId,
   today = pacificOperatingDate, logger = console }) {
   let running = null;
   async function drain() {
     if (await paused()) return [];
     const date = today();
+    await ingest(date);
     const rows = eligibleFreeRows(await readRows(), date, channelId);
     const results = [];
     for (const row of rows) {

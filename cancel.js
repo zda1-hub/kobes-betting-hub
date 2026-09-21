@@ -23,6 +23,9 @@ const message = document.querySelector('[data-message]');
 const portalLogin = document.querySelector('[data-portal-login]');
 const lastChance = document.querySelector('[data-last-chance]');
 const retention75 = document.querySelector('[data-retention-75]');
+const feedback = document.querySelector('[data-feedback]');
+const feedbackLogin = document.querySelector('[data-feedback-login]');
+const feedbackForm = document.querySelector('[data-feedback-form]');
 const productionMembershipWorkerOrigin = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
 const membershipConfig = (() => {
   const config = window.__KBH_MEMBERSHIP_CONFIG__;
@@ -50,7 +53,24 @@ if (membershipConfig && params.get('portal') === 'returned' && message) {
   message.textContent = 'Your Stripe billing portal session is complete. If you declined the 50% offer and finished canceling, you can accept one final 75% discount below. Eligibility is verified securely before any change is made.';
   if (lastChance) lastChance.hidden = false;
   if (retention75) retention75.href = `${membershipConfig.workerOrigin}/discord/login?intent=retention75`;
+  if (feedback) feedback.hidden = false;
+  if (feedbackLogin) feedbackLogin.href = `${membershipConfig.workerOrigin}/cancel/feedback-login`;
 }
+
+const feedbackToken = new URLSearchParams(globalThis.location?.hash?.replace(/^#/, '') || '').get('session') || '';
+if (membershipConfig && params.get('portal') === 'feedback' && feedbackToken) {
+  if (feedback) feedback.hidden = false;
+  if (feedbackLogin) feedbackLogin.hidden = true;
+  if (feedbackForm) feedbackForm.hidden = false;
+}
+feedbackForm?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const data = new FormData(feedbackForm);
+  const response = await fetch(`${membershipConfig.workerOrigin}/cancel/feedback`, { method: 'POST', headers: { Authorization: `Bearer ${feedbackToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: data.get('reason'), details: data.get('details'), retentionOfferShown: true }) });
+  const result = await response.json();
+  if (message) message.textContent = response.ok ? 'Thanks—your feedback was saved.' : result.error;
+  if (response.ok) feedbackForm.hidden = true;
+});
 
 if (membershipConfig && params.get('portal') === 'retained75' && message) {
   message.textContent = 'Your cancellation was stopped and 75% off your next monthly membership invoice was applied. This one-time offer cannot be used again.';

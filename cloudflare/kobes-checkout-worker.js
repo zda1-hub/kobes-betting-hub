@@ -44,11 +44,17 @@ const RETENTION_USED_METADATA_KEY = 'kbh_retention_offer_used';
 const RETENTION_COUPON_METADATA_KEY = 'kbh_retention_offer_coupon';
 const RETENTION_50_COUPON_METADATA_KEY = 'kbh_retention_offer_50_coupon';
 const RETENTION_75_COUPON_METADATA_KEY = 'kbh_retention_offer_75_coupon';
+const MEMBERSHIP_OFFERS = new Set(['starter', 'trial_2_day', 'referral_trial', 'six_month', 'annual']);
+const CHECKOUT_ASSOCIATION_TTL_MS = 60 * 60 * 1000;
+// A private admin dashboard is commonly opened from the owner's dedicated desktop app.
+// Keep the signed, allowlisted token useful for 30 days so the app does not demand
+// Discord OAuth every hour. Revoking the Discord allowlist entry invalidates access.
+const ADMIN_SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 const headers = (origin) => ({
   'Access-Control-Allow-Origin': ALLOWED_SITE_ORIGINS.has(origin) ? origin : SITE_ORIGIN,
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-Checkout-Request-Id',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Checkout-Request-Id, Authorization',
   Vary: 'Origin',
   'Content-Type': 'application/json; charset=utf-8',
 });
@@ -523,6 +529,101 @@ async function recordMembershipEvent(env, values) {
   });
 }
 
+function cleanAttribution(value = {}) {
+  const text = (input, maximum = 160) => String(input || '').replace(/[\u0000-\u001f]/g, '').slice(0, maximum);
+  const source = input => {
+    const raw = text(input).trim().toLowerCase();
+    if (['discord','x','instagram','google','email','referral','affiliate','direct','other'].includes(raw)) return raw;
+    if (/discord/.test(raw)) return 'discord';
+    if (/^(x|twitter)$/.test(raw) || /(^|\.)x\.com$|twitter\.com|t\.co/.test(raw)) return 'x';
+    if (/instagram|(^|\.)ig\.me$/.test(raw)) return 'instagram';
+    if (/google/.test(raw)) return 'google';
+    if (/mail|newsletter/.test(raw)) return 'email';
+    if (/referr/.test(raw)) return 'referral';
+    if (/affiliate|creator|partner/.test(raw)) return 'affiliate';
+    return raw ? 'other' : '';
+  };
+  return {
+    first_source: source(value.first_source) || 'direct', first_medium: text(value.first_medium),
+    first_campaign: text(value.first_campaign), first_content: text(value.first_content),
+    last_source: source(value.last_source) || source(value.first_source) || 'direct', last_medium: text(value.last_medium),
+    last_campaign: text(value.last_campaign), last_content: text(value.last_content),
+    utm_source: source(value.utm_source), utm_medium: text(value.utm_medium),
+    utm_campaign: text(value.utm_campaign), utm_content: text(value.utm_content),
+    referral_identifier: text(value.referral_identifier, 64), document_referrer: text(value.document_referrer, 500),
+    referrer_host: text(value.referrer_host), country: text(value.country, 2).toUpperCase(),
+    device: text(value.device, 24), browser: text(value.browser, 40),
+    landing_path: text(value.landing_path, 300),
+  };
+}
+
+function requestAttribution(request, supplied = {}) {
+  const ua = String(request.headers.get('user-agent') || '');
+  const device = /tablet|ipad/i.test(ua) ? 'tablet' : /mobile|iphone|android/i.test(ua) ? 'mobile' : 'desktop';
+  const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox'
+    : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Other';
+  return cleanAttribution({ ...supplied, country: request.cf?.country || supplied.country, device, browser });
+}
+
+async function recordAnalyticsEvent(env, values) {
+  if (!supabaseReady(env)) return;
+  try { await supabase(env, 'analytics_events?on_conflict=dedupe_key', {
+    method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal',
+    body: {
+      id: crypto.randomUUID(), dedupe_key: values.dedupeKey || null,
+      session_id: values.sessionId || null, event_name: values.eventName,
+      path: values.path || null, offer: values.offer || null,
+      stripe_customer_id: values.customerId || null,
+      stripe_subscription_id: values.subscriptionId || null,
+      discord_user_id: values.discordUserId || null,
+      properties: values.properties || {}, occurred_at: new Date().toISOString(),
+    },
+  }); } catch (error) {
+    // Analytics is never allowed to block checkout, payment, or entitlement.
+    console.error('Unable to persist analytics event.', error?.message || error);
+  }
+}
+
+async function recordBillingEvent(env, event, values) {
+  try { await supabase(env, 'membership_billing_events?on_conflict=stripe_event_id', {
+    method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal',
+    body: {
+      stripe_event_id: event.id, stripe_invoice_id: values.invoiceId || null,
+      stripe_charge_id: values.chargeId || null, stripe_customer_id: values.customerId || null,
+      stripe_subscription_id: values.subscriptionId || null, event_type: values.eventType,
+      amount_cents: Number.isSafeInteger(values.amountCents) ? values.amountCents : null,
+      currency: values.currency || null, billing_reason: values.billingReason || null,
+      occurred_at: stripeTimestamp(event.created) || new Date().toISOString(),
+    },
+  }); } catch (error) {
+    // Billing/access webhooks must keep working during a guarded schema rollout.
+    console.error('Unable to persist billing analytics event.', error?.message || error);
+  }
+}
+
+async function checkoutAssociationByToken(env, token) {
+  if (!/^[A-Za-z0-9_-]{32,100}$/.test(token || '')) return null;
+  const rows = await supabase(env, `membership_checkout_associations?public_token_hash=eq.${encodeURIComponent(await sha256Text(token))}&select=*&limit=1`);
+  return rows?.[0] || null;
+}
+
+async function updateCheckoutAssociation(env, id, body, statuses = null) {
+  const status = statuses?.length ? `&status=in.(${statuses.join(',')})` : '';
+  return supabase(env, `membership_checkout_associations?id=eq.${encodeURIComponent(id)}${status}`, {
+    method: 'PATCH', prefer: 'return=representation', body: { ...body, updated_at: new Date().toISOString() },
+  });
+}
+
+function safeActivationError(error) {
+  const message = String(error?.message || error || 'unknown');
+  if (/already connected|claim/i.test(message)) return 'IDENTITY_CONFLICT';
+  if (/Discord role synchronization failed \(403\)/.test(message)) return 'DISCORD_PERMISSION_DENIED';
+  if (/Discord role synchronization failed \(404\)/.test(message)) return 'DISCORD_MEMBER_NOT_FOUND';
+  if (/Discord/.test(message)) return 'DISCORD_TEMPORARY_FAILURE';
+  if (/active|payment|subscription/i.test(message)) return 'ENTITLEMENT_NOT_ELIGIBLE';
+  return 'ACTIVATION_FAILED';
+}
+
 async function beginWebhookEvent(env, event, payload) {
   const existing = await supabase(env, `stripe_webhook_events?event_id=eq.${encodeURIComponent(event.id)}&select=status&limit=1`);
   if (existing?.[0]?.status === 'PROCESSED') return false;
@@ -643,9 +744,9 @@ function discordNotReadyResponse(env) {
   return new Response('Discord connection is being configured. Please check back shortly.', { status: 503 });
 }
 
-async function createDiscordState({ sessionId = null, intent = 'connect' }, env) {
+async function createDiscordState({ sessionId = null, associationToken = null, intent = 'connect' }, env) {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
-  const body = toBase64Url(encode.encode(JSON.stringify({ sessionId, intent, expiresAt: Math.floor(Date.now() / 1000) + 600, nonce: toBase64Url(bytes) })));
+  const body = toBase64Url(encode.encode(JSON.stringify({ sessionId, associationToken, intent, expiresAt: Math.floor(Date.now() / 1000) + 600, nonce: toBase64Url(bytes) })));
   return `${body}.${await sign(body, env.DISCORD_OAUTH_STATE_SECRET)}`;
 }
 
@@ -653,8 +754,9 @@ async function readDiscordState(state, env) {
   const [body, signature, ...extra] = state.split('.');
   if (!body || !signature || extra.length || !await secureEqual(await sign(body, env.DISCORD_OAUTH_STATE_SECRET), signature)) throw new Error('Invalid Discord connection request.');
   const value = JSON.parse(decode.decode(fromBase64Url(body)));
-  if (!['connect', 'portal', 'referral', 'retention75'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
+  if (!['connect', 'portal', 'referral', 'retention75', 'precheckout', 'admin', 'member', 'feedback'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
   if (value.intent === 'connect' && !value.sessionId) throw new Error('That Discord connection request is incomplete.');
+  if (value.intent === 'precheckout' && !value.associationToken) throw new Error('That checkout verification request is incomplete.');
   return value;
 }
 
@@ -819,6 +921,7 @@ async function recordRetentionRedemption(env, subscription, eventId = null, know
     discordUserId: await discordUserForSubscription(env, subscription),
     details: { coupon_id: couponId },
   });
+  await recordAnalyticsEvent(env, { eventName: 'retention_offer_accepted', customerId, subscriptionId: subscription.id, discordUserId: await discordUserForSubscription(env, subscription), dedupeKey: `retention_accepted:${subscription.id}` });
   return true;
 }
 
@@ -847,6 +950,7 @@ async function acceptLastChanceRetention(env, membership, customer, subscription
     customerId: customer.id, subscriptionId: subscription.id, discordUserId,
     details: { coupon_id: couponId, percent: 75, stage: 'last_chance' },
   });
+  await recordAnalyticsEvent(env, { eventName: 'retention_offer_accepted', customerId: customer.id, subscriptionId: subscription.id, discordUserId, dedupeKey: `retention_accepted:${subscription.id}` });
   return true;
 }
 
@@ -1044,7 +1148,7 @@ function discordAuthorizationUrl(state, env, intent) {
     client_id: env.DISCORD_CLIENT_ID,
     response_type: 'code',
     redirect_uri: env.DISCORD_REDIRECT_URI,
-    scope: intent === 'connect' ? 'identify guilds.join' : intent === 'referral' ? 'identify email' : 'identify',
+    scope: ['connect', 'precheckout'].includes(intent) ? 'identify guilds.join' : intent === 'referral' ? 'identify email' : 'identify',
     state,
     prompt: 'consent',
   }).toString();
@@ -1143,6 +1247,55 @@ async function finishDiscordConnection(request, env) {
     if (!tokenResponse.ok || !token.access_token) throw new Error('Discord authorization failed.');
     discordAccessToken = token.access_token;
     const user = await discordRequest('/users/@me', { headers: { Authorization: `Bearer ${token.access_token}` } }, env);
+    if (state.intent === 'member') {
+      const membership = await membershipCustomerForDiscord(env, user.id);
+      if (!membership?.stripe_customer_id) return redirect(`${siteOrigin(env)}${SITE_PATH}/member#connection=required`);
+      const expiresAt = Math.floor(Date.now() / 1000) + ADMIN_SESSION_TTL_SECONDS;
+      const body = toBase64Url(encode.encode(JSON.stringify({ discordUserId: user.id, expiresAt, purpose: 'member' })));
+      const memberToken = `${body}.${await sign(body, env.DISCORD_OAUTH_STATE_SECRET)}`;
+      return redirect(`${siteOrigin(env)}${SITE_PATH}/member#session=${encodeURIComponent(memberToken)}`);
+    }
+    if (state.intent === 'feedback') {
+      const membership = await membershipCustomerForDiscord(env, user.id);
+      if (!membership?.current_subscription_id) throw new Error('No connected membership was found.');
+      const expiresAt = Math.floor(Date.now() / 1000) + ADMIN_SESSION_TTL_SECONDS;
+      const body = toBase64Url(encode.encode(JSON.stringify({ discordUserId: user.id, expiresAt, purpose: 'member' })));
+      const memberToken = `${body}.${await sign(body, env.DISCORD_OAUTH_STATE_SECRET)}`;
+      return redirect(`${siteOrigin(env)}${SITE_PATH}/managemembership?portal=feedback#session=${encodeURIComponent(memberToken)}`);
+    }
+    if (state.intent === 'admin') {
+      const allowed = new Set(String(env.ADMIN_DISCORD_USER_IDS || '').split(',').map(value => value.trim()).filter(Boolean));
+      if (!allowed.has(user.id)) throw new Error('This Discord account is not authorized for administration.');
+      const expiresAt = Math.floor(Date.now() / 1000) + ADMIN_SESSION_TTL_SECONDS;
+      const body = toBase64Url(encode.encode(JSON.stringify({ discordUserId: user.id, expiresAt, purpose: 'admin' })));
+      const adminToken = `${body}.${await sign(body, env.DISCORD_OAUTH_STATE_SECRET)}`;
+      return redirect(`${siteOrigin(env)}${SITE_PATH}/admin/analytics#session=${encodeURIComponent(adminToken)}`);
+    }
+    if (state.intent === 'precheckout') {
+      const association = await checkoutAssociationByToken(env, state.associationToken);
+      if (!association || new Date(association.expires_at).getTime() <= Date.now()) throw new Error('That checkout verification expired. Please select your offer again.');
+      if (!['PENDING_DISCORD', 'DISCORD_VERIFIED'].includes(association.status)) throw new Error('That checkout verification was already used.');
+      const linked = await membershipCustomerForDiscord(env, user.id);
+      if (linked?.stripe_customer_id && linked.current_subscription_id) {
+        const current = await stripeGet(env, `/subscriptions/${encodeURIComponent(linked.current_subscription_id)}`);
+        if (ACTIVE_SUBSCRIPTION_STATUSES.has(current.status)) {
+          return redirect(`${siteOrigin(env)}${SITE_PATH}/managemembership?portal=existing`);
+        }
+      }
+      // Joining the public server is not a paid entitlement. No role is granted
+      // here; the verified Stripe webhook is the only activation authority.
+      await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, {
+        method: 'PUT', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token: token.access_token }),
+      }, env, { memberId: user.id, triggerType: 'precheckout_identity_verification' });
+      await updateCheckoutAssociation(env, association.id, { discord_user_id: user.id, status: 'DISCORD_VERIFIED' }, ['PENDING_DISCORD', 'DISCORD_VERIFIED']);
+      await recordAnalyticsEvent(env, {
+        eventName: 'discord_verified', sessionId: association.analytics_session_id,
+        offer: association.offer, discordUserId: user.id, dedupeKey: `discord_verified:${association.id}`,
+      });
+      const checkout = await createAssociatedCheckout(env, association, state.associationToken, user.id);
+      return redirect(checkout.url);
+    }
     if (state.intent === 'referral') {
       if (!await activeMembershipForDiscord(env, user.id)) throw new Error('Connect the Discord account tied to an active Kobe’s Betting Hub membership.');
       const profile = await ensureReferralProfile(env, user.id);
@@ -1176,6 +1329,7 @@ async function finishDiscordConnection(request, env) {
         discordUserId: user.id,
         details: { retention_offer_included: offersRetention },
       });
+      if (offersRetention) await recordAnalyticsEvent(env, { eventName: 'retention_offer_shown', customerId: membership.stripe_customer_id, subscriptionId: membership.current_subscription_id, discordUserId: user.id, dedupeKey: `retention_shown:${membership.current_subscription_id}` });
       return redirect(portal.url);
     }
     if (state.intent === 'retention75') {
@@ -1228,6 +1382,74 @@ async function finishDiscordConnection(request, env) {
       } catch { /* The short-lived token expires even if best-effort revocation fails. */ }
     }
   }
+}
+
+async function prepareCheckout(request, env, origin) {
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  if (!MEMBERSHIP_OFFERS.has(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
+  const referralCode = String(data.referral_code || '').toUpperCase();
+  if (data.offer === 'referral_trial') {
+    if (!/^KBH-[A-Z0-9]{10}$/.test(referralCode)) return json({ error: 'That referral link is invalid or expired.' }, 400, origin);
+    const profile = await referralProfileForCode(env, referralCode);
+    if (!profile || !await activeMembershipForDiscord(env, profile.discord_user_id)) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
+  }
+  const sessionId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(data.analytics_session_id || '')
+    ? data.analytics_session_id.toLowerCase() : null;
+  const token = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+  const created = await supabase(env, 'membership_checkout_associations', {
+    method: 'POST', prefer: 'return=representation',
+    body: {
+      public_token_hash: await sha256Text(token), offer: data.offer,
+      referral_code: data.offer === 'referral_trial' ? referralCode : null,
+      analytics_session_id: sessionId, attribution: cleanAttribution(data.attribution),
+      expires_at: new Date(Date.now() + CHECKOUT_ASSOCIATION_TTL_MS).toISOString(),
+    },
+  });
+  const association = created?.[0];
+  if (!association) return json({ error: 'Unable to prepare checkout.' }, 503, origin);
+  await recordAnalyticsEvent(env, { eventName: 'offer_selected', sessionId, offer: data.offer, dedupeKey: `offer_selected:${association.id}` });
+  const state = await createDiscordState({ associationToken: token, intent: 'precheckout' }, env);
+  return json({ url: discordAuthorizationUrl(state, env, 'precheckout') }, 200, origin);
+}
+
+async function createAssociatedCheckout(env, association, publicToken, discordUserId) {
+  const longTerm = ['six_month', 'annual'].includes(association.offer);
+  const priceId = association.offer === 'six_month' ? env.STRIPE_SIX_MONTH_PRICE_ID
+    : association.offer === 'annual' ? env.STRIPE_ANNUAL_PRICE_ID : env.STRIPE_MONTHLY_PRICE_ID;
+  if (!env.STRIPE_SECRET_KEY || !priceId || (association.offer === 'starter' && !env.STRIPE_STARTER_PRICE_ID)) throw new Error('Checkout is being finalized. Please try again shortly.');
+  const values = {
+    mode: 'subscription',
+    success_url: `${siteOrigin(env)}${SITE_PATH}/welcome?state=${encodeURIComponent(publicToken)}`,
+    cancel_url: `${siteOrigin(env)}${SITE_PATH}/join?checkout=cancel`,
+    payment_method_collection: 'always', 'payment_method_types[0]': 'card', billing_address_collection: 'auto',
+    'line_items[0][price]': priceId, 'line_items[0][quantity]': 1,
+    'metadata[offer]': association.offer, 'metadata[checkout_association_id]': association.id,
+    'subscription_data[metadata][offer]': association.offer,
+    'subscription_data[metadata][checkout_association_id]': association.id,
+  };
+  if (!longTerm) {
+    values['subscription_data[trial_period_days]'] = association.offer === 'starter' ? 7 : 2;
+    values['subscription_data[trial_settings][end_behavior][missing_payment_method]'] = 'cancel';
+  }
+  if (association.referral_code) {
+    const profile = await referralProfileForCode(env, association.referral_code);
+    values['metadata[referral_code]'] = association.referral_code;
+    values['metadata[referrer_discord_user_id]'] = profile.discord_user_id;
+    values['subscription_data[metadata][referral_code]'] = association.referral_code;
+    values['subscription_data[metadata][referrer_discord_user_id]'] = profile.discord_user_id;
+  }
+  if (association.offer === 'starter') {
+    values['line_items[1][price]'] = env.STRIPE_STARTER_PRICE_ID;
+    values['line_items[1][quantity]'] = 1;
+  }
+  const checkout = await stripe(env, '/checkout/sessions', values, { idempotencyKey: `precheckout-${association.id}`, clientRequestId: association.id });
+  await updateCheckoutAssociation(env, association.id, { stripe_checkout_session_id: checkout.id, status: 'CHECKOUT_STARTED' }, ['DISCORD_VERIFIED']);
+  await recordAnalyticsEvent(env, {
+    eventName: 'checkout_started', sessionId: association.analytics_session_id, offer: association.offer,
+    discordUserId, dedupeKey: `checkout_started:${association.id}`,
+  });
+  return checkout;
 }
 
 async function createCheckout(request, env, origin) {
@@ -1661,6 +1883,7 @@ function memberWelcomeMessage(session, subscription, env) {
   const money = cents => '$' + (cents / 100).toFixed(2);
   const date = new Date(nextAt * 1000).toLocaleDateString('en-US', { timeZone: 'America/Phoenix', month: 'long', day: 'numeric', year: 'numeric' });
   const connection = `${siteOrigin(env)}/join?checkout=success&session_id=${encodeURIComponent(session.id)}#connect-discord`;
+  const automaticActivation = Boolean(session.metadata?.checkout_association_id);
   const period = months === 1 ? 'month' : months === 12 ? 'year' : '6 months';
   return {
     recipient: email,
@@ -1672,9 +1895,9 @@ function memberWelcomeMessage(session, subscription, env) {
       `Next billing date: ${date} (Arizona time).`,
       `Standard renewal price: ${money(price.unit_amount)} every ${period}. Any applicable tax or discount is shown on your Stripe invoice.`,
       'Your subscription automatically renews unless canceled before the next billing date.', '',
-      'One more step to unlock the member channels:',
-      'Open your private checkout confirmation below, tap Connect Discord, and authorize the Discord account you want to use.',
-      connection, '',
+      automaticActivation ? 'Your verified Discord account is being activated automatically.' : 'One more step to unlock the member channels:',
+      automaticActivation ? 'Open your member dashboard to review access and billing status.' : 'Open your private checkout confirmation below, tap Connect Discord, and authorize the Discord account you want to use.',
+      automaticActivation ? `${siteOrigin(env)}/member` : connection, '',
       'Already connected? Use that same Discord account in Kobe’s server. Do not buy another membership to fix missing access.',
       'Keep this connection link private — it belongs to your membership.', '',
       'Manage billing or cancel: ' + siteOrigin(env) + '/managemembership',
@@ -1710,6 +1933,49 @@ async function queueMemberWelcome(env, event) {
   return true;
 }
 
+async function queuePaidAssociationWelcome(env, association, event, invoice) {
+  const start = Date.parse(env.MEMBER_WELCOME_START_AT || '');
+  if (!Number.isFinite(start) || env.APP_ENV === 'staging' || event.livemode !== true || event.created * 1000 < start) return false;
+  const session = await stripeGet(env, `/checkout/sessions/${encodeURIComponent(association.stripe_checkout_session_id)}`);
+  const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(association.stripe_subscription_id)}`);
+  const message = memberWelcomeMessage({ ...session, payment_status: 'paid', amount_total: Number(invoice.amount_paid), currency: invoice.currency }, subscription, env);
+  if (!message) return false;
+  await supabase(env, 'member_welcome_outbox?on_conflict=stripe_subscription_id', {
+    method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal',
+    body: { ...message, stripe_subscription_id: subscription.id, stripe_checkout_session_id: session.id, stripe_customer_id: stripeId(session.customer) },
+  });
+  return true;
+}
+
+async function queueLifecycleReminders(env) {
+  const now = Date.now();
+  const subscriptions = await supabase(env, 'membership_subscriptions?status=in.(active,trialing)&select=*&limit=1000');
+  const associations = await supabase(env, 'membership_checkout_associations?status=in.(PAYMENT_CONFIRMED,VIP_PENDING,VIP_FAILED)&select=*&limit=1000');
+  let queued = 0;
+  const enqueue = async ({ dedupeKey, subscriptionId, customerId, emailType, recipient, subject, body }) => {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient || '')) return;
+    await supabase(env, 'member_lifecycle_outbox?on_conflict=dedupe_key', { method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal', body: { dedupe_key: dedupeKey, stripe_subscription_id: subscriptionId, stripe_customer_id: customerId, email_type: emailType, recipient, subject, body } });
+    queued += 1;
+  };
+  for (const subscription of subscriptions || []) {
+    if (subscription.offer !== 'starter' || subscription.cancel_at_period_end || subscription.cancel_at) continue;
+    const ends = new Date(subscription.current_period_end).getTime();
+    if (!Number.isFinite(ends) || ends - now < 0 || ends - now > 2 * 86400000) continue;
+    try {
+      const customer = await stripeGet(env, `/customers/${encodeURIComponent(subscription.stripe_customer_id)}`);
+      await enqueue({ dedupeKey: `intro-expiring:${subscription.stripe_subscription_id}:${subscription.current_period_end}`, subscriptionId: subscription.stripe_subscription_id, customerId: subscription.stripe_customer_id, emailType: 'INTRO_EXPIRING', recipient: customer.email, subject: 'Your Kobe’s VIP intro period renews soon', body: `Your $10 introductory period renews at the standard $32.99 monthly price on ${new Date(ends).toLocaleDateString('en-US',{timeZone:'America/Phoenix'})}. No action is needed to continue. Manage or cancel securely at ${siteOrigin(env)}/managemembership. We never subscribe you to a different plan without your authorization.` });
+    } catch { /* A reminder must never disrupt membership reconciliation. */ }
+  }
+  for (const association of associations || []) {
+    if (!association.stripe_customer_id || !association.stripe_subscription_id || association.status === 'VIP_ACTIVE') continue;
+    try {
+      const customer = await stripeGet(env, `/customers/${encodeURIComponent(association.stripe_customer_id)}`);
+      await enqueue({ dedupeKey: `access-incomplete:${association.stripe_subscription_id}`, subscriptionId: association.stripe_subscription_id, customerId: association.stripe_customer_id, emailType: 'INCOMPLETE_ONBOARDING', recipient: customer.email, subject: 'Your payment is safe — finish Kobe’s VIP access', body: `Your Kobe’s Betting Hub payment is confirmed, but Discord access still needs attention. Do not purchase again. Sign in at ${siteOrigin(env)}/member with the Discord account used at checkout, or contact support@kobesbettinghub.com and include your checkout email.` });
+    } catch { /* Retain operational alert; do not leak customer details. */ }
+  }
+  return { queued };
+}
+
 async function handleMemberWelcomeQueue(request, env) {
   const expected = String(env.MEMBER_WELCOME_QUEUE_SECRET || '');
   if (!expected || !await secureEqual(request.headers.get('authorization') || '', `Bearer ${expected}`)) {
@@ -1720,8 +1986,11 @@ async function handleMemberWelcomeQueue(request, env) {
   try {
     if (request.method === 'GET' && path === '/ops/member-welcomes') {
       // List identities only. Content is returned once, after an atomic claim.
-      const rows = await supabase(env, 'member_welcome_outbox?status=eq.QUEUED&select=id&order=created_at.asc&limit=10');
-      return reply({ notifications: rows || [] });
+      const [welcome, lifecycle] = await Promise.all([
+        supabase(env, 'member_welcome_outbox?status=eq.QUEUED&select=id,created_at&order=created_at.asc&limit=10'),
+        supabase(env, 'member_lifecycle_outbox?status=eq.QUEUED&select=id,created_at&order=created_at.asc&limit=10'),
+      ]);
+      return reply({ notifications: [...(welcome || []), ...(lifecycle || [])].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).slice(0,10).map(({id})=>({id})) });
     }
     if (request.method !== 'POST' || !['/ops/member-welcomes/claim', '/ops/member-welcomes/deliver', '/ops/member-welcomes/hold'].includes(path)) return reply({ error: 'Not found.' }, 404);
     const data = JSON.parse(await readTextWithLimit(request, 1000));
@@ -1729,27 +1998,458 @@ async function handleMemberWelcomeQueue(request, env) {
     if (!uuid(data.id)) return reply({ error: 'Invalid notification.' }, 400);
     if (path.endsWith('/claim')) {
       const token = crypto.randomUUID();
-      const rows = await supabase(env, `member_welcome_outbox?id=eq.${data.id}&status=eq.QUEUED`, {
-        method: 'PATCH', prefer: 'return=representation',
-        body: { status: 'SEND_STARTED', claim_token: token, send_started_at: new Date().toISOString() },
-      });
-      const row = rows?.[0];
+      let row = null;
+      for (const table of ['member_welcome_outbox','member_lifecycle_outbox']) {
+        const rows = await supabase(env, `${table}?id=eq.${data.id}&status=eq.QUEUED`, { method: 'PATCH', prefer: 'return=representation', body: { status: 'SEND_STARTED', claim_token: token, send_started_at: new Date().toISOString() } });
+        if (rows?.[0]) { row = rows[0]; break; }
+      }
       if (!row) return reply({ error: 'Already claimed.' }, 409);
       return reply({ id: row.id, claimToken: token, recipient: row.recipient, subject: row.subject, body: row.body });
     }
     if (!uuid(data.claimToken)) return reply({ error: 'Invalid claim.' }, 400);
     const delivered = path.endsWith('/deliver');
-    const rows = await supabase(env, `member_welcome_outbox?id=eq.${data.id}&claim_token=eq.${data.claimToken}&status=eq.SEND_STARTED`, {
-      method: 'PATCH', prefer: 'return=representation',
-      body: { status: delivered ? 'DELIVERED' : 'REVIEW_REQUIRED', ...(delivered ? { delivered_at: new Date().toISOString() } : {}) },
-    });
-    if (!rows?.length) return reply({ error: 'Claim cannot be acknowledged.' }, 409);
+    let acknowledged = false;
+    for (const table of ['member_welcome_outbox','member_lifecycle_outbox']) {
+      const rows = await supabase(env, `${table}?id=eq.${data.id}&claim_token=eq.${data.claimToken}&status=eq.SEND_STARTED`, { method: 'PATCH', prefer: 'return=representation', body: { status: delivered ? 'DELIVERED' : 'REVIEW_REQUIRED', ...(delivered ? { delivered_at: new Date().toISOString() } : {}) } });
+      if (rows?.length) { acknowledged = true; break; }
+    }
+    if (!acknowledged) return reply({ error: 'Claim cannot be acknowledged.' }, 409);
     return reply({ ok: true });
   } catch {
     // Never leak customer addresses, private links, or credentials into responses/logs.
     console.error(JSON.stringify({ message: 'Member welcome queue operation failed', path }));
     return reply({ error: 'Notification operation failed safely.' }, 503);
   }
+}
+
+async function activateCheckoutAssociation(env, association, eventId = null) {
+  if (!association?.discord_user_id || !association.stripe_checkout_session_id) throw new Error('Verified checkout identity is missing.');
+  const session = await stripeGet(env, `/checkout/sessions/${encodeURIComponent(association.stripe_checkout_session_id)}`);
+  if (session.status !== 'complete' || !['paid', 'no_payment_required'].includes(session.payment_status)) throw new Error('Stripe payment is not eligible.');
+  if (session.metadata?.checkout_association_id !== association.id || !session.subscription) throw new Error('Checkout association does not match Stripe.');
+  const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(stripeId(session.subscription))}`);
+  if (!ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status)) throw new Error('Stripe subscription is not eligible.');
+  let successfulPayment = session.payment_status === 'paid' && Number(session.amount_total || 0) > 0;
+  if (!successfulPayment && subscription.latest_invoice) {
+    const invoice = await stripeGet(env, `/invoices/${encodeURIComponent(stripeId(subscription.latest_invoice))}`);
+    successfulPayment = invoice.status === 'paid' && Number(invoice.amount_paid || 0) > 0;
+  }
+  if (!successfulPayment) throw new Error('An authoritative successful Stripe payment is required before VIP activation.');
+  const customerId = stripeId(session.customer) || stripeId(subscription.customer);
+  const attempts = Number(association.activation_attempts || 0) + 1;
+  await updateCheckoutAssociation(env, association.id, {
+    status: 'VIP_PENDING', stripe_customer_id: customerId,
+    stripe_subscription_id: subscription.id, activation_attempts: attempts,
+    last_activation_attempt_at: new Date().toISOString(), last_error_code: null,
+  });
+  try {
+    await claimDiscordLink(env, customerId, subscription.id, association.discord_user_id);
+    const updated = await stripe(env, `/subscriptions/${encodeURIComponent(subscription.id)}`, {
+      'metadata[discord_user_id]': association.discord_user_id,
+      'metadata[discord_connected_at]': new Date().toISOString(),
+      'metadata[checkout_association_id]': association.id,
+    }, { idempotencyKey: `link-${association.id}` });
+    await persistSubscription(env, updated, eventId);
+    if (await membershipEntitlementBlock(env, subscription.id)) throw new Error('Membership entitlement is blocked.');
+    await grantMemberRole(association.discord_user_id, env);
+    await updateCheckoutAssociation(env, association.id, { status: 'VIP_ACTIVE', next_retry_at: null, last_error_code: null });
+    await recordMembershipEvent(env, {
+      eventType: 'VIP_ACTIVATED', actorType: eventId ? 'stripe_webhook' : 'membership_reconciliation', actorId: eventId,
+      customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
+      details: { checkout_association_id: association.id, activation_attempt: attempts },
+    });
+    await recordAnalyticsEvent(env, {
+      eventName: 'payment_completed', sessionId: association.analytics_session_id, offer: association.offer,
+      customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
+      dedupeKey: `payment_completed:${subscription.id}`,
+    });
+    await recordAnalyticsEvent(env, {
+      eventName: 'vip_activated', sessionId: association.analytics_session_id, offer: association.offer,
+      customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
+      dedupeKey: `vip_activated:${subscription.id}`,
+    });
+    return 'VIP_ACTIVE';
+  } catch (error) {
+    const code = safeActivationError(error);
+    const delayMinutes = attempts === 1 ? 2 : attempts === 2 ? 10 : 60;
+    await updateCheckoutAssociation(env, association.id, {
+      status: attempts >= 3 ? 'VIP_FAILED' : 'VIP_PENDING', last_error_code: code,
+      next_retry_at: new Date(Date.now() + delayMinutes * 60 * 1000).toISOString(),
+    });
+    await recordAnalyticsEvent(env, {
+      eventName: 'payment_completed', sessionId: association.analytics_session_id, offer: association.offer,
+      customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
+      dedupeKey: `payment_completed:${subscription.id}`,
+    });
+    await recordAnalyticsEvent(env, {
+      eventName: 'vip_activation_failed', sessionId: association.analytics_session_id, offer: association.offer,
+      customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
+      dedupeKey: `vip_activation_failed:${subscription.id}:${attempts}`, properties: { error_code: code, attempt: attempts },
+    });
+    throw error;
+  }
+}
+
+async function onboardingStatus(request, env, origin) {
+  const token = new URL(request.url).searchParams.get('state') || '';
+  const association = await checkoutAssociationByToken(env, token);
+  if (!association) return json({ error: 'That welcome link is invalid.' }, 404, origin);
+  const expired = new Date(association.expires_at).getTime() <= Date.now() && !['PAYMENT_CONFIRMED','VIP_PENDING','VIP_ACTIVE','VIP_FAILED'].includes(association.status);
+  if (expired) return json({ state: 'expired' }, 410, origin);
+  const state = association.status === 'VIP_ACTIVE' ? 'active'
+    : association.status === 'VIP_FAILED' ? 'failed'
+      : ['PAYMENT_CONFIRMED', 'VIP_PENDING'].includes(association.status) ? 'processing'
+        : association.status === 'CHECKOUT_STARTED' ? 'awaiting_payment' : 'verifying';
+  return json({ state, paymentConfirmed: ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_ACTIVE','VIP_FAILED'].includes(association.status), discordConnected: Boolean(association.discord_user_id), vipActive: association.status === 'VIP_ACTIVE', retryAvailable: ['VIP_PENDING','VIP_FAILED'].includes(association.status), errorCode: association.last_error_code || null }, 200, origin);
+}
+
+async function retryOnboarding(request, env, origin) {
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  const association = await checkoutAssociationByToken(env, data.state || '');
+  if (!association || !['VIP_PENDING','VIP_FAILED','PAYMENT_CONFIRMED'].includes(association.status)) return json({ error: 'This activation cannot be retried.' }, 403, origin);
+  try { await activateCheckoutAssociation(env, association); return json({ ok: true }, 200, origin); }
+  catch { return json({ error: 'Your payment is safe, but Discord activation still needs attention. You do not need to purchase again.' }, 503, origin); }
+}
+
+async function retryPendingActivations(env) {
+  const now = new Date().toISOString();
+  const rows = await supabase(env, `membership_checkout_associations?status=in.(VIP_PENDING,VIP_FAILED)&next_retry_at=lte.${encodeURIComponent(now)}&select=*&order=next_retry_at.asc&limit=25`);
+  const summary = { checked: 0, activated: 0, failed: 0 };
+  for (const association of rows || []) {
+    summary.checked += 1;
+    try { await activateCheckoutAssociation(env, association); summary.activated += 1; }
+    catch { summary.failed += 1; }
+  }
+  return summary;
+}
+
+async function collectAnalytics(request, env, origin) {
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  if (!['page_view','join_page_view'].includes(data.event_name) || !/^[0-9a-f-]{36}$/i.test(data.session_id || '')) return json({ error: 'Invalid analytics event.' }, 400, origin);
+  const attribution = requestAttribution(request, data.attribution);
+  await supabase(env, 'analytics_sessions?on_conflict=id', {
+    method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal',
+    body: { id: data.session_id, first_path: String(data.path || '/').slice(0, 300), first_referrer_host: attribution.referrer_host || null, first_touch: attribution, last_touch: attribution, last_seen_at: new Date().toISOString() },
+  });
+  await supabase(env, `analytics_sessions?id=eq.${encodeURIComponent(data.session_id)}`, {
+    method: 'PATCH', prefer: 'return=minimal', body: { last_touch: attribution, last_seen_at: new Date().toISOString() },
+  });
+  await recordAnalyticsEvent(env, { eventName: data.event_name, sessionId: data.session_id, path: String(data.path || '/').slice(0, 300), dedupeKey: data.dedupe_key || null });
+  return json({ ok: true }, 202, origin);
+}
+
+async function readAdminSession(request, env) {
+  const token = String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  const [body, signature, ...extra] = token.split('.');
+  if (!body || !signature || extra.length || !await secureEqual(await sign(body, env.DISCORD_OAUTH_STATE_SECRET), signature)) return null;
+  try {
+    const value = JSON.parse(decode.decode(fromBase64Url(body)));
+    const allowed = new Set(String(env.ADMIN_DISCORD_USER_IDS || '').split(',').map(item => item.trim()).filter(Boolean));
+    return value.purpose === 'admin' && value.expiresAt >= Math.floor(Date.now() / 1000) && allowed.has(value.discordUserId) ? value : null;
+  } catch { return null; }
+}
+
+async function readMemberSession(request, env) {
+  const token = String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  const [body, signature, ...extra] = token.split('.');
+  if (!body || !signature || extra.length || !await secureEqual(await sign(body, env.DISCORD_OAUTH_STATE_SECRET), signature)) return null;
+  try {
+    const value = JSON.parse(decode.decode(fromBase64Url(body)));
+    return value.purpose === 'member' && value.expiresAt >= Math.floor(Date.now() / 1000) && /^\d{10,25}$/.test(value.discordUserId) ? value : null;
+  } catch { return null; }
+}
+
+async function memberDashboard(request, env, origin) {
+  const auth = await readMemberSession(request, env);
+  if (!auth) return json({ error: 'Member sign-in required.' }, 401, origin);
+  const membership = await membershipCustomerForDiscord(env, auth.discordUserId);
+  if (!membership?.current_subscription_id) return json({ error: 'No connected membership was found.' }, 404, origin);
+  const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(membership.current_subscription_id)}`);
+  const profile = await referralProfileForDiscord(env, auth.discordUserId);
+  const rewards = profile ? await supabase(env, `referral_rewards?referrer_discord_user_id=eq.${encodeURIComponent(auth.discordUserId)}&select=status,reward_amount_cents&limit=500`) : [];
+  const entitled = ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) && !await membershipEntitlementBlock(env, subscription.id);
+  return json({
+    plan: subscription.metadata?.offer || 'membership', status: subscription.status,
+    entitled, discordConnected: true, vipStatus: entitled ? 'active' : 'inactive',
+    renewsOrEndsAt: stripeTimestamp(subscription.cancel_at || subscription.current_period_end || subscription.items?.data?.[0]?.current_period_end),
+    scheduledToCancel: Boolean(subscription.cancel_at_period_end || subscription.cancel_at),
+    referral: profile ? { code: profile.referral_code, pending: (rewards || []).filter(item => !['PAYOUT_SENT','VOID'].includes(item.status)).length, paidCents: (rewards || []).filter(item => item.status === 'PAYOUT_SENT').reduce((sum, item) => sum + Number(item.reward_amount_cents || 0), 0) } : null,
+  }, 200, origin);
+}
+
+async function saveCancellationFeedback(request, env, origin) {
+  const auth = await readMemberSession(request, env);
+  if (!auth) return json({ error: 'Member sign-in required.' }, 401, origin);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  const allowed = new Set(['price','not_using','results','technical','billing','community','other']);
+  if (!allowed.has(data.reason)) return json({ error: 'Choose a cancellation reason.' }, 400, origin);
+  const membership = await membershipCustomerForDiscord(env, auth.discordUserId);
+  if (!membership?.current_subscription_id) return json({ error: 'No connected membership was found.' }, 404, origin);
+  await supabase(env, 'cancellation_feedback', { method: 'POST', prefer: 'return=minimal', body: {
+    stripe_subscription_id: membership.current_subscription_id, discord_user_id: auth.discordUserId,
+    reason_code: data.reason, reason_text: String(data.details || '').slice(0, 500) || null,
+    retention_offer_shown: Boolean(data.retentionOfferShown), retention_offer_accepted: false,
+  } });
+  return json({ ok: true }, 201, origin);
+}
+
+function analyticsRange(url) {
+  const now = new Date();
+  const preset = url.searchParams.get('range') || '30d';
+  let start = null; let end = now;
+  if (preset === 'today') start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  else if (preset === 'yesterday') { end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())); start = new Date(end.getTime() - 86400000); }
+  else if (preset === '7d') start = new Date(now.getTime() - 7 * 86400000);
+  else if (preset === '30d') start = new Date(now.getTime() - 30 * 86400000);
+  else if (preset === 'custom') {
+    start = new Date(url.searchParams.get('start') || 'invalid');
+    end = new Date(url.searchParams.get('end') || 'invalid');
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start >= end || end.getTime() - start.getTime() > 366 * 86400000) throw new Error('Invalid analytics date range.');
+  } else if (preset !== 'all') throw new Error('Invalid analytics range.');
+  return { preset, start, end, includes: value => { const time = new Date(value).getTime(); return Number.isFinite(time) && (!start || time >= start.getTime()) && time < end.getTime(); } };
+}
+
+function groupCount(values, key) {
+  return values.reduce((out, value) => { const label = key(value) || 'Unknown'; out[label] = (out[label] || 0) + 1; return out; }, {});
+}
+
+async function adminAnalytics(request, env, origin) {
+  if (!await readAdminSession(request, env)) return json({ error: 'Admin sign-in required.' }, 401, origin);
+  let range;
+  try { range = analyticsRange(new URL(request.url)); } catch (error) { return json({ error: error.message }, 400, origin); }
+  let paidInvoices = [];
+  try {
+    const invoicePage = await stripeGet(env, '/invoices?status=paid&limit=100');
+    paidInvoices = Array.isArray(invoicePage?.data) ? invoicePage.data : [];
+  } catch { /* The durable billing ledger remains the safe fallback. */ }
+  let successfulCharges = [];
+  if (!paidInvoices.length) {
+    try {
+      const chargePage = await stripeGet(env, '/charges?limit=100');
+      successfulCharges = (chargePage?.data || []).filter(item => item.paid && item.status === 'succeeded' && !item.refunded);
+    } catch { /* The durable billing ledger remains the safe fallback. */ }
+  }
+  const stripePayments = paidInvoices.length
+    ? paidInvoices.map(item => ({ created: item.created, amountPaid: Number(item.amount_paid || 0), subscriptionId: invoiceSubscriptionId(item), customerId: stripeId(item.customer) }))
+    : successfulCharges.map(item => ({ created: item.created, amountPaid: Number(item.amount_captured || item.amount || 0), subscriptionId: '', customerId: stripeId(item.customer) }));
+  let freePick = null;
+  try {
+    const response = await fetch('https://bettinghub-publisher.kobedirwin.workers.dev/api/free-pick/current', { signal: AbortSignal.timeout(8_000) });
+    if (response.ok) freePick = await response.json();
+  } catch { /* Dashboard shows unavailable without blocking business metrics. */ }
+  const [sessions, events, subscriptions, customers, associations, billing, referrals, profiles, feedback, webhooks] = await Promise.all([
+    supabase(env, 'analytics_sessions?select=*&order=started_at.desc&limit=1000'),
+    supabase(env, 'analytics_events?select=*&order=occurred_at.desc&limit=5000'),
+    supabase(env, 'membership_subscriptions?select=*&order=updated_at.desc&limit=1000'),
+    supabase(env, 'membership_customers?select=stripe_customer_id,discord_user_id,current_subscription_id&limit=1000'),
+    supabase(env, 'membership_checkout_associations?select=id,offer,referral_code,attribution,analytics_session_id,discord_user_id,stripe_subscription_id,status,activation_attempts,last_activation_attempt_at,last_error_code,next_retry_at,created_at&order=created_at.desc&limit=1000'),
+    supabase(env, 'membership_billing_events?select=*&order=occurred_at.desc&limit=5000'),
+    supabase(env, 'referral_rewards?select=referrer_discord_user_id,status,reward_amount_cents,created_at,first_paid_at&order=created_at.desc&limit=1000'),
+    supabase(env, 'referral_profiles?select=discord_user_id,referral_code,payout_status&limit=1000'),
+    supabase(env, 'cancellation_feedback?select=reason_code,retention_offer_shown,retention_offer_accepted,created_at&order=created_at.desc&limit=1000'),
+    supabase(env, 'stripe_webhook_events?status=eq.FAILED&select=event_id,event_type,error_detail,received_at&order=received_at.desc&limit=100'),
+  ]);
+  const rangedSessions = (sessions || []).filter(item => range.includes(item.started_at));
+  const rangedEvents = (events || []).filter(item => range.includes(item.occurred_at));
+  const rangedBilling = (billing || []).filter(item => range.includes(item.occurred_at));
+  const rangedReferrals = (referrals || []).filter(item => range.includes(item.created_at));
+  const rangedFeedback = (feedback || []).filter(item => range.includes(item.created_at));
+  const countEvents = name => rangedEvents.filter(event => event.event_name === name).length;
+  const eligible = (subscriptions || []).filter(item => ACTIVE_SUBSCRIPTION_STATUSES.has(item.status) && !item.entitlement_blocked);
+  const mappedEligible = eligible.map(subscription => ({ subscription, customer: (customers || []).find(item => item.stripe_customer_id === subscription.stripe_customer_id) }));
+  const roleChecks = await Promise.all(mappedEligible.map(async item => {
+    if (!item.customer?.discord_user_id) return { ...item, role: 'MISSING_DISCORD' };
+    try {
+      const member = await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${item.customer.discord_user_id}`, { headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }, env, { memberId: item.customer.discord_user_id, triggerType: 'admin_access_health' });
+      return { ...item, role: member?.roles?.includes(env.DISCORD_MEMBER_ROLE_ID) ? 'ACTIVE' : 'MISSING' };
+    } catch { return { ...item, role: 'CHECK_FAILED' }; }
+  }));
+  let vipWithoutEntitlement = null;
+  try {
+    const vipMembers = [];
+    let after = '';
+    for (let page = 0; page < 5; page += 1) {
+      const query = new URLSearchParams({ limit: '1000', ...(after ? { after } : {}) });
+      const members = await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members?${query}`, { headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }, env, { triggerType: 'admin_access_health' });
+      const current = Array.isArray(members) ? members : [];
+      vipMembers.push(...current.filter(member => member.roles?.includes(env.DISCORD_MEMBER_ROLE_ID)).map(member => member.user?.id).filter(Boolean));
+      if (current.length < 1000) break;
+      after = current.at(-1)?.user?.id || '';
+      if (!after) break;
+    }
+    const entitledDiscordIds = new Set(mappedEligible.map(item => item.customer?.discord_user_id).filter(Boolean));
+    vipWithoutEntitlement = vipMembers.filter(id => !entitledDiscordIds.has(id)).length;
+  } catch { /* Surface unavailable rather than inventing a zero. */ }
+  const activeIds = new Set(roleChecks.filter(item => item.role === 'ACTIVE').map(item => item.subscription.stripe_subscription_id));
+  const paidWithoutVip = roleChecks.filter(item => item.role !== 'ACTIVE').map(item => item.subscription);
+  const paidWithoutVipDetails = paidWithoutVip.map(subscription => {
+    const association = (associations || []).find(item => item.stripe_subscription_id === subscription.stripe_subscription_id);
+    return {
+      associationId: association?.id || null, plan: subscription.offer || 'unknown', entitlementStatus: subscription.status,
+      subscriptionId: subscription.stripe_subscription_id,
+      discordConnected: Boolean((customers || []).find(item => item.stripe_customer_id === subscription.stripe_customer_id)?.discord_user_id), vipStatus: association?.status || roleChecks.find(item => item.subscription.stripe_subscription_id === subscription.stripe_subscription_id)?.role || 'DISCORD_MISSING',
+      activationAttempts: association?.activation_attempts || 0, lastAttempt: association?.last_activation_attempt_at || null,
+      failureReason: association?.last_error_code || null, retryAt: association?.next_retry_at || null,
+    };
+  });
+  const invoiceWithinRange = stripePayments.filter(item => range.includes(new Date(Number(item.created || 0) * 1000).toISOString()));
+  const collected = stripePayments.length
+    ? invoiceWithinRange.reduce((sum, item) => sum + item.amountPaid, 0)
+    : rangedBilling.filter(item => item.event_type === 'invoice_paid').reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
+  const refunds = rangedBilling.filter(item => item.event_type === 'refund').reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
+  const paidSince = start => stripePayments.length
+    ? stripePayments.filter(item => Number(item.created || 0) * 1000 >= start).reduce((sum, item) => sum + item.amountPaid, 0)
+    : (billing || []).filter(item => item.event_type === 'invoice_paid' && new Date(item.occurred_at).getTime() >= start).reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
+  const currentDate = new Date();
+  const startOfDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()).getTime();
+  const startOfWeek = startOfDay - ((currentDate.getDay() + 6) % 7) * 86400000;
+  const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getTime();
+  const allTimeRevenue = stripePayments.length
+    ? stripePayments.reduce((sum, item) => sum + item.amountPaid, 0)
+    : (billing || []).filter(item => item.event_type === 'invoice_paid').reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
+  const mrr = eligible.reduce((sum, item) => sum + (item.offer === 'annual' ? 19499 / 12 : item.offer === 'six_month' ? 13499 / 6 : 3299), 0);
+  const funnelNames = ['unique_visitor','join_page_view','offer_selected','discord_verified','checkout_started','payment_completed','vip_activated'];
+  const funnel = funnelNames.map((name, index) => {
+    const count = name === 'unique_visitor' ? rangedSessions.length : countEvents(name);
+    const previous = index ? (funnelNames[index - 1] === 'unique_visitor' ? rangedSessions.length : countEvents(funnelNames[index - 1])) : count;
+    return { name, count, previousConversionRate: previous ? count / previous : 0, overallConversionRate: rangedSessions.length ? count / rangedSessions.length : 0, dropoff: Math.max(0, previous - count), dropoffRate: previous ? Math.max(0, previous - count) / previous : 0 };
+  });
+  const sessionById = new Map((sessions || []).map(item => [item.id, item]));
+  const associationBySubscription = new Map((associations || []).filter(item => item.stripe_subscription_id).map(item => [item.stripe_subscription_id, item]));
+  const normalizedSource = value => cleanAttribution({ first_source: value }).first_source;
+  const firstSourceForSession = session => normalizedSource(session?.first_touch?.first_source || session?.first_touch?.utm_source || session?.first_referrer_host || 'direct');
+  const firstCampaignForSession = session => String(session?.first_touch?.first_campaign || session?.first_touch?.utm_campaign || 'uncategorized').toLowerCase();
+  const sessionForSubscription = subscriptionId => sessionById.get(associationBySubscription.get(subscriptionId)?.analytics_session_id);
+  const mrrForSubscription = subscription => subscription.offer === 'annual' ? Math.round(19499 / 12) : subscription.offer === 'six_month' ? Math.round(13499 / 6) : 3299;
+  const revenueForSubscription = subscriptionId => {
+    const exact = invoiceWithinRange.filter(item => item.subscriptionId === subscriptionId);
+    if (exact.length) return exact.reduce((sum, item) => sum + item.amountPaid, 0);
+    return rangedBilling.filter(item => item.stripe_subscription_id === subscriptionId && item.event_type === 'invoice_paid').reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
+  };
+  const sourceRows = new Map(); const campaignRows = new Map();
+  const ensureSource = source => { if (!sourceRows.has(source)) sourceRows.set(source, { source, visitors: 0, joinViews: 0, checkoutStarts: 0, purchases: 0, revenueCents: 0, mrrCents: 0 }); return sourceRows.get(source); };
+  const ensureCampaign = (source, campaign) => { const key = `${source}:${campaign}`; if (!campaignRows.has(key)) campaignRows.set(key, { source, campaign, visitors: 0, joinViews: 0, checkoutStarts: 0, purchases: 0, revenueCents: 0, mrrCents: 0 }); return campaignRows.get(key); };
+  for (const session of rangedSessions) {
+    const source = firstSourceForSession(session); const campaign = firstCampaignForSession(session);
+    ensureSource(source).visitors += 1; ensureCampaign(source, campaign).visitors += 1;
+  }
+  for (const event of rangedEvents) {
+    const session = sessionById.get(event.session_id); const source = firstSourceForSession(session); const campaign = firstCampaignForSession(session);
+    const row = ensureSource(source); const campaignRow = ensureCampaign(source, campaign);
+    if (event.event_name === 'join_page_view') { row.joinViews += 1; campaignRow.joinViews += 1; }
+    if (event.event_name === 'checkout_started') { row.checkoutStarts += 1; campaignRow.checkoutStarts += 1; }
+    if (event.event_name === 'payment_completed') {
+      const paid = revenueForSubscription(event.stripe_subscription_id);
+      row.purchases += 1; row.revenueCents += paid; campaignRow.purchases += 1; campaignRow.revenueCents += paid;
+    }
+  }
+  for (const subscription of eligible) {
+    const session = sessionForSubscription(subscription.stripe_subscription_id); const source = firstSourceForSession(session); const campaign = firstCampaignForSession(session); const amount = mrrForSubscription(subscription);
+    ensureSource(source).mrrCents += amount; ensureCampaign(source, campaign).mrrCents += amount;
+  }
+  const sources = [...sourceRows.values()].map(item => ({ ...item, conversionRate: item.visitors ? item.purchases / item.visitors : 0 })).sort((a,b) => b.visitors - a.visitors);
+  const campaigns = [...campaignRows.values()].map(item => ({ ...item, conversionRate: item.visitors ? item.purchases / item.visitors : 0 })).sort((a,b) => b.revenueCents - a.revenueCents || b.visitors - a.visitors);
+  const referralStatus = status => rangedReferrals.filter(item => item.status === status).length;
+  const canceled = (subscriptions || []).filter(item => item.status === 'canceled');
+  const ageAtEndDays = item => (new Date(item.updated_at).getTime() - new Date(item.created_at).getTime()) / 86400000;
+  const now = Date.now();
+  const activeAges = eligible.map(item => (now - new Date(item.created_at).getTime()) / 86400000);
+  const durations = [...activeAges, ...canceled.map(ageAtEndDays)].filter(Number.isFinite);
+  const dayKey = value => new Date(value).toISOString().slice(0, 10);
+  const historyMap = new Map();
+  for (let offset = 89; offset >= 0; offset -= 1) { const date = new Date(now - offset * 86400000).toISOString().slice(0,10); historyMap.set(date, { date, newMembers: 0, payments: 0, renewals: 0, cancellations: 0, failedPayments: 0, revenueCents: 0 }); }
+  for (const event of events || []) { const row = historyMap.get(dayKey(event.occurred_at)); if (row && event.event_name === 'payment_completed') row.newMembers += 1; if (row && event.event_name === 'cancellation_completed') row.cancellations += 1; }
+  for (const item of billing || []) { const row = historyMap.get(dayKey(item.occurred_at)); if (!row) continue; if (item.event_type === 'invoice_paid') { row.payments += 1; row.revenueCents += Number(item.amount_cents || 0); if (item.billing_reason === 'subscription_cycle') row.renewals += 1; } if (item.event_type === 'invoice_failed') row.failedPayments += 1; }
+  const profileByDiscord = new Map((profiles || []).map(item => [item.discord_user_id, item]));
+  const leaderboardMap = new Map();
+  for (const reward of referrals || []) { const id = reward.referrer_discord_user_id || 'unknown'; if (!leaderboardMap.has(id)) leaderboardMap.set(id, { discordUserId: id, referralCode: profileByDiscord.get(id)?.referral_code || '', successfulReferrals: 0, pendingReferrals: 0, totalEarnedCents: 0 }); const row = leaderboardMap.get(id); if (['READY','PAYOUT_SENT'].includes(reward.status)) row.successfulReferrals += 1; else if (!['VOID'].includes(reward.status)) row.pendingReferrals += 1; if (reward.status === 'PAYOUT_SENT') row.totalEarnedCents += Number(reward.reward_amount_cents || 0); }
+  const stripeProfiles = await Promise.all((customers || []).slice(0, 250).map(async customer => {
+    try { const stripeCustomer = await stripeGet(env, `/customers/${encodeURIComponent(customer.stripe_customer_id)}`); return [customer.stripe_customer_id, { name: stripeCustomer.name || '', email: stripeCustomer.email || '' }]; }
+    catch { return [customer.stripe_customer_id, { name: '', email: '' }]; }
+  }));
+  const stripeProfileMap = new Map(stripeProfiles);
+  const baseMembers = (subscriptions || []).map(subscription => {
+    const customer = (customers || []).find(item => item.stripe_customer_id === subscription.stripe_customer_id); const identity = stripeProfileMap.get(subscription.stripe_customer_id) || {};
+    const association = associationBySubscription.get(subscription.stripe_subscription_id); const analyticsSession = sessionById.get(association?.analytics_session_id); const firstTouch = analyticsSession?.first_touch || association?.attribution || {}; const lastTouch = analyticsSession?.last_touch || association?.attribution || {};
+    const memberRewards = (referrals || []).filter(item => item.referrer_discord_user_id === customer?.discord_user_id); const purchase = (billing || []).filter(item => item.stripe_subscription_id === subscription.stripe_subscription_id && item.event_type === 'invoice_paid').sort((a,b) => new Date(a.occurred_at) - new Date(b.occurred_at))[0];
+    return { name: identity.name, email: identity.email, plan: subscription.offer || 'unknown', status: subscription.status, stripeCustomerId: subscription.stripe_customer_id, subscriptionId: subscription.stripe_subscription_id, discordUserId: customer?.discord_user_id || '', vipStatus: association?.status || 'UNKNOWN', joinedAt: subscription.created_at, purchaseAt: purchase?.occurred_at || null, renewsOrEndsAt: subscription.cancel_at || subscription.current_period_end, canceling: Boolean(subscription.cancel_at_period_end || subscription.cancel_at), source: firstSourceForSession(analyticsSession), firstSource: firstSourceForSession(analyticsSession), firstMedium: firstTouch.first_medium || firstTouch.utm_medium || '', firstCampaign: firstTouch.first_campaign || firstTouch.utm_campaign || '', lastSource: normalizedSource(lastTouch.last_source || lastTouch.utm_source || firstTouch.first_source || 'direct'), lastMedium: lastTouch.last_medium || lastTouch.utm_medium || '', lastCampaign: lastTouch.last_campaign || lastTouch.utm_campaign || '', landingPage: analyticsSession?.first_path || firstTouch.landing_path || '', referralSource: association?.referral_code || firstTouch.referral_identifier || '', referralCreditsCents: memberRewards.filter(item => item.status === 'PAYOUT_SENT').reduce((sum,item)=>sum+Number(item.reward_amount_cents||0),0), pendingReferralCreditsCents: memberRewards.filter(item => !['PAYOUT_SENT','VOID'].includes(item.status)).reduce((sum,item)=>sum+Number(item.reward_amount_cents||0),0), failureReason: association?.last_error_code || '' };
+  });
+  const normalizedEmail = value => String(value || '').trim().toLowerCase();
+  const distinct = values => [...new Set(values.filter(Boolean))];
+  const duplicateGroups = [];
+  const emailGroups = new Map(); const discordGroups = new Map(); const customerGroups = new Map();
+  for (const member of baseMembers) {
+    const email = normalizedEmail(member.email);
+    if (email) emailGroups.set(email, [...(emailGroups.get(email) || []), member]);
+    if (member.discordUserId) discordGroups.set(member.discordUserId, [...(discordGroups.get(member.discordUserId) || []), member]);
+    if (member.stripeCustomerId) customerGroups.set(member.stripeCustomerId, [...(customerGroups.get(member.stripeCustomerId) || []), member]);
+  }
+  const addDuplicateGroup = (type, value, groupMembers, reason) => {
+    const activeMembers = groupMembers.filter(item => ACTIVE_SUBSCRIPTION_STATUSES.has(item.status));
+    duplicateGroups.push({ type, value, reason, risk: activeMembers.length > 1 ? 'high' : 'review', activeSubscriptions: activeMembers.length,
+      customerIds: distinct(groupMembers.map(item => item.stripeCustomerId)), subscriptionIds: distinct(groupMembers.map(item => item.subscriptionId)),
+      discordIds: distinct(groupMembers.map(item => item.discordUserId)), emails: distinct(groupMembers.map(item => normalizedEmail(item.email))), names: distinct(groupMembers.map(item => item.name)) });
+  };
+  for (const [email, groupMembers] of emailGroups) if (distinct(groupMembers.map(item => item.stripeCustomerId)).length > 1) addDuplicateGroup('email', email, groupMembers, 'Same email appears on separate Stripe customers');
+  for (const [discordId, groupMembers] of discordGroups) if (distinct(groupMembers.map(item => item.stripeCustomerId)).length > 1) addDuplicateGroup('discord', discordId, groupMembers, 'Same Discord account appears on separate Stripe customers');
+  for (const [customerId, groupMembers] of customerGroups) if (groupMembers.filter(item => ACTIVE_SUBSCRIPTION_STATUSES.has(item.status)).length > 1) addDuplicateGroup('subscription', customerId, groupMembers, 'Stripe customer has multiple active subscriptions');
+  duplicateGroups.sort((a, b) => (a.risk === b.risk ? b.activeSubscriptions - a.activeSubscriptions : a.risk === 'high' ? -1 : 1));
+  const duplicateSubscriptionIds = new Set(duplicateGroups.flatMap(group => group.subscriptionIds));
+  const members = baseMembers.map(member => ({ ...member, duplicate: duplicateSubscriptionIds.has(member.subscriptionId), duplicateReasons: duplicateGroups.filter(group => group.subscriptionIds.includes(member.subscriptionId)).map(group => group.reason) }));
+  const webhookFailures = (webhooks || []).filter(item => range.includes(item.received_at));
+  const awaitingDiscord = (associations || []).filter(item => ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_FAILED'].includes(item.status) && !item.discord_user_id);
+  const failedPayments = rangedBilling.filter(item => item.event_type === 'invoice_failed');
+  const referralReview = (referrals || []).filter(item => ['REVIEW_REQUIRED','PAYOUT_UNCERTAIN'].includes(item.status));
+  return json({
+    generatedAt: new Date().toISOString(), range: { preset: range.preset, start: range.start?.toISOString() || null, end: range.end.toISOString() },
+    traffic: { uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
+    conversion: { funnel, offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), purchaseConversionRate: rangedSessions.length ? countEvents('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: countEvents('payment_completed') ? countEvents('vip_activated') / countEvents('payment_completed') : 0 },
+    revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPayments.length, introRevenueCents: invoiceWithinRange.filter(item => item.amountPaid === 1000).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
+    membership: { active: eligible.length, intro: eligible.filter(item => item.offer === 'starter').length, monthly: eligible.filter(item => ['trial_2_day','referral_trial'].includes(item.offer)).length, sixMonth: eligible.filter(item => item.offer === 'six_month').length, annual: eligible.filter(item => item.offer === 'annual').length, newMembers: countEvents('payment_completed'), renewals: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason === 'subscription_cycle').length, scheduledCancellations: eligible.filter(item => item.cancel_at_period_end || item.cancel_at).length, actualCancellations: canceled.filter(item => range.includes(item.updated_at)).length, duplicateGroups, duplicateCount: duplicateGroups.length, highRiskDuplicateCount: duplicateGroups.filter(item => item.risk === 'high').length, members },
+    discord: { paidWithoutVip: paidWithoutVip.length, vipActive: activeIds.size, pending: (associations || []).filter(item => item.status === 'VIP_PENDING').length, failed: (associations || []).filter(item => item.status === 'VIP_FAILED').length, recovered: (associations || []).filter(item => item.status === 'VIP_ACTIVE' && Number(item.activation_attempts || 0) > 1).length, paidDiscordMissing: paidWithoutVipDetails.filter(item => !item.discordConnected).length, vipWithoutEntitlement, details: paidWithoutVipDetails },
+    referrals: { visits: countEvents('referral_visit') + rangedSessions.filter(item => item.first_touch?.first_source === 'referral' || item.first_touch?.referral_identifier).length, referredPurchases: rangedReferrals.length, pending: referralStatus('PENDING_PAYMENT') + referralStatus('HOLDING'), qualified: rangedReferrals.filter(item => ['READY','PAYOUT_SENT'].includes(item.status)).length, paidCashCents: rangedReferrals.filter(item => item.status === 'PAYOUT_SENT').reduce((sum, item) => sum + Number(item.reward_amount_cents || 0), 0), leaderboard: [...leaderboardMap.values()].map(item => ({ ...item, conversionRate: item.successfulReferrals + item.pendingReferrals ? item.successfulReferrals / (item.successfulReferrals + item.pendingReferrals) : 0 })).sort((a,b)=>b.successfulReferrals-a.successfulReferrals) },
+    retention: {
+      churnRate: (eligible.length + canceled.length) ? canceled.length / (eligible.length + canceled.length) : 0,
+      renewalRate: rangedBilling.filter(item => item.billing_reason === 'subscription_cycle').length
+        ? rangedBilling.filter(item => item.billing_reason === 'subscription_cycle' && item.event_type === 'invoice_paid').length / rangedBilling.filter(item => item.billing_reason === 'subscription_cycle').length : 0,
+      averageDurationDays: durations.length ? durations.reduce((a,b)=>a+b,0)/durations.length : 0,
+      starterToMonthlyRate: countEvents('starter_started') ? countEvents('starter_upgraded') / countEvents('starter_started') : 0,
+      active30Days: activeAges.filter(days => days >= 30).length, active60Days: activeAges.filter(days => days >= 60).length, active90Days: activeAges.filter(days => days >= 90).length,
+      firstWeekCancellations: canceled.filter(item => ageAtEndDays(item) <= 7).length,
+      firstMonthCancellations: canceled.filter(item => ageAtEndDays(item) <= 31).length,
+      cancellationReasons: rangedFeedback.reduce((result, item) => ({ ...result, [item.reason_code]: (result[item.reason_code] || 0) + 1 }), {}),
+      offersShown: countEvents('retention_offer_shown'), offersAccepted: countEvents('retention_offer_accepted'),
+    },
+    history: [...historyMap.values()],
+    operations: { freePick },
+    alerts: { total: awaitingDiscord.length + paidWithoutVipDetails.length + webhookFailures.length + failedPayments.length + referralReview.length + duplicateGroups.length, awaitingDiscord, paidWithoutVip: paidWithoutVipDetails, webhookFailures, failedPayments, referralReview, duplicates: duplicateGroups },
+  }, 200, origin);
+}
+
+async function adminRetryVip(request, env, origin) {
+  if (!await readAdminSession(request, env)) return json({ error: 'Admin sign-in required.' }, 401, origin);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  if (data.associationId && /^[0-9a-f-]{36}$/i.test(data.associationId)) {
+    const rows = await supabase(env, `membership_checkout_associations?id=eq.${encodeURIComponent(data.associationId)}&select=*&limit=1`);
+    const association = rows?.[0];
+    if (!association?.stripe_subscription_id || !association.discord_user_id) return json({ error: 'A verified paid association is required.' }, 403, origin);
+    try { await activateCheckoutAssociation(env, association); return json({ ok: true }, 200, origin); }
+    catch { return json({ error: 'Stripe entitlement was not eligible or Discord sync failed safely.' }, 409, origin); }
+  }
+  if (!/^sub_[A-Za-z0-9_]+$/.test(data.subscriptionId || '')) return json({ error: 'Invalid activation.' }, 400, origin);
+  try {
+    const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(data.subscriptionId)}`);
+    const discordUserId = await discordUserForSubscription(env, subscription);
+    if (!discordUserId || !ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) || await membershipEntitlementBlock(env, subscription.id)) throw new Error('Not entitled');
+    await grantMemberRole(discordUserId, env);
+    await recordMembershipEvent(env, { eventType: 'ADMIN_VIP_SYNC', actorType: 'discord_admin', customerId: stripeId(subscription.customer), subscriptionId: subscription.id, discordUserId });
+    return json({ ok: true }, 200, origin);
+  }
+  catch { return json({ error: 'Stripe entitlement was not eligible or Discord sync failed safely.' }, 409, origin); }
 }
 
 async function handleWebhook(request, env) {
@@ -1771,7 +2471,28 @@ async function handleWebhook(request, env) {
       const customerId = stripeId(session?.customer);
       const subscriptionId = stripeId(session?.subscription);
       await persistCustomer(env, customerId, { subscriptionId });
-      await queueMemberWelcome(env, event);
+      const associationId = String(session?.metadata?.checkout_association_id || '');
+      if (!associationId || (session.payment_status === 'paid' && Number(session.amount_total || 0) > 0)) await queueMemberWelcome(env, event);
+      if (/^[0-9a-f-]{36}$/i.test(associationId)) {
+        const rows = await supabase(env, `membership_checkout_associations?id=eq.${encodeURIComponent(associationId)}&select=*&limit=1`);
+        const association = rows?.[0];
+        if (!association || association.stripe_checkout_session_id !== session.id) throw new Error('Stripe checkout association did not match the verified pending identity.');
+        if (association.status === 'VIP_ACTIVE') outcome = 'PAYMENT_CONFIRMED_VIP_ALREADY_ACTIVE';
+        else if (session.payment_status !== 'paid' || Number(session.amount_total || 0) <= 0) {
+          await updateCheckoutAssociation(env, association.id, {
+            status: 'CHECKOUT_STARTED', stripe_customer_id: customerId, stripe_subscription_id: subscriptionId,
+          }, ['CHECKOUT_STARTED']);
+          outcome = 'DISCORD_VERIFIED_AWAITING_FIRST_PAYMENT';
+        }
+        else {
+          await updateCheckoutAssociation(env, association.id, {
+            status: 'PAYMENT_CONFIRMED', stripe_customer_id: customerId, stripe_subscription_id: subscriptionId,
+          }, ['CHECKOUT_STARTED','PAYMENT_CONFIRMED','VIP_PENDING','VIP_FAILED']);
+          const refreshed = { ...association, status: 'PAYMENT_CONFIRMED', stripe_customer_id: customerId, stripe_subscription_id: subscriptionId };
+          await activateCheckoutAssociation(env, refreshed, event.id);
+          outcome = 'PAYMENT_CONFIRMED_VIP_ACTIVATED';
+        }
+      }
       if (session?.metadata?.offer === 'referral_trial') {
         await createReferralAttribution(env, {
           referralCode: session.metadata.referral_code,
@@ -1780,18 +2501,32 @@ async function handleWebhook(request, env) {
           subscriptionId,
         });
         outcome = 'REFERRAL_CHECKOUT_RECORDED';
-      } else outcome = 'CHECKOUT_RECORDED';
+      } else if (!associationId) outcome = 'CHECKOUT_RECORDED';
     } else if (['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
       const subscription = event.data?.object;
       await persistSubscription(env, subscription, event.id);
       if (event.type === 'customer.subscription.updated') await recordRetentionRedemption(env, subscription, event.id);
       outcome = await syncMemberRole(subscription, env);
     } else if (event.type === 'invoice.paid') {
-      outcome = await processReferralInvoicePaid(env, event.data?.object, event.id);
+      const invoice = event.data?.object;
+      await recordBillingEvent(env, event, { eventType: 'invoice_paid', invoiceId: invoice?.id, customerId: stripeId(invoice?.customer), subscriptionId: invoiceSubscriptionId(invoice), amountCents: Number(invoice?.amount_paid), currency: invoice?.currency, billingReason: invoice?.billing_reason });
+      const paidSubscriptionId = invoiceSubscriptionId(invoice);
+      if (paidSubscriptionId && Number(invoice?.amount_paid || 0) > 0) {
+        const rows = await supabase(env, `membership_checkout_associations?stripe_subscription_id=eq.${encodeURIComponent(paidSubscriptionId)}&status=neq.VIP_ACTIVE&select=*&limit=1`);
+        if (rows?.[0]) {
+          await activateCheckoutAssociation(env, rows[0], event.id);
+          await queuePaidAssociationWelcome(env, rows[0], event, invoice);
+        }
+      }
+      outcome = await processReferralInvoicePaid(env, invoice, event.id);
     } else if (event.type === 'invoice.payment_failed') {
+      const invoice = event.data?.object;
+      await recordBillingEvent(env, event, { eventType: 'invoice_failed', invoiceId: invoice?.id, customerId: stripeId(invoice?.customer), subscriptionId: invoiceSubscriptionId(invoice), amountCents: Number(invoice?.amount_due), currency: invoice?.currency });
       outcome = await processInvoicePaymentFailed(env, event.data?.object, event.id);
     } else if (event.type === 'charge.refunded') {
-      const invoiceId = stripeId(event.data?.object?.invoice);
+      const chargeObject = event.data?.object;
+      const invoiceId = stripeId(chargeObject?.invoice);
+      await recordBillingEvent(env, event, { eventType: 'refund', invoiceId, chargeId: chargeObject?.id, customerId: stripeId(chargeObject?.customer), amountCents: Number(chargeObject?.amount_refunded), currency: chargeObject?.currency });
       const entitlementOutcome = await blockEntitlementForInvoice(env, invoiceId, event.id, 'CHARGE_REFUNDED');
       const referralOutcome = await voidReferralForInvoice(env, invoiceId, 'QUALIFYING_CHARGE_REFUNDED');
       outcome = `${entitlementOutcome};${referralOutcome}`;
@@ -1801,6 +2536,7 @@ async function handleWebhook(request, env) {
       else {
         const charge = await stripeGet(env, `/charges/${encodeURIComponent(chargeId)}`);
         const invoiceId = stripeId(charge?.invoice);
+        await recordBillingEvent(env, event, { eventType: 'dispute', invoiceId, chargeId, customerId: stripeId(charge?.customer), amountCents: Number(event.data?.object?.amount), currency: event.data?.object?.currency });
         const entitlementOutcome = await blockEntitlementForInvoice(env, invoiceId, event.id, 'CHARGE_DISPUTED');
         const referralOutcome = await voidReferralForInvoice(env, invoiceId, 'QUALIFYING_CHARGE_DISPUTED');
         outcome = `${entitlementOutcome};${referralOutcome}`;
@@ -1844,6 +2580,32 @@ export default {
       }
     }
     if (request.method === 'GET' && url.pathname === '/cancel/offer') return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
+    if (request.method === 'GET' && url.pathname === '/admin/login') {
+      if (!discordReady(env) || !env.ADMIN_DISCORD_USER_IDS) return new Response('Admin access is not configured.', { status: 503 });
+      const state = await createDiscordState({ intent: 'admin' }, env);
+      return redirect(discordAuthorizationUrl(state, env, 'admin'));
+    }
+    if (request.method === 'GET' && url.pathname === '/member/login') {
+      if (!discordReady(env)) return discordNotReadyResponse(env);
+      const state = await createDiscordState({ intent: 'member' }, env);
+      return redirect(discordAuthorizationUrl(state, env, 'member'));
+    }
+    if (request.method === 'GET' && url.pathname === '/member/dashboard') return memberDashboard(request, env, origin);
+    if (request.method === 'GET' && url.pathname === '/cancel/feedback-login') {
+      if (!discordReady(env)) return discordNotReadyResponse(env);
+      const state = await createDiscordState({ intent: 'feedback' }, env);
+      return redirect(discordAuthorizationUrl(state, env, 'feedback'));
+    }
+    if (request.method === 'POST' && url.pathname === '/cancel/feedback') return saveCancellationFeedback(request, env, origin);
+    if (request.method === 'GET' && url.pathname === '/admin/analytics') return adminAnalytics(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/admin/retry-vip') return adminRetryVip(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/analytics/event') return collectAnalytics(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/checkout/prepare') {
+      const limited = await checkoutRateLimitResponse(request, env, origin);
+      return limited || prepareCheckout(request, env, origin);
+    }
+    if (request.method === 'GET' && url.pathname === '/onboarding/status') return onboardingStatus(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/onboarding/retry') return retryOnboarding(request, env, origin);
     if (request.method === 'GET' && url.pathname === '/discord/connect') return startDiscordConnection(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/login') return startPortalLogin(request, env);
     if (request.method === 'GET' && url.pathname === '/referrals/login') return startReferralLogin(request, env);
@@ -1858,7 +2620,10 @@ export default {
     return json({ error: 'Not found.' }, 404, origin);
   },
   scheduled(controller, env, ctx) {
-    ctx.waitUntil(Promise.all([reconcileMemberships(env), processReferralPayouts(env)]));
+    const frequent = retryPendingActivations(env);
+    const daily = controller.cron === '15 16 * * *'
+      ? Promise.all([reconcileMemberships(env), processReferralPayouts(env), queueLifecycleReminders(env)]) : Promise.resolve();
+    ctx.waitUntil(Promise.all([frequent, daily]));
   },
 };
 

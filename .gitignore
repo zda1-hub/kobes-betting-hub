@@ -3,6 +3,7 @@ tmp/
 .env
 node_modules/
 .public-site/
+desktop/KobesMonitor/build/
 trackers/x-monitoring/
 .env.*
 !.env.example

@@ -487,7 +487,9 @@ async function publishFreePick(request, env) {
   }
 
   const xEnabled = Boolean(env.X_CLIENT_ID);
-  const pick = { publishedDate, caption, details, objectKey, storyObjectKey, updatedAt: new Date().toISOString(), xStatus: image && xEnabled ? "pending" : "not_requested" };
+  const pickId = typeof input.pickId === "string" && /^[A-Za-z0-9_-]{4,160}$/.test(input.pickId) ? input.pickId : null;
+  const xQueueId = typeof input.xQueueId === "string" && /^free-x-[a-f0-9]{40}$/.test(input.xQueueId) ? input.xQueueId : null;
+  const pick = { publishedDate, caption, details, pickId, xQueueId, objectKey, storyObjectKey, updatedAt: new Date().toISOString(), xStatus: image && xEnabled ? "pending" : "not_requested" };
   await writeFreePick(pick, env);
   await putFreePickObject(env, `${FREE_PICK_BY_DATE_PREFIX}${publishedDate}.json`, JSON.stringify(pick), "application/json; charset=UTF-8", "no-store");
   if (!image) return json({ ...publicFreePick(pick, new URL(request.url).origin), xPosted: false, message: "Text-only Free Pick published to the website." }, 201);
@@ -512,7 +514,20 @@ async function getCurrentFreePick(request, env) {
   if (!hasFreePickStore(env)) return json({ error: "Free Pick media storage is not configured" }, 503, corsHeaders(request));
   const pick = await readFreePick(env);
   if (!pick) return json({ error: "No current free pick" }, 404, corsHeaders(request));
-  return json(publicFreePick(pick, new URL(request.url).origin), 200, corsHeaders(request));
+  let xReceipt = null;
+  let instagram = null;
+  if (env.DB && pick.xQueueId) {
+    xReceipt = await env.DB.prepare(`SELECT status, published_at AS xPublishedAt, x_post_id AS xPostId, last_error AS xError FROM approved_posts WHERE id = ?`).bind(pick.xQueueId).first();
+  } else if (env.DB && pick.updatedAt) {
+    const start = new Date(Date.parse(pick.updatedAt) - 60_000).toISOString();
+    const end = new Date(Date.parse(pick.updatedAt) + 10 * 60_000).toISOString();
+    xReceipt = await env.DB.prepare(`SELECT status, published_at AS xPublishedAt, x_post_id AS xPostId, last_error AS xError FROM approved_posts WHERE id LIKE 'free-x-%' AND created_at BETWEEN ? AND ? ORDER BY created_at ASC LIMIT 1`).bind(start, end).first();
+  }
+  if (env.DB) {
+    instagram = await env.DB.prepare(`SELECT account_id AS accountId, expires_at AS expiresAt, checked_at AS checkedAt FROM instagram_connections WHERE target = 'kobeslocks'`).first();
+  }
+  const resolved = xReceipt ? { ...pick, xStatus: xReceipt.status, xPublishedAt: xReceipt.xPublishedAt || null, xPostId: xReceipt.xPostId || null, xError: xReceipt.xError || null } : pick;
+  return json({ ...publicFreePick(resolved, new URL(request.url).origin), instagramConnectionStatus: instagram ? 'connected' : 'not_connected', instagramAccountId: instagram?.accountId || null }, 200, corsHeaders(request));
 }
 
 async function getCurrentFreePickImage(request, env) {
@@ -605,6 +620,13 @@ function publicFreePick(pick, origin) {
     details: pick.details || {},
     imageUrl: pick.objectKey ? `${origin}/media/free-pick/current?v=${encodeURIComponent(pick.updatedAt || pick.publishedDate)}` : null,
     storyUrl: pick.storyObjectKey ? `${origin}/media/free-pick/story/${encodeURIComponent(pick.publishedDate)}` : null,
+    websiteStatus: "published",
+    websitePublishedAt: pick.updatedAt || null,
+    xStatus: pick.xStatus || "not_requested",
+    xPublishedAt: pick.xPublishedAt || null,
+    xPostId: pick.xPostId || null,
+    instagramStatus: pick.storyObjectKey ? "story_ready_manual_post_unverified" : "not_ready",
+    instagramStoryPreparedAt: pick.storyObjectKey ? (pick.updatedAt || null) : null,
   };
 }
 

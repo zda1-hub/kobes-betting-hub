@@ -26,6 +26,16 @@ const APPROVED_MIGRATIONS = [
     version: '010_referral_payout_safety',
     sha256: '2e8e1eee812d17db951d73136c50d98e13551076d5399f99b937525a6069546d',
   },
+  {
+    name: '012_secure_onboarding_analytics.sql',
+    version: '012_secure_onboarding_analytics',
+    sha256: '3274ad31331f9835698aaead3b45c8c651602a2688d8d34233188d59957298c8',
+  },
+  {
+    name: '013_long_term_dashboard.sql',
+    version: '013_long_term_dashboard',
+    sha256: 'b9575de40d9c7a17fc727e03f5a80f99d5b53e0fba613f6f667b14e05eeb4e0f',
+  },
 ];
 const PROTECTED_TABLES = [
   'source_posts',
@@ -46,6 +56,12 @@ const PROTECTED_TABLES = [
   'referral_rewards',
   'referral_events',
   'referral_auth_sessions',
+  'membership_checkout_associations',
+  'analytics_sessions',
+  'analytics_events',
+  'cancellation_feedback',
+  'membership_billing_events',
+  'member_lifecycle_outbox',
 ];
 const REQUIRED_SERVICE_ROLE_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE'];
 
@@ -242,7 +258,7 @@ async function run({
     try {
       await client.query(
         'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
-        ['kobes-betting-hub', 'production-migrations-007-009'],
+        ['kobes-betting-hub', 'production-migrations-007-012'],
       );
       const appliedInsideLock = await readAppliedVersions(client);
       const pending = migrations.filter((migration) => !appliedInsideLock.has(migration.version));

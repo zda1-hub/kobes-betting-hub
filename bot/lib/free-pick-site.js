@@ -1,7 +1,7 @@
 const DEFAULT_PUBLISHER_URL = 'https://bettinghub-publisher.kobedirwin.workers.dev';
 const { sourceEvidence } = require('./source-review');
 const { auditedFetch } = require('../../pipeline/api-client');
-const { buildFreePickXPost } = require('./free-pick-x');
+const { buildFreePickXPost, freePickXPostId } = require('./free-pick-x');
 const { instagramStoryFilename, renderInstagramStory } = require('./instagram-story');
 
 function phoenixOperatingDate() {
@@ -70,7 +70,7 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
     const form = new FormData();
     if (imagePayload) form.append('image', new Blob([imagePayload], { type: imageType }), 'free-pick.png');
     if (storyPayload) form.append('story', new Blob([storyPayload], { type: 'image/png' }), instagramStoryFilename(packet.pick_id));
-    Object.entries({ date, caption, ...details }).forEach(([key, value]) => form.append(key, String(value || '')));
+    Object.entries({ date, caption, pickId: packet.pick_id, xQueueId: freePickXPostId(packet.pick_id), ...details }).forEach(([key, value]) => form.append(key, String(value || '')));
     response = await auditedFetch(`${config.url}/api/free-pick/publish`, { method: 'POST', headers: { authorization: `Bearer ${config.secret}` }, body: form }, {
       service: 'cloudflare-worker',
       endpointClass: '/api/free-pick/publish',
@@ -83,7 +83,7 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
     response = await auditedFetch(`${config.url}/api/free-pick/publish`, {
       method: 'POST',
       headers: { authorization: `Bearer ${config.secret}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ date, caption, details }),
+      body: JSON.stringify({ date, caption, pickId: packet.pick_id, xQueueId: freePickXPostId(packet.pick_id), details }),
     }, {
       service: 'cloudflare-worker',
       endpointClass: '/api/free-pick/publish',

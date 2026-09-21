@@ -6,7 +6,7 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const outputRoot = path.join(projectRoot, '.public-site');
 export const productionMembershipWorkerOrigin = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
 
-const membershipConfigFiles = ['join.html', 'membership.html', 'cancel.html'];
+const membershipConfigFiles = ['join.html', 'membership.html', 'cancel.html', 'welcome.html', 'admin-analytics.html', 'member.html'];
 const membershipConfigPattern = /window\.__KBH_MEMBERSHIP_CONFIG__ = Object\.freeze\(\{[^\n]*\}\);/g;
 
 const publicFiles = [
@@ -38,6 +38,14 @@ const publicFiles = [
   'membership.css',
   'membership.js',
   'membership-theme.css',
+  'analytics.js',
+  'welcome.html',
+  'welcome.js',
+  'admin-analytics.html',
+  'admin-analytics.css',
+  'admin-analytics.js',
+  'member.html',
+  'member.js',
   'refer.html',
   'referral.css',
   'referral.js',
@@ -99,6 +107,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
 
   await rm(outputRoot, { recursive: true, force: true });
   await mkdir(path.join(outputRoot, 'guides'), { recursive: true });
+  await mkdir(path.join(outputRoot, 'admin', 'analytics'), { recursive: true });
 
   await Promise.all(publicFiles.map((file) => cp(
     path.join(projectRoot, file),
@@ -111,8 +120,19 @@ export async function preparePublicSite({ env = process.env } = {}) {
     await writeFile(outputPath, injectMembershipConfig(source, membershipConfig, file));
   }));
 
+  // First-party page views are injected into every public HTML artifact so the
+  // funnel has one consistent session identity without third-party trackers.
+  const htmlFiles = publicFiles.filter(file => file.endsWith('.html'));
+  await Promise.all(htmlFiles.map(async file => {
+    const outputPath = path.join(outputRoot, file);
+    const source = await readFile(outputPath, 'utf8');
+    if (source.includes('src="analytics.js')) return;
+    await writeFile(outputPath, source.replace('</body>', '  <script src="/analytics.js?v=20260920-attribution"></script>\n  </body>'));
+  }));
+
   // One source of truth, including environment-specific secure portal config.
   await cp(path.join(outputRoot, 'cancel.html'), path.join(outputRoot, 'managemembership.html'));
+  await cp(path.join(outputRoot, 'admin-analytics.html'), path.join(outputRoot, 'admin', 'analytics', 'index.html'));
 
   await cp(
     path.join(projectRoot, 'guides', 'how-to-choose-a-sports-betting-discord.html'),
