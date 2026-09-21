@@ -5,8 +5,8 @@ const { manualFreePickRecord } = require('./manual-free-pick');
 const content = `CeeDee Lamb O5.5 Receptions (-124):
 Cowboys vs. Commanders
 
-• Lamb finished Week 1 with 5 receptions on 8 targets
-• Led Dallas with a 23.5% target share and 32% first-read target share`;
+* Lamb finished Week 1 with 5 receptions on 8 targets
+* Led Dallas with a 23.5% target share and 32% first-read target share`;
 
 test('turns an authorized manual Free Pick into one canonical delivery packet', () => {
   const result = manualFreePickRecord({ id: '123', channelId: 'free', content, createdAt: new Date('2026-09-20T16:25:00Z'), author: { id: 'kobe', bot: false } }, {

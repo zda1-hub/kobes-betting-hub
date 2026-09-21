@@ -17,14 +17,14 @@ function manualFreePickRecord(message, { operatingDate, guildId, channelId, appr
   const lines = rawLines.map((line) => line.trim()).filter(Boolean);
   if (lines.length < 3) return null;
   const header = lines[0];
-  const evidence = lines.filter((line) => /^[-•]\s*\S/.test(line)).map((line) => line.replace(/^[-•]\s*/, '').trim());
+  const evidence = lines.filter((line) => /^[-•*]\s*\S/.test(line)).map((line) => line.replace(/^[-•*]\s*/, '').trim());
   const marketPattern = /\b(?:over|under|receptions?|receiving\s+yards?|rushing\s+(?:yards?|attempts?)|attempts?|carries|touchdowns?|tds?|completions?|interceptions?|sacks?|targets?|longest\s+(?:reception|rush)|anytime\s+(?:touchdown|td)|to\s+score)\b|\b[ou]\s*\d/i;
   const odds = header.replaceAll('−', '-').match(/\(([+-]\d{3,4})\)\s*:?[\s]*$/)?.[1] || '';
   const selection = normalizeSelection(header);
   const line = selection.match(/\b(?:OVER|UNDER)\s*(\d+(?:\.\d+)?)/i)?.[1] || '';
   if (!marketPattern.test(header) || !odds || evidence.length < 2 || selection.length > 256) return null;
 
-  const event = lines.slice(1).find((line) => !/^[-•]\s*/.test(line))?.replace(/:\s*$/, '').trim() || '';
+  const event = lines.slice(1).find((line) => !/^[-•*]\s*/.test(line))?.replace(/:\s*$/, '').trim() || '';
   const createdAt = message.createdAt instanceof Date ? message.createdAt : new Date(message.createdTimestamp || Date.now());
   const date = operatingDate(createdAt);
   const pickId = `discord-manual-free-${message.id}`;
