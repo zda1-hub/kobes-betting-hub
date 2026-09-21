@@ -49,7 +49,7 @@ function request(path, { key, method = 'GET', body, cookie, origin } = {}) {
   });
 }
 function operatorRequest(path, method = 'POST') { return request(`/operator/instagram/${path}`, { key: secret, method }); }
-function providerMock({ username = 'kobeslocks', type = 'Business', granted = __test.SCOPES.join(','), expires = 5184000, nested = true } = {}) {
+function providerMock({ username = 'kobesbettinhub', type = 'Business', granted = __test.SCOPES.join(','), expires = 5184000, nested = true } = {}) {
   const calls = [];
   return {
     calls,
@@ -123,7 +123,7 @@ test('invitation GET is preview-safe; POST starts consent with only two scopes a
 test('correct Business account stores only encrypted token and redacted append-only audit', async () => {
   const env = environment(); const { result, mock } = await connected(env);
   assert.equal(result.status, 200);
-  assert.match(await result.text(), /Connected @kobeslocks successfully/);
+  assert.match(await result.text(), /Connected @kobesbettinhub successfully/);
   assert.equal(mock.calls.length, 3);
   assert.equal(mock.calls[0].body.get('grant_type'), 'authorization_code');
   assert.equal(mock.calls[0].body.get('redirect_uri'), `${ORIGIN}/auth/instagram/callback`);
@@ -146,19 +146,33 @@ test('root-shaped provider responses also connect without assuming data arrays',
   assert.equal((await connected(environment(), providerMock({ nested: false }))).result.status, 200);
 });
 
-test('owner account switch pins invites, consent, stored credentials and status to kobeslocks', async () => {
+test('owner account switch pins invites, consent, stored credentials and status to kobesbettinhub', async () => {
   const env = environment();
   const invite = await (await handle(operatorRequest('invite'), env)).json();
-  assert.equal(invite.target, 'kobeslocks');
+  assert.equal(invite.target, 'kobesbettinhub');
   const url = new URL(invite.authorizeUrl);
   const consent = await (await handle(request(url.pathname + url.search), env)).text();
-  assert.match(consent, /Authorize @kobeslocks/);
+  assert.match(consent, /Authorize @kobesbettinhub/);
   assert.doesNotMatch(consent, /Authorize @bettinhub|or connect Kobe's Locks/);
-  assert.equal((await connected(env, providerMock({ username: 'KobesLocks' }))).result.status, 200);
-  assert.equal(env.DB.sql.prepare('SELECT target FROM instagram_connections').get().target, 'kobeslocks');
-  assert.equal((await (await handle(operatorRequest('status', 'GET'), env)).json()).target, 'kobeslocks');
-  assert.throws(() => __test.identity({ username: 'bettinhub', account_type: 'Business', user_id: '111' }), /USE_KOBESLOCKS/);
+  assert.equal((await connected(env, providerMock({ username: 'KobesBettinHub' }))).result.status, 200);
+  assert.equal(env.DB.sql.prepare('SELECT target FROM instagram_connections').get().target, 'kobesbettinhub');
+  assert.equal((await (await handle(operatorRequest('status', 'GET'), env)).json()).target, 'kobesbettinhub');
+  assert.throws(() => __test.identity({ username: 'bettinhub', account_type: 'Business', user_id: '111' }), /USE_KOBESBETTINHUB/);
   assert.throws(() => env.DB.sql.exec("UPDATE instagram_connections SET target='bettinhub'"), /CHECK constraint/);
+});
+
+test('scheduled Story delivery finds the connected kobesbettinhub account before reading the current pick', async () => {
+  const env = environment();
+  env.INSTAGRAM_PUBLISHING_ENABLED = 'true';
+  env.INSTAGRAM_NOT_BEFORE_DATE = '2026-09-21';
+  assert.equal((await connected(env)).result.status, 200);
+  let pickReads = 0;
+  await assert.rejects(__test.deliverCurrentStory(env, async () => {
+    pickReads += 1;
+    return Response.json({ error: 'fixture pick unavailable' }, { status: 404 });
+  }), /FREE_PICK_NOT_READY/);
+  assert.equal(pickReads, 1);
+  assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_story_deliveries').get().n, 0);
 });
 
 test('wrong username, Creator account, missing grant and invalid expiration cannot install credentials', async () => {
@@ -290,6 +304,8 @@ nodeTest('OAuth config disables URL-bearing logs, isolates staging, and schedule
   assert.equal(config.compatibility_flags.includes('nodejs_compat'), true);
   assert.deepEqual(config.triggers.crons, ['*/5 * * * *']);
   assert.deepEqual(config.env.staging.triggers.crons, []);
+  assert.equal(config.vars.INSTAGRAM_PUBLISHING_ENABLED, 'true');
+  assert.equal(config.env.staging.vars.INSTAGRAM_PUBLISHING_ENABLED, 'false');
   assert.notEqual(config.d1_databases[0].database_id, config.env.staging.d1_databases[0].database_id);
   assert.equal(config.vars.INSTAGRAM_APP_ID, '1068122172774873');
   for (const secretName of ['INSTAGRAM_APP_SECRET', 'INSTAGRAM_OPERATOR_SECRET', 'INSTAGRAM_TOKEN_ENCRYPTION_KEY']) assert.equal(Object.hasOwn(config.vars, secretName), false);

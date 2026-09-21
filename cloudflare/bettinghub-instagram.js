@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 
-const TARGET = 'kobeslocks';
+const TARGET = 'kobesbettinhub';
 const SCOPES = ['instagram_business_basic', 'instagram_business_content_publish'];
 const CALLBACK = '/auth/instagram/callback';
 const COOKIE = '__Host-kbh-ig-state';
@@ -27,7 +27,7 @@ function json(value, status = 200) {
 }
 function page(message, { invite, status = 200, cookie } = {}) {
   const form = invite ? `<form method="post" action="/auth/instagram/start"><input type="hidden" name="invite" value="${invite}"><button>Authorize @${TARGET}</button></form>` : '';
-  return response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Instagram connection · Kobe's Betting Hub</title><style>body{margin:0;background:#090909;color:#f4f0e8;font:18px/1.6 system-ui}main{max-width:620px;margin:10vh auto;padding:32px}h1{line-height:1.1}span{color:#ff6a00}button{background:#ff6a00;color:#090909;border:0;padding:18px 24px;font:700 18px system-ui;cursor:pointer}p{overflow-wrap:anywhere}</style><main><h1>Kobe's <span>Betting Hub</span></h1><h2>Instagram account connection</h2><p>${message}</p>${form}<p>Instagram posting remains off. This connection is limited to @${TARGET}; it does not publish a Story, send messages, or connect @bettinhub.</p></main></html>`, status, {
+  return response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Instagram connection · Kobe's Betting Hub</title><style>body{margin:0;background:#090909;color:#f4f0e8;font:18px/1.6 system-ui}main{max-width:620px;margin:10vh auto;padding:32px}h1{line-height:1.1}span{color:#ff6a00}button{background:#ff6a00;color:#090909;border:0;padding:18px 24px;font:700 18px system-ui;cursor:pointer}p{overflow-wrap:anywhere}</style><main><h1>Kobe's <span>Betting Hub</span></h1><h2>Instagram account connection</h2><p>${message}</p>${form}<p>This connection is limited to @${TARGET}. Story publishing is controlled separately; connecting does not publish a Story or send messages.</p></main></html>`, status, {
     'content-type': 'text/html; charset=utf-8', ...(cookie ? { 'set-cookie': cookie } : {}),
   });
 }
@@ -267,7 +267,7 @@ function single(data) {
 }
 function identity(data, expectedId) {
   const profile = single(data);
-  if (typeof profile.username !== 'string' || profile.username.toLowerCase() !== TARGET) throw new SafeError('WRONG_INSTAGRAM_ACCOUNT_USE_KOBESLOCKS', 403);
+  if (typeof profile.username !== 'string' || profile.username.toLowerCase() !== TARGET) throw new SafeError('WRONG_INSTAGRAM_ACCOUNT_USE_KOBESBETTINHUB', 403);
   if (String(profile.account_type).toUpperCase() !== 'BUSINESS') throw new SafeError('INSTAGRAM_BUSINESS_ACCOUNT_REQUIRED', 403);
   if (typeof profile.user_id !== 'string' || !/^\d+$/.test(profile.user_id)) throw new SafeError('INSTAGRAM_ACCOUNT_ID_MISSING', 502);
   if (expectedId && String(profile.user_id) !== expectedId) throw new SafeError('INSTAGRAM_ACCOUNT_ID_CHANGED', 409);
