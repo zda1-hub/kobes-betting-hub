@@ -3,23 +3,33 @@ const path = require('node:path');
 const { expertName } = require('./vip-expert-list');
 
 const MARKER = 'KBH expert-pulse-v1';
-const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const RECORD_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const OPERATING_TIME_ZONE = 'America/Phoenix';
+
+function operatingDate(instant) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: OPERATING_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date(instant));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
 
 function keyFor(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function verifiedRecords(rows, sourceChannelId, now = Date.now()) {
+function verifiedRecords(rows, paidChannelIds) {
+  const channels = new Set([...paidChannelIds].map(String));
   const eligible = rows.filter((row) => {
     const published = Date.parse(row.published_at || '');
     const reference = String(row.post_reference || '');
+    const channelId = reference.match(/^https:\/\/discord\.com\/channels\/\d+\/(\d+)\/\d+$/)?.[1];
     return ['PUBLISHED', 'GRADED'].includes(row.status)
-      && new RegExp(`^https://discord\\.com/channels/\\d+/${sourceChannelId}/\\d+$`).test(reference)
-      && ['W', 'L', 'P'].includes(String(row.result || '').toUpperCase())
+      && channels.has(channelId)
+      && row.wager_scope === 'individual'
+      && ['W', 'L', 'P', 'V'].includes(String(row.result || '').toUpperCase())
       && /^https?:\/\/\S+/.test(String(row.result_verified_source || '').replace(/^Verified final result:\s*/i, ''))
       && Number.isFinite(Date.parse(row.result_verified_at || ''))
-      && Number.isFinite(published) && published >= now - RECORD_WINDOW_MS && published <= now
+      && Number.isFinite(published)
       && keyFor(row.source_name);
   });
   const byExpert = new Map();
@@ -28,11 +38,12 @@ function verifiedRecords(rows, sourceChannelId, now = Date.now()) {
     if (seen.has(row.pick_id) || !row.pick_id) continue;
     seen.add(row.pick_id);
     const key = keyFor(row.source_name);
-    const item = byExpert.get(key) || { name: row.source_name.trim(), wins: 0, losses: 0, pushes: 0, results: [], references: [] };
+    const item = byExpert.get(key) || { name: row.source_name.trim(), wins: 0, losses: 0, pushes: 0, voids: 0, results: [], references: [] };
     const grade = row.result.toUpperCase();
     if (grade === 'W') item.wins += 1;
     if (grade === 'L') item.losses += 1;
     if (grade === 'P') item.pushes += 1;
+    if (grade === 'V') item.voids += 1;
     item.results.push({ grade, at: Date.parse(row.published_at), reference: row.post_reference, sport: String(row.sport || row.league || '').trim().toLowerCase() });
     byExpert.set(key, item);
   }
@@ -40,10 +51,12 @@ function verifiedRecords(rows, sourceChannelId, now = Date.now()) {
     item.results.sort((a, b) => b.at - a.at);
     item.references = item.results.map((row) => row.reference);
     item.streak = 0;
-    for (const row of item.results) {
-      if (row.grade === 'P') continue;
-      if (row.grade !== 'W') break;
-      item.streak += 1;
+    for (const at of [...new Set(item.results.map((row) => row.at))]) {
+      const settledTogether = item.results.filter((row) => row.at === at);
+      // Picks published at the same instant have no knowable within-card
+      // order. Any loss in that card breaks the streak before wins count.
+      if (settledTogether.some((row) => row.grade === 'L')) break;
+      item.streak += settledTogether.filter((row) => row.grade === 'W').length;
     }
     return item;
   }).sort((a, b) => (b.wins - b.losses) - (a.wins - a.losses) || b.wins - a.wins || a.name.localeCompare(b.name));
@@ -58,9 +71,10 @@ function selections(message) {
 }
 
 function summary(messages, now = Date.now()) {
+  const today = operatingDate(now);
   const recent = messages.filter((message) => {
     const at = message.createdTimestamp ?? new Date(message.createdAt).getTime();
-    return Number.isFinite(at) && at >= now - WINDOW_MS && at <= now;
+    return Number.isFinite(at) && at <= now && operatingDate(at) === today;
   });
   const sources = new Map();
   const repeated = new Map();
@@ -78,6 +92,7 @@ function summary(messages, now = Date.now()) {
     }
   }
   return {
+    date: today,
     playCount,
     sourceCount: sources.size,
     active: [...sources.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).slice(0, 5),
@@ -86,15 +101,18 @@ function summary(messages, now = Date.now()) {
 }
 
 function payloadFor(report, records = []) {
+  const firstTracked = records.flatMap((row) => row.results.map((result) => result.at))
+    .reduce((earliest, at) => Math.min(earliest, at), Infinity);
+  const coverage = Number.isFinite(firstTracked) ? `since ${new Date(firstTracked).toISOString().slice(0, 10)}` : 'no settled history';
   const active = report.active.length
     ? report.active.map((row) => `${row.name}: ${row.count} posted selection${row.count === 1 ? '' : 's'}`).join('\n')
-    : 'No qualifying expert posts in the last 7 days.';
+    : 'No qualifying expert posts today.';
   const repeated = report.repeated.length
     ? report.repeated.map((row) => `${row.count} posts - ${row.play}`).join('\n')
-    : 'No identical selections repeated in the last 7 days.';
+    : 'No identical selections repeated today.';
   const graded = records.length
-    ? records.slice(0, 5).map((row) => `${row.name}: ${row.wins}-${row.losses}${row.pushes ? `-${row.pushes} P` : ''} verified W-L${row.streak >= 2 ? ` · ${row.streak} straight graded wins` : ''} · [latest post](${row.references[0]})`).join('\n')
-    : 'No linked, independently graded expert results in the last 30 days. Records and streaks are withheld until verified.';
+    ? records.slice(0, 5).map((row) => `${row.name}: ${row.wins}-${row.losses}-${row.pushes}P-${row.voids}V${row.streak >= 2 ? ` · ${row.streak} straight settled wins` : ''} · [latest post](${row.references[0]})`).join('\n')
+    : 'No linked, individually graded paid expert results on record. Records and streaks are withheld until verified.';
   const sports = new Map();
   for (const expert of records) {
     for (const result of expert.results) {
@@ -110,27 +128,27 @@ function payloadFor(report, records = []) {
     .sort((a, b) => a.sport.localeCompare(b.sport) || b.wins / (b.wins + b.losses) - a.wins / (a.wins + a.losses) || b.wins - a.wins);
   const bySport = [...new Set(leaders.map((row) => row.sport))].slice(0, 4)
     .map((sport) => { const row = leaders.find((item) => item.sport === sport); return `${sport}: ${row.name} ${row.wins}-${row.losses} (minimum 3 graded)`; }).join('\n')
-    || 'No sport has an expert with at least 3 linked, graded decisions in the last 30 days.';
+    || 'No sport has an expert with at least 3 linked, graded decisions on record.';
   return {
     allowedMentions: { parse: [] },
     embeds: [{
       color: 0xFF7900,
       title: 'VIP Expert Picks Pulse',
-      description: `**Last 7 days:** ${report.playCount} posted selections from ${report.sourceCount} sources.\n\n**Most posted sources**\n${active}\n\n**Repeated selections (not wager volume)**\n${repeated}\n\n**Verified expert records · last 30 days**\n${graded}\n\n**Verified leaders by sport**\n${bySport}\n\nPosting frequency is not a win rate. Only linked, graded pick-log rows count toward records.`,
+      description: `**Today (${report.date} Arizona):** ${report.playCount} posted selections from ${report.sourceCount} sources across #expert-picks messages.\n\n**Most posted sources today**\n${active}\n\n**Repeated selections today (not wager volume)**\n${repeated}\n\n**Tracked verified paid expert records · ${coverage}**\n${graded}\n\n**Verified leaders by sport · tracked history**\n${bySport}\n\nPosting frequency is not a win rate. Records count only linked, individually graded wagers; pushes and voids are separate. Historical coverage may be incomplete.`,
       footer: { text: `${MARKER} · Approved #expert-picks posts and verified pick log` }
     }]
   };
 }
 
-async function createExpertPulse({ sourceChannelFor, destinationChannelFor, rowsFor = async () => [], stateFile, now = () => Date.now() }) {
+async function createExpertPulse({ sourceChannelFor, destinationChannelFor, rowsFor = async () => [], paidChannelIds = [], stateFile, now = () => Date.now() }) {
   const [source, destination] = await Promise.all([sourceChannelFor(), destinationChannelFor()]);
   if (source.id === destination.id) throw new Error('Expert pulse destination must be separate from #expert-picks.');
   if (!source.guild?.id || source.guild.id !== destination.guild?.id) {
     throw new Error('Expert pulse source and destination must be in the same Discord server.');
   }
   const guild = destination.guild;
-  if (guild && destination.permissionsFor(guild.roles.everyone)?.has('ViewChannel')) {
-    throw new Error('Expert pulse destination is public; refusing to publish VIP selections.');
+  if (!guild || destination.permissionsFor(guild.roles.everyone)?.has('ViewChannel') !== false) {
+    throw new Error('Expert pulse destination privacy could not be verified; refusing to publish VIP selections.');
   }
   let state = {};
   try { state = JSON.parse(await fs.readFile(stateFile, 'utf8')); }
@@ -142,11 +160,11 @@ async function createExpertPulse({ sourceChannelFor, destinationChannelFor, rows
   for (let page = 0; page < 20; page += 1) {
     const batch = await source.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
     messages.push(...batch.values());
-    if (batch.size < 100 || [...batch.values()].every((message) => (message.createdTimestamp || 0) < now() - WINDOW_MS)) break;
+    if (batch.size < 100 || [...batch.values()].every((message) => operatingDate(message.createdTimestamp || 0) !== operatingDate(now()))) break;
     before = batch.last().id;
   }
   const rows = await rowsFor();
-  const payload = payloadFor(summary(messages, now()), verifiedRecords(rows, source.id, now()));
+  const payload = payloadFor(summary(messages, now()), verifiedRecords(rows, paidChannelIds));
   const signature = JSON.stringify(payload.embeds[0].description);
   const current = managed || (state.message_id ? await destination.messages.fetch(state.message_id).catch(() => null) : null);
   if (current && state.signature === signature) return { status: 'UNCHANGED', messageId: current.id };

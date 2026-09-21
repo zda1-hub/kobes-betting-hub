@@ -176,7 +176,24 @@ const vipExpertList = vipExpertListChannelId ? createVipExpertList({
 const refreshExpertPulse = vipExpertPulseChannelId ? () => createExpertPulse({
   sourceChannelFor: () => approvedTextChannel(expertPicksChannelId),
   destinationChannelFor: () => approvedTextChannel(vipExpertPulseChannelId),
-  rowsFor: () => readPickLog(),
+  // Reconstruct every exact wager from the immutable review packet and its
+  // saved grade. An unexpanded source group must never inherit one result.
+  rowsFor: async () => {
+    const rows = await readPickLog();
+    const byDate = new Map();
+    for (const row of rows) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(row.operating_date || '')) continue;
+      if (!byDate.has(row.operating_date)) byDate.set(row.operating_date, []);
+      byDate.get(row.operating_date).push(row);
+    }
+    const results = await Promise.all([...byDate].map(async ([date, dailyRows]) => gradeWagerRows({
+      rows: dailyRows, date, root: reviewQueueRoot,
+      file: path.join(path.dirname(pickLogPath()), `wager-results-${date}.json`),
+      grade: async () => ({ status: 'PENDING', reason: 'Digest never grades results.' })
+    })));
+    return results.flatMap((result) => result.rows);
+  },
+  paidChannelIds: [expertPicksChannelId, ...sportChannelMap.values(), process.env.EXCLUSIVES_CHANNEL_ID].filter(Boolean),
   stateFile: path.join(path.dirname(pickLogPath()), 'expert-pulse.json')
 }) : null;
 const pickApprovalChannelId = process.env.PICK_APPROVAL_CHANNEL_ID;
