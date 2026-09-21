@@ -37,8 +37,8 @@ const {
   independentWriteupPacket,
   isTermsOnlyMode,
   reviewButtons,
-  sourceCapperName,
   sourceEvidence,
+  sourceCapperName,
   writeupDescription,
   approvalCopySha256
 } = require('./lib/source-review');
@@ -1726,6 +1726,56 @@ async function findReviewPacket(pickId, interaction) {
   return hydrateLegacyReviewPacket({ interaction, pickId });
 }
 
+async function handleSourceEditButton(interaction) {
+  const [, pickId] = interaction.customId.split(':');
+  if (!isPickApprover(interaction)) throw new Error('Only Kobe can edit approval details.');
+  const found = await findReviewPacket(pickId, interaction);
+  if (!found || found.packet.approval?.decision || found.packet.discord_review_message_id !== interaction.message.id)
+    throw new Error('This approval card is no longer editable.');
+  if (isTermsOnlyMode(found.packet)) throw new Error('Exclusive terms have no writeup details to edit. Reject an incorrect wager.');
+  const packet = found.packet;
+  const details = sourceEvidence(packet).map((line) => `- ${line}`).join('\n');
+  await interaction.showModal({
+    custom_id: `source-edit:${pickId}:${String(packet.approval?.exact_final_copy_sha256 || 'none').slice(0, 20)}`,
+    title: 'Edit writeup details',
+    components: [{ type: 1, components: [{ type: 4, custom_id: 'details', label: 'Supporting facts only; one per line', style: 2,
+      min_length: 20, max_length: 3000, required: true, value: details.slice(0, 3000) }] }]
+  });
+}
+
+async function handleSourceEditSubmit(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  if (!isPickApprover(interaction)) throw new Error('Only Kobe can edit approval details.');
+  const match = interaction.customId.match(/^source-edit:([A-Za-z0-9_-]+):([a-f0-9]{20}|none)$/);
+  if (!match) throw new Error('Invalid edit request.');
+  const found = await findReviewPacket(match[1], interaction);
+  if (!found || found.packet.approval?.decision || isTermsOnlyMode(found.packet)) throw new Error('This approval is no longer editable.');
+  const { packet, packetPath } = found;
+  if (String(packet.approval?.exact_final_copy_sha256 || 'none').slice(0, 20) !== match[2])
+    throw new Error('This edit is stale. Open Edit details from the latest card.');
+  const lines = interaction.fields.getTextInputValue('details').split(/\r?\n/)
+    .map((line) => line.replace(/^\s*[-•]\s*/, '').trim()).filter(Boolean);
+  if (lines.length < 4 || lines.length > 8) throw new Error('Keep 4–8 supporting facts, one per line. No wager terms were changed.');
+  const draft = { ...packet, approval: { ...packet.approval, edited_evidence: lines } };
+  if (sourceEvidence(draft).length !== lines.length)
+    throw new Error('One or more details are not usable supporting facts. Remove copied picks, links, and promotional text.');
+  const presentation = packet.source?.reuse_permission !== 'CONFIRMED' && packet.source?.publish_mode !== 'terms_only'
+    && process.env.X_SOURCE_PUBLISHING_ENABLED !== 'true' ? independentWriteupPacket(draft) : draft;
+  assertCompleteWriteup(presentation);
+  const copy = writeupDescription(presentation);
+  if (copy.length > 4000) throw new Error('The edited writeup is too long for one card.');
+  draft.approval.exact_final_copy = copy;
+  draft.approval.exact_final_copy_sha256 = approvalCopySha256(copy);
+  presentation.approval = { ...draft.approval };
+  const channel = await interaction.client.channels.fetch(interaction.channelId);
+  const message = await channel.messages.fetch(packet.discord_review_message_id);
+  const components = message.components;
+  await message.edit({ components: [] });
+  await fs.writeFile(packetPath, `${JSON.stringify(draft, null, 2)}\n`);
+  await message.edit({ embeds: [buildSourcePickApprovalEmbed(presentation, 'APPROVED PICK')], components });
+  await interaction.editReply('Details updated on the private card. Player, prop, line, and odds stayed locked. Review the revised card before posting.');
+}
+
 async function handleSourceReviewButton(interaction) {
   const [, pickId, action] = interaction.customId.split(':');
   const startedAt = Date.now();
@@ -2233,8 +2283,36 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('source-edit:')) {
+    try { await handleSourceEditSubmit(interaction); }
+    catch (error) { await respondToInteractionFailure(interaction, error.message || 'Could not edit this pick.', 'Pick edit interaction'); }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('recap-edit:')) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      const match = interaction.customId.match(/^recap-edit:([a-z0-9_-]+):([a-f0-9]{20}):([a-f0-9]{20})$/);
+      const workflow = recapApprovalWorkflows.find((entry) => entry.config.workflow_id === match?.[1]);
+      if (!workflow) throw new Error('Unknown recap edit workflow.');
+      await workflow.engine.editNote({ key: match[2], digest: match[3], note: interaction.fields.getTextInputValue('note'),
+        userId: interaction.user.id, guildId: interaction.guildId, channelId: interaction.channelId });
+      await interaction.editReply('Recap note updated. All original wagers and verified results remain locked; review the revised card before posting.');
+    } catch (error) { await respondToInteractionFailure(interaction, error.message || 'Could not edit this recap.', 'Recap edit interaction'); }
+    return;
+  }
   if (interaction.isButton() && interaction.customId.startsWith('recap-review:')) {
     try {
+      if (/^recap-review:[a-z0-9_-]+:edit:/.test(interaction.customId)) {
+        const workflowId = interaction.customId.split(':')[1];
+        const workflow = recapApprovalWorkflows.find((entry) => entry.config.workflow_id === workflowId);
+        if (!workflow) throw new Error('This recap workflow is not configured.');
+        const draft = await workflow.engine.beginEdit({ customId: interaction.customId, userId: interaction.user.id,
+          guildId: interaction.guildId, channelId: interaction.channelId, messageId: interaction.message.id });
+        await interaction.showModal({ custom_id: `recap-edit:${workflowId}:${draft.key}:${draft.digest}`, title: 'Edit recap note',
+          components: [{ type: 1, components: [{ type: 4, custom_id: 'note', label: 'Optional context; results stay locked',
+            style: 2, max_length: 500, required: false, value: draft.note }] }] });
+        return;
+      }
       await interaction.deferReply({ ephemeral: true });
       const workflowId = interaction.customId.match(/^recap-review:([a-z0-9_-]+):(?:approve|reject):/)?.[1] || 'exclusive';
       const workflow = recapApprovalWorkflows.find((entry) => entry.config.workflow_id === workflowId);
@@ -2261,7 +2339,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
   if (interaction.isButton() && interaction.customId.startsWith('source-review:')) {
     try {
-      await handleSourceReviewButton(interaction);
+      if (interaction.customId.endsWith(':edit')) await handleSourceEditButton(interaction);
+      else await handleSourceReviewButton(interaction);
     } catch (error) {
       console.error(error);
       await respondToInteractionFailure(interaction, 'Unable to complete this review action. No member-facing post was made.', 'Pick review interaction');

@@ -76,7 +76,8 @@ test('private preparation never publishes; only Kobe’s exact-card approval sen
   assert.equal(f.channels.wins.sends, 0);
   const control = [...f.channels.review.records.values()].at(-1).payload.components[0].components;
   assert.equal(control[0].label, 'Post to exclusive wins');
-  assert.equal(control[1].label, 'Reject');
+  assert.equal(control[1].label, 'Edit note');
+  assert.equal(control[2].label, 'Reject');
   await assert.rejects(engine.decide({ ...f.request(), userId: 'not-kobe' }), /Only Kobe/);
   await assert.rejects(engine.decide({ ...f.request(), guildId: 'other' }), /Only Kobe/);
   await assert.rejects(engine.decide({ ...f.request(), channelId: 'other' }), /Only Kobe/);
@@ -89,6 +90,23 @@ test('private preparation never publishes; only Kobe’s exact-card approval sen
   assert.equal(f.channels.wins.sends, 1);
   await f.create().prepare(f.groups());
   assert.equal(f.channels.review.sends, 1);
+});
+
+test('Kobe can revise a recap note without changing locked wagers or verified results', async () => {
+  const f = await fixture(), engine = f.create();
+  await engine.prepare(f.groups());
+  const card = [...f.channels.review.records.values()].at(-1);
+  const editId = card.payload.components[0].components[1].custom_id;
+  const draft = await engine.beginEdit({ customId: editId, userId: 'kobe', guildId: 'guild', channelId: 'review', messageId: card.id });
+  await assert.rejects(engine.beginEdit({ customId: editId, userId: 'other', guildId: 'guild', channelId: 'review', messageId: card.id }), /Only Kobe/);
+  await engine.editNote({ key: draft.key, digest: draft.digest, note: 'Correction: this recap includes the late game.',
+    userId: 'kobe', guildId: 'guild', channelId: 'review' });
+  assert.match(card.embeds[0].description, /Reds ML -110 \(1U\) ☘️/);
+  assert.match(card.embeds[0].description, /Correction: this recap includes the late game/);
+  await assert.rejects(engine.decide(f.request()), /stale/);
+  const updated = card.payload.components[0].components[0].custom_id;
+  assert.equal((await engine.decide({ customId: updated, userId: 'kobe', guildId: 'guild', channelId: 'review', messageId: card.id })).status, 'PUBLISHED');
+  assert.match([...f.channels.wins.records.values()][0].embeds[0].description, /Correction: this recap includes the late game/);
 });
 
 test('reject is durable, disables buttons, and never sends to wins', async () => {

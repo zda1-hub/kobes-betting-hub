@@ -25,6 +25,7 @@ function reviewButtons(state, disabled = false) {
   const workflowId = state.workflowId || 'exclusive';
   return [{ type: 1, components: [
     { type: 2, style: 3, label: state.approveLabel || 'Post to exclusive wins', custom_id: `recap-review:${workflowId}:approve:${state.key}:${state.digest}`, disabled: disabled || state.pending > 0 },
+    { type: 2, style: 2, label: 'Edit note', custom_id: `recap-review:${workflowId}:edit:${state.key}:${state.digest}`, disabled },
     { type: 2, style: 4, label: 'Reject', custom_id: `recap-review:${workflowId}:reject:${state.key}:${state.digest}`, disabled }
   ] }];
 }
@@ -113,13 +114,17 @@ function createRecapApprovals({ root, config, channelFor, loadGroups, audit = as
       for (const group of groups) {
         let state = await read(group.key);
         if (state?.status === 'PUBLISHED' || state?.status === 'PUBLISHING') continue;
-        if (state?.digest === group.digest && state.reviewReceipts?.length === group.parts.length
+        if (!state?.needsRefresh && (state?.sourceDigest || state?.digest) === group.digest && state.reviewReceipts?.length === state.parts.length
           && state.reviewReceipts.every(receipt => receipt?.id)) continue;
         // Do not overwrite a snapshot that still has an uncertain delivery.
         if (state?.reviewReceipts?.some(receipt => receipt?.pending)) await refresh(state, channel);
         const previousParts = state?.parts.length || 0;
-        const revisionChanged = state?.digest !== group.digest;
-        state = { ...state, ...group, workflowId,
+        const revisionChanged = (state?.sourceDigest || state?.digest) !== group.digest;
+        const note = revisionChanged ? '' : (state?.editorNote || '');
+        state = { ...state, ...group, workflowId, sourceDigest: group.digest, editorNote: note,
+          digest: note ? hash([group.digest, note]).slice(0, 20) : group.digest,
+          body: note ? `${group.body}\n\nKobe's note: ${note}` : group.body,
+          parts: note ? splitRecapBody(`${group.body}\n\nKobe's note: ${note}`, 3400) : group.parts,
           approveLabel: config.approve_label || 'Post to exclusive wins',
           publicTitle: config.public_title || 'Exclusive recap',
           reviewTitle: config.review_title || 'Recap approval',
@@ -127,11 +132,12 @@ function createRecapApprovals({ root, config, channelFor, loadGroups, audit = as
           reviewReceipts: state?.reviewReceipts || [], publicReceipts: [] };
         await save(state); // Old buttons become stale before the edits.
         await refresh(state, channel);
-        for (let index = group.parts.length; index < previousParts; index++) {
+        for (let index = state.parts.length; index < previousParts; index++) {
           const receipt = state.reviewReceipts[index];
           if (receipt?.id) await (await channel.messages.fetch(receipt.id)).edit({ content: 'Recap revision shortened; use the updated approval card above.', embeds: [], components: [], allowedMentions: noMentions });
         }
-        state.reviewReceipts = state.reviewReceipts.slice(0, group.parts.length);
+        state.reviewReceipts = state.reviewReceipts.slice(0, state.parts.length);
+        state.needsRefresh = false;
         await save(state);
         await audit(state, 'REVIEW_READY');
         receipts.push({ capper: state.name, date: state.date, pending: state.pending,
@@ -158,7 +164,7 @@ function createRecapApprovals({ root, config, channelFor, loadGroups, audit = as
       const channel = await reviewChannel();
       if (state.status !== 'PUBLISHING') {
         const current = (await loadGroups(state.date)).find(group => group.key === key);
-        if (!current || current.digest !== digest) throw new Error('Grades or published wagers have changed. Wait for the refreshed recap card.');
+        if (!current || current.digest !== (state.sourceDigest || digest)) throw new Error('Grades or published wagers have changed. Wait for the refreshed recap card.');
         if (action === 'approve' && state.pending) throw new Error('Unverified results remain. This recap cannot be posted as settled.');
         state.actorId = userId;
         state.decidedAt = new Date().toISOString();
@@ -181,6 +187,47 @@ function createRecapApprovals({ root, config, channelFor, loadGroups, audit = as
       await audit(state, 'PUBLISHED');
       await refresh(state, channel);
       return { status: 'PUBLISHED', messageIds: state.publicReceipts.map(receipt => receipt.id) };
+    }); },
+    beginEdit({ customId, userId, guildId, channelId, messageId }) { return serialize(async () => {
+      if (!config.enabled || guildId !== config.guild_id || channelId !== config.review_channel_id
+        || !config.reviewer_user_ids.includes(userId)) throw new Error('Only Kobe can edit recaps in the private review channel.');
+      const match = String(customId).match(new RegExp(`^recap-review:${workflowId}:edit:([a-f0-9]{20}):([a-f0-9]{20})$`));
+      if (!match) throw new Error('Invalid recap edit action.');
+      const state = await read(match[1]);
+      if (!state || state.digest !== match[2] || state.reviewReceipts.at(-1)?.id !== messageId
+        || ['PUBLISHED', 'PUBLISHING', 'REJECTED'].includes(state.status)) throw new Error('This recap card is stale or already decided.');
+      return { note: state.editorNote || '', key: state.key, digest: state.digest };
+    }); },
+    editNote({ key, digest, note, userId, guildId, channelId }) { return serialize(async () => {
+      if (!config.enabled || guildId !== config.guild_id || channelId !== config.review_channel_id
+        || !config.reviewer_user_ids.includes(userId)) throw new Error('Only Kobe can edit recaps in the private review channel.');
+      const state = await read(key);
+      if (!state || state.digest !== digest || ['PUBLISHED', 'PUBLISHING', 'REJECTED'].includes(state.status))
+        throw new Error('This recap card is stale or already decided.');
+      const current = (await loadGroups(state.date)).find(group => group.key === key);
+      if (!current || current.digest !== (state.sourceDigest || state.digest))
+        throw new Error('The underlying results changed. Wait for a refreshed recap card.');
+      const clean = String(note || '').trim();
+      if (clean.length > 500 || /<@|https?:\/\//i.test(clean)) throw new Error('Keep the note under 500 characters, with no pings or links.');
+      const previousParts = state.parts.length;
+      state.editorNote = clean;
+      state.digest = clean ? hash([current.digest, clean]).slice(0, 20) : current.digest;
+      state.sourceDigest = current.digest;
+      state.body = clean ? `${current.body}\n\nKobe's note: ${clean}` : current.body;
+      state.parts = splitRecapBody(state.body, 3400);
+      state.needsRefresh = true;
+      await save(state);
+      const channel = await reviewChannel();
+      await refresh(state, channel);
+      for (let index = state.parts.length; index < previousParts; index++) {
+        const receipt = state.reviewReceipts[index];
+        if (receipt?.id) await (await channel.messages.fetch(receipt.id)).edit({ content: 'Recap note revision shortened this card; use the updated approval above.', embeds: [], components: [], allowedMentions: noMentions });
+      }
+      state.reviewReceipts = state.reviewReceipts.slice(0, state.parts.length);
+      state.needsRefresh = false;
+      await save(state);
+      await audit(state, 'REVIEW_EDITED');
+      return { status: 'UPDATED', messageIds: state.reviewReceipts.map(receipt => receipt.id) };
     }); },
     async stop() { stopping = true; await tail; }
   };
