@@ -173,8 +173,8 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
   async function channels() {
     const [source, review, destination] = await Promise.all([sourceChannelFor(), reviewChannelFor(), destinationChannelFor()]);
     if (!source.guild?.id || source.guild.id !== review.guild?.id || source.guild.id !== destination.guild?.id
-      || new Set([source.id, review.id, destination.id]).size !== 3) {
-      throw new Error('Expert pulse source, review, and VIP destination must be distinct channels in the same server.');
+      || review.id === source.id || review.id === destination.id) {
+      throw new Error('Expert pulse review must be separate from the source and VIP destination in the same server.');
     }
     for (const [name, channel] of [['review', review], ['VIP destination', destination]]) {
       if (channel.permissionsFor(channel.guild.roles.everyone)?.has('ViewChannel') !== false) {
