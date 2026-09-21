@@ -98,8 +98,10 @@ const dailyWriteupsChannelId = process.env.DAILY_WRITEUPS_CHANNEL_ID;
 const configuredFreeWriteupsChannelId = process.env.FREE_WRITEUPS_CHANNEL_ID;
 const vipExpertListChannelId = process.env.VIP_EXPERT_LIST_CHANNEL_ID;
 const vipExpertPulseChannelId = process.env.VIP_EXPERT_PULSE_CHANNEL_ID;
+const vipExpertPulseApprovalChannelId = process.env.VIP_EXPERT_PULSE_APPROVAL_CHANNEL_ID;
 if (vipExpertListChannelId) allowedChannelIds.add(vipExpertListChannelId);
 if (vipExpertPulseChannelId) allowedChannelIds.add(vipExpertPulseChannelId);
+if (vipExpertPulseApprovalChannelId) allowedChannelIds.add(vipExpertPulseApprovalChannelId);
 if (configuredFreeWriteupsChannelId) allowedChannelIds.add(configuredFreeWriteupsChannelId);
 if (dailyWriteupsChannelId) allowedChannelIds.add(dailyWriteupsChannelId);
 let manualFootballWriteupRows = [];
@@ -173,12 +175,35 @@ const vipExpertList = vipExpertListChannelId ? createVipExpertList({
   listChannelFor: () => approvedTextChannel(vipExpertListChannelId),
   stateFile: path.join(path.dirname(pickLogPath()), 'vip-expert-list.json')
 }) : null;
-const refreshExpertPulse = vipExpertPulseChannelId ? () => createExpertPulse({
+const expertPulse = vipExpertPulseChannelId && vipExpertPulseApprovalChannelId ? createExpertPulse({
   sourceChannelFor: () => approvedTextChannel(expertPicksChannelId),
+  reviewChannelFor: () => approvedTextChannel(vipExpertPulseApprovalChannelId),
   destinationChannelFor: () => approvedTextChannel(vipExpertPulseChannelId),
-  rowsFor: () => readPickLog(),
+  // Reconstruct every exact wager from the immutable review packet and its
+  // saved grade. An unexpanded source group must never inherit one result.
+  rowsFor: async () => {
+    const rows = await readPickLog();
+    const byDate = new Map();
+    for (const row of rows) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(row.operating_date || '')) continue;
+      if (!byDate.has(row.operating_date)) byDate.set(row.operating_date, []);
+      byDate.get(row.operating_date).push(row);
+    }
+    const results = await Promise.all([...byDate].map(async ([date, dailyRows]) => gradeWagerRows({
+      rows: dailyRows, date, root: reviewQueueRoot,
+      file: path.join(path.dirname(pickLogPath()), `wager-results-${date}.json`),
+      grade: async () => ({ status: 'PENDING', reason: 'Digest never grades results.' })
+    })));
+    return results.flatMap((result) => result.rows);
+  },
+  paidChannelIds: () => [expertPicksChannelId, ...sportChannelMap.values(), process.env.EXCLUSIVES_CHANNEL_ID].filter(Boolean),
+  isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId),
   stateFile: path.join(path.dirname(pickLogPath()), 'expert-pulse.json')
 }) : null;
+const refreshExpertPulse = expertPulse ? () => expertPulse.refresh() : null;
+if ((vipExpertPulseChannelId || vipExpertPulseApprovalChannelId) && !expertPulse) {
+  console.error('VIP expert pulse is held: both private review and private destination channel IDs are required.');
+}
 const pickApprovalChannelId = process.env.PICK_APPROVAL_CHANNEL_ID;
 const exclusivePickApprovalChannelId = exclusiveApprovalChannelId();
 const sourcesPath = path.join(__dirname, '..', 'data', 'twitter-sources.json');
@@ -2349,6 +2374,21 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isButton() && interaction.customId.startsWith('expert-pulse:')) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      if (!expertPulse) throw new Error('Expert pulse review and VIP channels are not configured.');
+      const result = await expertPulse.decide({ customId: interaction.customId,
+        userId: interaction.user.id, ownerId: interaction.guild?.ownerId,
+        guildId: interaction.guildId, channelId: interaction.channelId, messageId: interaction.message.id });
+      await interaction.editReply(result.status === 'PUBLISHED' ? 'Approved pulse posted to the private VIP channel.'
+        : result.status === 'REJECTED' ? 'Pulse rejected; nothing was posted to VIP.'
+        : 'Review card refreshed. Approve the current snapshot when ready.');
+    } catch (error) {
+      await respondToInteractionFailure(interaction, error.message || 'Expert pulse review needs attention.', 'Expert pulse interaction');
+    }
+    return;
+  }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('source-edit:')) {
     try { await handleSourceEditSubmit(interaction); }
     catch (error) { await respondToInteractionFailure(interaction, error.message || 'Could not edit this pick.', 'Pick edit interaction'); }

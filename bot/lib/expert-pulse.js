@@ -1,25 +1,37 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { expertName } = require('./vip-expert-list');
 
 const MARKER = 'KBH expert-pulse-v1';
-const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const RECORD_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const REVIEW_MARKER = 'KBH expert-pulse-review-v1';
+const OPERATING_TIME_ZONE = 'America/Phoenix';
+
+function operatingDate(instant) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: OPERATING_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date(instant));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
 
 function keyFor(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function verifiedRecords(rows, sourceChannelId, now = Date.now()) {
+function verifiedRecords(rows, paidChannelIds) {
+  const channels = new Set([...paidChannelIds].map(String));
   const eligible = rows.filter((row) => {
     const published = Date.parse(row.published_at || '');
     const reference = String(row.post_reference || '');
+    const channelId = reference.match(/^https:\/\/discord\.com\/channels\/\d+\/(\d+)\/\d+$/)?.[1];
     return ['PUBLISHED', 'GRADED'].includes(row.status)
-      && new RegExp(`^https://discord\\.com/channels/\\d+/${sourceChannelId}/\\d+$`).test(reference)
-      && ['W', 'L', 'P'].includes(String(row.result || '').toUpperCase())
+      && channels.has(channelId)
+      && row.wager_scope === 'individual'
+      && ['W', 'L', 'P', 'V'].includes(String(row.result || '').toUpperCase())
       && /^https?:\/\/\S+/.test(String(row.result_verified_source || '').replace(/^Verified final result:\s*/i, ''))
       && Number.isFinite(Date.parse(row.result_verified_at || ''))
-      && Number.isFinite(published) && published >= now - RECORD_WINDOW_MS && published <= now
+      && Number.isFinite(published)
       && keyFor(row.source_name);
   });
   const byExpert = new Map();
@@ -28,11 +40,12 @@ function verifiedRecords(rows, sourceChannelId, now = Date.now()) {
     if (seen.has(row.pick_id) || !row.pick_id) continue;
     seen.add(row.pick_id);
     const key = keyFor(row.source_name);
-    const item = byExpert.get(key) || { name: row.source_name.trim(), wins: 0, losses: 0, pushes: 0, results: [], references: [] };
+    const item = byExpert.get(key) || { name: row.source_name.trim(), wins: 0, losses: 0, pushes: 0, voids: 0, results: [], references: [] };
     const grade = row.result.toUpperCase();
     if (grade === 'W') item.wins += 1;
     if (grade === 'L') item.losses += 1;
     if (grade === 'P') item.pushes += 1;
+    if (grade === 'V') item.voids += 1;
     item.results.push({ grade, at: Date.parse(row.published_at), reference: row.post_reference, sport: String(row.sport || row.league || '').trim().toLowerCase() });
     byExpert.set(key, item);
   }
@@ -40,10 +53,12 @@ function verifiedRecords(rows, sourceChannelId, now = Date.now()) {
     item.results.sort((a, b) => b.at - a.at);
     item.references = item.results.map((row) => row.reference);
     item.streak = 0;
-    for (const row of item.results) {
-      if (row.grade === 'P') continue;
-      if (row.grade !== 'W') break;
-      item.streak += 1;
+    for (const at of [...new Set(item.results.map((row) => row.at))]) {
+      const settledTogether = item.results.filter((row) => row.at === at);
+      // Picks published at the same instant have no knowable within-card
+      // order. Any loss in that card breaks the streak before wins count.
+      if (settledTogether.some((row) => row.grade === 'L')) break;
+      item.streak += settledTogether.filter((row) => row.grade === 'W').length;
     }
     return item;
   }).sort((a, b) => (b.wins - b.losses) - (a.wins - a.losses) || b.wins - a.wins || a.name.localeCompare(b.name));
@@ -58,9 +73,10 @@ function selections(message) {
 }
 
 function summary(messages, now = Date.now()) {
+  const today = operatingDate(now);
   const recent = messages.filter((message) => {
     const at = message.createdTimestamp ?? new Date(message.createdAt).getTime();
-    return Number.isFinite(at) && at >= now - WINDOW_MS && at <= now;
+    return Number.isFinite(at) && at <= now && operatingDate(at) === today;
   });
   const sources = new Map();
   const repeated = new Map();
@@ -78,6 +94,7 @@ function summary(messages, now = Date.now()) {
     }
   }
   return {
+    date: today,
     playCount,
     sourceCount: sources.size,
     active: [...sources.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).slice(0, 5),
@@ -86,15 +103,18 @@ function summary(messages, now = Date.now()) {
 }
 
 function payloadFor(report, records = []) {
+  const firstTracked = records.flatMap((row) => row.results.map((result) => result.at))
+    .reduce((earliest, at) => Math.min(earliest, at), Infinity);
+  const coverage = Number.isFinite(firstTracked) ? `since ${new Date(firstTracked).toISOString().slice(0, 10)}` : 'no settled history';
   const active = report.active.length
     ? report.active.map((row) => `${row.name}: ${row.count} posted selection${row.count === 1 ? '' : 's'}`).join('\n')
-    : 'No qualifying expert posts in the last 7 days.';
+    : 'No qualifying expert posts today.';
   const repeated = report.repeated.length
     ? report.repeated.map((row) => `${row.count} posts - ${row.play}`).join('\n')
-    : 'No identical selections repeated in the last 7 days.';
+    : 'No identical selections repeated today.';
   const graded = records.length
-    ? records.slice(0, 5).map((row) => `${row.name}: ${row.wins}-${row.losses}${row.pushes ? `-${row.pushes} P` : ''} verified W-L${row.streak >= 2 ? ` · ${row.streak} straight graded wins` : ''} · [latest post](${row.references[0]})`).join('\n')
-    : 'No linked, independently graded expert results in the last 30 days. Records and streaks are withheld until verified.';
+    ? records.slice(0, 5).map((row) => `${row.name}: ${row.wins}-${row.losses}-${row.pushes}P-${row.voids}V${row.streak >= 2 ? ` · ${row.streak} straight settled wins` : ''} · [latest post](${row.references[0]})`).join('\n')
+    : 'No linked, individually graded paid expert results on record. Records and streaks are withheld until verified.';
   const sports = new Map();
   for (const expert of records) {
     for (const result of expert.results) {
@@ -110,50 +130,160 @@ function payloadFor(report, records = []) {
     .sort((a, b) => a.sport.localeCompare(b.sport) || b.wins / (b.wins + b.losses) - a.wins / (a.wins + a.losses) || b.wins - a.wins);
   const bySport = [...new Set(leaders.map((row) => row.sport))].slice(0, 4)
     .map((sport) => { const row = leaders.find((item) => item.sport === sport); return `${sport}: ${row.name} ${row.wins}-${row.losses} (minimum 3 graded)`; }).join('\n')
-    || 'No sport has an expert with at least 3 linked, graded decisions in the last 30 days.';
+    || 'No sport has an expert with at least 3 linked, graded decisions on record.';
   return {
     allowedMentions: { parse: [] },
     embeds: [{
       color: 0xFF7900,
       title: 'VIP Expert Picks Pulse',
-      description: `**Last 7 days:** ${report.playCount} posted selections from ${report.sourceCount} sources.\n\n**Most posted sources**\n${active}\n\n**Repeated selections (not wager volume)**\n${repeated}\n\n**Verified expert records · last 30 days**\n${graded}\n\n**Verified leaders by sport**\n${bySport}\n\nPosting frequency is not a win rate. Only linked, graded pick-log rows count toward records.`,
+      description: `**Today (${report.date} Arizona):** ${report.playCount} selections parsed from ${report.sourceCount} sources' text cards in #expert-picks. Image-only cards are not counted.\n\n**Most posted sources today**\n${active}\n\n**Exact-text repeats today (not wager volume)**\n${repeated}\n\n**Tracked verified paid expert records · ${coverage}**\n${graded}\n\n**Verified leaders by sport · tracked history**\n${bySport}\n\nPosting frequency is not a win rate. Alias/odds variants may describe the same play but are not combined. Records count only linked, individually graded wagers; pushes and voids are separate. Historical coverage may be incomplete.`,
       footer: { text: `${MARKER} · Approved #expert-picks posts and verified pick log` }
     }]
   };
 }
 
-async function createExpertPulse({ sourceChannelFor, destinationChannelFor, rowsFor = async () => [], stateFile, now = () => Date.now() }) {
-  const [source, destination] = await Promise.all([sourceChannelFor(), destinationChannelFor()]);
-  if (source.id === destination.id) throw new Error('Expert pulse destination must be separate from #expert-picks.');
-  if (!source.guild?.id || source.guild.id !== destination.guild?.id) {
-    throw new Error('Expert pulse source and destination must be in the same Discord server.');
+function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChannelFor,
+  rowsFor = async () => [], paidChannelIds = [], isApprover = () => false, stateFile, now = () => Date.now() }) {
+  if (!reviewChannelFor || !destinationChannelFor || !stateFile) throw new Error('Private expert pulse review, VIP destination, and state file are required.');
+  let queue = Promise.resolve();
+  function locked(action) {
+    const run = queue.then(action, action);
+    queue = run.catch(() => {});
+    return run;
   }
-  const guild = destination.guild;
-  if (guild && destination.permissionsFor(guild.roles.everyone)?.has('ViewChannel')) {
-    throw new Error('Expert pulse destination is public; refusing to publish VIP selections.');
+  async function readState() {
+    try {
+      const state = JSON.parse(await fs.readFile(stateFile, 'utf8'));
+      // Adopt the original auto-published pulse rather than creating a second
+      // VIP message when the approval-gated version is first deployed.
+      if (!state.posted_message_id && state.message_id) state.posted_message_id = state.message_id;
+      return state;
+    }
+    catch (error) { if (error.code === 'ENOENT') return {}; throw error; }
   }
-  let state = {};
-  try { state = JSON.parse(await fs.readFile(stateFile, 'utf8')); }
-  catch (error) { if (error.code !== 'ENOENT') throw error; }
-  const existing = await destination.messages.fetch({ limit: 100 });
-  const managed = [...existing.values()].find((message) => message.embeds?.some((embed) => embed.footer?.text?.includes(MARKER)));
-  const messages = [];
-  let before;
-  for (let page = 0; page < 20; page += 1) {
-    const batch = await source.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
-    messages.push(...batch.values());
-    if (batch.size < 100 || [...batch.values()].every((message) => (message.createdTimestamp || 0) < now() - WINDOW_MS)) break;
-    before = batch.last().id;
+  async function writeState(state) {
+    await fs.mkdir(path.dirname(stateFile), { recursive: true });
+    const temporary = `${stateFile}.tmp`;
+    await fs.writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+    await fs.rename(temporary, stateFile);
   }
-  const rows = await rowsFor();
-  const payload = payloadFor(summary(messages, now()), verifiedRecords(rows, source.id, now()));
-  const signature = JSON.stringify(payload.embeds[0].description);
-  const current = managed || (state.message_id ? await destination.messages.fetch(state.message_id).catch(() => null) : null);
-  if (current && state.signature === signature) return { status: 'UNCHANGED', messageId: current.id };
-  const posted = current ? await current.edit(payload) : await destination.send(payload);
-  await fs.mkdir(path.dirname(stateFile), { recursive: true });
-  await fs.writeFile(stateFile, `${JSON.stringify({ message_id: posted.id, signature }, null, 2)}\n`);
-  return { status: current ? 'UPDATED' : 'CREATED', messageId: posted.id };
+  async function channels() {
+    const [source, review, destination] = await Promise.all([sourceChannelFor(), reviewChannelFor(), destinationChannelFor()]);
+    if (!source.guild?.id || source.guild.id !== review.guild?.id || source.guild.id !== destination.guild?.id
+      || new Set([source.id, review.id, destination.id]).size !== 3) {
+      throw new Error('Expert pulse source, review, and VIP destination must be distinct channels in the same server.');
+    }
+    for (const [name, channel] of [['review', review], ['VIP destination', destination]]) {
+      if (channel.permissionsFor(channel.guild.roles.everyone)?.has('ViewChannel') !== false) {
+        throw new Error(`Expert pulse ${name} privacy could not be verified; refusing to publish VIP selections.`);
+      }
+    }
+    return { source, review, destination };
+  }
+  async function candidate(source) {
+    const messages = [];
+    let before;
+    for (let page = 0; page < 20; page += 1) {
+      const batch = await source.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+      messages.push(...batch.values());
+      if (batch.size < 100 || [...batch.values()].every((message) => operatingDate(message.createdTimestamp || 0) !== operatingDate(now()))) break;
+      before = batch.last().id;
+    }
+    const rows = await rowsFor();
+    const channels = typeof paidChannelIds === 'function' ? paidChannelIds() : paidChannelIds;
+    const payload = payloadFor(summary(messages, now()), verifiedRecords(rows, channels));
+    const digest = createHash('sha256').update(payload.embeds[0].description).digest('hex').slice(0, 20);
+    return { payload, digest };
+  }
+  function reviewPayload(payload, digest, status) {
+    return {
+      allowedMentions: { parse: [] },
+      content: status === 'PENDING' ? 'Private review: verify the figures, then approve this exact snapshot for VIP.'
+        : status === 'REJECTED' ? 'Rejected. Nothing was posted to VIP.' : 'Approved and posted to VIP.',
+      embeds: [{ ...payload.embeds[0], title: 'Review VIP Expert Picks Pulse', footer: { text: `${REVIEW_MARKER} · ${digest}` } }],
+      components: [{ type: 1, components: [
+        { type: 2, style: 3, label: 'Approve for VIP', custom_id: `expert-pulse:approve:${digest}`, disabled: status !== 'PENDING' },
+        { type: 2, style: 4, label: 'Reject', custom_id: `expert-pulse:reject:${digest}`, disabled: status !== 'PENDING' },
+        { type: 2, style: 2, label: 'Refresh', custom_id: `expert-pulse:refresh:${digest}` }
+      ] }]
+    };
+  }
+  async function refreshUnlocked() {
+    const { source, review, destination } = await channels();
+    const { payload, digest } = await candidate(source);
+    const state = await readState();
+    if (state.status === 'PUBLISHING') {
+      const recent = await destination.messages.fetch({ limit: 100 });
+      const matching = [...recent.values()].find((message) => message.embeds?.some((embed) =>
+        embed.description === state.candidate_description && embed.footer?.text?.includes(MARKER)));
+      if (!matching) throw new Error('Expert pulse VIP publication receipt is uncertain; inspect the destination before retrying.');
+      await writeState({ ...state, status: 'PUBLISHED', posted_message_id: matching.id });
+      const card = state.review_message_id ? await review.messages.fetch(state.review_message_id).catch(() => null) : null;
+      if (card && digest === state.digest) await card.edit(reviewPayload(payload, digest, 'PUBLISHED'));
+      return { status: 'PUBLICATION_RECOVERED', messageId: matching.id };
+    }
+    if (state.status === 'REVIEW_SENDING') {
+      const recent = await review.messages.fetch({ limit: 100 });
+      const matching = [...recent.values()].find((message) => message.embeds?.some((embed) =>
+        embed.footer?.text?.includes(`${REVIEW_MARKER} · ${state.digest}`)));
+      if (!matching) throw new Error('Expert pulse review-card receipt is uncertain; inspect the review channel before retrying.');
+      await writeState({ ...state, status: 'PENDING', review_message_id: matching.id });
+      return { status: 'REVIEW_RECOVERED', messageId: matching.id };
+    }
+    if (state.digest === digest && ['PENDING', 'REJECTED', 'PUBLISHED'].includes(state.status)) {
+      const current = state.review_message_id ? await review.messages.fetch(state.review_message_id).catch(() => null) : null;
+      if (current) return { status: 'UNCHANGED', messageId: current.id };
+    }
+    const next = { ...state, digest, status: 'PENDING', candidate_description: payload.embeds[0].description };
+    const current = state.review_message_id ? await review.messages.fetch(state.review_message_id).catch(() => null) : null;
+    if (current) {
+      await writeState(next);
+      await current.edit(reviewPayload(payload, digest, 'PENDING'));
+      return { status: 'REVIEW_UPDATED', messageId: current.id };
+    }
+    await writeState({ ...next, status: 'REVIEW_SENDING' });
+    const posted = await review.send(reviewPayload(payload, digest, 'PENDING'));
+    await writeState({ ...next, review_message_id: posted.id });
+    return { status: 'REVIEW_CREATED', messageId: posted.id };
+  }
+  async function decideUnlocked({ customId, userId, ownerId, guildId, channelId, messageId }) {
+    const match = String(customId).match(/^expert-pulse:(approve|reject|refresh):([a-f0-9]{20})$/);
+    if (!match) throw new Error('Unknown expert pulse action.');
+    if (!isApprover({ userId, ownerId })) throw new Error('Only Kobe or a configured pick approver can review this pulse.');
+    const { source, review, destination } = await channels();
+    if (guildId !== source.guild.id || channelId !== review.id) throw new Error('Expert pulse action must come from the private review channel.');
+    const state = await readState();
+    if (messageId !== state.review_message_id) throw new Error('This is not the current expert pulse review card.');
+    if (match[1] === 'refresh') return refreshUnlocked();
+    if (state.digest !== match[2] || state.status !== 'PENDING') throw new Error('This review is stale or already decided.');
+    const fresh = await candidate(source);
+    if (fresh.digest !== state.digest) {
+      await refreshUnlocked();
+      throw new Error('Expert data changed. Review the refreshed card before approving.');
+    }
+    if (match[1] === 'reject') {
+      await writeState({ ...state, status: 'REJECTED' });
+      const card = await review.messages.fetch(messageId);
+      await card.edit(reviewPayload(fresh.payload, state.digest, 'REJECTED'));
+      return { status: 'REJECTED' };
+    }
+    await writeState({ ...state, status: 'PUBLISHING' });
+    let existing = state.posted_message_id ? await destination.messages.fetch(state.posted_message_id).catch(() => null) : null;
+    if (state.posted_message_id && !existing) throw new Error('Previous VIP message is missing or inaccessible; publication held to avoid a duplicate.');
+    if (!existing) {
+      // Recover the managed message even if an old ephemeral state file was
+      // lost. Never create a second VIP pulse while one is still visible.
+      const recent = await destination.messages.fetch({ limit: 100 });
+      existing = [...recent.values()].find((message) => message.embeds?.some((embed) => embed.footer?.text?.includes(MARKER))) || null;
+    }
+    const posted = existing ? await existing.edit(fresh.payload) : await destination.send(fresh.payload);
+    const complete = { ...state, status: 'PUBLISHED', posted_message_id: posted.id };
+    await writeState(complete);
+    const card = await review.messages.fetch(messageId);
+    await card.edit(reviewPayload(fresh.payload, state.digest, 'PUBLISHED'));
+    return { status: 'PUBLISHED', messageId: posted.id };
+  }
+  return { refresh: () => locked(refreshUnlocked), decide: (args) => locked(() => decideUnlocked(args)) };
 }
 
 module.exports = { MARKER, createExpertPulse, payloadFor, selections, summary, verifiedRecords };
