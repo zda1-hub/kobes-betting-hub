@@ -209,9 +209,9 @@ async function providerPost(env, operation, endpoint, fields, fetchImpl = fetch)
 async function currentFreePick(env, fetchImpl = fetch) {
   const origin = String(env.FREE_PICK_API_ORIGIN || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
   const currentUrl = `${origin}/api/free-pick/current`;
-  const request = new Request(currentUrl, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10000) });
   let response;
   try {
+    const request = new Request(currentUrl, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10000) });
     response = env.PUBLISHER_SERVICE
       ? await env.PUBLISHER_SERVICE.fetch(request)
       : await fetchImpl(request);
@@ -230,12 +230,17 @@ async function currentFreePick(env, fetchImpl = fetch) {
 
 async function deliverCurrentStory(env, fetchImpl = fetch) {
   if (!configured(env) || !publishingEnabled(env)) return { status: 'disabled' };
-  await schema(env);
-  const connection = await env.DB.prepare('SELECT * FROM instagram_connections WHERE target = ?').bind(TARGET).first();
+  try { await schema(env); }
+  catch { throw new SafeError('INSTAGRAM_SCHEMA_FAILED', 503); }
+  let connection;
+  try { connection = await env.DB.prepare('SELECT * FROM instagram_connections WHERE target = ?').bind(TARGET).first(); }
+  catch { throw new SafeError('INSTAGRAM_CONNECTION_READ_FAILED', 503); }
   if (!connection || connection.expires_at <= Date.now()) return { status: 'not_connected' };
   const pick = await currentFreePick(env, fetchImpl);
   if (!publicationDateAllowed(env, pick.operatingDate)) return { status: 'before_activation_date' };
-  let row = await env.DB.prepare('SELECT * FROM instagram_story_deliveries WHERE pick_id = ?').bind(pick.pickId).first();
+  let row;
+  try { row = await env.DB.prepare('SELECT * FROM instagram_story_deliveries WHERE pick_id = ?').bind(pick.pickId).first(); }
+  catch { throw new SafeError('INSTAGRAM_STORY_READ_FAILED', 503); }
   if (row?.state === 'published') return { status: 'published', mediaId: row.media_id };
   if (row && !['container_created'].includes(row.state)) return { status: row.state };
   const operation = crypto.randomUUID();
@@ -243,7 +248,9 @@ async function deliverCurrentStory(env, fetchImpl = fetch) {
   try { token = await decrypt(connection.encrypted_token, env); }
   catch { throw new SafeError('INSTAGRAM_TOKEN_DECRYPT_FAILED', 503); }
   if (!row) {
-    const reserved = await env.DB.prepare(`INSERT INTO instagram_story_deliveries (pick_id, operating_date, story_url, state, attempted_at, updated_at) VALUES (?, ?, ?, 'creating_container', ?, ?) ON CONFLICT DO NOTHING`).bind(pick.pickId, pick.operatingDate, pick.storyUrl, Date.now(), Date.now()).run();
+    let reserved;
+    try { reserved = await env.DB.prepare(`INSERT INTO instagram_story_deliveries (pick_id, operating_date, story_url, state, attempted_at, updated_at) VALUES (?, ?, ?, 'creating_container', ?, ?) ON CONFLICT DO NOTHING`).bind(pick.pickId, pick.operatingDate, pick.storyUrl, Date.now(), Date.now()).run(); }
+    catch { throw new SafeError('INSTAGRAM_STORY_RESERVATION_FAILED', 503); }
     if (reserved.meta.changes !== 1) return { status: 'already_reserved' };
     try {
       const containerId = await providerPost(env, operation, 'story_create', { accountId: connection.account_id, storyUrl: pick.storyUrl, token }, fetchImpl);
