@@ -15,6 +15,7 @@ on:
           - reconcile
           - encrypted-backup
           - apply-membership-migrations
+          - provision-sports-centered-creator
 
 permissions:
   contents: read
@@ -102,3 +103,23 @@ jobs:
         run: node pipeline/migrate-production.js
       - name: Apply locked membership migrations
         run: node pipeline/migrate-production.js --apply
+
+  provision-sports-centered-creator:
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'provision-sports-centered-creator'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCTION_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      CREATOR_PROVISION_CONFIRM: PROVISION_SPORTS_CENTERED_CREATOR_IN_PRODUCTION
+    steps:
+      - name: Check out the approved release source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Provision only the approved Sports Centered creator invitation
+        run: node scripts/provision-sports-centered-creator.mjs
