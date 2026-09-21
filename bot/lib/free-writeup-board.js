@@ -38,19 +38,16 @@ function marketLabel(row) {
   return 'player prop';
 }
 
-function safeFacts(row) {
-  const selection = String(row.selection || '').toLowerCase();
-  const line = String(row.published_line || '').match(/\d+(?:\.\d+)?/g) || [];
-  const selectionNumbers = selection.match(/\d+(?:\.\d+)?/g) || [];
-  const privateNumbers = [...new Set([...line, ...selectionNumbers].filter((number) => number.includes('.')))];
-  return String(row.teaser_source || '').split(/\r?\n/)
-    .filter((item) => /^\s*[-•]\s*\S/.test(item))
-    .map((item) => item.replace(/^\s*[-•]\s*/, '').replace(/\*\*/g, '').trim())
-    .filter((item) => item.length >= 24 && item.length <= 180)
-    .filter((item) => !/\b(?:over|under|o|u)\s*\d|[+−-]\d{3,4}\b|https?:\/\/|@everyone|@here/i.test(item))
-    .filter((item) => !privateNumbers.some((number) => new RegExp(`(^|\\D)${number.replace('.', '\\.')}($|\\D)`).test(item)))
-    .filter((item) => !selection.includes(item.toLowerCase()))
-    .slice(0, 2);
+function safeEvidenceTopics(row) {
+  // Never copy writeup sentences into a public preview. Even sentences without
+  // the wager can identify a player, team, or target line indirectly.
+  const source = String(row.teaser_source || '').toLowerCase();
+  return [
+    [/\b(?:targets?|carries|snaps?|attempts?|usage|workload|opportunities)\b/, 'Usage and opportunity'],
+    [/\b(?:last|recent|season|games?|weeks?|averag\w*|form)\b/, 'Recent production'],
+    [/\b(?:defense|opponent|matchup|coverage|rank\w*|allowed)\b/, 'Matchup context'],
+    [/\b(?:injur\w*|questionable|availability|absence|inactive)\b/, 'Availability context']
+  ].filter(([pattern]) => pattern.test(source)).slice(0, 2).map(([, label]) => label);
 }
 
 function freeWriteupBoardPayload(rows, date) {
@@ -65,8 +62,8 @@ function freeWriteupBoardPayload(rows, date) {
   if (!eligible.length) return null;
   const lines = eligible.map((row, index) => {
     const [emoji] = sportLabel(row);
-    const facts = safeFacts(row);
-    return `**${emoji} PLAY ${index + 1} · ████ ${marketLabel(row)}**\n${facts.length ? facts.map((fact) => `• ${fact}`).join('\n') : '• Full supporting stats and exact pick are in VIP.'}`;
+    const topics = safeEvidenceTopics(row);
+    return `**${emoji} PLAY ${index + 1} · ████ ${marketLabel(row)}**\n${topics.length ? `• Breakdown covers ${topics.join(' and ').toLowerCase()}. Exact details stay in VIP.` : '• Supporting stats and exact details stay in VIP.'}`;
   });
   const description = [
     '**Today’s plays:**',
