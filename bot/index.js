@@ -176,6 +176,7 @@ const vipExpertList = vipExpertListChannelId ? createVipExpertList({
 const refreshExpertPulse = vipExpertPulseChannelId ? () => createExpertPulse({
   sourceChannelFor: () => approvedTextChannel(expertPicksChannelId),
   destinationChannelFor: () => approvedTextChannel(vipExpertPulseChannelId),
+  rowsFor: () => readPickLog(),
   stateFile: path.join(path.dirname(pickLogPath()), 'expert-pulse.json')
 }) : null;
 const pickApprovalChannelId = process.env.PICK_APPROVAL_CHANNEL_ID;
