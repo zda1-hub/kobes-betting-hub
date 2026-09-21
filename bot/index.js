@@ -409,17 +409,21 @@ function canonicalFreePacket(row) {
 const manualFreePackets = new Map();
 
 async function ingestManualFreePicks(date) {
-  if (!freePickChannelId || !process.env.DISCORD_GUILD_ID || pickApproverUserIds.size === 0) return;
+  if (!freePickChannelId || !process.env.DISCORD_GUILD_ID || (pickApproverUserIds.size === 0 && publisherRoleIds.size === 0)) return;
   const channel = await approvedTextChannel(freePickChannelId);
   const messages = await channel.messages.fetch({ limit: 100 });
   const existingIds = new Set((await readPickLog()).map((row) => row.pick_id));
   const records = [...messages.values()]
-    .map((message) => manualFreePickRecord(message, {
-      operatingDate: dailyPickOperatingDate,
-      guildId: process.env.DISCORD_GUILD_ID,
-      channelId: freePickChannelId,
-      approverIds: pickApproverUserIds,
-    }))
+    .map((message) => {
+      const authorizedIds = new Set(pickApproverUserIds);
+      if (message.member?.roles?.cache?.some((role) => publisherRoleIds.has(role.id))) authorizedIds.add(message.author.id);
+      return manualFreePickRecord(message, {
+        operatingDate: dailyPickOperatingDate,
+        guildId: process.env.DISCORD_GUILD_ID,
+        channelId: freePickChannelId,
+        approverIds: authorizedIds,
+      });
+    })
     .filter((record) => record?.row.operating_date === date)
     .sort((a, b) => a.row.published_at.localeCompare(b.row.published_at));
   for (const record of records) {
