@@ -190,6 +190,23 @@ test('scheduled Story failures identify the safe stage without reserving or publ
   assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_story_deliveries').get().n, 0);
 });
 
+test('scheduled Story reads the current Free Pick through the publisher service binding', async () => {
+  const env = environment();
+  env.INSTAGRAM_PUBLISHING_ENABLED = 'true';
+  assert.equal((await connected(env)).result.status, 200);
+  let boundReads = 0;
+  env.PUBLISHER_SERVICE = {
+    async fetch(request) {
+      boundReads += 1;
+      assert.equal(new URL(request.url).pathname, '/api/free-pick/current');
+      return Response.json({ error: 'fixture unavailable' }, { status: 404 });
+    },
+  };
+  await assert.rejects(__test.deliverCurrentStory(env, async () => { throw new Error('public fetch must not run'); }), /FREE_PICK_NOT_READY/);
+  assert.equal(boundReads, 1);
+  assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_story_deliveries').get().n, 0);
+});
+
 test('wrong username, Creator account, missing grant and invalid expiration cannot install credentials', async () => {
   for (const options of [{ username: 'bettinhub' }, { type: 'Media_Creator' }, { granted: 'instagram_business_basic' }, { expires: undefined }, { expires: 0 }]) {
     const env = environment(); const mock = providerMock(options);
@@ -319,6 +336,8 @@ nodeTest('OAuth config disables URL-bearing logs, isolates staging, and schedule
   assert.equal(config.compatibility_flags.includes('nodejs_compat'), true);
   assert.deepEqual(config.triggers.crons, ['*/5 * * * *']);
   assert.deepEqual(config.env.staging.triggers.crons, []);
+  assert.deepEqual(config.services, [{ binding: 'PUBLISHER_SERVICE', service: 'bettinghub-publisher' }]);
+  assert.deepEqual(config.env.staging.services, [{ binding: 'PUBLISHER_SERVICE', service: 'bettinghub-publisher-staging' }]);
   assert.equal(config.vars.INSTAGRAM_PUBLISHING_ENABLED, 'true');
   assert.equal(config.env.staging.vars.INSTAGRAM_PUBLISHING_ENABLED, 'false');
   assert.notEqual(config.d1_databases[0].database_id, config.env.staging.d1_databases[0].database_id);
