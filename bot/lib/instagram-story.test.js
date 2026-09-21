@@ -12,13 +12,13 @@ const packet = {
   },
 };
 
-test('renders an Instagram Story PNG at the native 9:16 size', async () => {
-  const png = await renderInstagramStory(packet);
-  const metadata = await sharp(png).metadata();
-  assert.equal(metadata.format, 'png');
+test('renders an Instagram Story JPEG at the native 9:16 size', async () => {
+  const jpeg = await renderInstagramStory(packet);
+  const metadata = await sharp(jpeg).metadata();
+  assert.equal(metadata.format, 'jpeg');
   assert.equal(metadata.width, STORY_WIDTH);
   assert.equal(metadata.height, STORY_HEIGHT);
-  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.deepEqual([...jpeg.subarray(0, 3)], [255, 216, 255]);
 });
 
 test('story copy comes only from approved terms and escapes markup', () => {
@@ -32,5 +32,5 @@ test('story copy comes only from approved terms and escapes markup', () => {
 
 test('wraps long story lines and creates a safe filename', () => {
   assert.ok(wrapWords('A very long approved selection that needs multiple display lines', 18).length > 1);
-  assert.equal(instagramStoryFilename('NFL/001 risky'), 'kobes-betting-hub-NFL-001-risky-story.png');
+  assert.equal(instagramStoryFilename('NFL/001 risky'), 'kobes-betting-hub-NFL-001-risky-story.jpg');
 });

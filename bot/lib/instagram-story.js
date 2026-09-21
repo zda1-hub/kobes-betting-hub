@@ -79,13 +79,13 @@ function storySvg(packet) {
 
 async function renderInstagramStory(packet, { sharpImpl = sharp } = {}) {
   return sharpImpl(Buffer.from(storySvg(packet)))
-    .png({ compressionLevel: 9, palette: true })
+    .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
     .toBuffer();
 }
 
 function instagramStoryFilename(pickId) {
   const safeId = String(pickId || 'free-pick').replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 80);
-  return `kobes-betting-hub-${safeId}-story.png`;
+  return `kobes-betting-hub-${safeId}-story.jpg`;
 }
 
 module.exports = {

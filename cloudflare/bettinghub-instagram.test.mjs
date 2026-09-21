@@ -283,18 +283,21 @@ test('encrypted credentials are random per write and cannot decrypt under anothe
   await assert.rejects(() => __test.decrypt(first, { ...env, INSTAGRAM_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 13).toString('base64') }));
 });
 
-nodeTest('OAuth config disables URL-bearing automatic logs and tracing; staging keeps DB isolated', async () => {
+nodeTest('OAuth config disables URL-bearing logs, isolates staging, and schedules production delivery', async () => {
   const config = JSON.parse(await fs.readFile(new URL('../wrangler.instagram.jsonc', import.meta.url), 'utf8'));
   assert.equal(config.observability.logs.invocation_logs, false);
   assert.equal(config.observability.traces.enabled, false);
   assert.equal(config.compatibility_flags.includes('nodejs_compat'), true);
-  assert.deepEqual(config.triggers.crons, []);
+  assert.deepEqual(config.triggers.crons, ['*/5 * * * *']);
   assert.deepEqual(config.env.staging.triggers.crons, []);
   assert.notEqual(config.d1_databases[0].database_id, config.env.staging.d1_databases[0].database_id);
   assert.equal(config.vars.INSTAGRAM_APP_ID, '');
   for (const secretName of ['INSTAGRAM_APP_SECRET', 'INSTAGRAM_OPERATOR_SECRET', 'INSTAGRAM_TOKEN_ENCRYPTION_KEY']) assert.equal(Object.hasOwn(config.vars, secretName), false);
 });
 
-nodeTest('separate connection source has no media/container/post dispatch path', () => {
-  assert.doesNotMatch(source, /media_publish|media_type|\/api\/queue|FREE_PICK_X|FREE_PICK_SITE/);
+nodeTest('Story delivery is limited to the official current Free Pick and remains feature-gated', () => {
+  assert.match(source, /media_publish/);
+  assert.match(source, /media_type: 'STORIES'/);
+  assert.match(source, /INSTAGRAM_PUBLISHING_ENABLED/);
+  assert.doesNotMatch(source, /FREE_PICK_X|FREE_PICK_SITE/);
 });

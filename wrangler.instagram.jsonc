@@ -13,7 +13,7 @@
     "logs": { "head_sampling_rate": 1, "invocation_logs": false },
     "traces": { "enabled": false }
   },
-  "triggers": { "crons": [] },
+  "triggers": { "crons": ["*/5 * * * *"] },
   "d1_databases": [{
     "binding": "DB",
     "database_name": "bettinghub-publisher",
@@ -22,7 +22,9 @@
   "vars": {
     "INSTAGRAM_PUBLIC_ORIGIN": "https://bettinghub-instagram.kobedirwin.workers.dev",
     "INSTAGRAM_API_VERSION": "v25.0",
-    "INSTAGRAM_APP_ID": ""
+    "INSTAGRAM_APP_ID": "1068122172774873",
+    "INSTAGRAM_PUBLISHING_ENABLED": "false",
+    "FREE_PICK_API_ORIGIN": "https://bettinghub-publisher.kobedirwin.workers.dev"
   },
   "env": {
     "staging": {
@@ -32,7 +34,9 @@
       "vars": {
         "INSTAGRAM_PUBLIC_ORIGIN": "https://bettinghub-instagram-staging.kobedirwin.workers.dev",
         "INSTAGRAM_API_VERSION": "v25.0",
-        "INSTAGRAM_APP_ID": ""
+        "INSTAGRAM_APP_ID": "",
+        "INSTAGRAM_PUBLISHING_ENABLED": "false",
+        "FREE_PICK_API_ORIGIN": "https://bettinghub-publisher-staging.kobedirwin.workers.dev"
       },
       "d1_databases": [{
         "binding": "DB",

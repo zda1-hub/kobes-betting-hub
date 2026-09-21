@@ -91,7 +91,7 @@ test('stores and serves a dated Instagram Story without publishing it to X', asy
   form.set('date', '2026-09-14');
   form.set('caption', 'FREE PLAY\nArizona over 20.5 points');
   form.set('selection', 'Arizona over 20.5 points');
-  form.set('story', new File([storyBytes], 'story.png', { type: 'image/png' }));
+  form.set('story', new File([storyBytes], 'story.jpg', { type: 'image/jpeg' }));
   const env = { FREE_PICK_KV: store, FREE_PICK_SITE_PUBLISH_SECRET: 'test-publisher-secret' };
   const publishResponse = await worker.fetch(new Request('https://publisher.test/api/free-pick/publish', {
     method: 'POST', headers: { authorization: 'Bearer test-publisher-secret' }, body: form,
@@ -104,7 +104,7 @@ test('stores and serves a dated Instagram Story without publishing it to X', asy
 
   const storyResponse = await worker.fetch(new Request(published.storyUrl), env);
   assert.equal(storyResponse.status, 200);
-  assert.equal(storyResponse.headers.get('content-type'), 'image/png');
+  assert.equal(storyResponse.headers.get('content-type'), 'image/jpeg');
   assert.deepEqual(new Uint8Array(await storyResponse.arrayBuffer()), new Uint8Array(storyBytes));
 });
 

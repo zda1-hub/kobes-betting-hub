@@ -457,7 +457,7 @@ async function publishFreePick(request, env) {
   const extension = ALLOWED_IMAGE_TYPES.get(contentType);
   if (image && (!(image instanceof File) || !extension)) return json({ error: "image must be a JPG, PNG, or WebP file" }, 400);
   if (image && (image.size < 1 || image.size > FREE_PICK_MAX_BYTES)) return json({ error: "image must be no larger than 5 MB" }, 400);
-  if (story && (!(story instanceof File) || story.type !== "image/png")) return json({ error: "story must be a PNG file" }, 400);
+  if (story && (!(story instanceof File) || story.type !== "image/jpeg")) return json({ error: "story must be a JPEG file" }, 400);
   if (story && (story.size < 1 || story.size > FREE_PICK_MAX_BYTES)) return json({ error: "story must be no larger than 5 MB" }, 400);
 
   const publishedDate = validDate(String(input.date || input.publishedDate || "")) || phoenixDate();
@@ -482,8 +482,8 @@ async function publishFreePick(request, env) {
     await putFreePickObject(env, objectKey, image, contentType, "public, max-age=31536000, immutable");
   }
   if (story) {
-    storyObjectKey = `free-picks/${publishedDate}/story-${crypto.randomUUID()}.png`;
-    await putFreePickObject(env, storyObjectKey, story, "image/png", "public, max-age=31536000, immutable");
+    storyObjectKey = `free-picks/${publishedDate}/story-${crypto.randomUUID()}.jpg`;
+    await putFreePickObject(env, storyObjectKey, story, "image/jpeg", "public, max-age=31536000, immutable");
   }
 
   const xEnabled = Boolean(env.X_CLIENT_ID);
@@ -558,9 +558,9 @@ async function getFreePickStory(request, env) {
   const headers = new Headers(corsHeaders(request));
   if (object.writeHttpMetadata) object.writeHttpMetadata(headers);
   if (object.httpEtag) headers.set("etag", object.httpEtag);
-  headers.set("content-type", "image/png");
+  headers.set("content-type", "image/jpeg");
   headers.set("cache-control", "public, max-age=31536000, immutable");
-  headers.set("content-disposition", `inline; filename="kobes-betting-hub-${publishedDate}-story.png"`);
+  headers.set("content-disposition", `inline; filename="kobes-betting-hub-${publishedDate}-story.jpg"`);
   return new Response(object.body, { headers });
 }
 
@@ -615,6 +615,7 @@ async function getFreePickObject(env, key) {
 
 function publicFreePick(pick, origin) {
   return {
+    pickId: pick.pickId || null,
     publishedDate: pick.publishedDate,
     caption: pick.caption,
     details: pick.details || {},

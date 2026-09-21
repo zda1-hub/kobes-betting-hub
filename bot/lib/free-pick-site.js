@@ -72,7 +72,7 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
   if (imagePayload || storyPayload) {
     const form = new FormData();
     if (imagePayload) form.append('image', new Blob([imagePayload], { type: imageType }), 'free-pick.png');
-    if (storyPayload) form.append('story', new Blob([storyPayload], { type: 'image/png' }), instagramStoryFilename(packet.pick_id));
+    if (storyPayload) form.append('story', new Blob([storyPayload], { type: 'image/jpeg' }), instagramStoryFilename(packet.pick_id));
     Object.entries({ date, caption, pickId: packet.pick_id, xQueueId: freePickXPostId(packet.pick_id), ...details }).forEach(([key, value]) => form.append(key, String(value || '')));
     response = await auditedFetch(`${config.url}/api/free-pick/publish`, { method: 'POST', headers: { authorization: `Bearer ${config.secret}` }, body: form }, {
       service: 'cloudflare-worker',
