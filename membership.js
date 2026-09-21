@@ -81,7 +81,7 @@ const clearCheckoutRequestId = (offer) => {
 const checkoutState = new URLSearchParams(window.location.search).get('checkout');
 const checkoutSession = new URLSearchParams(window.location.search).get('session_id');
 const requestedReferralCode = (new URLSearchParams(window.location.search).get('ref') || '').toUpperCase();
-const referralCode = /^KBH-[A-Z0-9]{10}$/.test(requestedReferralCode) ? requestedReferralCode : '';
+const referralCode = /^(KBH|KBC)-[A-Z0-9]{10}$/.test(requestedReferralCode) ? requestedReferralCode : '';
 
 if (referralCode && !checkoutState) {
   const starterButton = document.querySelector('[data-checkout="starter"]');
@@ -94,7 +94,7 @@ if (referralCode && !checkoutState) {
     trialButton.dataset.checkout = 'referral_trial';
     trialButton.innerHTML = 'Start with 2 days free <span aria-hidden="true">→</span>';
   }
-  if (offerBadge) offerBadge.innerHTML = '<strong>MEMBER REFERRAL</strong><span>Exclusive two-day free trial</span>';
+  if (offerBadge) offerBadge.innerHTML = '<strong>REFERRAL OFFER</strong><span>Exclusive two-day free trial</span>';
   if (priceDescription) priceDescription.textContent = 'per month after your 2-day free trial';
   setCheckoutMessage('Referral offer: 2 days free, then $32.99/month until canceled. The $10 starter option is not available with referrals.');
 }

@@ -47,6 +47,7 @@ const publicFiles = [
   'member.html',
   'member.js',
   'refer.html',
+  'creator.html',
   'referral.css',
   'referral.js',
   'robots.txt',
