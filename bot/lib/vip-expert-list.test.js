@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { baselineNames, expertName, listMonth, namesFromMessages, payloadFor } = require('./vip-expert-list');
+const { baselineNames, expertName, listMonth, managedNames, namesFromMessages, payloadFor } = require('./vip-expert-list');
 
 test('reads Kobe’s original list and recognizes only actual expert-picks posts', () => {
   const list = { content: 'September 2026 Updated List - Alphabetical Order\n- Ben Burns ($150/week)\n- McBets ($39.99/week)\n- LearLocks ($10/3 days)\nTotal: 3 cappers/sources.' };
@@ -16,6 +16,7 @@ test('reads Kobe’s original list and recognizes only actual expert-picks posts
   assert.deepEqual(names, ['Ben Burns', 'Hammering Hank', 'Kelly In Vegas', 'LearLocks', 'McBets']);
   const payload = payloadFor(names, 3, listMonth(list));
   assert.equal(payload.embeds[0].title, 'September 2026');
+  assert.deepEqual(managedNames({ embeds: payload.embeds }), names);
   assert.match(payload.content, /5 sources.*2 added/);
   assert.doesNotMatch(JSON.stringify(payload), /Falcons|Broncos|Rams|\$150/);
 });

@@ -25,6 +25,12 @@ function baselineNames(message) {
     .map(cleanName).filter(Boolean);
 }
 
+function managedNames(message) {
+  if (!message.embeds?.some((embed) => embed.footer?.text?.includes(MARKER))) return [];
+  return message.embeds.flatMap((embed) => String(embed.description || '').split(/\r?\n/)
+    .map((line) => line.match(/^\s*\d+\.\s+(.+?)\s*$/)?.[1]).map(cleanName).filter(Boolean));
+}
+
 function listMonth(message) {
   return messageText(message).match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+20\d{2}\b/i)?.[0] || '';
 }
@@ -98,11 +104,11 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile }) {
     if (!initialized) {
       const listMessages = await destination.messages.fetch({ limit: 100 });
       const original = [...listMessages.values()].find((message) => baselineNames(message).length >= 20);
-      baseline = original ? baselineNames(original) : [];
-      title = original ? listMonth(original) : '';
-      if (!baseline.length) throw new Error('Kobe’s original VIP expert list was not found; no replacement posted.');
+      const managed = [...listMessages.values()].find((message) => managedNames(message).length >= 20);
+      baseline = original ? baselineNames(original) : managed ? managedNames(managed) : [];
+      title = original ? listMonth(original) : managed ? listMonth(managed) : '';
+      if (!baseline.length) throw new Error('VIP expert list source was not found; no replacement posted.');
       if (!state.message_id) {
-        const managed = [...listMessages.values()].find((message) => message.embeds?.some((embed) => embed.footer?.text?.includes(MARKER)));
         if (managed) state.message_id = managed.id;
       }
       discovered = Array.isArray(state.discovered) ? state.discovered : [];
@@ -111,7 +117,7 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile }) {
     const messages = await fetchHistory(source, state.message_id ? 1 : 20);
     const names = namesFromMessages(messages, [...baseline, ...discovered]);
     discovered = names.filter((name) => !baseline.some((item) => keyFor(item) === keyFor(name)));
-    const payload = payloadFor(names, baseline.length, title || 'VIP Expert List');
+    const payload = payloadFor(names, baseline.length, title || 'September 2026');
     const signature = JSON.stringify([names, baseline.length, title]);
     const current = state.message_id ? await destination.messages.fetch(state.message_id).catch(() => null) : null;
     if (state.signature === signature && current) return { status: 'UNCHANGED', count: names.length, messageId: state.message_id };
@@ -122,4 +128,4 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile }) {
   return { refresh };
 }
 
-module.exports = { MARKER, baselineNames, cleanName, createVipExpertList, expertName, listMonth, namesFromMessages, payloadFor };
+module.exports = { MARKER, baselineNames, cleanName, createVipExpertList, expertName, listMonth, managedNames, namesFromMessages, payloadFor };
