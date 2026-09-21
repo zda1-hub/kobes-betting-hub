@@ -2142,11 +2142,27 @@ client.once(Events.ClientReady, async (readyClient) => {
   }
   try {
     const channel = await ensureFreeWriteupsChannel();
+    let lastSitePreview = '';
     freeWriteupBoard = createFreeWriteupBoard({
       channelFor: () => Promise.resolve(channel),
       rowsFor: allWriteupRows,
       stateFile: path.join(path.dirname(pickLogPath()), 'free-writeups-board.json'),
-      operatingDate: () => dailyPickOperatingDate(new Date())
+      operatingDate: () => dailyPickOperatingDate(new Date()),
+      syncSite: async (board) => {
+        const secret = process.env.FREE_PICK_SITE_PUBLISH_SECRET;
+        if (!secret) return;
+        const serialized = JSON.stringify(board);
+        if (serialized === lastSitePreview) return;
+        const origin = (process.env.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
+        const response = await fetch(`${origin}/api/vip-preview/current`, {
+          method: 'PUT',
+          headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
+          body: serialized,
+          signal: AbortSignal.timeout(10000)
+        });
+        if (!response.ok) console.error('VIP preview website sync needs attention:', response.status);
+        else lastSitePreview = serialized;
+      }
     });
     const receipt = await freeWriteupBoard.refresh();
     console.log('Free writeups preview receipt:', JSON.stringify({ ...receipt, channelId: channel.id }));

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { freeWriteupBoardPayload } = require('./free-writeup-board');
+const { freeWriteupBoardPayload, publicPreviews } = require('./free-writeup-board');
 
 test('previews every current writeup without exposing exact wagers', () => {
   const payload = freeWriteupBoardPayload([
@@ -13,8 +13,9 @@ test('previews every current writeup without exposing exact wagers', () => {
   assert.match(text, /Today’s plays/);
   assert.match(text, /PLAY 1[\s\S]*PLAY 2/);
   assert.match(text, /recent production/);
-  assert.match(text, /████ receptions/);
-  assert.doesNotMatch(text, /Bijan|Boutte|Higbee|Blake|Corum|Giants|Cowboys|Rams|43\.9|6-2|4\.5|38\.5|-150|-115|Old exact|Not a writeup/);
+  assert.match(text, /EXACT PICK HIDDEN/);
+  assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'] }]);
+  assert.doesNotMatch(text, /Bijan|Boutte|Higbee|Blake|Corum|Giants|Cowboys|Rams|receptions|rushing yards|43\.9|6-2|4\.5|38\.5|-150|-115|Old exact|Not a writeup/);
 });
 
 test('stays empty until a writeup is published', () => {

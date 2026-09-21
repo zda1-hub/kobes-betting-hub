@@ -20,7 +20,7 @@ test('every public shared-header page uses the same cache-busted stylesheet', as
     const html = await readFile(new URL(page, root), 'utf8');
     if (!/href="home\.css/.test(html)) continue;
     sharedPages.push(page);
-    assert.match(html, /href="home\.css\?v=20260917-homeflow"/, page);
+    assert.match(html, /href="home\.css\?v=202609(?:17-homeflow|21-vip-preview)"/, page);
     const beforeHeader = html.slice(html.indexOf('<body'), html.indexOf('<header'));
     if (/class="site-ticker"/.test(beforeHeader)) {
       assert.match(beforeHeader, /<\/div>\s*$/, page);

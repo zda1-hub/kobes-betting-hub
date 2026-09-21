@@ -1,6 +1,37 @@
 const year = document.getElementById('year');
 if (year) year.textContent = new Date().getFullYear();
 
+const vipPreview = document.querySelector('[data-vip-preview]');
+const vipPreviewList = document.querySelector('[data-vip-preview-list]');
+if (vipPreview && vipPreviewList) {
+  const permittedTopics = new Set(['Usage and opportunity', 'Recent production', 'Matchup context', 'Availability context']);
+  const permittedSports = new Set(['football', 'baseball', 'basketball', 'hockey', 'soccer', 'sports']);
+  fetch('https://bettinghub-publisher.kobedirwin.workers.dev/api/vip-preview/current', {
+    headers: { Accept: 'application/json' }
+  }).then((response) => {
+    if (!response.ok) throw new Error('VIP preview unavailable');
+    return response.json();
+  }).then((board) => {
+    if (!Array.isArray(board?.previews) || !board.previews.length) return;
+    for (const [index, preview] of board.previews.entries()) {
+      const sport = permittedSports.has(preview.sport) ? preview.sport : 'sports';
+      const topics = Array.isArray(preview.topics) ? preview.topics.filter((topic) => permittedTopics.has(topic)).slice(0, 3) : [];
+      const card = document.createElement('article');
+      card.className = 'vip-preview-card';
+      const label = document.createElement('span');
+      label.className = 'vip-preview-card-label';
+      label.textContent = `${sport.toUpperCase()} / PLAY ${index + 1}`;
+      const title = document.createElement('h3');
+      title.textContent = 'Exact pick hidden';
+      const detail = document.createElement('p');
+      detail.textContent = topics.length ? `Research covers ${topics.join(', ').toLowerCase()}.` : 'Full supporting research is inside VIP.';
+      card.append(label, title, detail);
+      vipPreviewList.append(card);
+    }
+    vipPreview.hidden = false;
+  }).catch(() => { /* Do not display stale or unverified plays. */ });
+}
+
 const menuToggle = document.querySelector('[data-menu-toggle]');
 const menu = document.querySelector('[data-menu]');
 menuToggle.addEventListener('click', () => {

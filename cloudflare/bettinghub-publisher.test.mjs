@@ -56,6 +56,21 @@ function memoryKv() {
   };
 }
 
+test('VIP preview feed strips all private fields and expires by operating date', async () => {
+  const env = { FREE_PICK_KV: memoryKv(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret' };
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const input = { date, previews: [{ sport: 'football', topics: ['Recent production', 'Giants allow 8 catches'], selection: 'Higbee Over 4.5', team: 'Rams', market: 'receptions' }] };
+  const put = await worker.fetch(new Request('https://publisher.test/api/vip-preview/current', { method: 'PUT', headers: { authorization: 'Bearer fixture-secret', 'content-type': 'application/json' }, body: JSON.stringify(input) }), env);
+  assert.equal(put.status, 200);
+  const response = await worker.fetch(new Request('https://publisher.test/api/vip-preview/current'), env);
+  const body = await response.text();
+  assert.equal(response.status, 200);
+  assert.doesNotMatch(body, /Higbee|Giants|Rams|4\.5|receptions/);
+  assert.deepEqual(JSON.parse(body).previews[0].topics, ['Recent production']);
+  const unauthorized = await worker.fetch(new Request('https://publisher.test/api/vip-preview/current', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) }), env);
+  assert.equal(unauthorized.status, 401);
+});
+
 test('text-only Free Pick remains readable after publication', async () => {
   const env = {
     FREE_PICK_KV: memoryKv(),

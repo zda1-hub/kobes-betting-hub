@@ -24,20 +24,6 @@ function privateWagerKey(row) {
     .join(' ');
 }
 
-function marketLabel(row) {
-  const value = `${row.market || ''} ${row.selection || ''} ${row.published_line || ''}`.toLowerCase();
-  if (/strikeouts?/.test(value)) return 'strikeouts';
-  if (/receptions?/.test(value)) return 'receptions';
-  if (/receiving yards?/.test(value)) return 'receiving yards';
-  if (/rushing (?:yards?|attempts?)/.test(value)) return value.match(/rushing (?:yards?|attempts?)/)[0];
-  if (/passing (?:yards?|attempts?|touchdowns?)/.test(value)) return value.match(/passing (?:yards?|attempts?|touchdowns?)/)[0];
-  if (/touchdowns?/.test(value)) return 'touchdowns';
-  if (/assists?/.test(value)) return 'assists';
-  if (/rebounds?/.test(value)) return 'rebounds';
-  if (/hits?/.test(value)) return 'hits';
-  return 'player prop';
-}
-
 function safeEvidenceTopics(row) {
   // Never copy writeup sentences into a public preview. Even sentences without
   // the wager can identify a player, team, or target line indirectly.
@@ -47,10 +33,10 @@ function safeEvidenceTopics(row) {
     [/\b(?:last|recent|season|games?|weeks?|averag\w*|form)\b/, 'Recent production'],
     [/\b(?:defense|opponent|matchup|coverage|rank\w*|allowed)\b/, 'Matchup context'],
     [/\b(?:injur\w*|questionable|availability|absence|inactive)\b/, 'Availability context']
-  ].filter(([pattern]) => pattern.test(source)).slice(0, 2).map(([, label]) => label);
+  ].filter(([pattern]) => pattern.test(source)).slice(0, 3).map(([, label]) => label);
 }
 
-function freeWriteupBoardPayload(rows, date) {
+function publicPreviews(rows, date) {
   const eligible = [];
   const seen = new Set();
   for (const row of rows.filter((item) => item.operating_date === date && isWriteup(item))) {
@@ -59,12 +45,17 @@ function freeWriteupBoardPayload(rows, date) {
     seen.add(key);
     eligible.push(row);
   }
-  if (!eligible.length) return null;
-  const lines = eligible.map((row, index) => {
-    const [emoji] = sportLabel(row);
-    const topics = safeEvidenceTopics(row);
-    return `**${emoji} PLAY ${index + 1} · ████ ${marketLabel(row)}**\n${topics.length ? `• Breakdown covers ${topics.join(' and ').toLowerCase()}. Exact details stay in VIP.` : '• Supporting stats and exact details stay in VIP.'}`;
+  return eligible.map((row, index) => {
+    const [emoji, sport] = sportLabel(row);
+    return { number: index + 1, emoji, sport, topics: safeEvidenceTopics(row) };
   });
+}
+
+function freeWriteupBoardPayload(rows, date) {
+  const previews = publicPreviews(rows, date);
+  if (!previews.length) return null;
+  const lines = previews.map(({ number, emoji, topics }) =>
+    `**${emoji} PLAY ${number} · EXACT PICK HIDDEN**\n• ${topics.length ? `Research covers ${topics.join(', ').toLowerCase()}.` : 'Full supporting research is in VIP.'} No names, teams, or bet terms shown here.`);
   const description = [
     '**Today’s plays:**',
     ...lines,
@@ -93,12 +84,13 @@ async function writeState(file, state) {
   await fs.writeFile(file, `${JSON.stringify(state, null, 2)}\n`);
 }
 
-function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate }) {
+function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate, syncSite = async () => {} }) {
   async function refresh() {
     const channel = await channelFor();
     const date = operatingDate();
     const rows = await rowsFor();
     const payload = freeWriteupBoardPayload(rows, date);
+    const previews = publicPreviews(rows, date);
     const state = await readState(stateFile);
     if (state.message_id && state.date !== date) {
       const prior = await channel.messages.fetch(state.message_id).catch(() => null);
@@ -107,6 +99,7 @@ function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate 
       delete state.date;
     }
     if (!payload) {
+      await syncSite({ date, previews: [] });
       await writeState(stateFile, state);
       return { status: 'EMPTY', date, previews: 0 };
     }
@@ -115,10 +108,11 @@ function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate 
       : null;
     const message = current ? await current.edit(payload) : await channel.send(payload);
     await writeState(stateFile, { date, message_id: message.id, updated_at: new Date().toISOString() });
+    await syncSite({ date, previews });
     return { status: current ? 'UPDATED' : 'CREATED', date, messageId: message.id,
       previews: rows.filter((row) => row.operating_date === date && isWriteup(row)).length };
   }
   return { refresh };
 }
 
-module.exports = { FREE_BOARD_MARKER, createFreeWriteupBoard, freeWriteupBoardPayload };
+module.exports = { FREE_BOARD_MARKER, createFreeWriteupBoard, freeWriteupBoardPayload, publicPreviews };

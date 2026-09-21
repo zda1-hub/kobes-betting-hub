@@ -157,10 +157,45 @@ async function handleRequest(request, env) {
   if (url.pathname === "/api/queue/recap-notifications" && request.method === "GET") return listRecapNotifications(request, env);
   if (url.pathname === "/api/queue/recap-notifications/deliver" && request.method === "POST") return markRecapNotificationDelivered(request, env);
   if (url.pathname === "/api/free-pick/current" && request.method === "GET") return getCurrentFreePick(request, env);
+  if (url.pathname === "/api/vip-preview/current" && request.method === "GET") return getVipPreview(request, env);
+  if (url.pathname === "/api/vip-preview/current" && request.method === "PUT") return putVipPreview(request, env);
   if (url.pathname === "/media/free-pick/current" && request.method === "GET") return getCurrentFreePickImage(request, env);
   if (url.pathname.startsWith("/media/free-pick/story/") && request.method === "GET") return getFreePickStory(request, env);
   if (url.pathname === "/api/free-pick/publish" && request.method === "POST") return publishFreePick(request, env);
   return new Response("Not found", { status: 404 });
+}
+
+const VIP_PREVIEW_KEY = 'vip-preview/current.json';
+const VIP_TOPICS = new Set(['Usage and opportunity', 'Recent production', 'Matchup context', 'Availability context']);
+const VIP_SPORTS = new Map([['football', '🏈'], ['baseball', '⚾'], ['basketball', '🏀'], ['hockey', '🏒'], ['soccer', '⚽'], ['sports', '🎯']]);
+
+async function putVipPreview(request, env) {
+  if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({ error: 'Unauthorized' }, 401);
+  if (!env.FREE_PICK_KV) return json({ error: 'Preview storage is not configured' }, 503);
+  let input;
+  try { input = await request.json(); } catch { return json({ error: 'Expected JSON' }, 400); }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date || '') || !Array.isArray(input?.previews) || input.previews.length > 40) {
+    return json({ error: 'Invalid preview date or list' }, 400);
+  }
+  // Rebuild from a tiny allowlist. Never store the incoming source writeups,
+  // player/team names, markets, lines, or odds in the public website feed.
+  const previews = input.previews.map((item, index) => {
+    const sport = VIP_SPORTS.has(item?.sport) ? item.sport : 'sports';
+    const topics = Array.isArray(item?.topics) ? [...new Set(item.topics.filter(topic => VIP_TOPICS.has(topic)))].slice(0, 3) : [];
+    return { number: index + 1, sport, emoji: VIP_SPORTS.get(sport), topics };
+  });
+  const board = { date: input.date, previews, updatedAt: new Date().toISOString() };
+  await env.FREE_PICK_KV.put(VIP_PREVIEW_KEY, JSON.stringify(board));
+  return json({ date: board.date, count: previews.length, status: 'updated' });
+}
+
+async function getVipPreview(request, env) {
+  if (!env.FREE_PICK_KV) return json({ error: 'Preview storage is not configured' }, 503, corsHeaders(request));
+  const stored = await env.FREE_PICK_KV.get(VIP_PREVIEW_KEY, 'text');
+  let board;
+  try { board = stored ? JSON.parse(stored) : null; } catch { board = null; }
+  if (!board || board.date !== phoenixDate()) return json({ date: phoenixDate(), previews: [] }, 200, corsHeaders(request));
+  return json(board, 200, corsHeaders(request));
 }
 
 // Kobe's existing Gmail automation uses this private queue.  It accepts only
