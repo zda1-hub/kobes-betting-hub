@@ -210,12 +210,13 @@ async function currentFreePick(env, fetchImpl = fetch) {
   const origin = String(env.FREE_PICK_API_ORIGIN || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
   const currentUrl = `${origin}/api/free-pick/current`;
   let response;
-  try {
-    const request = new Request(currentUrl, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10000) });
-    response = env.PUBLISHER_SERVICE
-      ? await env.PUBLISHER_SERVICE.fetch(request)
-      : await fetchImpl(request);
-  } catch { throw new SafeError('FREE_PICK_LOOKUP_FAILED', 502); }
+  if (env.PUBLISHER_SERVICE) {
+    try { response = await env.PUBLISHER_SERVICE.fetch(currentUrl, { headers: { accept: 'application/json' } }); }
+    catch { throw new SafeError('FREE_PICK_BINDING_FAILED', 502); }
+  } else {
+    try { response = await fetchImpl(currentUrl, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10000) }); }
+    catch { throw new SafeError('FREE_PICK_LOOKUP_FAILED', 502); }
+  }
   if (!response.ok) throw new SafeError('FREE_PICK_NOT_READY', 409);
   let data;
   try { data = await readJson(response.body); }
