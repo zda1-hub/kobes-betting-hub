@@ -142,9 +142,7 @@ function isIndependentWriteup(packet) {
 }
 
 function isPlayerProp(play) {
-  // This deliberately looks at the published play itself rather than at a
-  // source caption such as "MLB Play of the Day". A free post must be a
-  // player-specific stat market, never a side, moneyline, spread, or total.
+  // Detect individual stat markets without mistaking a source caption for a play.
   return /\b(?:strikeouts?|k'?s|walks?(?: allowed)?|hits?|total bases?|rbi|runs?|stolen bases?|outs?|earned runs?|points?|rebounds?|assists?|three[- ]pointers?|threes?|blocks?|steals?|passing\s+(?:yards?|yds?)|rushing\s+(?:yards?|yds?)|receiving\s+(?:yards?|yds?)|receptions?|sacks?|shots?(?: on goal)?|goals?|saves?)\b/i.test(play?.terms || '');
 }
 
@@ -487,14 +485,17 @@ function assertPublishableExtraction(packet) {
 
 function assertFreePickEligible(packet) {
   if (isTermsOnlyMode(packet)) {
-    throw new Error('Free picks are limited to writeup player props and require Kobe’s original writeup or independently verified breakdown. Monitoring-only source text and media cannot be republished.');
+    throw new Error('Free picks require Kobe’s original writeup or an independently verified breakdown. Monitoring-only source text and media cannot be republished.');
   }
   const plays = visiblePlays(packet);
-  if (plays.length === 0 || !plays.every(isPlayerProp)) {
-    throw new Error('Free picks are limited to player props. This card includes a side, total, moneyline, spread, or unclear market.');
+  if (plays.length === 0 || !plays.every(hasExplicitBettingMarket)) {
+    throw new Error('A Free Pick needs a clear betting market before it can be approved.');
   }
-  if (!plays.every(hasNamedPlayer)) {
+  if (plays.some((play) => (requiresNamedPlayer(play) || isUnnamedBareProp(play)) && !hasNamedPlayer(play))) {
     throw new Error('A player prop must show the player’s full name before it can be approved or published.');
+  }
+  if (plays.some(isGenericMarketWithoutEvent)) {
+    throw new Error('A total or game market must show the matchup before it can be approved.');
   }
 }
 

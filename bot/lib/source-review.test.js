@@ -439,9 +439,9 @@ test('does not allow unclear capper or non-pick extraction to publish', () => {
   assert.deepEqual(sourceTerms(packet), ['Jacob Misiorowski OVER 6.5 strikeouts -115 (1u)', 'Team ML +120']);
 });
 
-test('limits free posts to writeup player props', () => {
-  assert.throws(() => assertFreePickEligible(packet), /side, total, moneyline, spread/);
-  assert.throws(() => assertFreePickEligible({ ...packet, source: { ...packet.source, publish_mode: 'terms_only' } }), /writeup player props/);
+test('allows verified Free Picks from any explicit betting market', () => {
+  assert.doesNotThrow(() => assertFreePickEligible(packet));
+  assert.throws(() => assertFreePickEligible({ ...packet, source: { ...packet.source, publish_mode: 'terms_only' } }), /original writeup/);
   assert.doesNotThrow(() => assertFreePickEligible({
     ...packet,
     analysis: {
@@ -449,6 +449,20 @@ test('limits free posts to writeup player props', () => {
       extraction: { ...packet.analysis.extraction, plays: [packet.analysis.extraction.plays[0]] }
     }
   }));
+  for (const selection of ['Bills -3.5', 'Bills ML -130', 'Bills vs Dolphins OVER 43.5']) {
+    assert.doesNotThrow(() => assertFreePickEligible({
+      ...packet,
+      analysis: { ...packet.analysis, extraction: {
+        ...packet.analysis.extraction,
+        plays: [{ selection, player_name: '', event: 'Bills vs Dolphins', line: '', odds_american: '', units: '' }]
+      } }
+    }));
+  }
+  assert.throws(() => assertFreePickEligible({
+    ...packet,
+    analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction,
+      plays: [{ selection: 'Bills to win', player_name: '', event: 'Bills vs Dolphins' }] } }
+  }), /clear betting market/);
 });
 
 test('recognizes NFL player-prop shorthand and does not require units', () => {
