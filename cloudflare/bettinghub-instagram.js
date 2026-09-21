@@ -175,6 +175,11 @@ function publishingEnabled(env) {
   return String(env.INSTAGRAM_PUBLISHING_ENABLED || '').toLowerCase() === 'true';
 }
 
+function publicationDateAllowed(env, operatingDate) {
+  const notBefore = String(env.INSTAGRAM_NOT_BEFORE_DATE || '9999-12-31');
+  return /^\d{4}-\d{2}-\d{2}$/.test(notBefore) && operatingDate >= notBefore;
+}
+
 async function providerPost(env, operation, endpoint, fields, fetchImpl = fetch) {
   const started = Date.now();
   await audit(env, operation, 'PROVIDER_CALL', 'ATTEMPTED', { endpoint, method: 'POST' });
@@ -220,6 +225,7 @@ async function deliverCurrentStory(env, fetchImpl = fetch) {
   const connection = await env.DB.prepare('SELECT * FROM instagram_connections WHERE target = ?').bind(TARGET).first();
   if (!connection || connection.expires_at <= Date.now()) return { status: 'not_connected' };
   const pick = await currentFreePick(env, fetchImpl);
+  if (!publicationDateAllowed(env, pick.operatingDate)) return { status: 'before_activation_date' };
   let row = await env.DB.prepare('SELECT * FROM instagram_story_deliveries WHERE pick_id = ?').bind(pick.pickId).first();
   if (row?.state === 'published') return { status: 'published', mediaId: row.media_id };
   if (row && !['container_created'].includes(row.state)) return { status: row.state };
@@ -437,4 +443,4 @@ const worker = {
   scheduled: (_controller, env, ctx) => ctx.waitUntil(deliverCurrentStory(env).catch(error => console.error(JSON.stringify({ service: 'instagram-story', error: error instanceof SafeError ? error.message : 'STORY_DELIVERY_FAILED' })))),
 };
 export default worker;
-export const __test = { configured, encrypt, decrypt, identity, hash, readJson, phoenixDate, publishingEnabled, deliverCurrentStory, SCOPES };
+export const __test = { configured, encrypt, decrypt, identity, hash, readJson, phoenixDate, publishingEnabled, publicationDateAllowed, deliverCurrentStory, SCOPES };

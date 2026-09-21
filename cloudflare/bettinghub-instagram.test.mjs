@@ -301,3 +301,10 @@ nodeTest('Story delivery is limited to the official current Free Pick and remain
   assert.match(source, /INSTAGRAM_PUBLISHING_ENABLED/);
   assert.doesNotMatch(source, /FREE_PICK_X|FREE_PICK_SITE/);
 });
+
+nodeTest('Instagram launch cannot backfill a pick from before September 21', () => {
+  const env = { INSTAGRAM_NOT_BEFORE_DATE: '2026-09-21' };
+  assert.equal(__test.publicationDateAllowed(env, '2026-09-20'), false);
+  assert.equal(__test.publicationDateAllowed(env, '2026-09-21'), true);
+  assert.equal(__test.publicationDateAllowed(env, '2026-09-22'), true);
+});
