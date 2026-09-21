@@ -208,9 +208,14 @@ async function providerPost(env, operation, endpoint, fields, fetchImpl = fetch)
 
 async function currentFreePick(env, fetchImpl = fetch) {
   const origin = String(env.FREE_PICK_API_ORIGIN || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
-  const response = await fetchImpl(`${origin}/api/free-pick/current`, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10000) });
+  let response;
+  try {
+    response = await fetchImpl(`${origin}/api/free-pick/current`, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10000) });
+  } catch { throw new SafeError('FREE_PICK_LOOKUP_FAILED', 502); }
   if (!response.ok) throw new SafeError('FREE_PICK_NOT_READY', 409);
-  const data = await readJson(response.body);
+  let data;
+  try { data = await readJson(response.body); }
+  catch { throw new SafeError('FREE_PICK_RESPONSE_INVALID', 502); }
   const pickId = String(data?.pickId || '');
   const operatingDate = String(data?.publishedDate || '');
   const storyUrl = String(data?.storyUrl || '');
@@ -230,7 +235,9 @@ async function deliverCurrentStory(env, fetchImpl = fetch) {
   if (row?.state === 'published') return { status: 'published', mediaId: row.media_id };
   if (row && !['container_created'].includes(row.state)) return { status: row.state };
   const operation = crypto.randomUUID();
-  const token = await decrypt(connection.encrypted_token, env);
+  let token;
+  try { token = await decrypt(connection.encrypted_token, env); }
+  catch { throw new SafeError('INSTAGRAM_TOKEN_DECRYPT_FAILED', 503); }
   if (!row) {
     const reserved = await env.DB.prepare(`INSERT INTO instagram_story_deliveries (pick_id, operating_date, story_url, state, attempted_at, updated_at) VALUES (?, ?, ?, 'creating_container', ?, ?) ON CONFLICT DO NOTHING`).bind(pick.pickId, pick.operatingDate, pick.storyUrl, Date.now(), Date.now()).run();
     if (reserved.meta.changes !== 1) return { status: 'already_reserved' };

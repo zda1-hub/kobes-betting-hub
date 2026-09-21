@@ -175,6 +175,21 @@ test('scheduled Story delivery finds the connected kobesbettinhub account before
   assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_story_deliveries').get().n, 0);
 });
 
+test('scheduled Story failures identify the safe stage without reserving or publishing', async () => {
+  const env = environment();
+  env.INSTAGRAM_PUBLISHING_ENABLED = 'true';
+  env.INSTAGRAM_NOT_BEFORE_DATE = '2026-09-21';
+  assert.equal((await connected(env)).result.status, 200);
+  await assert.rejects(__test.deliverCurrentStory(env, async () => { throw new Error('private lookup detail'); }), /FREE_PICK_LOOKUP_FAILED/);
+  env.INSTAGRAM_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 13).toString('base64');
+  const date = __test.phoenixDate();
+  await assert.rejects(__test.deliverCurrentStory(env, async () => Response.json({
+    pickId: 'today-fixture', publishedDate: date,
+    storyUrl: `https://bettinghub-publisher.kobedirwin.workers.dev/media/free-pick/story/${date}`,
+  })), /INSTAGRAM_TOKEN_DECRYPT_FAILED/);
+  assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_story_deliveries').get().n, 0);
+});
+
 test('wrong username, Creator account, missing grant and invalid expiration cannot install credentials', async () => {
   for (const options of [{ username: 'bettinhub' }, { type: 'Media_Creator' }, { granted: 'instagram_business_basic' }, { expires: undefined }, { expires: 0 }]) {
     const env = environment(); const mock = providerMock(options);
