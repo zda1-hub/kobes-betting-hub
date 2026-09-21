@@ -14,6 +14,7 @@ const referralRewardMigrationPath = path.join(
   'migrations',
   '006_referral_reward_ten_dollars.sql',
 );
+const creatorMigrationPath = path.join(__dirname, 'migrations', '014_email_creator_referrals.sql');
 
 test('legacy OpenAI cost migration only relabels keyless snapshots and is repeat-safe', async () => {
   const sql = await fs.readFile(migrationPath, 'utf8');
@@ -40,4 +41,11 @@ test('referral reward migration replaces its named constraint repeat-safely', as
   const sql = await fs.readFile(referralRewardMigrationPath, 'utf8');
   assert.match(sql, /DROP CONSTRAINT IF EXISTS referral_rewards_reward_amount_cents_valid/i);
   assert.match(sql, /ADD CONSTRAINT referral_rewards_reward_amount_cents_valid/i);
+});
+
+test('creator referral migration does not re-add its ownership constraint on bot restart', async () => {
+  const sql = await fs.readFile(creatorMigrationPath, 'utf8');
+  assert.match(sql, /IF NOT EXISTS\s*\([\s\S]*pg_constraint[\s\S]*referral_rewards_one_owner/i);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS creator_referral_profiles/i);
+  assert.match(sql, /DROP TRIGGER IF EXISTS referral_rewards_validate_owner/i);
 });
