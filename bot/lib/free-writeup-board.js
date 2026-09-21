@@ -24,6 +24,35 @@ function privateWagerKey(row) {
     .join(' ');
 }
 
+function marketLabel(row) {
+  const value = `${row.market || ''} ${row.selection || ''} ${row.published_line || ''}`.toLowerCase();
+  if (/strikeouts?/.test(value)) return 'strikeouts';
+  if (/receptions?/.test(value)) return 'receptions';
+  if (/receiving yards?/.test(value)) return 'receiving yards';
+  if (/rushing (?:yards?|attempts?)/.test(value)) return value.match(/rushing (?:yards?|attempts?)/)[0];
+  if (/passing (?:yards?|attempts?|touchdowns?)/.test(value)) return value.match(/passing (?:yards?|attempts?|touchdowns?)/)[0];
+  if (/touchdowns?/.test(value)) return 'touchdowns';
+  if (/assists?/.test(value)) return 'assists';
+  if (/rebounds?/.test(value)) return 'rebounds';
+  if (/hits?/.test(value)) return 'hits';
+  return 'player prop';
+}
+
+function safeFacts(row) {
+  const selection = String(row.selection || '').toLowerCase();
+  const line = String(row.published_line || '').match(/\d+(?:\.\d+)?/g) || [];
+  const selectionNumbers = selection.match(/\d+(?:\.\d+)?/g) || [];
+  const privateNumbers = [...new Set([...line, ...selectionNumbers].filter((number) => number.includes('.')))];
+  return String(row.teaser_source || '').split(/\r?\n/)
+    .filter((item) => /^\s*[-•]\s*\S/.test(item))
+    .map((item) => item.replace(/^\s*[-•]\s*/, '').replace(/\*\*/g, '').trim())
+    .filter((item) => item.length >= 24 && item.length <= 180)
+    .filter((item) => !/\b(?:over|under|o|u)\s*\d|[+−-]\d{3,4}\b|https?:\/\/|@everyone|@here/i.test(item))
+    .filter((item) => !privateNumbers.some((number) => new RegExp(`(^|\\D)${number.replace('.', '\\.')}($|\\D)`).test(item)))
+    .filter((item) => !selection.includes(item.toLowerCase()))
+    .slice(0, 2);
+}
+
 function freeWriteupBoardPayload(rows, date) {
   const eligible = [];
   const seen = new Set();
@@ -35,21 +64,21 @@ function freeWriteupBoardPayload(rows, date) {
   }
   if (!eligible.length) return null;
   const lines = eligible.map((row, index) => {
-    const [emoji, sport] = sportLabel(row);
-    const source = row.source_type === 'discord_manual' ? 'Kobe’s manual breakdown' : 'a fully reviewed writeup';
-    return `**${emoji} PLAY ${index + 1}**\nA fresh ${sport} angle is live, backed by ${source}. The exact play, line, odds, and complete reasoning stay inside VIP.`;
+    const [emoji] = sportLabel(row);
+    const facts = safeFacts(row);
+    return `**${emoji} PLAY ${index + 1} · ████ ${marketLabel(row)}**\n${facts.length ? facts.map((fact) => `• ${fact}`).join('\n') : '• Full supporting stats and exact pick are in VIP.'}`;
   });
   const description = [
-    `There ${eligible.length === 1 ? 'is' : 'are'} **${eligible.length} new writeup${eligible.length === 1 ? '' : 's'}** on today’s board. Here’s the preview without giving away the plays:`,
+    '**Today’s plays:**',
     ...lines,
-    '🔒 **VIP members get every exact wager and the full supporting breakdown.**'
+    '🔒 **See the exact plays and full writeups in VIP.**'
   ].join('\n\n');
   if (description.length > 4000) throw new Error('Free writeup preview exceeds one Discord embed.');
   return {
     allowedMentions: { parse: [] },
     embeds: [{
       color: 0xFF7900,
-      title: '🆓 Today’s Free Writeup Preview',
+      title: 'Today’s Plays · Preview',
       description,
       footer: { text: `${FREE_BOARD_MARKER} · Exact plays remain in VIP` },
       timestamp: new Date().toISOString()

@@ -60,6 +60,7 @@ function manualFootballWriteupRow(message, operatingDate) {
     operating_date: operatingDate(message.createdAt || message.createdTimestamp),
     status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', league: 'NFL',
     selection, published_line: '', published_odds_american: '', source_message_id: message.id, source_type: 'discord_manual',
+    teaser_source: rawLines.filter((line) => /^\s*[-•]\s*\S/.test(line)).join('\n'),
   };
 }
 

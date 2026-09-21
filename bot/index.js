@@ -134,7 +134,20 @@ async function readManualFootballWriteups() {
 }
 
 async function allWriteupRows() {
-  return [...await readPickLog(), ...await readManualFootballWriteups()];
+  const rows = [...await readPickLog(), ...await readManualFootballWriteups()];
+  return Promise.all(rows.map(async (row) => {
+    if (row.teaser_source || row.status !== 'PUBLISHED' || !/writeups?/i.test(row.destination || '')) return row;
+    const match = String(row.post_reference || '').match(/discord(?:app)?\.com\/channels\/\d+\/(\d+)\/(\d+)/);
+    if (!match) return row;
+    try {
+      const channel = await approvedTextChannel(match[1]);
+      const message = await channel.messages.fetch(match[2]);
+      return { ...row, teaser_source: [message.content, ...message.embeds.map((embed) => embed.description)].filter(Boolean).join('\n') };
+    } catch (error) {
+      console.warn('Writeup teaser source unavailable:', row.pick_id, error.message);
+      return row;
+    }
+  }));
 }
 
 const dailyWriteupBoard = dailyWriteupsChannelId ? createDailyWriteupBoard({
