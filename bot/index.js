@@ -409,7 +409,7 @@ function canonicalFreePacket(row) {
 const manualFreePackets = new Map();
 
 async function ingestManualFreePicks(date) {
-  if (!freePickChannelId || !process.env.DISCORD_GUILD_ID || (pickApproverUserIds.size === 0 && publisherRoleIds.size === 0)) return;
+  if (!freePickChannelId || !process.env.DISCORD_GUILD_ID) return;
   const channel = await approvedTextChannel(freePickChannelId);
   const messages = await channel.messages.fetch({ limit: 100 });
   const existingIds = new Set((await readPickLog()).map((row) => row.pick_id));
@@ -417,6 +417,7 @@ async function ingestManualFreePicks(date) {
     .map((message) => {
       const authorizedIds = new Set(pickApproverUserIds);
       if (message.member?.roles?.cache?.some((role) => publisherRoleIds.has(role.id))) authorizedIds.add(message.author.id);
+      if (message.guild?.ownerId === message.author.id) authorizedIds.add(message.author.id);
       return manualFreePickRecord(message, {
         operatingDate: dailyPickOperatingDate,
         guildId: process.env.DISCORD_GUILD_ID,
