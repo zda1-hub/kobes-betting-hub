@@ -16,3 +16,37 @@ test('does not count pending, unverified or unexpanded group results as wins', (
   assert.match(recap.body, /NOT FINAL/);
   assert.match(recap.body, /Group ⏳/);
 });
+
+test('reposted identical selections count once in the capper record and retain every source receipt', () => {
+  const plays = ['Vikings ML', 'Titans ML', 'Broncos ML', 'Commanders ML', 'Colts ML'];
+  const rows = Array.from({ length: 3 }, (_, post) => plays.map((selection, index) => ({
+    ...base, source_name: 'PORTER PICKS', pick_id: `${post}-${index}`, selection,
+    result: index === 4 ? 'L' : 'W',
+    post_reference: `https://discord.com/channels/1/2/${post + 3}`
+  }))).flat();
+  const recap = buildCapperRecap({ date: base.operating_date, rows });
+  assert.equal(recap.total, 5);
+  assert.equal(recap.reviews[0].total, 5);
+  assert.equal(recap.reviews[0].includedPickIds.length, 15);
+  assert.match(recap.body, /PORTER PICKS 4-1💸/);
+  assert.match(recap.body, /10 identical reposted listings excluded/);
+  assert.equal((recap.body.match(/Vikings ML ☘️/g) || []).length, 1);
+});
+
+test('conflicting verified grades for identical terms block approval instead of favoring a result', () => {
+  const rows = [{ ...base, pick_id: 'first', selection: 'Vikings ML', result: 'W' },
+    { ...base, pick_id: 'second', selection: 'Vikings ML', result: 'L' }];
+  const recap = buildCapperRecap({ date: base.operating_date, rows });
+  assert.equal(recap.pending, 1);
+  assert.match(recap.body, /0-0💸 \(1 pending\)/);
+  assert.match(recap.body, /Vikings ML ⏳/);
+  assert.doesNotMatch(recap.body, /1-0💸|0-1💸/);
+});
+
+test('same selection with changed odds remains a distinct published wager', () => {
+  const rows = [{ ...base, pick_id: 'first', selection: 'Vikings ML', published_odds_american: '-110', result: 'W' },
+    { ...base, pick_id: 'second', selection: 'Vikings ML', published_odds_american: '+105', result: 'W' }];
+  const recap = buildCapperRecap({ date: base.operating_date, rows });
+  assert.equal(recap.total, 2);
+  assert.match(recap.body, /2-0💸/);
+});
