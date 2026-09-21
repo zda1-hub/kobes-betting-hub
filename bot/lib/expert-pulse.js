@@ -112,9 +112,12 @@ function payloadFor(report, records = []) {
   const repeated = report.repeated.length
     ? report.repeated.map((row) => `${row.count} posts - ${row.play}`).join('\n')
     : 'No identical selections repeated today.';
-  const graded = records.length
-    ? records.slice(0, 5).map((row) => `${row.name}: ${row.wins}-${row.losses}-${row.pushes}P-${row.voids}V${row.streak >= 2 ? ` · ${row.streak} straight settled wins` : ''} · [latest post](${row.references[0]})`).join('\n')
-    : 'No linked, individually graded paid expert results on record. Records and streaks are withheld until verified.';
+  const eligibleExperts = records.filter((row) => row.wins + row.losses >= 5)
+    .sort((a, b) => b.wins / (b.wins + b.losses) - a.wins / (a.wins + a.losses)
+      || b.wins - a.wins || a.name.localeCompare(b.name));
+  const graded = eligibleExperts.length
+    ? eligibleExperts.slice(0, 5).map((row) => `${row.name}: ${row.wins}-${row.losses}-${row.pushes}P-${row.voids}V${row.streak >= 2 ? ` · ${row.streak} straight settled wins` : ''} · [latest post](${row.references[0]})`).join('\n')
+    : 'No expert has 5 linked, individually graded paid decisions yet. Best-expert rankings are withheld until the sample is large enough.';
   const sports = new Map();
   for (const expert of records) {
     for (const result of expert.results) {
@@ -135,8 +138,8 @@ function payloadFor(report, records = []) {
     allowedMentions: { parse: [] },
     embeds: [{
       color: 0xFF7900,
-      title: 'VIP Expert Picks Pulse',
-      description: `**Today (${report.date} Arizona):** ${report.playCount} selections parsed from ${report.sourceCount} sources' text cards in #expert-picks. Image-only cards are not counted.\n\n**Most posted sources today**\n${active}\n\n**Exact-text repeats today (not wager volume)**\n${repeated}\n\n**Tracked verified paid expert records · ${coverage}**\n${graded}\n\n**Verified leaders by sport · tracked history**\n${bySport}\n\nPosting frequency is not a win rate. Alias/odds variants may describe the same play but are not combined. Records count only linked, individually graded wagers; pushes and voids are separate. Historical coverage may be incomplete.`,
+      title: 'Best Experts & Today’s Trends',
+      description: `**Today (${report.date} Arizona):** ${report.playCount} selections parsed from ${report.sourceCount} sources' text cards in #expert-picks. Image-only cards are not counted.\n\n**Most posted sources today**\n${active}\n\n**Exact-text repeats today (not wager volume)**\n${repeated}\n\n**Best experts · verified tracked results · ${coverage}**\nMinimum 5 graded decisions; ranked by win rate, then wins.\n${graded}\n\n**Verified leaders by sport · tracked history**\n${bySport}\n\nPosting frequency is not a win rate. Alias/odds variants may describe the same play but are not combined. Records count only linked, individually graded wagers; pushes and voids are separate. Historical coverage may be incomplete.`,
       footer: { text: `${MARKER} · Approved #expert-picks posts and verified pick log` }
     }]
   };
@@ -192,7 +195,7 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     const rows = await rowsFor();
     const channels = typeof paidChannelIds === 'function' ? paidChannelIds() : paidChannelIds;
     const payload = payloadFor(summary(messages, now()), verifiedRecords(rows, channels));
-    const digest = createHash('sha256').update(payload.embeds[0].description).digest('hex').slice(0, 20);
+    const digest = createHash('sha256').update(`${payload.embeds[0].title}\n${payload.embeds[0].description}`).digest('hex').slice(0, 20);
     return { payload, digest };
   }
   function reviewPayload(payload, digest, status) {
@@ -200,7 +203,7 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
       allowedMentions: { parse: [] },
       content: status === 'PENDING' ? 'Private review: verify the figures, then approve this exact snapshot for VIP.'
         : status === 'REJECTED' ? 'Rejected. Nothing was posted to VIP.' : 'Approved and posted to VIP.',
-      embeds: [{ ...payload.embeds[0], title: 'Review VIP Expert Picks Pulse', footer: { text: `${REVIEW_MARKER} · ${digest}` } }],
+      embeds: [{ ...payload.embeds[0], title: 'Review Best Experts & Today’s Trends', footer: { text: `${REVIEW_MARKER} · ${digest}` } }],
       components: [{ type: 1, components: [
         { type: 2, style: 3, label: 'Approve for VIP', custom_id: `expert-pulse:approve:${digest}`, disabled: status !== 'PENDING' },
         { type: 2, style: 4, label: 'Reject', custom_id: `expert-pulse:reject:${digest}`, disabled: status !== 'PENDING' },
