@@ -85,6 +85,7 @@ async function writeState(file, state) {
 }
 
 function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate, syncSite = async () => {} }) {
+  let reconciled = false;
   async function refresh() {
     const channel = await channelFor();
     const date = operatingDate();
@@ -92,6 +93,22 @@ function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate,
     const payload = freeWriteupBoardPayload(rows, date);
     const previews = publicPreviews(rows, date);
     const state = await readState(stateFile);
+    // Deploys can start with an empty local state file. Recover the bot's
+    // existing public board by its footer instead of publishing a duplicate.
+    if (!reconciled) {
+      const recent = await channel.messages.fetch({ limit: 50 });
+      const boards = [...recent.values()].filter((message) =>
+        message.author?.id === channel.client?.user?.id &&
+        message.embeds?.some((embed) => String(embed.footer?.text || '').includes(FREE_BOARD_MARKER))
+      ).sort((a, b) => Number(BigInt(b.id) - BigInt(a.id)));
+      if (boards.length) {
+        const [newest, ...duplicates] = boards;
+        state.message_id = newest.id;
+        state.date = date;
+        for (const duplicate of duplicates) await duplicate.delete();
+      }
+      reconciled = true;
+    }
     if (state.message_id && state.date !== date) {
       const prior = await channel.messages.fetch(state.message_id).catch(() => null);
       if (prior) await prior.delete();

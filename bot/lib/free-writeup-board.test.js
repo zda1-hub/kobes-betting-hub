@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { freeWriteupBoardPayload, publicPreviews } = require('./free-writeup-board');
+const { mkdtemp, rm } = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const { createFreeWriteupBoard, freeWriteupBoardPayload, publicPreviews } = require('./free-writeup-board');
 
 test('previews every current writeup without exposing exact wagers', () => {
   const payload = freeWriteupBoardPayload([
@@ -20,4 +23,23 @@ test('previews every current writeup without exposing exact wagers', () => {
 
 test('stays empty until a writeup is published', () => {
   assert.equal(freeWriteupBoardPayload([], '2026-09-20'), null);
+});
+
+test('restart reuses the newest board and deletes duplicate bot boards', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'kbh-free-board-'));
+  try {
+    const deleted = [];
+    const edited = [];
+    const board = (id) => ({ id, author: { id: 'bot' }, embeds: [{ footer: { text: 'KBH free-writeups-v1' } }], delete: async () => deleted.push(id), edit: async (payload) => { edited.push(payload); return { id }; } });
+    const old = board('100');
+    const current = board('200');
+    const channel = { client: { user: { id: 'bot' } }, messages: { fetch: async (id) => typeof id === 'object' ? new Map([['100', old], ['200', current]]) : id === '200' ? current : null }, send: async () => { throw new Error('must not create another board'); } };
+    const service = createFreeWriteupBoard({ channelFor: async () => channel, rowsFor: async () => [{ pick_id: 'pick', operating_date: '2026-09-21', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', teaser_source: '10 targets in recent games' }], stateFile: path.join(directory, 'state.json'), operatingDate: () => '2026-09-21' });
+    const receipt = await service.refresh();
+    assert.equal(receipt.status, 'UPDATED');
+    assert.deepEqual(deleted, ['100']);
+    assert.equal(edited.length, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
