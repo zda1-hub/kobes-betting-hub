@@ -90,6 +90,24 @@ test('refuses to draft or publish when review or VIP destination privacy is publ
   }
 });
 
+test('can reuse a private expert source as the VIP destination while keeping review separate', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'expert-pulse-same-channel-'));
+  try {
+    const guild = { id: '123', roles: { everyone: { id: 'everyone' } } };
+    const source = { id: '456', guild, permissionsFor: () => ({ has: () => false }),
+      messages: { fetch: async () => new Map() } };
+    const review = { id: '567', guild, permissionsFor: () => ({ has: () => false }),
+      messages: { fetch: async () => new Map() },
+      send: async (payload) => ({ id: 'review-1', embeds: payload.embeds }) };
+    const pulse = createExpertPulse({ sourceChannelFor: async () => source,
+      reviewChannelFor: async () => review, destinationChannelFor: async () => source,
+      stateFile: path.join(directory, 'state.json') });
+    assert.equal((await pulse.refresh()).status, 'REVIEW_CREATED');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('owner approves an exact private review card once; changes require another approval', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'expert-pulse-'));
   try {
