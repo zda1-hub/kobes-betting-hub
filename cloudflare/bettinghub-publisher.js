@@ -8,6 +8,7 @@ const X_SCOPES = ["tweet.read", "tweet.write", "users.read", "media.write", "off
 const MAX_POST_LENGTH = 280;
 const FREE_PICK_STATE_KEY = "free-picks/current.json";
 const FREE_PICK_BY_DATE_PREFIX = "free-picks/by-date/";
+const FREE_PICK_RESULTS_KEY = "free-picks/verified-results.json";
 const FREE_PICK_MAX_BYTES = 5 * 1024 * 1024;
 const TREND_EMAIL_MAX_BYTES = 12 * 1024;
 const TREND_EMAIL_LEAGUES = new Set(["mlb", "nfl"]);
@@ -157,6 +158,8 @@ async function handleRequest(request, env) {
   if (url.pathname === "/api/queue/recap-notifications" && request.method === "GET") return listRecapNotifications(request, env);
   if (url.pathname === "/api/queue/recap-notifications/deliver" && request.method === "POST") return markRecapNotificationDelivered(request, env);
   if (url.pathname === "/api/free-pick/current" && request.method === "GET") return getCurrentFreePick(request, env);
+  if (url.pathname === "/api/free-pick/results" && request.method === "GET") return getFreePickResults(request, env);
+  if (url.pathname === "/api/free-pick/results" && request.method === "PUT") return putFreePickResults(request, env);
   if (url.pathname === "/api/vip-preview/current" && request.method === "GET") return getVipPreview(request, env);
   if (url.pathname === "/api/vip-preview/current" && request.method === "PUT") return putVipPreview(request, env);
   if (url.pathname === "/media/free-pick/current" && request.method === "GET") return getCurrentFreePickImage(request, env);
@@ -563,6 +566,70 @@ async function getCurrentFreePick(request, env) {
   }
   const resolved = xReceipt ? { ...pick, xStatus: xReceipt.status, xPublishedAt: xReceipt.xPublishedAt || null, xPostId: xReceipt.xPostId || null, xError: xReceipt.xError || null } : pick;
   return json({ ...publicFreePick(resolved, new URL(request.url).origin), instagramConnectionStatus: instagram ? 'connected' : 'not_connected', instagramAccountId: instagram?.accountId || null }, 200, corsHeaders(request));
+}
+
+function normalizedFreePickResults(input) {
+  const validDateValue = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const count = (value) => Number.isSafeInteger(value) && value >= 0 && value <= 1000000 ? value : null;
+  const record = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    const wins = count(value.wins), losses = count(value.losses), pushes = count(value.pushes), voids = count(value.voids);
+    return [wins, losses, pushes, voids].every((item) => item !== null) ? { wins, losses, pushes, voids } : null;
+  };
+  const win = (value) => {
+    if (!validDateValue(value?.date) || typeof value?.selection !== 'string' || !value.selection.trim()) return null;
+    if (typeof value?.postUrl !== 'string' || !/^https:\/\/discord\.com\/channels\/\d+\/\d+\/\d+$/.test(value.postUrl)) return null;
+    const units = value.netUnits === null ? null : Number(value.netUnits);
+    if (units !== null && (!Number.isFinite(units) || units <= 0 || units > 10000)) return null;
+    return {
+      date: value.date,
+      selection: value.selection.slice(0, 180),
+      line: String(value.line || '').slice(0, 80),
+      odds: String(value.odds || '').slice(0, 24),
+      netUnits: units,
+      postUrl: value.postUrl,
+    };
+  };
+  if (!input || !validDateValue(input.operatingDate) || !Number.isFinite(Date.parse(input.generatedAt || ''))) return null;
+  const overall = record(input.overall), today = record(input.today), pending = count(input.pending);
+  if (!overall || !today || pending === null || !Array.isArray(input.recentWins) || !Array.isArray(input.bestWins)
+    || input.recentWins.length > 5 || input.bestWins.length > 3) return null;
+  const recentWins = input.recentWins.map(win), bestWins = input.bestWins.map(win);
+  if ([...recentWins, ...bestWins].some((item) => !item)) return null;
+  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, recentWins, bestWins };
+}
+
+async function putFreePickResults(request, env) {
+  if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({ error: 'Unauthorized' }, 401);
+  if (!hasFreePickStore(env)) return json({ error: 'Free Pick storage is unavailable' }, 503);
+  const raw = await request.text();
+  if (raw.length > 20000) return json({ error: 'Results snapshot is too large' }, 413);
+  let input;
+  try { input = JSON.parse(raw); } catch { return json({ error: 'Invalid JSON' }, 400); }
+  const snapshot = normalizedFreePickResults(input);
+  if (!snapshot) return json({ error: 'Invalid verified results snapshot' }, 400);
+  const previous = await getFreePickText(env, FREE_PICK_RESULTS_KEY);
+  if (previous) {
+    let old;
+    try { old = JSON.parse(previous); } catch { old = null; }
+    if (old?.generatedAt && Date.parse(old.generatedAt) > Date.parse(snapshot.generatedAt)) {
+      return json({ error: 'An older snapshot cannot replace newer results' }, 409);
+    }
+  }
+  await putFreePickObject(env, FREE_PICK_RESULTS_KEY, JSON.stringify(snapshot), 'application/json; charset=UTF-8', 'no-store');
+  return json({ status: 'updated', generatedAt: snapshot.generatedAt });
+}
+
+async function getFreePickResults(request, env) {
+  if (!hasFreePickStore(env)) return json({ error: 'Free Pick storage is unavailable' }, 503, corsHeaders(request));
+  const raw = await getFreePickText(env, FREE_PICK_RESULTS_KEY);
+  if (!raw) return json({ error: 'Verified Free Pick results are not available yet' }, 404, corsHeaders(request));
+  let snapshot;
+  try { snapshot = normalizedFreePickResults(JSON.parse(raw)); } catch { snapshot = null; }
+  if (!snapshot) return json({ error: 'Verified Free Pick results are unavailable' }, 503, corsHeaders(request));
+  const headers = corsHeaders(request);
+  headers.set('cache-control', 'no-store');
+  return json(snapshot, 200, headers);
 }
 
 async function getCurrentFreePickImage(request, env) {

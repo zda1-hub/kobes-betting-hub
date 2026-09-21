@@ -99,6 +99,30 @@ test('text-only Free Pick remains readable after publication', async () => {
   assert.equal(current.storyUrl, null);
 });
 
+test('verified Free Pick results require authorization and expose only the approved snapshot', async () => {
+  const env = { FREE_PICK_KV: memoryKv(), FREE_PICK_SITE_PUBLISH_SECRET: 'test-publisher-secret' };
+  const snapshot = {
+    generatedAt: '2026-09-21T23:00:00.000Z', operatingDate: '2026-09-21',
+    overall: { wins: 2, losses: 1, pushes: 1, voids: 0 },
+    today: { wins: 1, losses: 1, pushes: 0, voids: 0 }, pending: 2,
+    recentWins: [{ date: '2026-09-21', selection: 'Test free pick', line: '+3.5', odds: '-110', netUnits: 0.91, postUrl: 'https://discord.com/channels/1/2/3', secret: 'do not expose' }],
+    bestWins: [], secret: 'do not expose',
+  };
+  const url = 'https://publisher.test/api/free-pick/results';
+  const submit = (body, token = 'test-publisher-secret') => worker.fetch(new Request(url, {
+    method: 'PUT', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
+  }), env);
+  assert.equal((await submit(snapshot, 'wrong')).status, 401);
+  assert.equal((await submit(snapshot)).status, 200);
+  const response = await worker.fetch(new Request(url), env);
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.doesNotMatch(body, /do not expose/);
+  assert.equal(JSON.parse(body).overall.losses, 1);
+  assert.equal((await submit({ ...snapshot, generatedAt: '2026-09-20T23:00:00.000Z' })).status, 409);
+  assert.equal((await submit({ ...snapshot, recentWins: [{ ...snapshot.recentWins[0], postUrl: 'https://example.com/private' }] })).status, 400);
+});
+
 test('stores and serves a dated Instagram Story without publishing it to X', async () => {
   const store = memoryKv();
   const storyBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]).buffer;
