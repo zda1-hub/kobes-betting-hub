@@ -23,7 +23,7 @@
     "INSTAGRAM_PUBLIC_ORIGIN": "https://bettinghub-instagram.kobedirwin.workers.dev",
     "INSTAGRAM_API_VERSION": "v25.0",
     "INSTAGRAM_APP_ID": "1068122172774873",
-    "INSTAGRAM_PUBLISHING_ENABLED": "false",
+    "INSTAGRAM_PUBLISHING_ENABLED": "true",
     "INSTAGRAM_NOT_BEFORE_DATE": "2026-09-21",
     "FREE_PICK_API_ORIGIN": "https://bettinghub-publisher.kobedirwin.workers.dev"
   },

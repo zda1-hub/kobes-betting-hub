@@ -562,7 +562,7 @@ async function getCurrentFreePick(request, env) {
     xReceipt = await env.DB.prepare(`SELECT status, published_at AS xPublishedAt, x_post_id AS xPostId, last_error AS xError FROM approved_posts WHERE id LIKE 'free-x-%' AND created_at BETWEEN ? AND ? ORDER BY created_at ASC LIMIT 1`).bind(start, end).first();
   }
   if (env.DB) {
-    instagram = await env.DB.prepare(`SELECT account_id AS accountId, expires_at AS expiresAt, checked_at AS checkedAt FROM instagram_connections WHERE target = 'kobeslocks'`).first();
+    instagram = await env.DB.prepare(`SELECT account_id AS accountId, expires_at AS expiresAt, checked_at AS checkedAt FROM instagram_connections WHERE target = 'kobesbettinhub'`).first();
   }
   const resolved = xReceipt ? { ...pick, xStatus: xReceipt.status, xPublishedAt: xReceipt.xPublishedAt || null, xPostId: xReceipt.xPostId || null, xError: xReceipt.xError || null } : pick;
   return json({ ...publicFreePick(resolved, new URL(request.url).origin), instagramConnectionStatus: instagram ? 'connected' : 'not_connected', instagramAccountId: instagram?.accountId || null }, 200, corsHeaders(request));
