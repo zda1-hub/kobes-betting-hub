@@ -389,6 +389,7 @@ test('uses destination names directly on approval buttons', () => {
   });
   assert.equal(buttons[0].components[0].label, 'Post to #daily-free-play');
   assert.equal(buttons[0].components[1].label, 'Post to #mlb-writeups');
+  assert.equal(buttons[0].components[2].label, 'Edit details');
 
   const monitoringOnly = require('./source-review').reviewButtons('20260907-002-X', {
     freeDisabled: true,
@@ -647,6 +648,23 @@ test('locks a four-to-eight point writeup and detects approval drift', () => {
   assert.equal(assertApprovalCopyMatches(researched), copy);
   researched.analysis.extraction.source_claims[0] = 'Changed after approval';
   assert.throws(() => assertApprovalCopyMatches(researched), /changed after approval/);
+});
+
+test('an owner detail edit changes evidence copy without changing wager terms', () => {
+  const researched = independentWriteupPacket({
+    ...packet,
+    approval: { edited_evidence: [
+      'He averaged 8 targets across the last four games',
+      'The opponent allowed 7 catches to this position last week',
+      'He played 80 percent of offensive snaps in Week 1',
+      'His recent receiving production supports this matchup'
+    ] }
+  });
+  const before = buildSourcePickEmbed(packet, 'PAID PICK').description.split('\n')[0];
+  const after = writeupDescription(researched);
+  assert.equal(after.split('\n')[0], before);
+  assert.match(after, /averaged 8 targets/);
+  assert.doesNotThrow(() => assertCompleteWriteup(researched));
 });
 
 test('holds a thin writeup instead of padding or publishing it', () => {

@@ -292,6 +292,13 @@ function cleanEvidenceClaim(claim) {
 function sourceEvidence(packet) {
   const extraction = packet.analysis?.extraction || {};
   const pickTerms = publicPickTerms(packet);
+  // Kobe may correct the supporting copy, never the structured wager terms.
+  if (Array.isArray(packet.approval?.edited_evidence)) {
+    return [...new Set(packet.approval.edited_evidence.map(cleanEvidenceClaim).filter(Boolean))]
+      .filter((claim) => !/https?:\/\/|<@/i.test(claim))
+      .filter((claim) => isUsefulSupport(claim, pickTerms, packet))
+      .slice(0, MAX_WRITEUP_EVIDENCE);
+  }
   // Regular writeups may include focused research support. It is cleaned below
   // so the member-facing card contains facts, not source credits or URLs.
   const playClaims = extraction.plays?.length === 1 && Array.isArray(extraction.plays[0].source_claims)
@@ -536,6 +543,7 @@ function reviewButtons(pickId, { testOnly = false, freeDisabled = false, paidOnl
   }
   components.push(
     { type: ComponentType.Button, style: ButtonStyle.Primary, label: buttonLabel(paidLabel, 'Post to paid channel'), custom_id: `source-review:${pickId}:paid`, disabled: testOnly },
+    ...(!paidOnly ? [{ type: ComponentType.Button, style: ButtonStyle.Secondary, label: 'Edit details', custom_id: `source-review:${pickId}:edit`, disabled: testOnly }] : []),
     { type: ComponentType.Button, style: ButtonStyle.Danger, label: 'Reject', custom_id: `source-review:${pickId}:reject` }
   );
   return [{
