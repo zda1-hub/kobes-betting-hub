@@ -36,6 +36,11 @@ const APPROVED_MIGRATIONS = [
     version: '013_long_term_dashboard',
     sha256: 'b9575de40d9c7a17fc727e03f5a80f99d5b53e0fba613f6f667b14e05eeb4e0f',
   },
+  {
+    name: '014_email_creator_referrals.sql',
+    version: '014_email_creator_referrals',
+    sha256: '7e2669a5ea62b2244e8a4e85097dc635209196929729bba13a2afd69e05ff25a',
+  },
 ];
 const PROTECTED_TABLES = [
   'source_posts',
@@ -53,6 +58,7 @@ const PROTECTED_TABLES = [
   'api_call_events',
   'provider_usage_snapshots',
   'referral_profiles',
+  'creator_referral_profiles',
   'referral_rewards',
   'referral_events',
   'referral_auth_sessions',
@@ -303,7 +309,7 @@ function usage() {
     'Usage: node pipeline/migrate-production.js [--plan | --apply]',
     '',
     'Plan mode is the default and makes no database writes.',
-    'Only approved production migrations 007 through 010 are considered.',
+    'Only the explicitly allowlisted production migrations are considered.',
   ].join('\n');
 }
 

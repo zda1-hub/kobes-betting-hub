@@ -100,5 +100,5 @@ jobs:
         run: npm ci
       - name: Show ledger-aware production migration plan
         run: node pipeline/migrate-production.js
-      - name: Apply locked migrations 007 through 009
+      - name: Apply locked membership migrations
         run: node pipeline/migrate-production.js --apply

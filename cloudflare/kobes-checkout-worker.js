@@ -365,6 +365,27 @@ async function referralProfileForCode(env, referralCode) {
   return rows?.[0] || null;
 }
 
+async function creatorProfileForCode(env, referralCode) {
+  const rows = await supabase(env, `creator_referral_profiles?referral_code=eq.${encodeURIComponent(referralCode)}&select=id,contact_email,display_name,referral_code,discord_user_id,trial_expires_at,stripe_recipient_account_id,payout_status,status&limit=1`);
+  return rows?.[0] || null;
+}
+
+async function creatorProfileForId(env, id) {
+  const rows = await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(id)}&select=id,contact_email,display_name,referral_code,discord_user_id,trial_expires_at,stripe_recipient_account_id,payout_status,status&limit=1`);
+  return rows?.[0] || null;
+}
+
+async function referralOwnerForCode(env, referralCode) {
+  if (/^KBC-[A-Z0-9]{10}$/.test(referralCode)) {
+    const creator = await creatorProfileForCode(env, referralCode);
+    return creator?.status === 'ACTIVE' ? { kind: 'creator', profile: creator } : null;
+  }
+  if (!/^KBH-[A-Z0-9]{10}$/.test(referralCode)) return null;
+  const member = await referralProfileForCode(env, referralCode);
+  return member && await activeMembershipForDiscord(env, member.discord_user_id)
+    ? { kind: 'member', profile: member } : null;
+}
+
 async function ensureReferralProfile(env, discordUserId) {
   const existing = await referralProfileForDiscord(env, discordUserId);
   if (existing) return existing;
@@ -405,15 +426,21 @@ async function recordReferralEvent(env, values) {
 
 async function createReferralAttribution(env, values) {
   if (!values.referralCode || !values.customerId || !values.subscriptionId) return null;
-  const profile = await referralProfileForCode(env, values.referralCode);
-  if (!profile || profile.discord_user_id !== values.referrerDiscordUserId) throw new Error('Referral attribution is invalid.');
+  // Checkout eligibility is checked before creating Stripe's session. A creator
+  // paused afterward must not break a paid customer's webhook or erase credit.
+  const creator = /^KBC-[A-Z0-9]{10}$/.test(values.referralCode)
+    ? await creatorProfileForCode(env, values.referralCode) : null;
+  const owner = creator ? { kind: 'creator', profile: creator } : await referralOwnerForCode(env, values.referralCode);
+  if (!owner || (owner.kind === 'member' && owner.profile.discord_user_id !== values.referrerDiscordUserId)
+      || (owner.kind === 'creator' && owner.profile.id !== values.creatorProfileId)) throw new Error('Referral attribution is invalid.');
   try {
     const created = await supabase(env, 'referral_rewards?on_conflict=referred_subscription_id', {
       method: 'POST',
       prefer: 'resolution=ignore-duplicates,return=representation',
       body: {
-        referral_code: profile.referral_code,
-        referrer_discord_user_id: profile.discord_user_id,
+        referral_code: owner.profile.referral_code,
+        referrer_discord_user_id: owner.kind === 'member' ? owner.profile.discord_user_id : null,
+        creator_profile_id: owner.kind === 'creator' ? owner.profile.id : null,
         referred_stripe_customer_id: values.customerId,
         referred_subscription_id: values.subscriptionId,
         reward_amount_cents: REFERRAL_REWARD_CENTS,
@@ -422,7 +449,7 @@ async function createReferralAttribution(env, values) {
       },
     });
     const reward = created?.[0];
-    if (reward) await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_ATTRIBUTED', details: { referral_code: profile.referral_code } });
+    if (reward) await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_ATTRIBUTED', details: { referral_code: owner.profile.referral_code, owner_type: owner.kind } });
     return reward || null;
   } catch (error) {
     const rows = await supabase(env, `referral_rewards?referred_subscription_id=eq.${encodeURIComponent(values.subscriptionId)}&select=*&limit=1`);
@@ -744,9 +771,9 @@ function discordNotReadyResponse(env) {
   return new Response('Discord connection is being configured. Please check back shortly.', { status: 503 });
 }
 
-async function createDiscordState({ sessionId = null, associationToken = null, intent = 'connect' }, env) {
+async function createDiscordState({ sessionId = null, associationToken = null, referralCode = null, intent = 'connect' }, env) {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
-  const body = toBase64Url(encode.encode(JSON.stringify({ sessionId, associationToken, intent, expiresAt: Math.floor(Date.now() / 1000) + 600, nonce: toBase64Url(bytes) })));
+  const body = toBase64Url(encode.encode(JSON.stringify({ sessionId, associationToken, referralCode, intent, expiresAt: Math.floor(Date.now() / 1000) + 600, nonce: toBase64Url(bytes) })));
   return `${body}.${await sign(body, env.DISCORD_OAUTH_STATE_SECRET)}`;
 }
 
@@ -754,9 +781,10 @@ async function readDiscordState(state, env) {
   const [body, signature, ...extra] = state.split('.');
   if (!body || !signature || extra.length || !await secureEqual(await sign(body, env.DISCORD_OAUTH_STATE_SECRET), signature)) throw new Error('Invalid Discord connection request.');
   const value = JSON.parse(decode.decode(fromBase64Url(body)));
-  if (!['connect', 'portal', 'referral', 'retention75', 'precheckout', 'admin', 'member', 'feedback'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
+  if (!['connect', 'portal', 'referral', 'creator', 'retention75', 'precheckout', 'admin', 'member', 'feedback'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
   if (value.intent === 'connect' && !value.sessionId) throw new Error('That Discord connection request is incomplete.');
   if (value.intent === 'precheckout' && !value.associationToken) throw new Error('That checkout verification request is incomplete.');
+  if (value.intent === 'creator' && !/^KBC-[A-Z0-9]{10}$/.test(value.referralCode || '')) throw new Error('That creator connection request is incomplete.');
   return value;
 }
 
@@ -1148,7 +1176,7 @@ function discordAuthorizationUrl(state, env, intent) {
     client_id: env.DISCORD_CLIENT_ID,
     response_type: 'code',
     redirect_uri: env.DISCORD_REDIRECT_URI,
-    scope: ['connect', 'precheckout'].includes(intent) ? 'identify guilds.join' : intent === 'referral' ? 'identify email' : 'identify',
+    scope: ['connect', 'precheckout'].includes(intent) ? 'identify guilds.join' : intent === 'creator' ? 'identify email guilds.join' : intent === 'referral' ? 'identify email' : 'identify',
     state,
     prompt: 'consent',
   }).toString();
@@ -1159,6 +1187,134 @@ async function startReferralLogin(request, env) {
   if (!discordReady(env) || !supabaseReady(env)) return new Response('Member referrals are being configured. Please check back shortly.', { status: 503 });
   const state = await createDiscordState({ intent: 'referral' }, env);
   return redirect(discordAuthorizationUrl(state, env, 'referral'));
+}
+
+async function startCreatorLogin(request, env) {
+  if (!discordReady(env) || !supabaseReady(env)) return new Response('Creator access is being configured.', { status: 503 });
+  const referralCode = new URL(request.url).searchParams.get('code') || '';
+  const profile = /^KBC-[A-Z0-9]{10}$/.test(referralCode) ? await creatorProfileForCode(env, referralCode) : null;
+  if (!profile || profile.status === 'PAUSED') return new Response('Creator invitation not found.', { status: 404 });
+  const state = await createDiscordState({ intent: 'creator', referralCode }, env);
+  return redirect(discordAuthorizationUrl(state, env, 'creator'));
+}
+
+async function createCreatorInvitation(request, env, origin) {
+  if (!await authorizedOperationsRequest(request, env)) return json({ error: 'Unauthorized.' }, 401, origin);
+  if (!supabaseReady(env)) return json({ error: 'Creator records are unavailable.' }, 503, origin);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  const email = String(data.email || '').trim().toLowerCase();
+  const name = String(data.name || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || name.length < 2 || name.length > 120) {
+    return json({ error: 'A valid creator email and name are required.' }, 400, origin);
+  }
+  const existing = await supabase(env, `creator_referral_profiles?contact_email=eq.${encodeURIComponent(email)}&select=*&limit=1`);
+  let profile = existing?.[0];
+  if (!profile) {
+    for (let attempt = 0; attempt < 3 && !profile; attempt += 1) {
+      const code = `KBC-${crypto.randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`;
+      try {
+        const rows = await supabase(env, 'creator_referral_profiles', {
+          method: 'POST', prefer: 'return=representation',
+          body: { contact_email: email, display_name: name, referral_code: code },
+        });
+        profile = rows?.[0];
+      } catch (error) {
+        const concurrent = await supabase(env, `creator_referral_profiles?contact_email=eq.${encodeURIComponent(email)}&select=*&limit=1`);
+        profile = concurrent?.[0];
+        if (!profile && attempt === 2) throw error;
+      }
+    }
+  }
+  return json({ email: profile.contact_email, status: profile.status,
+    onboardingUrl: `${new URL(request.url).origin}/creators/login?code=${encodeURIComponent(profile.referral_code)}`,
+    referralUrl: `${siteOrigin(env)}${SITE_PATH}/join?ref=${encodeURIComponent(profile.referral_code)}`,
+    rewardCents: REFERRAL_REWARD_CENTS }, 200, origin);
+}
+
+async function activateCreator(request, env, origin) {
+  if (!await authorizedOperationsRequest(request, env)) return json({ error: 'Unauthorized.' }, 401, origin);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  const code = String(data.code || '').toUpperCase();
+  const profile = /^KBC-[A-Z0-9]{10}$/.test(code) ? await creatorProfileForCode(env, code) : null;
+  if (!profile || !profile.discord_user_id || !profile.stripe_recipient_account_id) return json({ error: 'Creator email, Discord, and Stripe setup must be complete.' }, 409, origin);
+  const includes = stripeV2IncludeQuery(['configuration.recipient']);
+  const recipient = await stripeV2(env, `/core/accounts/${encodeURIComponent(profile.stripe_recipient_account_id)}?${includes}`);
+  const capability = recipient?.configuration?.recipient?.capabilities?.bank_accounts?.local;
+  const methods = await stripeV2(env, '/money_management/payout_methods', { stripeContext: profile.stripe_recipient_account_id });
+  if (!referralRecipientIsReady(capability, methods?.data?.[0]?.id)) return json({ error: 'Stripe payout verification is not complete.' }, 409, origin);
+  await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(profile.id)}&status=eq.PENDING`, {
+    method: 'PATCH', prefer: 'return=minimal', body: { status: 'ACTIVE', payout_status: 'READY', updated_at: new Date().toISOString() },
+  });
+  return json({ status: 'ACTIVE', referralUrl: `${siteOrigin(env)}${SITE_PATH}/join?ref=${encodeURIComponent(code)}` }, 200, origin);
+}
+
+async function expireCreatorTrials(env) {
+  if (!supabaseReady(env) || !env.DISCORD_BOT_TOKEN) return;
+  const now = new Date().toISOString();
+  const expired = await supabase(env, `creator_referral_profiles?trial_expires_at=lte.${encodeURIComponent(now)}&trial_role_removed_at=is.null&discord_user_id=not.is.null&select=id,discord_user_id&limit=50`);
+  for (const profile of expired || []) {
+    try {
+      if (!await activeMembershipForDiscord(env, profile.discord_user_id)) {
+        await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${profile.discord_user_id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, {
+          method: 'DELETE', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
+        }, env, { memberId: profile.discord_user_id, triggerType: 'creator_trial_expired' });
+      }
+      await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(profile.id)}&trial_role_removed_at=is.null`, {
+        method: 'PATCH', prefer: 'return=minimal', body: { trial_role_removed_at: now, updated_at: now },
+      });
+    } catch (error) { console.error('Creator trial expiry requires attention.', { creatorId: profile.id, error: String(error?.message || error) }); }
+  }
+}
+
+async function activateReadyCreators(env) {
+  if (!supabaseReady(env) || !env.STRIPE_GLOBAL_PAYOUTS_KEY) return;
+  const pending = await supabase(env, 'creator_referral_profiles?status=eq.PENDING&stripe_recipient_account_id=not.is.null&discord_user_id=not.is.null&select=id,stripe_recipient_account_id&limit=25');
+  for (const profile of pending || []) {
+    try {
+      const includes = stripeV2IncludeQuery(['configuration.recipient']);
+      const recipient = await stripeV2(env, `/core/accounts/${encodeURIComponent(profile.stripe_recipient_account_id)}?${includes}`);
+      const methods = await stripeV2(env, '/money_management/payout_methods', { stripeContext: profile.stripe_recipient_account_id });
+      if (!referralRecipientIsReady(recipient?.configuration?.recipient?.capabilities?.bank_accounts?.local, methods?.data?.[0]?.id)) continue;
+      await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(profile.id)}&status=eq.PENDING`, {
+        method: 'PATCH', prefer: 'return=minimal', body: { status: 'ACTIVE', payout_status: 'READY', updated_at: new Date().toISOString() },
+      });
+    } catch (error) { console.error('Creator payout activation requires attention.', { creatorId: profile.id, error: String(error?.message || error) }); }
+  }
+}
+
+async function creatorPayoutOnboarding(env, profile) {
+  if (!env.STRIPE_GLOBAL_PAYOUTS_KEY) throw new Error('Creator payout setup is unavailable.');
+  let recipientId = profile.stripe_recipient_account_id;
+  if (!recipientId) {
+    const recipient = await stripeV2(env, '/core/accounts', {
+      method: 'POST', idempotencyKey: `kbh-creator-${profile.id}`,
+      body: {
+        contact_email: profile.contact_email, display_name: profile.display_name,
+        identity: { country: 'us' },
+        configuration: { recipient: { capabilities: { bank_accounts: { local: { requested: true } } } } },
+        metadata: { kbh_creator_profile_id: profile.id, kbh_referral_code: profile.referral_code },
+        include: ['identity', 'configuration.recipient', 'requirements'],
+      },
+    });
+    recipientId = recipient.id;
+    if (!recipientId) throw new Error('Stripe did not create a creator payout recipient.');
+    await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(profile.id)}&stripe_recipient_account_id=is.null`, {
+      method: 'PATCH', prefer: 'return=minimal',
+      body: { stripe_recipient_account_id: recipientId, payout_status: 'ONBOARDING', updated_at: new Date().toISOString() },
+    });
+  }
+  const returnUrl = `${siteOrigin(env)}${SITE_PATH}/creator.html?setup=complete`;
+  const refreshUrl = `${siteOrigin(env)}${SITE_PATH}/creator.html?setup=refresh`;
+  const link = await stripeV2(env, '/core/account_links', {
+    method: 'POST', idempotencyKey: crypto.randomUUID(),
+    body: { account: recipientId, use_case: { type: 'account_onboarding', account_onboarding: {
+      configurations: ['recipient'], return_url: returnUrl, refresh_url: refreshUrl,
+    } } },
+  });
+  if (!link.url) throw new Error('Stripe did not return a creator payout setup link.');
+  return link.url;
 }
 
 async function startPayoutOnboarding(request, env) {
@@ -1247,6 +1403,38 @@ async function finishDiscordConnection(request, env) {
     if (!tokenResponse.ok || !token.access_token) throw new Error('Discord authorization failed.');
     discordAccessToken = token.access_token;
     const user = await discordRequest('/users/@me', { headers: { Authorization: `Bearer ${token.access_token}` } }, env);
+    if (state.intent === 'creator') {
+      const profile = await creatorProfileForCode(env, state.referralCode);
+      if (!profile || profile.status === 'PAUSED' || !user?.id || user.verified !== true
+          || String(user.email || '').trim().toLowerCase() !== profile.contact_email) {
+        throw new Error('Use a Discord account with the verified email on your creator invitation.');
+      }
+      if (profile.discord_user_id && profile.discord_user_id !== user.id) throw new Error('This creator invitation is already linked to a different Discord account.');
+      if (!profile.discord_user_id) {
+        const updated = await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(profile.id)}&discord_user_id=is.null`, {
+          method: 'PATCH', prefer: 'return=representation',
+          body: { discord_user_id: user.id, updated_at: new Date().toISOString() },
+        });
+        if (!updated?.length) throw new Error('Creator identity was changed during verification.');
+      }
+      let trialExpiresAt = profile.trial_expires_at;
+      if (!trialExpiresAt) {
+        trialExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+        const claimed = await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(profile.id)}&trial_expires_at=is.null`, {
+          method: 'PATCH', prefer: 'return=representation',
+          body: { trial_expires_at: trialExpiresAt, updated_at: new Date().toISOString() },
+        });
+        if (!claimed?.length) trialExpiresAt = (await creatorProfileForId(env, profile.id))?.trial_expires_at;
+      }
+      if (trialExpiresAt && Date.parse(trialExpiresAt) > Date.now()) {
+        const botHeaders = { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' };
+        await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, {
+          method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }),
+        }, env, { memberId: user.id, triggerType: 'creator_trial' });
+        await grantMemberRole(user.id, env);
+      }
+      return redirect(await creatorPayoutOnboarding(env, profile));
+    }
     if (state.intent === 'member') {
       const membership = await membershipCustomerForDiscord(env, user.id);
       if (!membership?.stripe_customer_id) return redirect(`${siteOrigin(env)}${SITE_PATH}/member#connection=required`);
@@ -1390,9 +1578,7 @@ async function prepareCheckout(request, env, origin) {
   if (!MEMBERSHIP_OFFERS.has(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
   const referralCode = String(data.referral_code || '').toUpperCase();
   if (data.offer === 'referral_trial') {
-    if (!/^KBH-[A-Z0-9]{10}$/.test(referralCode)) return json({ error: 'That referral link is invalid or expired.' }, 400, origin);
-    const profile = await referralProfileForCode(env, referralCode);
-    if (!profile || !await activeMembershipForDiscord(env, profile.discord_user_id)) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
+    if (!await referralOwnerForCode(env, referralCode)) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
   }
   const sessionId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(data.analytics_session_id || '')
     ? data.analytics_session_id.toLowerCase() : null;
@@ -1433,11 +1619,17 @@ async function createAssociatedCheckout(env, association, publicToken, discordUs
     values['subscription_data[trial_settings][end_behavior][missing_payment_method]'] = 'cancel';
   }
   if (association.referral_code) {
-    const profile = await referralProfileForCode(env, association.referral_code);
+    const owner = await referralOwnerForCode(env, association.referral_code);
+    if (!owner) throw new Error('Referral link is no longer eligible.');
     values['metadata[referral_code]'] = association.referral_code;
-    values['metadata[referrer_discord_user_id]'] = profile.discord_user_id;
     values['subscription_data[metadata][referral_code]'] = association.referral_code;
-    values['subscription_data[metadata][referrer_discord_user_id]'] = profile.discord_user_id;
+    if (owner.kind === 'creator') {
+      values['metadata[creator_profile_id]'] = owner.profile.id;
+      values['subscription_data[metadata][creator_profile_id]'] = owner.profile.id;
+    } else {
+      values['metadata[referrer_discord_user_id]'] = owner.profile.discord_user_id;
+      values['subscription_data[metadata][referrer_discord_user_id]'] = owner.profile.discord_user_id;
+    }
   }
   if (association.offer === 'starter') {
     values['line_items[1][price]'] = env.STRIPE_STARTER_PRICE_ID;
@@ -1468,12 +1660,12 @@ async function createCheckout(request, env, origin) {
     return json({ error: 'Checkout is being finalized. Please try again shortly.' }, 503, origin);
   }
 
-  let referrerProfile = null;
+  let referralOwner = null;
   if (data.offer === 'referral_trial') {
     const referralCode = String(data.referral_code || '').toUpperCase();
-    if (!/^KBH-[A-Z0-9]{10}$/.test(referralCode) || !supabaseReady(env)) return json({ error: 'That referral link is invalid or expired.' }, 400, origin);
-    referrerProfile = await referralProfileForCode(env, referralCode);
-    if (!referrerProfile || !await activeMembershipForDiscord(env, referrerProfile.discord_user_id)) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
+    if (!supabaseReady(env)) return json({ error: 'That referral link is invalid or expired.' }, 400, origin);
+    referralOwner = await referralOwnerForCode(env, referralCode);
+    if (!referralOwner) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
   }
 
   // Go straight to the canonical confirmation page, avoiding the legacy
@@ -1495,11 +1687,16 @@ async function createCheckout(request, env, origin) {
     values['subscription_data[trial_period_days]'] = data.offer === 'starter' ? 7 : 2;
     values['subscription_data[trial_settings][end_behavior][missing_payment_method]'] = 'cancel';
   }
-  if (referrerProfile) {
-    values['metadata[referral_code]'] = referrerProfile.referral_code;
-    values['metadata[referrer_discord_user_id]'] = referrerProfile.discord_user_id;
-    values['subscription_data[metadata][referral_code]'] = referrerProfile.referral_code;
-    values['subscription_data[metadata][referrer_discord_user_id]'] = referrerProfile.discord_user_id;
+  if (referralOwner) {
+    values['metadata[referral_code]'] = referralOwner.profile.referral_code;
+    values['subscription_data[metadata][referral_code]'] = referralOwner.profile.referral_code;
+    if (referralOwner.kind === 'creator') {
+      values['metadata[creator_profile_id]'] = referralOwner.profile.id;
+      values['subscription_data[metadata][creator_profile_id]'] = referralOwner.profile.id;
+    } else {
+      values['metadata[referrer_discord_user_id]'] = referralOwner.profile.discord_user_id;
+      values['subscription_data[metadata][referrer_discord_user_id]'] = referralOwner.profile.discord_user_id;
+    }
   }
   if (data.offer === 'starter') {
     values['line_items[1][price]'] = env.STRIPE_STARTER_PRICE_ID;
@@ -1529,13 +1726,14 @@ async function processReferralInvoicePaid(env, invoice, eventId) {
   if (!subscriptionId || String(invoice?.currency || '').toLowerCase() !== 'usd' || Number(invoice?.amount_paid || 0) < 3299) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
   const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
   const metadata = subscription.metadata || {};
-  if (metadata.offer !== 'referral_trial' || !metadata.referral_code || !metadata.referrer_discord_user_id) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
+  if (metadata.offer !== 'referral_trial' || !metadata.referral_code || !(metadata.referrer_discord_user_id || metadata.creator_profile_id)) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
   if (stripeId(subscription.items?.data?.[0]?.price) !== env.STRIPE_MONTHLY_PRICE_ID) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
   let reward = await referralRewardForSubscription(env, subscriptionId);
   if (!reward) {
     reward = await createReferralAttribution(env, {
       referralCode: metadata.referral_code,
       referrerDiscordUserId: metadata.referrer_discord_user_id,
+      creatorProfileId: metadata.creator_profile_id,
       customerId: stripeId(invoice.customer) || stripeId(subscription.customer),
       subscriptionId,
     });
@@ -1705,6 +1903,28 @@ async function checkReferrerCardIdentity(env, reward, fingerprintHash) {
   }
 }
 
+async function checkCreatorIdentity(env, reward, profile, fingerprintHash) {
+  if (!profile || profile.status !== 'ACTIVE') throw referralSafetyFailure('CREATOR_NOT_ACTIVE');
+  const customer = await stripeGet(env, `/customers/${encodeURIComponent(reward.referred_stripe_customer_id)}`);
+  if (!customer?.email) throw referralSafetyFailure('REFERRED_EMAIL_REQUIRES_REVIEW');
+  if (customer.email.trim().toLowerCase() === profile.contact_email) throw referralSafetyFailure('SELF_REFERRAL', 'VOID');
+  // Check every Stripe customer using the creator's email. An incomplete list
+  // must be reviewed rather than silently passing an identity comparison.
+  const matches = await stripeGet(env, `/customers?email=${encodeURIComponent(profile.contact_email)}&limit=100`);
+  if (matches.has_more) throw referralSafetyFailure('CREATOR_HISTORY_REQUIRES_REVIEW');
+  for (const match of matches.data || []) {
+    if (match.id === reward.referred_stripe_customer_id) throw referralSafetyFailure('SELF_REFERRAL', 'VOID');
+    const methods = await stripeGet(env, `/payment_methods?customer=${encodeURIComponent(match.id)}&type=card&limit=100`);
+    const charges = await stripeGet(env, `/charges?customer=${encodeURIComponent(match.id)}&limit=100`);
+    if (methods.has_more || charges.has_more) throw referralSafetyFailure('CREATOR_HISTORY_REQUIRES_REVIEW');
+    const fingerprints = [...(methods.data || []).map((method) => method.card?.fingerprint),
+      ...(charges.data || []).map((charge) => charge.payment_method_details?.card?.fingerprint)].filter(Boolean);
+    for (const fingerprint of fingerprints) {
+      if (await sha256Text(fingerprint) === fingerprintHash) throw referralSafetyFailure('SHARED_CARD_REQUIRES_REVIEW');
+    }
+  }
+}
+
 function referralPayoutAmount(reward) {
   const amount = Number(reward?.reward_amount_cents);
   if (![1000, 2000].includes(amount)) throw new Error('Referral reward amount is invalid.');
@@ -1739,16 +1959,28 @@ async function processReferralPayouts(env) {
         await updateReferralReward(env, reward.id, { status: 'AWAITING_MEMBER_IDENTITY', status_reason: 'REFERRED_DISCORD_NOT_CONNECTED' }, REFERRAL_PRE_PAYOUT_STATUSES);
         continue;
       }
-      if (reward.referred_discord_user_id === reward.referrer_discord_user_id) {
+      if (reward.referrer_discord_user_id && reward.referred_discord_user_id === reward.referrer_discord_user_id) {
         summary.voided += 1;
         await updateReferralReward(env, reward.id, { status: 'VOID', status_reason: 'SELF_REFERRAL' }, REFERRAL_PRE_PAYOUT_STATUSES);
         await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_VOIDED', details: { reason: 'SELF_REFERRAL' } });
         continue;
       }
+      if (reward.creator_profile_id) {
+        const creator = await creatorProfileForId(env, reward.creator_profile_id);
+        if (creator?.discord_user_id && reward.referred_discord_user_id === creator.discord_user_id) {
+          summary.voided += 1;
+          await updateReferralReward(env, reward.id, { status: 'VOID', status_reason: 'SELF_REFERRAL' }, REFERRAL_PRE_PAYOUT_STATUSES);
+          await recordReferralEvent(env, { rewardId: reward.id, eventType: 'REFERRAL_VOIDED', details: { reason: 'SELF_REFERRAL' } });
+          continue;
+        }
+      }
       if (await membershipEntitlementBlock(env, reward.referred_subscription_id)) throw referralSafetyFailure('REFERRED_MEMBERSHIP_BLOCKED', 'VOID');
       const payment = await qualifyingReferralCharge(env, reward);
-      await checkReferrerCardIdentity(env, reward, payment.fingerprintHash);
-      const profile = await referralProfileForDiscord(env, reward.referrer_discord_user_id);
+      const profile = reward.creator_profile_id
+        ? await creatorProfileForId(env, reward.creator_profile_id)
+        : await referralProfileForDiscord(env, reward.referrer_discord_user_id);
+      if (reward.creator_profile_id) await checkCreatorIdentity(env, reward, profile, payment.fingerprintHash);
+      else await checkReferrerCardIdentity(env, reward, payment.fingerprintHash);
       if (!profile?.stripe_recipient_account_id) {
         summary.awaitingSetup += 1;
         await updateReferralReward(env, reward.id, { status: 'AWAITING_PAYOUT_SETUP', status_reason: 'RECIPIENT_NOT_CONNECTED' }, REFERRAL_PRE_PAYOUT_STATUSES);
@@ -1765,12 +1997,15 @@ async function processReferralPayouts(env) {
         continue;
       }
       if (profile.payout_status !== 'READY') {
-        await supabase(env, `referral_profiles?discord_user_id=eq.${encodeURIComponent(profile.discord_user_id)}`, {
+        const profilePath = reward.creator_profile_id
+          ? `creator_referral_profiles?id=eq.${encodeURIComponent(profile.id)}`
+          : `referral_profiles?discord_user_id=eq.${encodeURIComponent(profile.discord_user_id)}`;
+        await supabase(env, profilePath, {
           method: 'PATCH',
           prefer: 'return=minimal',
           body: { payout_status: 'READY', updated_at: new Date().toISOString() },
         });
-        await recordReferralEvent(env, { rewardId: reward.id, eventType: 'PAYOUT_RECIPIENT_READY', actorType: 'system', actorId: profile.discord_user_id });
+        await recordReferralEvent(env, { rewardId: reward.id, eventType: 'PAYOUT_RECIPIENT_READY', actorType: 'system', actorId: profile.id || profile.discord_user_id });
       }
       const claim = await updateReferralReward(env, reward.id, {
         status: 'READY', status_reason: null, payout_attempt_started_at: new Date().toISOString(),
@@ -2240,15 +2475,16 @@ async function adminAnalytics(request, env, origin) {
     const response = await fetch('https://bettinghub-publisher.kobedirwin.workers.dev/api/free-pick/current', { signal: AbortSignal.timeout(8_000) });
     if (response.ok) freePick = await response.json();
   } catch { /* Dashboard shows unavailable without blocking business metrics. */ }
-  const [sessions, events, subscriptions, customers, associations, billing, referrals, profiles, feedback, webhooks] = await Promise.all([
+  const [sessions, events, subscriptions, customers, associations, billing, referrals, profiles, creators, feedback, webhooks] = await Promise.all([
     supabase(env, 'analytics_sessions?select=*&order=started_at.desc&limit=1000'),
     supabase(env, 'analytics_events?select=*&order=occurred_at.desc&limit=5000'),
     supabase(env, 'membership_subscriptions?select=*&order=updated_at.desc&limit=1000'),
     supabase(env, 'membership_customers?select=stripe_customer_id,discord_user_id,current_subscription_id&limit=1000'),
     supabase(env, 'membership_checkout_associations?select=id,offer,referral_code,attribution,analytics_session_id,discord_user_id,stripe_subscription_id,status,activation_attempts,last_activation_attempt_at,last_error_code,next_retry_at,created_at&order=created_at.desc&limit=1000'),
     supabase(env, 'membership_billing_events?select=*&order=occurred_at.desc&limit=5000'),
-    supabase(env, 'referral_rewards?select=referrer_discord_user_id,status,reward_amount_cents,created_at,first_paid_at&order=created_at.desc&limit=1000'),
+    supabase(env, 'referral_rewards?select=referrer_discord_user_id,creator_profile_id,status,reward_amount_cents,created_at,first_paid_at&order=created_at.desc&limit=1000'),
     supabase(env, 'referral_profiles?select=discord_user_id,referral_code,payout_status&limit=1000'),
+    supabase(env, 'creator_referral_profiles?select=id,display_name,referral_code,discord_user_id,trial_expires_at,status,payout_status&limit=1000'),
     supabase(env, 'cancellation_feedback?select=reason_code,retention_offer_shown,retention_offer_accepted,created_at&order=created_at.desc&limit=1000'),
     supabase(env, 'stripe_webhook_events?status=eq.FAILED&select=event_id,event_type,error_detail,received_at&order=received_at.desc&limit=100'),
   ]);
@@ -2281,6 +2517,9 @@ async function adminAnalytics(request, env, origin) {
       if (!after) break;
     }
     const entitledDiscordIds = new Set(mappedEligible.map(item => item.customer?.discord_user_id).filter(Boolean));
+    for (const creator of creators || []) {
+      if (creator.discord_user_id && creator.trial_expires_at && Date.parse(creator.trial_expires_at) > Date.now()) entitledDiscordIds.add(creator.discord_user_id);
+    }
     vipWithoutEntitlement = vipMembers.filter(id => !entitledDiscordIds.has(id)).length;
   } catch { /* Surface unavailable rather than inventing a zero. */ }
   const activeIds = new Set(roleChecks.filter(item => item.role === 'ACTIVE').map(item => item.subscription.stripe_subscription_id));
@@ -2364,8 +2603,9 @@ async function adminAnalytics(request, env, origin) {
   for (const event of events || []) { const row = historyMap.get(dayKey(event.occurred_at)); if (row && event.event_name === 'payment_completed') row.newMembers += 1; if (row && event.event_name === 'cancellation_completed') row.cancellations += 1; }
   for (const item of billing || []) { const row = historyMap.get(dayKey(item.occurred_at)); if (!row) continue; if (item.event_type === 'invoice_paid') { row.payments += 1; row.revenueCents += Number(item.amount_cents || 0); if (item.billing_reason === 'subscription_cycle') row.renewals += 1; } if (item.event_type === 'invoice_failed') row.failedPayments += 1; }
   const profileByDiscord = new Map((profiles || []).map(item => [item.discord_user_id, item]));
+  const creatorById = new Map((creators || []).map(item => [item.id, item]));
   const leaderboardMap = new Map();
-  for (const reward of referrals || []) { const id = reward.referrer_discord_user_id || 'unknown'; if (!leaderboardMap.has(id)) leaderboardMap.set(id, { discordUserId: id, referralCode: profileByDiscord.get(id)?.referral_code || '', successfulReferrals: 0, pendingReferrals: 0, totalEarnedCents: 0 }); const row = leaderboardMap.get(id); if (['READY','PAYOUT_SENT'].includes(reward.status)) row.successfulReferrals += 1; else if (!['VOID'].includes(reward.status)) row.pendingReferrals += 1; if (reward.status === 'PAYOUT_SENT') row.totalEarnedCents += Number(reward.reward_amount_cents || 0); }
+  for (const reward of referrals || []) { const id = reward.creator_profile_id ? `creator:${reward.creator_profile_id}` : reward.referrer_discord_user_id || 'unknown'; const creator = creatorById.get(reward.creator_profile_id); if (!leaderboardMap.has(id)) leaderboardMap.set(id, { discordUserId: reward.referrer_discord_user_id || '', referrerName: creator?.display_name || reward.referrer_discord_user_id || 'Unknown', referralCode: creator?.referral_code || profileByDiscord.get(id)?.referral_code || '', successfulReferrals: 0, pendingReferrals: 0, totalEarnedCents: 0 }); const row = leaderboardMap.get(id); if (['READY','PAYOUT_SENT'].includes(reward.status)) row.successfulReferrals += 1; else if (!['VOID'].includes(reward.status)) row.pendingReferrals += 1; if (reward.status === 'PAYOUT_SENT') row.totalEarnedCents += Number(reward.reward_amount_cents || 0); }
   const stripeProfiles = await Promise.all((customers || []).slice(0, 250).map(async customer => {
     try { const stripeCustomer = await stripeGet(env, `/customers/${encodeURIComponent(customer.stripe_customer_id)}`); return [customer.stripe_customer_id, { name: stripeCustomer.name || '', email: stripeCustomer.email || '' }]; }
     catch { return [customer.stripe_customer_id, { name: '', email: '' }]; }
@@ -2497,6 +2737,7 @@ async function handleWebhook(request, env) {
         await createReferralAttribution(env, {
           referralCode: session.metadata.referral_code,
           referrerDiscordUserId: session.metadata.referrer_discord_user_id,
+          creatorProfileId: session.metadata.creator_profile_id,
           customerId,
           subscriptionId,
         });
@@ -2579,6 +2820,8 @@ export default {
         return json({ error: 'Discord role readiness check failed safely.' }, 500, origin);
       }
     }
+    if (request.method === 'POST' && url.pathname === '/ops/creators') return createCreatorInvitation(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/ops/creators/activate') return activateCreator(request, env, origin);
     if (request.method === 'GET' && url.pathname === '/cancel/offer') return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'GET' && url.pathname === '/admin/login') {
       if (!discordReady(env) || !env.ADMIN_DISCORD_USER_IDS) return new Response('Admin access is not configured.', { status: 503 });
@@ -2609,6 +2852,7 @@ export default {
     if (request.method === 'GET' && url.pathname === '/discord/connect') return startDiscordConnection(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/login') return startPortalLogin(request, env);
     if (request.method === 'GET' && url.pathname === '/referrals/login') return startReferralLogin(request, env);
+    if (request.method === 'GET' && url.pathname === '/creators/login') return startCreatorLogin(request, env);
     if (request.method === 'GET' && url.pathname === '/referrals/onboard') return startPayoutOnboarding(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/callback') return finishDiscordConnection(request, env);
     if (request.method === 'POST' && url.pathname === '/create-checkout') {
@@ -2620,7 +2864,7 @@ export default {
     return json({ error: 'Not found.' }, 404, origin);
   },
   scheduled(controller, env, ctx) {
-    const frequent = retryPendingActivations(env);
+    const frequent = Promise.all([retryPendingActivations(env), expireCreatorTrials(env), activateReadyCreators(env)]);
     const daily = controller.cron === '15 16 * * *'
       ? Promise.all([reconcileMemberships(env), processReferralPayouts(env), queueLifecycleReminders(env)]) : Promise.resolve();
     ctx.waitUntil(Promise.all([frequent, daily]));
@@ -2635,6 +2879,9 @@ export const __test = {
   claimDiscordLink,
   checkoutRateLimitResponse,
   createDiscordState,
+  createReferralAttribution,
+  checkCreatorIdentity,
+  expireCreatorTrials,
   discordAuthorizationUrl,
   discordRoleReadiness,
   ensurePerMemberRetentionCoupon,

@@ -385,6 +385,132 @@ test('referral checkout is locked to the two-day monthly offer and records the s
   assert.equal(checkout.get('subscription_data[metadata][referrer_discord_user_id]'), 'discord_referrer');
 });
 
+test('creator referral checkout records email-owned identity without requiring creator membership', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const stripeRequests = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const target = new URL(url);
+    if (target.hostname === 'project.supabase.test') {
+      if (target.pathname.endsWith('/creator_referral_profiles')) return Response.json([{
+        id: 'a7000000-0000-4000-8000-000000000001', contact_email: 'sportscenteredpod@gmail.com',
+        referral_code: 'KBC-ABCDEF1234', status: 'ACTIVE',
+      }]);
+      if (target.pathname.endsWith('/api_call_events')) return new Response(null, { status: 204 });
+      throw new Error(`Unexpected database call: ${target.pathname}`);
+    }
+    stripeRequests.push(new URLSearchParams(String(options.body || '')));
+    return Response.json({ url: 'https://checkout.stripe.test/creator-session' }, { headers: { 'request-id': 'req_creator_test' } });
+  };
+  const env = { STRIPE_SECRET_KEY: 'sk_test_local_only', STRIPE_MONTHLY_PRICE_ID: 'price_monthly',
+    SUPABASE_URL: 'https://project.supabase.test', SUPABASE_SECRET_KEY: 'sb_secret_test' };
+  const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
+    method: 'POST', body: JSON.stringify({ offer: 'referral_trial', referral_code: 'KBC-ABCDEF1234' }),
+  }), env);
+  assert.equal(response.status, 200);
+  assert.equal(stripeRequests.length, 1);
+  assert.equal(stripeRequests[0].get('metadata[creator_profile_id]'), 'a7000000-0000-4000-8000-000000000001');
+  assert.equal(stripeRequests[0].get('subscription_data[metadata][creator_profile_id]'), 'a7000000-0000-4000-8000-000000000001');
+  assert.equal(stripeRequests[0].has('metadata[referrer_discord_user_id]'), false);
+  assert.equal(stripeRequests[0].get('subscription_data[trial_period_days]'), '2');
+});
+
+test('creator invitation cannot be created without the operations secret', async () => {
+  const response = await worker.fetch(new Request('https://worker.test/ops/creators', {
+    method: 'POST', body: JSON.stringify({ email: 'sportscenteredpod@gmail.com', name: 'Sports Centered' }),
+  }), { MEMBERSHIP_OPERATIONS_SECRET: 'test-operations-secret' });
+  assert.equal(response.status, 401);
+});
+
+test('creator attribution records an email-owned ten-dollar reward exactly once', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const writes = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const target = new URL(url);
+    if (target.pathname.endsWith('/creator_referral_profiles')) return Response.json([{
+      id: 'a7000000-0000-4000-8000-000000000001', referral_code: 'KBC-ABCDEF1234',
+      contact_email: 'sportscenteredpod@gmail.com', status: 'PAUSED',
+    }]);
+    if (target.pathname.endsWith('/referral_rewards')) {
+      const body = JSON.parse(options.body);
+      writes.push(body);
+      return Response.json([{ id: 'reward_creator', ...body }]);
+    }
+    if (target.pathname.endsWith('/referral_events')) return new Response(null, { status: 204 });
+    throw new Error(`Unexpected external request: ${target}`);
+  };
+  const reward = await workerTest.createReferralAttribution({
+    SUPABASE_URL: 'https://project.supabase.test', SUPABASE_SECRET_KEY: 'sb_secret_test',
+  }, { referralCode: 'KBC-ABCDEF1234', creatorProfileId: 'a7000000-0000-4000-8000-000000000001',
+    customerId: 'cus_referred', subscriptionId: 'sub_referred' });
+  assert.equal(reward.creator_profile_id, 'a7000000-0000-4000-8000-000000000001');
+  assert.equal(writes[0].referrer_discord_user_id, null);
+  assert.equal(writes[0].reward_amount_cents, 1000);
+  assert.equal(writes.length, 1);
+});
+
+test('creator self-referral and shared payment card are held before payout', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async (url) => {
+    const target = new URL(url);
+    if (target.pathname === '/v1/customers/cus_referred') return Response.json({ email: 'sportscenteredpod@gmail.com' });
+    throw new Error(`Unexpected external request: ${target}`);
+  };
+  await assert.rejects(() => workerTest.checkCreatorIdentity({ STRIPE_SECRET_KEY: 'sk_test_local_only' }, {
+    referred_stripe_customer_id: 'cus_referred',
+  }, { status: 'ACTIVE', contact_email: 'sportscenteredpod@gmail.com' }, 'fingerprint_hash'), /SELF_REFERRAL/);
+});
+
+test('creator Discord connection rejects a different email before VIP or payout setup', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const target = new URL(url);
+    calls.push(`${options.method || 'GET'} ${target.pathname}`);
+    if (target.pathname === '/api/oauth2/token') return Response.json({ access_token: 'creator_oauth_token' });
+    if (target.pathname === '/api/v10/users/@me') return Response.json({ id: 'discord_creator', email: 'wrong@example.com', verified: true });
+    if (target.pathname === '/api/oauth2/token/revoke') return new Response(null, { status: 204 });
+    if (target.pathname.endsWith('/creator_referral_profiles')) return Response.json([{
+      id: 'a7000000-0000-4000-8000-000000000001', contact_email: 'sportscenteredpod@gmail.com',
+      referral_code: 'KBC-ABCDEF1234', status: 'PENDING',
+    }]);
+    if (target.pathname.endsWith('/api_call_events')) return new Response(null, { status: 204 });
+    throw new Error(`Unexpected external request: ${target}`);
+  };
+  const env = { DISCORD_CLIENT_ID: 'client_test', DISCORD_CLIENT_SECRET: 'secret_test',
+    DISCORD_BOT_TOKEN: 'bot_test', DISCORD_GUILD_ID: 'guild_test', DISCORD_MEMBER_ROLE_ID: 'vip_role',
+    DISCORD_OAUTH_STATE_SECRET: 'state_test', DISCORD_REDIRECT_URI: 'https://worker.test/discord/callback',
+    SUPABASE_URL: 'https://project.supabase.test', SUPABASE_SECRET_KEY: 'sb_secret_test' };
+  const state = await workerTest.createDiscordState({ intent: 'creator', referralCode: 'KBC-ABCDEF1234' }, env);
+  const response = await worker.fetch(new Request(`https://worker.test/discord/callback?code=test&state=${encodeURIComponent(state)}`), env);
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /verified email/);
+  assert.ok(!calls.some((call) => call.includes('/guilds/') || call.includes('/v2/core/accounts')));
+});
+
+test('expired creator trial removes VIP while leaving creator referral records intact', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const target = new URL(url);
+    calls.push(`${options.method || 'GET'} ${target.pathname}`);
+    if (target.pathname.endsWith('/creator_referral_profiles') && options.method === 'PATCH') return new Response(null, { status: 204 });
+    if (target.pathname.endsWith('/creator_referral_profiles')) return Response.json([{ id: 'a7000000-0000-4000-8000-000000000001', discord_user_id: '123456789012345678' }]);
+    if (target.pathname.endsWith('/membership_customers')) return Response.json([]);
+    if (target.pathname.includes('/guilds/guild_test/members/123456789012345678/roles/vip_role')) return new Response(null, { status: 204 });
+    if (target.pathname.endsWith('/api_call_events')) return new Response(null, { status: 204 });
+    throw new Error(`Unexpected external request: ${target}`);
+  };
+  await workerTest.expireCreatorTrials({ SUPABASE_URL: 'https://project.supabase.test', SUPABASE_SECRET_KEY: 'sb_secret_test',
+    DISCORD_BOT_TOKEN: 'bot_test', DISCORD_GUILD_ID: 'guild_test', DISCORD_MEMBER_ROLE_ID: 'vip_role' });
+  assert.ok(calls.some((call) => call === 'DELETE /api/v10/guilds/guild_test/members/123456789012345678/roles/vip_role'));
+  assert.ok(calls.some((call) => call === 'PATCH /rest/v1/creator_referral_profiles'));
+});
+
 test('invoice subscription extraction supports current and legacy Stripe invoice shapes', () => {
   assert.equal(workerTest.invoiceSubscriptionId({ subscription: 'sub_legacy' }), 'sub_legacy');
   assert.equal(workerTest.invoiceSubscriptionId({ parent: { subscription_details: { subscription: 'sub_current' } } }), 'sub_current');
