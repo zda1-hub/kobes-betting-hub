@@ -1,5 +1,5 @@
 const sharp = require('sharp');
-const { publicPickTerms } = require('./source-review');
+const { publicPickTerms, sourceEvidence } = require('./source-review');
 
 const STORY_WIDTH = 1080;
 const STORY_HEIGHT = 1920;
@@ -38,6 +38,7 @@ function storyTerms(packet) {
 
 function storySvg(packet) {
   const terms = storyTerms(packet);
+  const evidence = sourceEvidence(packet).filter((claim) => claim.length <= 105).slice(0, 2);
   const titleLines = wrapWords(terms[0], 24);
   const detailLines = terms.slice(1).flatMap((term) => wrapWords(term, 34)).slice(0, 7);
   const title = titleLines.map((line, index) => (
@@ -47,6 +48,8 @@ function storySvg(packet) {
   const details = detailLines.map((line, index) => (
     `<text x="94" y="${detailStart + (index * 60)}" class="detail">${escapeXml(line)}</text>`
   )).join('');
+  const breakdown = evidence.flatMap((claim, index) => wrapWords(claim, 43).slice(0, 3)
+    .map((line, lineIndex) => `<text x="118" y="${1160 + (index * 150) + (lineIndex * 48)}" class="reason">${escapeXml(line)}</text>`)).join('');
 
   return `
     <svg width="${STORY_WIDTH}" height="${STORY_HEIGHT}" viewBox="0 0 ${STORY_WIDTH} ${STORY_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
@@ -60,6 +63,7 @@ function storySvg(packet) {
       <text x="90" y="445" class="eyebrow">TODAY&apos;S FREE PLAY</text>
       ${title}
       ${details}
+      ${evidence.length ? `<rect x="90" y="1040" width="900" height="395" rx="24" fill="#1c1c1c" stroke="#ff6a00" stroke-width="3"/><text x="118" y="1110" class="breakdownTitle">THE QUICK BREAKDOWN</text>${breakdown}` : ''}
       <rect x="90" y="1510" width="900" height="190" rx="24" fill="#f4f0e8"/>
       <text x="540" y="1585" text-anchor="middle" class="ctaTop">FULL WRITEUP + MEMBER CARD</text>
       <text x="540" y="1665" text-anchor="middle" class="cta">KOBESBETTINGHUB.COM</text>
@@ -70,6 +74,8 @@ function storySvg(packet) {
         .eyebrow { fill:#ff6a00; font-family:Arial,Helvetica,sans-serif; font-size:39px; font-weight:800; letter-spacing:8px; }
         .pick { fill:#f4f0e8; font-family:Arial,Helvetica,sans-serif; font-size:78px; font-weight:900; letter-spacing:-2px; }
         .detail { fill:#d9d4cb; font-family:Arial,Helvetica,sans-serif; font-size:38px; font-weight:600; }
+        .breakdownTitle { fill:#ff6a00; font-family:Arial,Helvetica,sans-serif; font-size:31px; font-weight:800; letter-spacing:3px; }
+        .reason { fill:#f4f0e8; font-family:Arial,Helvetica,sans-serif; font-size:31px; font-weight:600; }
         .ctaTop { fill:#5b5852; font-family:Arial,Helvetica,sans-serif; font-size:25px; font-weight:800; letter-spacing:3px; }
         .cta { fill:#090909; font-family:Arial,Helvetica,sans-serif; font-size:48px; font-weight:900; letter-spacing:1px; }
         .legal { fill:#a8a39b; font-family:Arial,Helvetica,sans-serif; font-size:24px; font-weight:700; letter-spacing:2px; }
