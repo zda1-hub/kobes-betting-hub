@@ -39,7 +39,7 @@ const APPROVED_MIGRATIONS = [
   {
     name: '014_email_creator_referrals.sql',
     version: '014_email_creator_referrals',
-    sha256: '7e2669a5ea62b2244e8a4e85097dc635209196929729bba13a2afd69e05ff25a',
+    sha256: '2489772c780d615c1362538bdbcddd78d5ce173c6be2c26fabcd462f627e4cbe',
   },
 ];
 const PROTECTED_TABLES = [

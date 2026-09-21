@@ -18,10 +18,17 @@ CREATE TABLE IF NOT EXISTS creator_referral_profiles (
 ALTER TABLE referral_rewards ADD COLUMN IF NOT EXISTS creator_profile_id uuid REFERENCES creator_referral_profiles(id);
 ALTER TABLE referral_rewards ALTER COLUMN referrer_discord_user_id DROP NOT NULL;
 ALTER TABLE referral_rewards DROP CONSTRAINT IF EXISTS referral_rewards_referral_code_fkey;
-ALTER TABLE referral_rewards ADD CONSTRAINT referral_rewards_one_owner CHECK (
-  (creator_profile_id IS NOT NULL AND referrer_discord_user_id IS NULL)
-  OR (creator_profile_id IS NULL AND referrer_discord_user_id IS NOT NULL)
-);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'referral_rewards'::regclass AND conname = 'referral_rewards_one_owner'
+  ) THEN
+    ALTER TABLE referral_rewards ADD CONSTRAINT referral_rewards_one_owner CHECK (
+      (creator_profile_id IS NOT NULL AND referrer_discord_user_id IS NULL)
+      OR (creator_profile_id IS NULL AND referrer_discord_user_id IS NOT NULL)
+    );
+  END IF;
+END $$;
 CREATE OR REPLACE FUNCTION validate_referral_reward_owner() RETURNS trigger
 LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN
