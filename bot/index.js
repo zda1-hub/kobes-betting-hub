@@ -2281,6 +2281,10 @@ client.once(Events.ClientReady, async (readyClient) => {
   } catch (error) {
     console.error('Unable to refresh pending approval research:', error);
   }
+  // The scheduled recap may already have run before a deploy. Refresh
+  // yesterday's still-pending cards now so Kobe sees the current controls.
+  void queueDiscordRecapApprovals(previousPacificOperatingDate())
+    .catch((error) => console.error('Unable to refresh pending recap approval controls:', error));
 });
 
 async function registerCommandsOnStart() {
