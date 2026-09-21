@@ -30,6 +30,14 @@ test('story copy comes only from approved terms and escapes markup', () => {
   assert.equal(escapeXml('<pick & “line”>'), '&lt;pick &amp; “line”&gt;');
 });
 
+test('includes only concise approved supporting facts in the story breakdown', () => {
+  const withEvidence = { ...packet, approval: { edited_evidence: ['The player had 8 interceptions on 597 attempts last season'] } };
+  const svg = storySvg(withEvidence);
+  assert.match(svg, /THE QUICK BREAKDOWN/);
+  assert.match(svg, /8 interceptions on 597/);
+  assert.match(svg, /attempts last season/);
+});
+
 test('wraps long story lines and creates a safe filename', () => {
   assert.ok(wrapWords('A very long approved selection that needs multiple display lines', 18).length > 1);
   assert.equal(instagramStoryFilename('NFL/001 risky'), 'kobes-betting-hub-NFL-001-risky-story.jpg');
