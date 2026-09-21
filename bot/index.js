@@ -2082,6 +2082,28 @@ async function refreshVisibleTermsOnlyApprovalControls() {
   return refreshed;
 }
 
+async function refreshPendingDetailEditControls() {
+  if (!pickApprovalChannelId) return 0;
+  const channel = await approvedTextChannel(pickApprovalChannelId);
+  const messages = await channel.messages.fetch({ limit: 100 });
+  let refreshed = 0;
+  for (const message of messages.values()) {
+    if (message.author?.id !== client.user.id || message.components.length !== 1) continue;
+    const row = message.components[0].toJSON();
+    const buttons = row.components || [];
+    const ids = buttons.map((button) => button.custom_id || '');
+    const pickId = ids.find((id) => /^source-review:[A-Za-z0-9_-]+:paid$/.test(id))?.split(':')[1];
+    const paid = buttons.find((button) => button.custom_id === `source-review:${pickId}:paid`);
+    if (!pickId || !paid || !ids.includes(`source-review:${pickId}:free`)
+      || !ids.includes(`source-review:${pickId}:reject`) || ids.includes(`source-review:${pickId}:edit`)) continue;
+    buttons.splice(buttons.length - 1, 0, { type: 2, style: 2, label: 'Edit details',
+      custom_id: `source-review:${pickId}:edit`, disabled: Boolean(paid.disabled) });
+    await message.edit({ components: [row] });
+    refreshed++;
+  }
+  return refreshed;
+}
+
 async function refreshPendingResearchApprovals() {
   if (!pickApprovalChannelId) return;
   const date = pacificClock().date;
@@ -2255,6 +2277,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   }
   try {
     await refreshPendingResearchApprovals();
+    await refreshPendingDetailEditControls();
   } catch (error) {
     console.error('Unable to refresh pending approval research:', error);
   }
