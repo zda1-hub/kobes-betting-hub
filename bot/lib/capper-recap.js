@@ -15,7 +15,7 @@ function wagerIdentity(row) {
   // A copied/re-posted selection is one capper call, not a fresh win. Keep
   // the price and stake in the identity so genuinely changed terms are not
   // silently collapsed.
-  return [row.source_name, row.selection, row.published_line, row.published_odds_american,
+  return [row.selection, row.published_line, row.published_odds_american,
     row.units_risked, row.event, row.market]
     .map(value => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()).join('\u001f');
 }
