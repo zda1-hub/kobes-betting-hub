@@ -196,9 +196,10 @@ test('scheduled Story reads the current Free Pick through the publisher service 
   assert.equal((await connected(env)).result.status, 200);
   let boundReads = 0;
   env.PUBLISHER_SERVICE = {
-    async fetch(request) {
+    async fetch(request, options) {
       boundReads += 1;
-      assert.equal(new URL(request.url).pathname, '/api/free-pick/current');
+      assert.equal(new URL(request).pathname, '/api/free-pick/current');
+      assert.equal(options.headers.accept, 'application/json');
       return Response.json({ error: 'fixture unavailable' }, { status: 404 });
     },
   };
