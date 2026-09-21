@@ -89,7 +89,7 @@ test('owner approves an exact private review card once; changes require another 
     let sourceMessages = [{ content: 'Ben Burns\n• Broncos ML -110', createdTimestamp: now - 1000 }];
     const source = { id: '456', guild, messages: { fetch: async () => new Map(sourceMessages.map((message, index) => [String(index), message])) } };
     function channel(id, map) {
-      return { id, guild, permissionsFor: () => ({ has: () => false }), messages: { fetch: async (messageId) => map.get(messageId) || null },
+      return { id, guild, permissionsFor: () => ({ has: () => false }), messages: { fetch: async (messageId) => typeof messageId === 'object' ? map : map.get(messageId) || null },
         send: async (payload) => {
           const message = { id: `${id}-${map.size + 1}`, embeds: payload.embeds,
             edit: async (next) => { message.embeds = next.embeds; return message; } };

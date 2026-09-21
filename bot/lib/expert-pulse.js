@@ -268,8 +268,14 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
       return { status: 'REJECTED' };
     }
     await writeState({ ...state, status: 'PUBLISHING' });
-    const existing = state.posted_message_id ? await destination.messages.fetch(state.posted_message_id).catch(() => null) : null;
+    let existing = state.posted_message_id ? await destination.messages.fetch(state.posted_message_id).catch(() => null) : null;
     if (state.posted_message_id && !existing) throw new Error('Previous VIP message is missing or inaccessible; publication held to avoid a duplicate.');
+    if (!existing) {
+      // Recover the managed message even if an old ephemeral state file was
+      // lost. Never create a second VIP pulse while one is still visible.
+      const recent = await destination.messages.fetch({ limit: 100 });
+      existing = [...recent.values()].find((message) => message.embeds?.some((embed) => embed.footer?.text?.includes(MARKER))) || null;
+    }
     const posted = existing ? await existing.edit(fresh.payload) : await destination.send(fresh.payload);
     const complete = { ...state, status: 'PUBLISHED', posted_message_id: posted.id };
     await writeState(complete);
