@@ -50,6 +50,7 @@ const { createTelegramReader } = require('./lib/telegram-reader');
 const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/daily-writeup-board');
 const { createFreeWriteupBoard } = require('./lib/free-writeup-board');
 const { createVipExpertList } = require('./lib/vip-expert-list');
+const { createExpertPulse } = require('./lib/expert-pulse');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
@@ -95,7 +96,9 @@ const freeRecapStatePath = path.join(path.dirname(pickLogPath()), 'free-recap-st
 const dailyWriteupsChannelId = process.env.DAILY_WRITEUPS_CHANNEL_ID;
 const configuredFreeWriteupsChannelId = process.env.FREE_WRITEUPS_CHANNEL_ID;
 const vipExpertListChannelId = process.env.VIP_EXPERT_LIST_CHANNEL_ID;
+const vipExpertPulseChannelId = process.env.VIP_EXPERT_PULSE_CHANNEL_ID;
 if (vipExpertListChannelId) allowedChannelIds.add(vipExpertListChannelId);
+if (vipExpertPulseChannelId) allowedChannelIds.add(vipExpertPulseChannelId);
 if (configuredFreeWriteupsChannelId) allowedChannelIds.add(configuredFreeWriteupsChannelId);
 if (dailyWriteupsChannelId) allowedChannelIds.add(dailyWriteupsChannelId);
 let manualFootballWriteupRows = [];
@@ -168,6 +171,11 @@ const vipExpertList = vipExpertListChannelId ? createVipExpertList({
   sourceChannelFor: () => approvedTextChannel(expertPicksChannelId),
   listChannelFor: () => approvedTextChannel(vipExpertListChannelId),
   stateFile: path.join(path.dirname(pickLogPath()), 'vip-expert-list.json')
+}) : null;
+const refreshExpertPulse = vipExpertPulseChannelId ? () => createExpertPulse({
+  sourceChannelFor: () => approvedTextChannel(expertPicksChannelId),
+  destinationChannelFor: () => approvedTextChannel(vipExpertPulseChannelId),
+  stateFile: path.join(path.dirname(pickLogPath()), 'expert-pulse.json')
 }) : null;
 const pickApprovalChannelId = process.env.PICK_APPROVAL_CHANNEL_ID;
 const exclusivePickApprovalChannelId = exclusiveApprovalChannelId();
@@ -1523,6 +1531,9 @@ async function postAndLogOfficialPick({ channel, payload, entry, packet = null }
       console.error('VIP expert list needs attention:', error instanceof Error ? error.message : String(error));
     }
   }
+  if (refreshExpertPulse && channel.id === expertPicksChannelId) {
+    void refreshExpertPulse().catch((error) => console.error('VIP expert pulse needs attention:', error.message));
+  }
   return message;
 }
 
@@ -2177,6 +2188,14 @@ client.once(Events.ClientReady, async (readyClient) => {
     setInterval(() => void vipExpertList.refresh()
       .then((receipt) => { if (receipt.status !== 'UNCHANGED') console.log('VIP expert list receipt:', JSON.stringify(receipt)); })
       .catch((error) => console.error('VIP expert list needs attention:', error.message)), 300000);
+  }
+  if (refreshExpertPulse) {
+    void refreshExpertPulse()
+      .then((receipt) => console.log('VIP expert pulse receipt:', JSON.stringify(receipt)))
+      .catch((error) => console.error('VIP expert pulse needs attention:', error.message));
+    setInterval(() => void refreshExpertPulse()
+      .then((receipt) => { if (receipt.status !== 'UNCHANGED') console.log('VIP expert pulse receipt:', JSON.stringify(receipt)); })
+      .catch((error) => console.error('VIP expert pulse needs attention:', error.message)), 300000);
   }
   try {
     await refreshPendingTermsOnlyApprovals();
