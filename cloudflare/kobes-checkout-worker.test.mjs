@@ -22,6 +22,28 @@ test('checkout worker health endpoint responds without credentials', async () =>
   assert.deepEqual(await response.json(), { ok: true, version: null });
 });
 
+test('dashboard database reads page past the first batch and flag a safety cap', async () => {
+  const originalFetch = globalThis.fetch;
+  const offsets = [];
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    const offset = Number(url.searchParams.get('offset'));
+    offsets.push(offset);
+    return new Response(JSON.stringify(offset === 0 ? [{ id: 'one' }, { id: 'two' }] : [{ id: 'three' }]), { status: 200 });
+  };
+  try {
+    const env = { SUPABASE_URL: 'https://database.test', SUPABASE_SECRET_KEY: 'db_test' };
+    const result = await workerTest.supabasePages(env, 'analytics_sessions?select=id&order=id.asc', { pageSize: 2 });
+    assert.deepEqual(result.rows.map(row => row.id), ['one', 'two', 'three']);
+    assert.equal(result.truncated, false);
+    assert.deepEqual(offsets, [0, 2]);
+    const capped = await workerTest.supabasePages(env, 'analytics_sessions?select=id&order=id.asc', { pageSize: 2, maxPages: 1 });
+    assert.equal(capped.truncated, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('manual reconciliation endpoint requires its dedicated operations secret', async () => {
   const env = { MEMBERSHIP_OPERATIONS_SECRET: 'operations-test-secret' };
   const missing = await worker.fetch(new Request('https://worker.test/ops/reconcile-memberships', { method: 'POST' }), env);

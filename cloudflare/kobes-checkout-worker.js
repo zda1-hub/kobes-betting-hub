@@ -266,6 +266,18 @@ async function supabase(env, path, { method = 'GET', body, prefer } = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+async function supabasePages(env, path, { pageSize = 1000, maxPages = 20 } = {}) {
+  const rows = [];
+  const separator = path.includes('?') ? '&' : '?';
+  for (let page = 0; page < maxPages; page += 1) {
+    const batch = await supabase(env, `${path}${separator}limit=${pageSize}&offset=${page * pageSize}`);
+    if (!Array.isArray(batch)) throw new Error('Expected a paginated membership database result.');
+    rows.push(...batch);
+    if (batch.length < pageSize) return { rows, truncated: false };
+  }
+  return { rows, truncated: true };
+}
+
 const stripeId = (value) => (typeof value === 'string' ? value : value?.id || '');
 const stripeTimestamp = (value) => (Number.isFinite(value) ? new Date(value * 1000).toISOString() : null);
 
@@ -2456,16 +2468,33 @@ async function adminAnalytics(request, env, origin) {
   let range;
   try { range = analyticsRange(new URL(request.url)); } catch (error) { return json({ error: error.message }, 400, origin); }
   let paidInvoices = [];
+  let stripePaymentsTruncated = false;
   try {
-    const invoicePage = await stripeGet(env, '/invoices?status=paid&limit=100');
-    paidInvoices = Array.isArray(invoicePage?.data) ? invoicePage.data : [];
-  } catch { /* The durable billing ledger remains the safe fallback. */ }
+    let cursor = '';
+    for (let page = 0; page < 20; page += 1) {
+      const invoicePage = await stripeGet(env, `/invoices?status=paid&limit=100${cursor ? `&starting_after=${encodeURIComponent(cursor)}` : ''}`);
+      const batch = Array.isArray(invoicePage?.data) ? invoicePage.data : [];
+      paidInvoices.push(...batch);
+      stripePaymentsTruncated = Boolean(invoicePage?.has_more);
+      if (!stripePaymentsTruncated) break;
+      cursor = batch.at(-1)?.id || '';
+      if (!cursor) break;
+    }
+  } catch { paidInvoices = []; stripePaymentsTruncated = true; /* The durable billing ledger remains the safe fallback. */ }
   let successfulCharges = [];
   if (!paidInvoices.length) {
     try {
-      const chargePage = await stripeGet(env, '/charges?limit=100');
-      successfulCharges = (chargePage?.data || []).filter(item => item.paid && item.status === 'succeeded' && !item.refunded);
-    } catch { /* The durable billing ledger remains the safe fallback. */ }
+      let cursor = '';
+      for (let page = 0; page < 20; page += 1) {
+        const chargePage = await stripeGet(env, `/charges?limit=100${cursor ? `&starting_after=${encodeURIComponent(cursor)}` : ''}`);
+        const batch = Array.isArray(chargePage?.data) ? chargePage.data : [];
+        successfulCharges.push(...batch.filter(item => item.paid && item.status === 'succeeded' && !item.refunded));
+        stripePaymentsTruncated = Boolean(chargePage?.has_more);
+        if (!stripePaymentsTruncated) break;
+        cursor = batch.at(-1)?.id || '';
+        if (!cursor) break;
+      }
+    } catch { successfulCharges = []; stripePaymentsTruncated = true; /* The durable billing ledger remains the safe fallback. */ }
   }
   const stripePayments = paidInvoices.length
     ? paidInvoices.map(item => ({ created: item.created, amountPaid: Number(item.amount_paid || 0), subscriptionId: invoiceSubscriptionId(item), customerId: stripeId(item.customer) }))
@@ -2475,20 +2504,28 @@ async function adminAnalytics(request, env, origin) {
     const response = await fetch('https://bettinghub-publisher.kobedirwin.workers.dev/api/free-pick/current', { signal: AbortSignal.timeout(8_000) });
     if (response.ok) freePick = await response.json();
   } catch { /* Dashboard shows unavailable without blocking business metrics. */ }
-  const [sessions, events, subscriptions, customers, associations, billing, referrals, profiles, creators, feedback, webhooks] = await Promise.all([
-    supabase(env, 'analytics_sessions?select=*&order=started_at.desc&limit=1000'),
-    supabase(env, 'analytics_events?select=*&order=occurred_at.desc&limit=5000'),
-    supabase(env, 'membership_subscriptions?select=*&order=updated_at.desc&limit=1000'),
-    supabase(env, 'membership_customers?select=stripe_customer_id,discord_user_id,current_subscription_id&limit=1000'),
-    supabase(env, 'membership_checkout_associations?select=id,offer,referral_code,attribution,analytics_session_id,discord_user_id,stripe_subscription_id,status,activation_attempts,last_activation_attempt_at,last_error_code,next_retry_at,created_at&order=created_at.desc&limit=1000'),
-    supabase(env, 'membership_billing_events?select=*&order=occurred_at.desc&limit=5000'),
-    supabase(env, 'referral_rewards?select=referrer_discord_user_id,creator_profile_id,status,reward_amount_cents,created_at,first_paid_at&order=created_at.desc&limit=1000'),
-    supabase(env, 'referral_profiles?select=discord_user_id,referral_code,payout_status&limit=1000'),
-    supabase(env, 'creator_referral_profiles?select=id,display_name,referral_code,discord_user_id,trial_expires_at,status,payout_status&limit=1000'),
-    supabase(env, 'cancellation_feedback?select=reason_code,retention_offer_shown,retention_offer_accepted,created_at&order=created_at.desc&limit=1000'),
-    supabase(env, 'stripe_webhook_events?status=eq.FAILED&select=event_id,event_type,error_detail,received_at&order=received_at.desc&limit=100'),
+  const [sessionPage, eventPage, subscriptionPage, customerPage, associationPage, billingPage, referralPage, profilePage, creatorPage, feedbackPage, webhookPage] = await Promise.all([
+    supabasePages(env, 'analytics_sessions?select=*&order=started_at.desc,id.desc'),
+    supabasePages(env, 'analytics_events?select=*&order=occurred_at.desc,id.desc'),
+    supabasePages(env, 'membership_subscriptions?select=*&order=updated_at.desc,stripe_subscription_id.desc'),
+    supabasePages(env, 'membership_customers?select=stripe_customer_id,discord_user_id,current_subscription_id&order=stripe_customer_id.asc'),
+    supabasePages(env, 'membership_checkout_associations?select=id,offer,referral_code,attribution,analytics_session_id,discord_user_id,stripe_subscription_id,status,activation_attempts,last_activation_attempt_at,last_error_code,next_retry_at,created_at&order=created_at.desc,id.desc'),
+    supabasePages(env, 'membership_billing_events?select=*&order=occurred_at.desc,stripe_event_id.desc'),
+    supabasePages(env, 'referral_rewards?select=referrer_discord_user_id,creator_profile_id,status,reward_amount_cents,created_at,first_paid_at&order=created_at.desc,id.desc'),
+    supabasePages(env, 'referral_profiles?select=discord_user_id,referral_code,payout_status&order=discord_user_id.asc'),
+    supabasePages(env, 'creator_referral_profiles?select=id,display_name,referral_code,discord_user_id,trial_expires_at,status,payout_status&order=id.asc'),
+    supabasePages(env, 'cancellation_feedback?select=reason_code,retention_offer_shown,retention_offer_accepted,created_at&order=created_at.desc,id.desc'),
+    supabasePages(env, 'stripe_webhook_events?status=eq.FAILED&select=event_id,event_type,error_detail,received_at&order=received_at.desc,event_id.desc', { pageSize: 100 }),
   ]);
+  const [sessions, events, subscriptions, customers, associations, billing, referrals, profiles, creators, feedback, webhooks] = [sessionPage, eventPage, subscriptionPage, customerPage, associationPage, billingPage, referralPage, profilePage, creatorPage, feedbackPage, webhookPage].map(page => page.rows);
   const rangedSessions = (sessions || []).filter(item => range.includes(item.started_at));
+  const dataCompletenessWarnings = [
+    sessionPage.truncated && 'Visitor/source history may be incomplete (20,000-row safety limit).',
+    eventPage.truncated && 'Conversion/event history may be incomplete (20,000-row safety limit).',
+    billingPage.truncated && 'Billing history may be incomplete (20,000-row safety limit).',
+    [subscriptionPage, customerPage, associationPage, referralPage, profilePage, creatorPage, feedbackPage, webhookPage].some(page => page.truncated) && 'Some member, referral, or alert history may be incomplete (pagination safety limit).',
+    stripePaymentsTruncated && 'Stripe payment totals may be incomplete (2,000-invoice/charge safety limit).',
+  ].filter(Boolean);
   const rangedEvents = (events || []).filter(item => range.includes(item.occurred_at));
   const rangedBilling = (billing || []).filter(item => range.includes(item.occurred_at));
   const rangedReferrals = (referrals || []).filter(item => range.includes(item.created_at));
@@ -2658,6 +2695,7 @@ async function adminAnalytics(request, env, origin) {
   const referralReview = (referrals || []).filter(item => ['REVIEW_REQUIRED','PAYOUT_UNCERTAIN'].includes(item.status));
   return json({
     generatedAt: new Date().toISOString(), range: { preset: range.preset, start: range.start?.toISOString() || null, end: range.end.toISOString() },
+    dataCompletenessWarnings,
     traffic: { uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
     conversion: { funnel, offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), purchaseConversionRate: rangedSessions.length ? countEvents('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: countEvents('payment_completed') ? countEvents('vip_activated') / countEvents('payment_completed') : 0 },
     revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPayments.length, introRevenueCents: invoiceWithinRange.filter(item => item.amountPaid === 1000).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
@@ -2885,6 +2923,7 @@ export default {
 };
 
 export const __test = {
+  supabasePages,
   memberWelcomeMessage,
   queueMemberWelcome,
   REFERRAL_REWARD_CENTS,
