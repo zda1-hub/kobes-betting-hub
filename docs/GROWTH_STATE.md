@@ -13,7 +13,7 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 - Verified 2026-09-22 production checkout `/health` (HTTP 200), website `/` and `/join` (HTTP 200), and admin API rejects unauthenticated requests (HTTP 401). Render bot deploy `dep-dap4phbrjlhs73f900u0` is live. This is not a completed paid-funnel test.
 - Released a compact, responsive executive scoreboard to the existing authenticated admin dashboard: active paid, MRR, Arizona-day new paid/cancelled/net, and new paid in the last seven rolling days. Source UTM tags now remain intact through the site return path, while rollup sources distinguish TikTok and Kobe X. The bot's X link carries `utm_source=kobe_x`. PR #24 merged as `e750f7a`; checkout Worker version `d9df5a99-fc9a-4753-93e3-a4abe9e5ff1b`, site Worker version `e1f26632-ce33-476d-b567-5e8630156268`, Render bot deploy `dep-dap528e8bjmc73apt030`, and GitHub Pages are live. Public assets and unauthenticated API boundary were verified; the private scoreboard still needs a logged-in admin verification.
 - The entire repository test suite passes in the isolated release worktree: 498/498. Site build and both Worker dry-runs pass. Stale Free Pick caption assertions were updated to match already-live professional/age-neutral copy.
-- A lightweight 1,000-member target panel (remaining, seven-day net pace, required daily pace by Dec 31, and milestones) is implemented in the existing private dashboard; it is **local until the next site release** and labels pace as a run-rate estimate.
+- A lightweight 1,000-member target panel (remaining, seven-day net pace, required daily pace by Dec 31, and milestones) is live in the existing private dashboard after PR #25; site Worker version `9969af61-4ac8-4443-be95-170f2ddfd211`. It labels pace as a run-rate estimate. The HTML/JS assets were verified live, but a logged-in admin data response still needs checking.
 
 ## In progress
 
@@ -49,5 +49,6 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 - Free Pick posts in production still showed a 150-like CTA in the latest screenshot; local branch has a 10-like copy change not yet released.
 - Dashboard uses `join_page_view`; this is not the same as Discord join or click.
 - No public Free Discord invite URL was found in the site or environment example; adding a free-Discord click CTA requires an approved destination.
-- The 2026-09-21 recap had 25 results pending before the morning window, so final delivery may wait beyond 07:00 until all are verified. The former stale Free Pick copy test failures are corrected in the pending release.
+- The 2026-09-21 recap had 25 results pending before the morning window, so final delivery may wait beyond 07:00 until all are verified. The former stale Free Pick copy test failures are corrected in PR #24.
+- Targeted SEO inspection found the live `/join` canonical pointed at `/join.html`, while the sitemap used `/join`. The selective `/recaps` page lacked a canonical and explicit "not a full record" metadata. Corrections are local until the next site release; no fabricated results were introduced.
 - The authenticated dashboard data response has not been verified from a real admin session; active paid count is not yet independently confirmed. No live payment, refund, cancellation, or Discord role mutation was made for this release.
