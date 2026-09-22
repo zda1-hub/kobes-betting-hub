@@ -7,11 +7,13 @@ const root = new URL('../', import.meta.url);
 const html = await readFile(new URL('exclusives.html', root), 'utf8');
 const data = JSON.parse(await readFile(new URL('data/exclusive-directory.json', root), 'utf8'));
 
-test('exclusive directory preserves all 50 remaining capper prices and intervals', () => {
-  assert.equal(data.entries.length, 50);
+test('exclusive directory matches the 120-source Discord roster and preserves known prices', () => {
+  assert.equal(data.entries.length, 120);
   const rows = [...html.matchAll(/<tr data-capper-row><td[^>]*>\d+<\/td><th scope="row">([^<]+)<\/th><td[^>]*>([^<]+)<\/td><\/tr>/g)].map(m => ({ name: m[1], price: m[2] }));
   assert.deepEqual(rows, data.entries);
-  for (const name of ['AllBets', 'BL', 'SetPointBets', 'Shark', 'Spartan']) assert.ok(!rows.some(row => row.name === name));
+  for (const name of ['A11 Bets', 'AllBets', 'SetPointBets', 'Shark', 'Spartan', 'yourdailycapper']) assert.ok(rows.some(row => row.name === name));
+  assert.equal(rows.find(row => row.name === 'AlgoPicks')?.price, '$99/week');
+  assert.equal(rows.find(row => row.name === 'A11 Bets')?.price, 'Not listed');
   assert.match(html, /SeekingReturns’ two weekly rates/);
   assert.match(html, /not independently verified current offers/);
   assert.match(html, /not what you pay to join the Hub/);
@@ -26,9 +28,8 @@ test('homepage, public manifest and sitemap expose the exclusive directory', asy
   const sitemap = await readFile(new URL('sitemap.xml', root), 'utf8');
   assert.match(home, /id="exclusives"/);
   assert.match(home, /href="exclusives.html">See the exclusive channel list/);
-  assert.match(home, /100\+ sports betting expert sources/);
-  assert.match(home, /50 verified below/);
-  assert.doesNotMatch(home, /100\+ sports betting experts|\$7,?000 of value/i);
+  assert.match(home, /120 sports betting expert sources/);
+  assert.doesNotMatch(home, /\$7,?000 of value/i);
   assert.match(home, /data-hero-experts/);
   assert.match(homeCss, /\.hero-experts-scroll[^}]*overflow-y:auto/);
   assert.match(homeCss, /\.hero-experts-scroll[^}]*height:282px/);
@@ -50,7 +51,7 @@ test('directory search matches spaced names, reports empty state and resets all 
     querySelectorAll: () => rows, addEventListener() {}
   };
   vm.runInNewContext(await readFile(new URL('exclusives.js', root), 'utf8'), { document });
-  input.value = 'bankroll bill'; handlers.input(); assert.deepEqual(rows.map(r => r.hidden), [false, true]); assert.equal(count.textContent, '1 capper shown');
-  input.value = 'unknown'; handlers.input(); assert.equal(empty.hidden, false); assert.equal(count.textContent, '0 cappers shown');
+  input.value = 'bankroll bill'; handlers.input(); assert.deepEqual(rows.map(r => r.hidden), [false, true]); assert.equal(count.textContent, '1 expert source shown');
+  input.value = 'unknown'; handlers.input(); assert.equal(empty.hidden, false); assert.equal(count.textContent, '0 expert sources shown');
   input.value = ''; handlers.input(); assert.deepEqual(rows.map(r => r.hidden), [false, false]); assert.equal(empty.hidden, true);
 });

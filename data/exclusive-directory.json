@@ -1,10 +1,26 @@
 {
-  "as_of": "2026-09-17",
-  "provenance": "Owner-supplied Discord exclusive-list screenshots; standalone rates not independently verified. Public lineup excludes AllBets, BL, SetPointBets, Shark, and Spartan at owner request.",
+  "as_of": "2026-09-22",
+  "provenance": "Kobe Bot Discord #vip-expert-list roster (120 sources), synchronized September 22, 2026. Prices retained only where supplied in the earlier owner-provided list; additional sources have no verified standalone price.",
   "entries": [
+    {
+      "name": "A11 Bets",
+      "price": "Not listed"
+    },
+    {
+      "name": "Adam Burke",
+      "price": "Not listed"
+    },
+    {
+      "name": "Al MacMillan",
+      "price": "Not listed"
+    },
     {
       "name": "AlgoPicks",
       "price": "$99/week"
+    },
+    {
+      "name": "AllBets",
+      "price": "Not listed"
     },
     {
       "name": "AnalyticsCapper",
@@ -31,20 +47,68 @@
       "price": "$18/week"
     },
     {
+      "name": "BEEZO WINS",
+      "price": "Not listed"
+    },
+    {
       "name": "Ben Burns",
       "price": "$150/week"
+    },
+    {
+      "name": "Bet Labs",
+      "price": "Not listed"
+    },
+    {
+      "name": "BetSharper",
+      "price": "Not listed"
     },
     {
       "name": "BettingWithBush",
       "price": "$15/week"
     },
     {
+      "name": "Big Al",
+      "price": "Not listed"
+    },
+    {
+      "name": "Boyer Bets VIP",
+      "price": "Not listed"
+    },
+    {
+      "name": "Brandon Lee",
+      "price": "Not listed"
+    },
+    {
+      "name": "Brian Edwards",
+      "price": "Not listed"
+    },
+    {
+      "name": "Bruce Marshall",
+      "price": "Not listed"
+    },
+    {
+      "name": "Bryan Leonard",
+      "price": "Not listed"
+    },
+    {
       "name": "BulliesPicks",
       "price": "$200/month"
     },
     {
+      "name": "BunkysBangers",
+      "price": "Not listed"
+    },
+    {
       "name": "CalebPicks",
       "price": "$60/month"
+    },
+    {
+      "name": "Carmine Bianco",
+      "price": "Not listed"
+    },
+    {
+      "name": "CASH CING",
+      "price": "Not listed"
     },
     {
       "name": "CashItBaby",
@@ -59,20 +123,52 @@
       "price": "$249/month"
     },
     {
+      "name": "CF PP",
+      "price": "Not listed"
+    },
+    {
       "name": "Cheeseaholic",
       "price": "$30/week"
+    },
+    {
+      "name": "CHEFS BEST BETS",
+      "price": "Not listed"
+    },
+    {
+      "name": "Chris Ruffolo",
+      "price": "Not listed"
     },
     {
       "name": "codycoverspreads",
       "price": "$1,499/month"
     },
     {
+      "name": "Dan Gamble",
+      "price": "Not listed"
+    },
+    {
+      "name": "Dan Gamble AI",
+      "price": "Not listed"
+    },
+    {
       "name": "DarthFader",
       "price": "$40/week"
     },
     {
+      "name": "Dave Essler",
+      "price": "Not listed"
+    },
+    {
+      "name": "David Racey",
+      "price": "Not listed"
+    },
+    {
       "name": "DirtyBubbleBets",
       "price": "$30/week"
+    },
+    {
+      "name": "Docs Platinum Club",
+      "price": "Not listed"
     },
     {
       "name": "DommyLocked",
@@ -83,28 +179,108 @@
       "price": "$125/month"
     },
     {
+      "name": "Drew Martin",
+      "price": "Not listed"
+    },
+    {
       "name": "duckinvestments",
       "price": "$30/month"
+    },
+    {
+      "name": "Dustin Hawkins",
+      "price": "Not listed"
+    },
+    {
+      "name": "Dwayne Bryant",
+      "price": "Not listed"
+    },
+    {
+      "name": "Emory Hunt",
+      "price": "Not listed"
+    },
+    {
+      "name": "EMPIRE",
+      "price": "Not listed"
+    },
+    {
+      "name": "Eric Cohen",
+      "price": "Not listed"
+    },
+    {
+      "name": "Five Star Sports",
+      "price": "Not listed"
+    },
+    {
+      "name": "FREDO",
+      "price": "Not listed"
+    },
+    {
+      "name": "Gianni the Greek",
+      "price": "Not listed"
     },
     {
       "name": "Greg Peterson",
       "price": "$40/month"
     },
     {
+      "name": "Hammering Hank",
+      "price": "Not listed"
+    },
+    {
+      "name": "Hunter Price",
+      "price": "Not listed"
+    },
+    {
+      "name": "ISW",
+      "price": "Not listed"
+    },
+    {
+      "name": "ITS TROY WEST",
+      "price": "Not listed"
+    },
+    {
       "name": "Jack Jones",
       "price": "$40/month"
+    },
+    {
+      "name": "Jackie Mack",
+      "price": "Not listed"
+    },
+    {
+      "name": "Jason Sharpe",
+      "price": "Not listed"
     },
     {
       "name": "Jimmy Adams",
       "price": "$50 one-time"
     },
     {
+      "name": "Joe Duffy",
+      "price": "Not listed"
+    },
+    {
+      "name": "Kelly In Vegas",
+      "price": "Not listed"
+    },
+    {
       "name": "KimsPicks",
       "price": "$15/3 days"
     },
     {
+      "name": "Kyle Hunter",
+      "price": "Not listed"
+    },
+    {
       "name": "LearLocks",
       "price": "$10/3 days"
+    },
+    {
+      "name": "LocksByTommy",
+      "price": "Not listed"
+    },
+    {
+      "name": "Matt Severance",
+      "price": "Not listed"
     },
     {
       "name": "Matthewp07",
@@ -115,20 +291,44 @@
       "price": "$39.99/week"
     },
     {
+      "name": "MIDWEST MIKE",
+      "price": "Not listed"
+    },
+    {
       "name": "midwestmikesports",
       "price": "$200/month"
+    },
+    {
+      "name": "Mike Tierney",
+      "price": "Not listed"
     },
     {
       "name": "MrAsianLocks",
       "price": "$25/month"
     },
     {
+      "name": "MrBigBets",
+      "price": "Not listed"
+    },
+    {
       "name": "NazEaster",
       "price": "$5/week"
     },
     {
+      "name": "Nick Parsons",
+      "price": "Not listed"
+    },
+    {
       "name": "NickyCashin",
       "price": "$99.99/month"
+    },
+    {
+      "name": "Nikos Lagouretos",
+      "price": "Not listed"
+    },
+    {
+      "name": "Oliver Smith",
+      "price": "Not listed"
     },
     {
       "name": "OutofLineBets",
@@ -143,12 +343,24 @@
       "price": "$74.99/month"
     },
     {
+      "name": "Pick Don",
+      "price": "Not listed"
+    },
+    {
+      "name": "Picks4Dayzzz",
+      "price": "Not listed"
+    },
+    {
       "name": "PorterPicks",
       "price": "$75/month"
     },
     {
       "name": "PropBomb",
       "price": "$50/month"
+    },
+    {
+      "name": "PropJoe",
+      "price": "Not listed"
     },
     {
       "name": "PropJoeDFS",
@@ -159,6 +371,10 @@
       "price": "$500/month"
     },
     {
+      "name": "Randy Chambers",
+      "price": "Not listed"
+    },
+    {
       "name": "Ricky Tran",
       "price": "$50 one-time"
     },
@@ -167,16 +383,48 @@
       "price": "$30 one-time"
     },
     {
+      "name": "Sean Murphy",
+      "price": "Not listed"
+    },
+    {
       "name": "seanperrywins",
       "price": "$2,500/month"
+    },
+    {
+      "name": "SECURED TYS",
+      "price": "Not listed"
     },
     {
       "name": "SeekingReturns",
       "price": "$20/week, $50/week"
     },
     {
+      "name": "SetPointBets",
+      "price": "Not listed"
+    },
+    {
+      "name": "Shark",
+      "price": "Not listed"
+    },
+    {
       "name": "SmartMoneySports",
       "price": "$150/month"
+    },
+    {
+      "name": "Spartan",
+      "price": "Not listed"
+    },
+    {
+      "name": "Steve Janus",
+      "price": "Not listed"
+    },
+    {
+      "name": "Steve Merril",
+      "price": "Not listed"
+    },
+    {
+      "name": "TCC",
+      "price": "Not listed"
     },
     {
       "name": "Teddy Covers",
@@ -187,6 +435,14 @@
       "price": "$50/month"
     },
     {
+      "name": "THE GURU",
+      "price": "Not listed"
+    },
+    {
+      "name": "The Prez",
+      "price": "Not listed"
+    },
+    {
       "name": "TheSharpSheets",
       "price": "$159/month"
     },
@@ -195,12 +451,36 @@
       "price": "$25/week"
     },
     {
+      "name": "Thomas Casale",
+      "price": "Not listed"
+    },
+    {
+      "name": "TKSportsAnalytics",
+      "price": "Not listed"
+    },
+    {
       "name": "Tokyo Brandon",
       "price": "$22 one-time"
     },
     {
+      "name": "Totals Guru",
+      "price": "Not listed"
+    },
+    {
+      "name": "VONN",
+      "price": "Not listed"
+    },
+    {
+      "name": "Wayne Root",
+      "price": "Not listed"
+    },
+    {
       "name": "WinWithWeiss",
       "price": "$49/week"
+    },
+    {
+      "name": "yourdailycapper",
+      "price": "Not listed"
     }
   ]
 }
