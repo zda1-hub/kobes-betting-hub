@@ -6,10 +6,10 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 
 - Mapped the existing Pages → Cloudflare checkout Worker → Stripe → Discord/Supabase path, first-party analytics, admin dashboard, member/creator referrals, pick ledger, and email systems.
 - Created `docs/GROWTH_AUDIT.md` with working/partial/missing inventory.
-- Added TikTok and tagged Kobe-X source normalization in `analytics.js` and `cloudflare/kobes-checkout-worker.js`, with browser and Worker regression tests. The bot's Free Pick X link now carries `utm_source=kobe_x`. The site build cache key was bumped. This is local code only until the Pages, checkout Worker, and bot releases.
+- Added TikTok and tagged Kobe-X source normalization locally in `analytics.js` and `cloudflare/kobes-checkout-worker.js`, with browser and Worker regression tests. The bot's Free Pick X link locally carries `utm_source=kobe_x`. This attribution work is **not** part of the 2026-09-22 production release; it still needs a coordinated Pages/site, checkout Worker, and bot release.
 - Added an explicit dashboard warning when its session/event/billing query limits or Stripe payment page are reached. This prevents capped long-range figures from silently appearing complete; pagination/aggregation is still needed for truly complete all-time reporting.
-- Paginated dashboard reads across Supabase tables and Stripe invoices/charges with conservative safety caps and visible incompleteness warnings. The prior first-page-only figures are no longer silently treated as complete.
-- Changed automatic official, writeup, and exclusive recap eligibility to the next morning at `RECAP_MORNING_REVIEW_AT` (default 07:00 Arizona). Final delivery still waits for verified results and public Discord recaps still require Kobe approval.
+- Released paginated dashboard reads across Supabase tables and Stripe invoices/charges with conservative safety caps and visible incompleteness warnings in PR #22. Checkout Worker version `acbbb9e8-9e51-47a4-a397-6fe2a3b2295a` and site Worker version `33aed0d3-eb09-40a7-81e2-5dc0465f0c4e` are live. The authenticated dashboard's data response still needs a live admin-session check.
+- Released next-morning automatic official, writeup, and exclusive recap eligibility at `RECAP_MORNING_REVIEW_AT` (default 07:00 Arizona). Render deploy `dep-dap4mrjrjlhs73f8tas0` is live. Final delivery still waits for verified results and public Discord recaps still require Kobe approval. The next 07:00 cycle has not yet been observed.
 
 ## In progress
 
@@ -45,3 +45,4 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 - Free Pick posts in production still showed a 150-like CTA in the latest screenshot; local branch has a 10-like copy change not yet released.
 - Dashboard uses `join_page_view`; this is not the same as Discord join or click.
 - No public Free Discord invite URL was found in the site or environment example; adding a free-Discord click CTA requires an approved destination.
+- The existing full test suite has Free Pick copy-assertion failures unrelated to PR #22; focused dashboard/recap tests passed (43/43). The 2026-09-21 recap had 25 results still pending before the morning window, so a final recap may wait beyond 07:00 until all are verified.
