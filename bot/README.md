@@ -23,6 +23,22 @@ automate a user account, place bets, or create picks from unverified claims.
 - `/hub-status` — Kobe/admin-only private health check for monitoring, durable
   logging, grading, recap, and email readiness.
 
+## Optional Discord join attribution
+
+Actual server joins can be measured without treating website clicks as joins. Set
+`DISCORD_JOIN_ATTRIBUTION_ENABLED=true`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`,
+`DISCORD_GUILD_ID`, and `DISCORD_INVITE_CAMPAIGNS_JSON`. The JSON object is keyed
+by a real campaign-specific Discord invite code and may contain `source`, `medium`,
+`campaign`, `content`, and `referral_code` fields.
+
+The Discord application must have the **Server Members Intent** enabled, and the
+bot needs **Manage Server** permission to read invite-use counts. On each member
+join, the bot compares current invite counts with its prior snapshot. It
+attributes only a single uniquely incremented code; simultaneous/ambiguous,
+unmapped, or unavailable invite data is recorded as `unknown`, never guessed.
+Writes use a per-guild/member dedupe key so reconnects or retries cannot create
+duplicate acquisition events.
+
 ## ESPN research trends
 
 - `/preview-trends` privately renders an MLB or NFL ESPN research sheet.
@@ -44,7 +60,7 @@ to be checked before publishing.
 ## Setup
 
 1. In the [Discord Developer Portal](https://discord.com/developers/applications), create an application and add a bot.
-2. Copy the bot token **once** into a local `.env` file. Do not send it in chat or commit it. Enable no privileged gateway intents; this bot only needs the standard `Guilds` intent.
+2. Copy the bot token **once** into a local `.env` file. Do not send it in chat or commit it. By default, enable no privileged gateway intents. The optional join-attribution feature described above additionally requires Server Members Intent.
 3. Under **OAuth2 → URL Generator**, select scopes `bot` and `applications.commands`; grant the bot `View Channels`, `Send Messages`, and `Embed Links` in only the destination channels.
 4. Enable Developer Mode in Discord, then copy the application, server, channel, and authorized publisher-role IDs.
 5. Copy `../.env.example` to `../.env` and set the values. During setup set `DISCORD_GUILD_ID` so command updates are immediate. Add every production destination to `ALLOWED_CHANNEL_IDS`; map sport defaults with `SPORT_CHANNEL_MAP`, such as `baseball:123,basketball:456`. A publisher can select a different allowlisted channel at the final step.

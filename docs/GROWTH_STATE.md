@@ -32,6 +32,7 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 
 - Finish the staging $19.99 Stripe-to-Discord lifecycle by submitting the already-verified Stripe Sandbox checkout and authorizing the designated staging Discord identity. The test-mode $13 one-time coupon and displayed $19.99/$32.99 billing are verified; the remaining payment submission and Discord authorization require an approved test identity. Production payment, refund, and role state were not mutated.
 - `free-writeups` is currently private in Discord even though the new format is intended for free members. Changing `@everyone` visibility and creating/confirming the official invite requires an explicit Discord access-control confirmation.
+- Discord join attribution is implemented behind `DISCORD_JOIN_ATTRIBUTION_ENABLED` with campaign-specific invite snapshots, ambiguity-safe `unknown` events, and idempotent writes. It remains off until migration `016_discord_join_attribution.sql` is applied, the bot's Server Members intent/Manage Server permission are verified, and approved campaign invites are configured.
 
 ## Architecture and relevant files
 
