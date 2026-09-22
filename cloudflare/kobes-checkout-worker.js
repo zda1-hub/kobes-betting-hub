@@ -572,10 +572,11 @@ function cleanAttribution(value = {}) {
   const text = (input, maximum = 160) => String(input || '').replace(/[\u0000-\u001f]/g, '').slice(0, maximum);
   const source = input => {
     const raw = text(input).trim().toLowerCase();
-    if (['discord','x','instagram','google','email','referral','affiliate','direct','other'].includes(raw)) return raw;
+    if (['discord','x','kobe_x','instagram','tiktok','google','email','referral','affiliate','direct','other'].includes(raw)) return raw;
     if (/discord/.test(raw)) return 'discord';
     if (/^(x|twitter)$/.test(raw) || /(^|\.)x\.com$|twitter\.com|t\.co/.test(raw)) return 'x';
     if (/instagram|(^|\.)ig\.me$/.test(raw)) return 'instagram';
+    if (/tiktok|(^|\.)vm\.tiktok\.com$/.test(raw)) return 'tiktok';
     if (/google/.test(raw)) return 'google';
     if (/mail|newsletter/.test(raw)) return 'email';
     if (/referr/.test(raw)) return 'referral';
@@ -587,7 +588,7 @@ function cleanAttribution(value = {}) {
     first_campaign: text(value.first_campaign), first_content: text(value.first_content),
     last_source: source(value.last_source) || source(value.first_source) || 'direct', last_medium: text(value.last_medium),
     last_campaign: text(value.last_campaign), last_content: text(value.last_content),
-    utm_source: source(value.utm_source), utm_medium: text(value.utm_medium),
+    utm_source: text(value.utm_source), utm_medium: text(value.utm_medium),
     utm_campaign: text(value.utm_campaign), utm_content: text(value.utm_content),
     referral_identifier: text(value.referral_identifier, 64), document_referrer: text(value.document_referrer, 500),
     referrer_host: text(value.referrer_host), country: text(value.country, 2).toUpperCase(),
@@ -2632,6 +2633,25 @@ async function adminAnalytics(request, env, origin) {
   const canceled = (subscriptions || []).filter(item => item.status === 'canceled');
   const ageAtEndDays = item => (new Date(item.updated_at).getTime() - new Date(item.created_at).getTime()) / 86400000;
   const now = Date.now();
+  const phoenixDateFormat = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const phoenixDay = value => {
+    const parts = phoenixDateFormat.formatToParts(new Date(value));
+    const part = type => parts.find(item => item.type === type)?.value;
+    return `${part('year')}-${part('month')}-${part('day')}`;
+  };
+  const todayPhoenix = phoenixDay(now);
+  const last7Start = now - 7 * 86400000;
+  let newPaidToday = 0, cancelledToday = 0, newPaidLast7 = 0, cancelledLast7 = 0;
+  for (const item of events || []) {
+    if (!['payment_completed', 'cancellation_completed'].includes(item.event_name)) continue;
+    const occurredAt = new Date(item.occurred_at).getTime();
+    if (!Number.isFinite(occurredAt) || occurredAt < last7Start) continue;
+    const paid = item.event_name === 'payment_completed';
+    if (paid) newPaidLast7 += 1; else cancelledLast7 += 1;
+    if (phoenixDay(occurredAt) === todayPhoenix) {
+      if (paid) newPaidToday += 1; else cancelledToday += 1;
+    }
+  }
   const activeAges = eligible.map(item => (now - new Date(item.created_at).getTime()) / 86400000);
   const durations = [...activeAges, ...canceled.map(ageAtEndDays)].filter(Number.isFinite);
   const dayKey = value => new Date(value).toISOString().slice(0, 10);
@@ -2696,6 +2716,7 @@ async function adminAnalytics(request, env, origin) {
   return json({
     generatedAt: new Date().toISOString(), range: { preset: range.preset, start: range.start?.toISOString() || null, end: range.end.toISOString() },
     dataCompletenessWarnings,
+    scoreboard: { todayPhoenix, activePaid: eligible.length, mrrCents: Math.round(mrr), newPaidToday, cancelledToday, netAddsToday: newPaidToday - cancelledToday, newPaidLast7, netAddsLast7: newPaidLast7 - cancelledLast7 },
     traffic: { uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
     conversion: { funnel, offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), purchaseConversionRate: rangedSessions.length ? countEvents('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: countEvents('payment_completed') ? countEvents('vip_activated') / countEvents('payment_completed') : 0 },
     revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPayments.length, introRevenueCents: invoiceWithinRange.filter(item => item.amountPaid === 1000).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
@@ -2923,6 +2944,7 @@ export default {
 };
 
 export const __test = {
+  cleanAttribution,
   supabasePages,
   memberWelcomeMessage,
   queueMemberWelcome,

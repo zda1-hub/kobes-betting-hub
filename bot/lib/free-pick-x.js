@@ -6,7 +6,7 @@ const MAX_X_POST_LENGTH = 280;
 const MAX_X_EVIDENCE_POINTS = 2;
 const X_HEADER = 'TODAY’S FREE PICK';
 const X_EVIDENCE_HEADER = 'QUICK BREAKDOWN';
-const X_CTA = 'Full writeup → kobesbettinghub.com/free-pick\nLegal age where you live. Bet responsibly.';
+const X_CTA = 'Full writeup → kobesbettinghub.com/free-pick?utm_source=kobe_x\nLegal age where you live. Bet responsibly.';
 
 function freePickXPostId(pickId) {
   if (typeof pickId !== 'string' || !pickId.trim()) {

@@ -74,10 +74,10 @@ test('image-backed Free Pick copies exact approved image bytes into one multipar
   const story = calls[1].init.body.get('story');
   assert.equal(story.type, 'image/jpeg');
   assert.deepEqual(new Uint8Array(await story.arrayBuffer()), storyBytes);
-  assert.match(calls[1].init.body.get('caption'), /^🔨 HOW DOES THIS PICK NOT HIT\?/);
+  assert.match(calls[1].init.body.get('caption'), /^TODAY’S FREE PICK/);
   assert.match(calls[1].init.body.get('caption'), /Bijan Robinson over 29\.5 receiving yards/);
-  assert.match(calls[1].init.body.get('caption'), /🔥 150 LIKES AND I’LL DROP A 2ND FREE PLAY!/);
-  assert.match(calls[1].init.body.get('caption'), /21\+ \| Bet responsibly\. No guarantees\.$/);
+  assert.match(calls[1].init.body.get('caption'), /QUICK BREAKDOWN/);
+  assert.match(calls[1].init.body.get('caption'), /Legal age where you live\. Bet responsibly\.$/);
   assert.ok(calls[1].init.body.get('caption').length <= 280);
   assert.equal(calls[1].init.body.get('selection'), 'Bijan Robinson over 29.5 receiving yards');
 });
@@ -117,7 +117,7 @@ test('image retrieval failure falls back to one text-only publish', async () => 
   assert.ok(calls[1].init.body instanceof FormData);
   assert.equal(calls[1].init.body.get('image'), null);
   assert.equal(calls[1].init.body.get('story').type, 'image/jpeg');
-  assert.match(calls[1].init.body.get('caption'), /^🔨 HOW DOES THIS PICK NOT HIT\?/);
+  assert.match(calls[1].init.body.get('caption'), /^TODAY’S FREE PICK/);
   assert.match(calls[1].init.body.get('caption'), /Bijan Robinson over 29\.5 receiving yards/);
 });
 

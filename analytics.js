@@ -1,7 +1,7 @@
 (() => {
   const workerOrigin = window.__KBH_MEMBERSHIP_CONFIG__?.workerOrigin || 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
   const uuid = /^[0-9a-f-]{36}$/i;
-  const allowedSources = new Set(['discord', 'x', 'instagram', 'google', 'email', 'referral', 'affiliate', 'direct', 'other']);
+  const allowedSources = new Set(['discord', 'x', 'kobe_x', 'instagram', 'tiktok', 'google', 'email', 'referral', 'affiliate', 'direct', 'other']);
   const clean = (value, limit = 160) => String(value || '').trim().replace(/[\u0000-\u001f]/g, '').slice(0, limit);
   const normalizeSource = (value) => {
     const raw = clean(value).toLowerCase();
@@ -10,6 +10,7 @@
     if (/discord/.test(raw)) return 'discord';
     if (/^(x|twitter)$/.test(raw) || /(^|\.)x\.com$|twitter\.com|t\.co/.test(raw)) return 'x';
     if (/instagram|(^|\.)ig\.me$/.test(raw)) return 'instagram';
+    if (/tiktok|(^|\.)vm\.tiktok\.com$/.test(raw)) return 'tiktok';
     if (/google/.test(raw)) return 'google';
     if (/mail|newsletter/.test(raw)) return 'email';
     if (/referr/.test(raw)) return 'referral';
@@ -27,7 +28,7 @@
   const taggedSource = normalizeSource(query.get('utm_source'));
   const referrerSource = isInternalReferrer ? '' : normalizeSource(referrerHost);
   const incomingSource = referralIdentifier ? 'referral' : taggedSource || referrerSource;
-  const inferredMedium = !incomingSource ? '' : ['x', 'instagram'].includes(incomingSource) ? 'organic_social' : incomingSource === 'discord' ? 'community' : incomingSource;
+  const inferredMedium = !incomingSource ? '' : ['x', 'kobe_x', 'instagram', 'tiktok'].includes(incomingSource) ? 'organic_social' : incomingSource === 'discord' ? 'community' : incomingSource;
   let sessionId;
   try {
     sessionId = localStorage.getItem('kbh.analytics.session');
@@ -47,10 +48,10 @@
     last_medium: clean(incomingSource ? query.get('utm_medium') || inferredMedium : stored.last_medium || stored.utm_medium),
     last_campaign: clean(incomingSource ? query.get('utm_campaign') : stored.last_campaign || stored.utm_campaign),
     last_content: clean(incomingSource ? query.get('utm_content') : stored.last_content || stored.utm_content),
-    utm_source: taggedSource,
-    utm_medium: clean(query.get('utm_medium')),
-    utm_campaign: clean(query.get('utm_campaign')),
-    utm_content: clean(query.get('utm_content')),
+    utm_source: clean(query.get('utm_source') || stored.utm_source),
+    utm_medium: clean(query.get('utm_medium') || stored.utm_medium),
+    utm_campaign: clean(query.get('utm_campaign') || stored.utm_campaign),
+    utm_content: clean(query.get('utm_content') || stored.utm_content),
     referral_identifier: referralIdentifier || clean(stored.referral_identifier, 64),
     document_referrer: rawReferrer || clean(stored.document_referrer, 500),
     referrer_host: (!isInternalReferrer && referrerHost) || clean(stored.referrer_host),

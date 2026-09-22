@@ -50,3 +50,25 @@ test('An untagged visit without a referrer is legitimate direct traffic', () => 
   assert.equal(result.attribution.first_source, 'direct');
   assert.equal(result.attribution.last_source, 'direct');
 });
+
+for (const [tag, expected] of [['x', 'x'], ['discord', 'discord'], ['instagram', 'instagram'], ['tiktok', 'tiktok'], ['google', 'google'], ['email', 'email'], ['creator_test', 'affiliate']]) {
+  test(`${tag} UTM stays attributed across the join and Stripe return pages`, () => {
+    const first = visit({ url: `https://kobesbettinghub.com/?utm_source=${tag}&utm_medium=organic&utm_campaign=sprint&utm_content=creative_a` });
+    const join = visit({ url: 'https://kobesbettinghub.com/join', storage: first.storage });
+    const returned = visit({ url: 'https://kobesbettinghub.com/welcome?checkout=success', referrer: 'https://checkout.stripe.com/', storage: first.storage });
+    for (const step of [first, join, returned]) {
+      assert.equal(step.attribution.first_source, expected);
+      assert.equal(step.attribution.first_campaign, 'sprint');
+      assert.equal(step.attribution.first_content, 'creative_a');
+      assert.equal(step.attribution.utm_source, tag);
+      assert.equal(step.attribution.utm_medium, 'organic');
+      assert.equal(step.attribution.utm_campaign, 'sprint');
+      assert.equal(step.attribution.utm_content, 'creative_a');
+    }
+  });
+}
+
+test('TikTok referral host and Kobe X tagged link remain distinct sources', () => {
+  assert.equal(visit({ url: 'https://kobesbettinghub.com/', referrer: 'https://www.tiktok.com/@creator/video/123' }).attribution.first_source, 'tiktok');
+  assert.equal(visit({ url: 'https://kobesbettinghub.com/join?utm_source=kobe_x' }).attribution.first_source, 'kobe_x');
+});
