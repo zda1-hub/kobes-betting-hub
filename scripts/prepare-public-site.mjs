@@ -110,6 +110,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
   await rm(outputRoot, { recursive: true, force: true });
   await mkdir(path.join(outputRoot, 'guides'), { recursive: true });
   await mkdir(path.join(outputRoot, 'admin', 'analytics'), { recursive: true });
+  await mkdir(path.join(outputRoot, 'data'), { recursive: true });
 
   await Promise.all(publicFiles.map((file) => cp(
     path.join(projectRoot, file),
@@ -141,6 +142,10 @@ export async function preparePublicSite({ env = process.env } = {}) {
     path.join(outputRoot, 'guides', 'how-to-choose-a-sports-betting-discord.html')
   );
   await cp(path.join(projectRoot, 'assets'), path.join(outputRoot, 'assets'), { recursive: true });
+  await cp(
+    path.join(projectRoot, 'data', 'exclusive-directory.json'),
+    path.join(outputRoot, 'data', 'exclusive-directory.json')
+  );
 
   console.log(`Prepared ${publicFiles.length + 2} public site entries in ${outputRoot} for ${membershipConfig.environment}.`);
 }

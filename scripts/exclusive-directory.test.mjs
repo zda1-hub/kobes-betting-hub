@@ -20,10 +20,20 @@ test('exclusive directory preserves all 50 remaining capper prices and intervals
 
 test('homepage, public manifest and sitemap expose the exclusive directory', async () => {
   const home = await readFile(new URL('index.html', root), 'utf8');
+  const homeCss = await readFile(new URL('home.css', root), 'utf8');
+  const homeJs = await readFile(new URL('home.js', root), 'utf8');
   const manifest = await readFile(new URL('scripts/prepare-public-site.mjs', root), 'utf8');
   const sitemap = await readFile(new URL('sitemap.xml', root), 'utf8');
   assert.match(home, /id="exclusives"/);
   assert.match(home, /href="exclusives.html">See the exclusive channel list/);
+  assert.match(home, /All 50 listed sports betting experts/);
+  assert.doesNotMatch(home, /100\+ sports betting experts|\$7,?000 of value/i);
+  assert.match(home, /data-hero-experts/);
+  assert.match(homeCss, /\.hero-experts-scroll[^}]*overflow-y:auto/);
+  assert.match(homeCss, /\.hero-experts-scroll[^}]*height:282px/);
+  assert.match(homeJs, /fetch\('data\/exclusive-directory\.json'/);
+  assert.match(homeJs, /localeCompare/);
+  assert.match(manifest, /exclusive-directory\.json/);
   for (const file of ['exclusives.html', 'exclusives.css', 'exclusives.js']) assert.ok(manifest.includes(`'${file}'`));
   assert.match(sitemap, /https:\/\/kobesbettinghub.com\/exclusives/);
 });
