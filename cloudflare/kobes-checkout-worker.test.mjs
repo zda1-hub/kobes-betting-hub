@@ -55,6 +55,17 @@ test('a completed subscription cancellation records one stable analytics event',
   }
 });
 
+test('Today and yesterday ranges follow Phoenix midnight, not UTC midnight', () => {
+  const now = new Date('2026-09-22T02:00:00Z'); // Sep 21 at 7 PM in Phoenix.
+  const today = workerTest.analyticsRange(new URL('https://worker.test/admin/analytics?range=today'), now);
+  const yesterday = workerTest.analyticsRange(new URL('https://worker.test/admin/analytics?range=yesterday'), now);
+  assert.equal(today.start.toISOString(), '2026-09-21T07:00:00.000Z');
+  assert.equal(yesterday.start.toISOString(), '2026-09-20T07:00:00.000Z');
+  assert.equal(yesterday.end.toISOString(), '2026-09-21T07:00:00.000Z');
+  assert.equal(today.includes('2026-09-21T23:00:00Z'), true);
+  assert.equal(yesterday.includes('2026-09-21T23:00:00Z'), false);
+});
+
 test('dashboard database reads page past the first batch and flag a safety cap', async () => {
   const originalFetch = globalThis.fetch;
   const offsets = [];

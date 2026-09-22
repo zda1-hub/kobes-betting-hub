@@ -15,6 +15,7 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 - The entire repository test suite passes in the isolated release worktree: 499/499. Site build and both Worker dry-runs pass. Stale Free Pick caption assertions were updated to match already-live professional/age-neutral copy.
 - A lightweight 1,000-member target panel (remaining, seven-day net pace, required daily pace by Dec 31, and milestones) is live in the existing private dashboard after PR #25; site Worker version `9969af61-4ac8-4443-be95-170f2ddfd211`. It labels pace as a run-rate estimate. The HTML/JS assets were verified live, but a logged-in admin data response still needs checking.
 - PR #27 fixed missing cancellation analytics at the existing Stripe subscription webhook, with a subscription-scoped dedupe key. Checkout Worker version `333d6064-8717-4a6c-8099-d0a66c398206` and site Worker version `d56f4d4c-b402-40e4-8958-9e6252e59188` are live. Admin now displays unavailable—not zero—for cancellation/net windows before a full tracked Arizona day. GitHub Pages and Render bot deploy `dep-dap59d0473hc73966qh0` are live. Read-only production smoke checks passed for checkout health, publisher health, current Free Pick API, public Free Pick page, and client asset.
+- The date-filtered Today/Yesterday and revenue Today/Week/Month cards used UTC day boundaries while the executive cards used Phoenix. A targeted timezone correction and regression test are local pending checkout Worker release; no billing data is changed.
 
 ## In progress
 
