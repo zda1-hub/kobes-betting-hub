@@ -37,6 +37,7 @@ const publicFiles = [
   'home.js',
   'membership.css',
   'membership.js',
+  'first-month-promo.js',
   'membership-theme.css',
   'analytics.js',
   'welcome.html',

@@ -1,5 +1,12 @@
 # Growth work state
 
+## First-month-back offer (2026-09-22)
+
+- Added a 30-day, Arizona-time public monthly offer: $19.99 for the first full month, then $32.99/month. The claim window is September 22 through October 21, 2026; server checkout rejects it after the window. No existing subscription is changed.
+- The checkout Worker uses a verified Stripe `duration=once` $13 coupon against the existing $32.99 monthly Price, with no trial, and retains the existing Stripe → Discord onboarding. The coupon is created deterministically on the first eligible checkout if absent. Referral links retain their separate two-day offer and $10-reward rules.
+- `pipeline/migrations/015_first_month_back_offer.sql` permits the new `first_month_back` checkout-association value. Applied successfully to production in Supabase SQL Editor on September 22; the migration allowlist pins its hash.
+- Homepage, join, and membership page offer copy switch only during the claim window; FAQ and terms disclose first and renewal prices. Full suite 505/505 passed locally and site build passed. **Worker and site not yet deployed or live-verified**; do not advertise the discount until the Worker and site deploys are complete and a safe Stripe Checkout session displays $19.99 due today / $32.99 recurring.
+
 Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth turns; use `GROWTH_AUDIT.md` for classification. Local tests do not certify the paid production funnel.
 
 ## Completed

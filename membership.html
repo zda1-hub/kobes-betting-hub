@@ -42,8 +42,10 @@
         </div>
         <aside class="offer-card" id="offer" aria-label="Kobe's Betting Hub membership price">
           <p class="card-kicker">MONTHLY ACCESS <span>MEMBERSHIP</span></p>
-          <div class="offer-badge"><strong>CHOOSE YOUR START</strong><span>Both options become $32.99/month</span></div>
-          <p class="membership-price"><strong>$32.99</strong><span>per month after your intro offer</span></p>
+          <div class="offer-badge" data-promo-default><strong>CHOOSE YOUR START</strong><span>Both options become $32.99/month</span></div>
+          <div class="offer-badge" data-promo-only hidden><strong>LIMITED-TIME FIRST MONTH BACK</strong><span>$13 off your first full month · claim by October 21, 2026 (Arizona time)</span></div>
+          <p class="membership-price" data-promo-default><strong>$32.99</strong><span>per month after your intro offer</span></p>
+          <p class="membership-price" data-promo-only hidden><strong>$19.99</strong><span>today for your first month; then $32.99/month</span></p>
           <ul>
             <li>Organized plays and parlays</li>
             <li>Game notes and odds context</li>
@@ -51,8 +53,9 @@
             <li>Member Discord access</li>
           </ul>
           <div class="checkout-options" aria-label="Membership offer">
-            <button class="button offer-button" type="button" data-checkout="starter">Connect Discord &amp; start for $10 / 7 days <span aria-hidden="true">→</span></button>
-            <button class="button offer-button" type="button" data-checkout="trial_2_day">Connect Discord &amp; try 2 days free <span aria-hidden="true">→</span></button>
+            <button class="button offer-button" type="button" data-checkout="first_month_back" data-promo-only hidden>Connect Discord &amp; get your first month for $19.99 <span aria-hidden="true">→</span></button>
+            <button class="button offer-button" type="button" data-checkout="starter" data-promo-default>Connect Discord &amp; start for $10 / 7 days <span aria-hidden="true">→</span></button>
+            <button class="button offer-button" type="button" data-checkout="trial_2_day" data-promo-default>Connect Discord &amp; try 2 days free <span aria-hidden="true">→</span></button>
           </div>
           <section class="term-plans" data-term-plans aria-label="Longer membership plans">
             <article class="term-plan">
@@ -103,5 +106,6 @@
     <footer><span>© <span id="year"></span> KOBE'S BETTING HUB</span><span class="footer-nav"><a href="index.html">Home</a><a href="/managemembership">Manage membership</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></span><span class="footer-social"><a href="https://www.instagram.com/kobeslocks/" target="_blank" rel="noreferrer" aria-label="Instagram — @kobeslocks"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg></a><a href="https://x.com/kobesbettinghub" target="_blank" rel="noreferrer" aria-label="X — @kobesbettinghub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h4.8l4.3 5.8L18 3h2l-6.1 7.2L20 21h-4.8l-4.7-6.3L5.2 21H3.1l6.3-7.4L4 3Zm3.1 1.8L16.1 19.2h1L8.1 4.8Z"/></svg></a></span><span>21+ • WAGER RESPONSIBLY</span></footer>
     <script>window.__KBH_MEMBERSHIP_CONFIG__ = Object.freeze({"environment":"production","workerOrigin":"https://kobes-betting-hub-checkout.kobedirwin.workers.dev"});</script>
     <script src="membership.js?v=20260921-creators"></script>
+    <script src="first-month-promo.js?v=20260922"></script>
   </body>
 </html>

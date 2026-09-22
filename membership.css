@@ -72,3 +72,4 @@
   .manage-panel { padding:22px 20px; }
   .manage-actions .button { letter-spacing:0; }
 }
+[data-promo-only][hidden], [data-promo-default][hidden] { display:none !important; }
