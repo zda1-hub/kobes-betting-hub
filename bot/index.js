@@ -8,6 +8,7 @@ const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { buildCapperRecap } = require('./lib/capper-recap');
 const { createRecapApprovals, recapApprovalGroups } = require('./lib/recap-approvals');
+const { reviewWindow } = require('./lib/recap-schedule');
 const recapWorkflow = require('../data/recap-workflow.json');
 const referralWorkflow = require('../data/referral-workflow.json');
 const { REFERRAL_CARD_MARKER, referralCardPayload } = require('./lib/referral-card');
@@ -335,14 +336,13 @@ const recapApprovalWorkflows = [
 
 async function queueDiscordRecapApprovals(date, rows) {
   if (!recapApprovalWorkflows.length) return;
-  const today = pacificOperatingDate(), time = arizonaTimeNow();
+  const due = reviewWindow({ date, today: pacificOperatingDate(), yesterday: previousPacificOperatingDate(), time: arizonaTimeNow(), morningAt: process.env.RECAP_MORNING_REVIEW_AT || '07:00' });
+  if (!due) return;
   for (const workflow of recapApprovalWorkflows) {
     const groups = rows
       ? recapApprovalGroups({ date, rows, sourceChannelIds: workflow.config.source_channel_ids })
       : await cachedRecapGroups(date, workflow.config);
-    const due = date === previousPacificOperatingDate() ? time >= (process.env.RECAP_MORNING_REVIEW_AT || '07:00')
-      : date === today && (time >= '21:00' || (time >= freeRecapCloseAt() && groups.length && groups.every(group => !group.pending)));
-    if (!due || !groups.length) continue;
+    if (!groups.length) continue;
     try {
       const receipts = await workflow.engine.prepare(groups);
       if (receipts.length) console.log(`Private ${workflow.label} recap approval receipts:`, JSON.stringify(receipts));
@@ -756,8 +756,7 @@ async function queueRecapParts({ id, subject, body }) {
   return 'QUEUED';
 }
 
-async function queueNightlyRecapReview({ date, rows, attempts, state }) {
-  const { reviewWindow } = require('./lib/recap-schedule');
+async function queueMorningRecapReview({ date, rows, attempts, state }) {
   const window = reviewWindow({ date, today: pacificOperatingDate(), yesterday: previousPacificOperatingDate(), time: arizonaTimeNow(), morningAt: process.env.RECAP_MORNING_REVIEW_AT || '07:00' });
   if (!window) return;
   const statusKey = window.key === 'nightly' ? 'review_status' : 'morning_review_status';
@@ -787,6 +786,7 @@ async function queueNightlyRecapReview({ date, rows, attempts, state }) {
 
 async function publishDueFreeRecap(date) {
   if (freeRecapInProgress || (!recapEmailConfigured() && !recapWorkflow.enabled)) return;
+  if (!reviewWindow({ date, today: pacificOperatingDate(), yesterday: previousPacificOperatingDate(), time: arizonaTimeNow(), morningAt: process.env.RECAP_MORNING_REVIEW_AT || '07:00' })) return;
   freeRecapInProgress = true;
   try {
     const state = await readFreeRecapState();
@@ -847,7 +847,7 @@ async function publishDueFreeRecap(date) {
     await queueDiscordRecapApprovals(date, rows);
     // Discord review remains operational if the optional email sender is absent.
     if (!recapEmailConfigured()) return;
-    await queueNightlyRecapReview({ date, rows, attempts: gradingAttempts, state });
+    await queueMorningRecapReview({ date, rows, attempts: gradingAttempts, state });
     if (picks.some((row) => resultFor(row) === 'PENDING')) {
       const pending = picks.filter((row) => resultFor(row) === 'PENDING');
       const isCurrentOperatingDay = date === pacificOperatingDate();
@@ -937,17 +937,14 @@ function startFreeRecapSchedule() {
   }
   if (!freeRecapCloseAt()) return;
   const run = () => void (async () => {
-    // Yesterday remains eligible for a late ESPN correction; today emails Kobe
-    // as soon as its pick window has closed and the final game settles.
+    // Send only the previous operating day's verified recap in the morning.
     await publishDueFreeRecap(previousPacificOperatingDate());
-    await publishDueFreeRecap(pacificOperatingDate());
   })();
   const interval = freeRecapIntervalMs();
   freeRecapTimer = setInterval(run, interval);
   run();
-    console.log(`Automatic official-pick recap emails check every ${Math.round(interval / 60000)} minute(s), after the ${freeRecapCloseAt()} Arizona pick window closes, and email once every result is graded.`);
-    console.log('Private unresolved recap review package becomes eligible at 21:00 Arizona; no invented results or automatic public recap posts.');
-    console.log(`Previous-day unresolved recap review becomes eligible at ${process.env.RECAP_MORNING_REVIEW_AT || '07:00'} Arizona; complete final recaps queue as soon as all published wagers are verified.`);
+    console.log(`Automatic official-pick recaps check every ${Math.round(interval / 60000)} minute(s) after ${process.env.RECAP_MORNING_REVIEW_AT || '07:00'} Arizona for the previous operating day; final delivery still waits for verified results.`);
+    console.log('Private recap review and Discord approvals become eligible in the morning; no invented results or automatic public recap posts.');
     if (recapApprovalWorkflows.length) console.log('Writeup and exclusive recaps queue to separate private approval channels. Only Kobe’s exact-card approval can send to either member recap destination; pending results stay blocked.');
 }
 
