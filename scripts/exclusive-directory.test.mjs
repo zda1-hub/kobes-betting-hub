@@ -26,7 +26,8 @@ test('homepage, public manifest and sitemap expose the exclusive directory', asy
   const sitemap = await readFile(new URL('sitemap.xml', root), 'utf8');
   assert.match(home, /id="exclusives"/);
   assert.match(home, /href="exclusives.html">See the exclusive channel list/);
-  assert.match(home, /All 50 listed sports betting experts/);
+  assert.match(home, /100\+ sports betting expert sources/);
+  assert.match(home, /50 verified below/);
   assert.doesNotMatch(home, /100\+ sports betting experts|\$7,?000 of value/i);
   assert.match(home, /data-hero-experts/);
   assert.match(homeCss, /\.hero-experts-scroll[^}]*overflow-y:auto/);
