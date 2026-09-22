@@ -1,5 +1,10 @@
 # Growth work state
 
+## Kobe admin dashboard authorization (2026-09-22)
+
+- The owner explicitly confirmed Discord user ID `1209660006383755265` belongs to Kobe and authorized full access to the private admin dashboard.
+- Production `ADMIN_DISCORD_USER_IDS` now includes Kobe alongside the existing administrator. This changes dashboard authorization only; it does not change billing, payouts, referrals, Discord roles, or revenue-share calculations.
+
 ## First-month-back offer (2026-09-22)
 
 - Added a 30-day, Arizona-time public monthly offer: $19.99 for the first full month, then $32.99/month. The claim window is September 22 through October 21, 2026; server checkout rejects it after the window. No existing subscription is changed.
