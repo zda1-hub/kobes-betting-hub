@@ -55,18 +55,18 @@ function freeWriteupBoardPayload(rows, date) {
   const previews = publicPreviews(rows, date);
   if (!previews.length) return null;
   const lines = previews.map(({ number, emoji, topics }) =>
-    `**${emoji} PLAY ${number} · EXACT PICK HIDDEN**\n• ${topics.length ? `Research covers ${topics.join(', ').toLowerCase()}.` : 'Full supporting research is in VIP.'} No names, teams, or bet terms shown here.`);
+    `**${emoji} PLAYER / GAME PROP ${number} · PICK HIDDEN**\n${topics.length ? `Short breakdown: ${topics.join(', ')}.` : 'Short breakdown: Full supporting research is in VIP.'}`);
   const description = [
-    '**Today’s plays:**',
+    '**Today’s writeup board**\nShort breakdown here. Full pick and full breakdown stay in the member channel.',
     ...lines,
-    '🔒 **See the exact plays and full writeups in VIP.**'
+    '🔒 **Open VIP for the player/team, line, odds, and complete writeup.**'
   ].join('\n\n');
   if (description.length > 4000) throw new Error('Free writeup preview exceeds one Discord embed.');
   return {
     allowedMentions: { parse: [] },
     embeds: [{
       color: 0xFF7900,
-      title: 'Today’s Plays · Preview',
+      title: 'Today’s Writeups · Free Preview',
       description,
       footer: { text: `${FREE_BOARD_MARKER} · Exact plays remain in VIP` },
       timestamp: new Date().toISOString()

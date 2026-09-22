@@ -19,7 +19,7 @@ test('counts structured picks from all qualifying posts today, not last week', (
   assert.equal(report.sourceCount, 2);
   assert.equal(report.date, '2026-09-21');
   assert.deepEqual(report.repeated, [{ play: 'Broncos ML -110', count: 2 }]);
-  assert.match(payloadFor(report).embeds[0].description, /Best-expert rankings are withheld/);
+  assert.match(payloadFor(report).embeds[0].description, /No verified expert currently meets this threshold/);
 });
 
 test('reads production-style bot embeds but never merges odds or team-alias variants as a most-picked claim', () => {
@@ -31,7 +31,7 @@ test('reads production-style bot embeds but never merges odds or team-alias vari
   ], now);
   assert.equal(report.playCount, 3);
   assert.deepEqual(report.repeated, []);
-  assert.match(payloadFor(report).embeds[0].description, /Exact-text repeats/);
+  assert.match(payloadFor(report).embeds[0].description, /Exact-text repeats today/);
 });
 
 test('shows all-time linked, individually graded paid expert results, including losses and pushes', () => {
@@ -60,10 +60,10 @@ test('shows all-time linked, individually graded paid expert results, including 
   assert.equal(records[0].losses, 1);
   assert.equal(records[0].pushes, 1);
   assert.equal(records[0].streak, 0);
-  assert.match(payloadFor({ date: '2026-09-21', active: [], repeated: [], playCount: 0, sourceCount: 0 }, records).embeds[0].description, /Minimum 5 graded decisions/);
+  assert.match(payloadFor({ date: '2026-09-21', active: [], repeated: [], playCount: 0, sourceCount: 0 }, records).embeds[0].description, /Best exclusive records/);
 });
 
-test('best experts require five graded decisions and rank by verified win rate', () => {
+test('expert feedback applies Kobe thresholds and ranks by verified win rate', () => {
   const rows = [
     { name: 'More Wins', wins: 6, losses: 4, pushes: 0, voids: 0, streak: 0, references: ['https://discord.com/1'], results: [] },
     { name: 'Better Rate', wins: 4, losses: 1, pushes: 0, voids: 0, streak: 0, references: ['https://discord.com/2'], results: [] },
@@ -71,7 +71,7 @@ test('best experts require five graded decisions and rank by verified win rate',
   ];
   const text = payloadFor({ date: '2026-09-21', active: [], repeated: [], playCount: 0, sourceCount: 0 }, rows).embeds[0].description;
   assert.ok(text.indexOf('Better Rate: 4-1') < text.indexOf('More Wins: 6-4'));
-  assert.doesNotMatch(text, /Too Few:/);
+  assert.match(text, /Too Few: 4-0/);
 });
 
 test('refuses to draft or publish when review or VIP destination privacy is public or unverified', async () => {

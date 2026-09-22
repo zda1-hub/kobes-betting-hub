@@ -112,34 +112,47 @@ function payloadFor(report, records = []) {
   const repeated = report.repeated.length
     ? report.repeated.map((row) => `${row.count} posts - ${row.play}`).join('\n')
     : 'No identical selections repeated today.';
-  const eligibleExperts = records.filter((row) => row.wins + row.losses >= 5)
-    .sort((a, b) => b.wins / (b.wins + b.losses) - a.wins / (a.wins + a.losses)
-      || b.wins - a.wins || a.name.localeCompare(b.name));
-  const graded = eligibleExperts.length
-    ? eligibleExperts.slice(0, 5).map((row) => `${row.name}: ${row.wins}-${row.losses}-${row.pushes}P-${row.voids}V${row.streak >= 2 ? ` · ${row.streak} straight settled wins` : ''} · [latest post](${row.references[0]})`).join('\n')
-    : 'No expert has 5 linked, individually graded paid decisions yet. Best-expert rankings are withheld until the sample is large enough.';
-  const sports = new Map();
-  for (const expert of records) {
-    for (const result of expert.results) {
-      if (!result.sport || !['W', 'L'].includes(result.grade)) continue;
-      const key = `${result.sport}:${keyFor(expert.name)}`;
-      const row = sports.get(key) || { sport: result.sport, name: expert.name, wins: 0, losses: 0 };
-      if (result.grade === 'W') row.wins += 1;
-      else row.losses += 1;
-      sports.set(key, row);
+  const end = Date.parse(`${report.date}T07:00:00Z`);
+  const day = 86400000;
+  const recordWithin = (expert, start, finish) => {
+    const decisions = expert.results.filter((item) => item.at >= start && item.at < finish && ['W', 'L'].includes(item.grade));
+    const wins = decisions.filter((item) => item.grade === 'W').length;
+    const losses = decisions.length - wins;
+    return { wins, losses, decisions: decisions.length, rate: decisions.length ? wins / decisions.length : 0 };
+  };
+  const format = ({ name, wins, losses, rate, references }) => `${name}: ${wins}-${losses} (${Math.round(rate * 100)}%)${references?.[0] ? ` · [latest post](${references[0]})` : ''}`;
+  const ranked = (rows) => rows.sort((a, b) => b.rate - a.rate || b.wins - a.wins || a.name.localeCompare(b.name));
+  const yesterday = ranked(records.map((expert) => ({ name: expert.name, references: expert.references, ...recordWithin(expert, end - day, end) }))
+    .filter((item) => item.decisions && item.rate > 0.61));
+  const sevenDays = ranked(records.map((expert) => ({ name: expert.name, references: expert.references, ...recordWithin(expert, end - 7 * day, end) }))
+    .filter((item) => item.decisions && item.rate > 0.60));
+  const allTime = ranked(records.map((expert) => ({ name: expert.name, wins: expert.wins, losses: expert.losses,
+    rate: expert.wins + expert.losses ? expert.wins / (expert.wins + expert.losses) : 0, references: expert.references }))
+    .filter((item) => item.wins + item.losses > 0 && item.rate > 0.54));
+  const hot = records.map((expert) => {
+    const byDate = new Map();
+    for (const result of expert.results.filter((item) => ['W', 'L'].includes(item.grade))) {
+      const date = operatingDate(result.at);
+      const grades = byDate.get(date) || [];
+      grades.push(result.grade);
+      byDate.set(date, grades);
     }
-  }
-  const leaders = [...sports.values()].filter((row) => row.wins + row.losses >= 3)
-    .sort((a, b) => a.sport.localeCompare(b.sport) || b.wins / (b.wins + b.losses) - a.wins / (a.wins + a.losses) || b.wins - a.wins);
-  const bySport = [...new Set(leaders.map((row) => row.sport))].slice(0, 4)
-    .map((sport) => { const row = leaders.find((item) => item.sport === sport); return `${sport}: ${row.name} ${row.wins}-${row.losses} (minimum 3 graded)`; }).join('\n')
-    || 'No sport has an expert with at least 3 linked, graded decisions on record.';
+    const dates = [...byDate.keys()].sort().reverse();
+    let days = 0;
+    for (const date of dates) {
+      if (byDate.get(date).includes('L') || !byDate.get(date).includes('W')) break;
+      days += 1;
+    }
+    const sports = [...new Set(expert.results.filter((item) => item.grade === 'W' && item.sport).map((item) => item.sport))];
+    return { name: expert.name, days, label: sports.length === 1 ? sports[0] : 'all sports' };
+  }).filter((item) => item.days >= 2).sort((a, b) => b.days - a.days || a.name.localeCompare(b.name));
+  const lines = (items, mapper = format) => items.length ? items.map(mapper).join('\n') : 'No verified expert currently meets this threshold.';
   return {
     allowedMentions: { parse: [] },
     embeds: [{
       color: 0xFF7900,
-      title: 'Best Experts & Today’s Trends',
-      description: `**Today (${report.date} Arizona):** ${report.playCount} selections parsed from ${report.sourceCount} sources' text cards in #expert-picks. Image-only cards are not counted.\n\n**Most posted sources today**\n${active}\n\n**Exact-text repeats today (not wager volume)**\n${repeated}\n\n**Best experts · verified tracked results · ${coverage}**\nMinimum 5 graded decisions; ranked by win rate, then wins.\n${graded}\n\n**Verified leaders by sport · tracked history**\n${bySport}\n\nPosting frequency is not a win rate. Alias/odds variants may describe the same play but are not combined. Records count only linked, individually graded wagers; pushes and voids are separate. Historical coverage may be incomplete.`,
+      title: 'Expert Play Feedback',
+      description: `**Yesterday’s best · above 61%**\n${lines(yesterday)}\n\n**Hottest experts · 2+ winning days**\n${lines(hot, (item) => `${item.name}: ${item.days}-day verified streak (${item.label})`)}\n\n**Best exclusive records · last 7 days · above 60%**\n${lines(sevenDays)}\n\n**Best exclusive records · all time · above 54%**\n${lines(allTime)}\n\n**Today’s source activity (${report.date} Arizona)**\n${report.playCount} selections parsed from ${report.sourceCount} text-card sources.\n${active}\n\n**Exact-text repeats today**\n${repeated}\n\nVerified tracked results ${coverage}. Records count only linked, individually graded paid picks; pushes and voids are excluded from percentages. Image-only picks and unavailable history are not invented.`,
       footer: { text: `${MARKER} · Approved #expert-picks posts and verified pick log` }
     }]
   };
