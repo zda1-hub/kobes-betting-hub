@@ -239,7 +239,8 @@ const client = new Client({ intents: [
 const discordJoinAttribution = discordJoinAttributionEnabled ? createDiscordJoinAttribution({
   campaigns: parseCampaigns(process.env.DISCORD_INVITE_CAMPAIGNS_JSON),
   supabaseUrl: process.env.SUPABASE_URL,
-  supabaseKey: process.env.SUPABASE_SECRET_KEY
+  supabaseKey: process.env.SUPABASE_SECRET_KEY,
+  databaseUrl: process.env.DATABASE_URL
 }) : null;
 
 async function ensureFreeWriteupsChannel() {

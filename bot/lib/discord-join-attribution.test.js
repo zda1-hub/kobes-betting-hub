@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createDiscordJoinAttribution, parseCampaigns, uniqueIncrement } = require('./discord-join-attribution');
+const { createDiscordJoinAttribution, parseCampaigns, recordDiscordJoin, uniqueIncrement } = require('./discord-join-attribution');
 
 const collection = (rows) => new Map(rows.map((row) => [row.code, row]));
 
@@ -53,4 +53,42 @@ test('ambiguous increments are recorded as unknown without leaking an invite cod
   assert.equal(event.properties.attribution_reason, 'NO_UNIQUE_INCREMENT');
   assert.equal(event.properties.invite_code, null);
   assert.equal(written.length, 1);
+});
+
+test('database fallback writes the same idempotent analytics event without a Supabase key', async () => {
+  const queries = [];
+  class FakePool {
+    constructor(options) { this.options = options; }
+    on() {}
+    async query(text, values) { queries.push({ text, values, options: this.options }); }
+  }
+  const event = {
+    id: 'event-1', dedupe_key: 'discord_join:guild-1:member-3', event_name: 'discord_join',
+    discord_user_id: 'member-3', path: null, properties: { source: 'instagram' },
+    occurred_at: '2026-09-22T12:00:00.000Z'
+  };
+  await recordDiscordJoin({ databaseUrl: 'postgres://db.test/app', PoolClass: FakePool, event });
+  assert.equal(queries.length, 1);
+  assert.match(queries[0].text, /ON CONFLICT \(dedupe_key\) DO NOTHING/);
+  assert.equal(queries[0].values[1], event.dedupe_key);
+  assert.deepEqual(JSON.parse(queries[0].values[5]), event.properties);
+});
+
+test('Supabase REST remains preferred when both storage configurations exist', async () => {
+  let fetchCalls = 0;
+  class UnexpectedPool { constructor() { throw new Error('database fallback should not be opened'); } }
+  await recordDiscordJoin({
+    supabaseUrl: 'https://db.test', supabaseKey: 'secret', databaseUrl: 'postgres://db.test/app',
+    PoolClass: UnexpectedPool,
+    fetchImpl: async () => { fetchCalls += 1; return { ok: true, status: 201 }; },
+    event: { dedupe_key: 'discord_join:guild:member' }
+  });
+  assert.equal(fetchCalls, 1);
+});
+
+test('join attribution fails clearly when neither write path is configured', async () => {
+  await assert.rejects(
+    recordDiscordJoin({ event: {} }),
+    /requires either SUPABASE_URL with SUPABASE_SECRET_KEY or DATABASE_URL/
+  );
 });

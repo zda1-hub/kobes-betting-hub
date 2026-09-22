@@ -1,5 +1,22 @@
 const crypto = require('node:crypto');
 
+let databasePool;
+
+function getDatabasePool(databaseUrl, PoolClass) {
+  if (!databasePool) {
+    const Pool = PoolClass || require('pg').Pool;
+    databasePool = new Pool({
+      connectionString: databaseUrl,
+      max: 2,
+      connectionTimeoutMillis: 10000,
+      query_timeout: 7500,
+      statement_timeout: 7000
+    });
+    databasePool.on?.('error', (error) => console.error('Discord join analytics database connection failed:', error.message));
+  }
+  return databasePool;
+}
+
 function parseCampaigns(value) {
   if (!value) return new Map();
   let parsed;
@@ -43,22 +60,35 @@ function uniqueIncrement(previous, current) {
   return incremented.length === 1 ? incremented[0] : null;
 }
 
-async function recordDiscordJoin({ fetchImpl = fetch, supabaseUrl, supabaseKey, event }) {
-  if (!supabaseUrl || !supabaseKey) throw new Error('SUPABASE_URL and SUPABASE_SECRET_KEY are required for Discord join attribution.');
-  const response = await fetchImpl(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/analytics_events?on_conflict=dedupe_key`, {
-    method: 'POST',
-    headers: {
-      apikey: supabaseKey,
-      authorization: `Bearer ${supabaseKey}`,
-      'content-type': 'application/json',
-      prefer: 'resolution=ignore-duplicates,return=minimal'
-    },
-    body: JSON.stringify(event)
-  });
-  if (!response.ok) throw new Error(`Discord join analytics write failed (${response.status}).`);
+async function recordDiscordJoin({ fetchImpl = fetch, supabaseUrl, supabaseKey, databaseUrl, PoolClass, event }) {
+  if (supabaseUrl && supabaseKey) {
+    const response = await fetchImpl(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/analytics_events?on_conflict=dedupe_key`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseKey,
+        authorization: `Bearer ${supabaseKey}`,
+        'content-type': 'application/json',
+        prefer: 'resolution=ignore-duplicates,return=minimal'
+      },
+      body: JSON.stringify(event)
+    });
+    if (!response.ok) throw new Error(`Discord join analytics write failed (${response.status}).`);
+    return;
+  }
+  if (!databaseUrl) {
+    throw new Error('Discord join attribution requires either SUPABASE_URL with SUPABASE_SECRET_KEY or DATABASE_URL.');
+  }
+  await getDatabasePool(databaseUrl, PoolClass).query(`
+    INSERT INTO analytics_events (
+      id, dedupe_key, event_name, discord_user_id, path, properties, occurred_at
+    ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)
+    ON CONFLICT (dedupe_key) DO NOTHING`, [
+    event.id, event.dedupe_key, event.event_name, event.discord_user_id,
+    event.path, JSON.stringify(event.properties || {}), event.occurred_at
+  ]);
 }
 
-function createDiscordJoinAttribution({ campaigns, supabaseUrl, supabaseKey, fetchImpl = fetch, logger = console }) {
+function createDiscordJoinAttribution({ campaigns, supabaseUrl, supabaseKey, databaseUrl, PoolClass, fetchImpl = fetch, logger = console }) {
   let snapshot = new Map();
   let snapshotReady = false;
   let queue = Promise.resolve();
@@ -123,7 +153,7 @@ function createDiscordJoinAttribution({ campaigns, supabaseUrl, supabaseKey, fet
         },
         occurred_at: occurredAt
       };
-      await recordDiscordJoin({ fetchImpl, supabaseUrl, supabaseKey, event });
+      await recordDiscordJoin({ fetchImpl, supabaseUrl, supabaseKey, databaseUrl, PoolClass, event });
       return event;
     });
   }
