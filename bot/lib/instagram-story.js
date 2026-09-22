@@ -67,7 +67,7 @@ function storySvg(packet) {
       <rect x="90" y="1510" width="900" height="190" rx="24" fill="#f4f0e8"/>
       <text x="540" y="1585" text-anchor="middle" class="ctaTop">FULL WRITEUP + MEMBER CARD</text>
       <text x="540" y="1665" text-anchor="middle" class="cta">KOBESBETTINGHUB.COM</text>
-      <text x="90" y="1810" class="legal">21+ • WAGER RESPONSIBLY • LINES CAN MOVE</text>
+      <text x="90" y="1810" class="legal">LEGAL AGE WHERE YOU LIVE • WAGER RESPONSIBLY</text>
       <style>
         .brand { fill:#f4f0e8; font-family:Arial,Helvetica,sans-serif; font-size:72px; font-weight:900; letter-spacing:4px; }
         .accent { fill:#ff6a00; }
