@@ -1,6 +1,32 @@
 const year = document.getElementById('year');
 if (year) year.textContent = new Date().getFullYear();
 
+const heroExperts = document.querySelector('[data-hero-experts]');
+if (heroExperts) {
+  fetch('data/exclusive-directory.json', { headers: { Accept: 'application/json' } })
+    .then((response) => {
+      if (!response.ok) throw new Error('Exclusive directory unavailable');
+      return response.json();
+    })
+    .then((directory) => {
+      if (!Array.isArray(directory?.entries) || !directory.entries.length) return;
+      const entries = [...directory.entries].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+      const list = document.createElement('ol');
+      list.className = 'hero-experts-list';
+      for (const entry of entries) {
+        const item = document.createElement('li');
+        item.textContent = entry.name;
+        list.append(item);
+      }
+      heroExperts.replaceChildren(list);
+      heroExperts.setAttribute('aria-label', `Alphabetical list of all ${entries.length} experts`);
+    })
+    .catch(() => {
+      const status = heroExperts.querySelector('.hero-experts-status');
+      if (status) status.textContent = 'View the verified lineup and rates on the exclusives page.';
+    });
+}
+
 const vipPreview = document.querySelector('[data-vip-preview]');
 const vipPreviewList = document.querySelector('[data-vip-preview-list]');
 if (vipPreview && vipPreviewList) {
