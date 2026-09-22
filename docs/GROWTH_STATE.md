@@ -5,7 +5,7 @@
 - Added a 30-day, Arizona-time public monthly offer: $19.99 for the first full month, then $32.99/month. The claim window is September 22 through October 21, 2026; server checkout rejects it after the window. No existing subscription is changed.
 - The checkout Worker uses a verified Stripe `duration=once` $13 coupon against the existing $32.99 monthly Price, with no trial, and retains the existing Stripe → Discord onboarding. The coupon is created deterministically on the first eligible checkout if absent. Referral links retain their separate two-day offer and $10-reward rules.
 - `pipeline/migrations/015_first_month_back_offer.sql` permits the new `first_month_back` checkout-association value. Applied successfully to production in Supabase SQL Editor on September 22; the migration allowlist pins its hash.
-- Homepage, join, and membership page offer copy switch only during the claim window; FAQ and terms disclose first and renewal prices. Production is live. Staging site version `759554f2-5762-40b8-827a-8089467e214b` visibly exposes the $19.99 first month and $10/7-day offers. Staging checkout cannot complete the $19.99 path until its test Stripe coupon is configured; do not substitute the hidden two-day test for acceptance of this offer.
+- Homepage, join, and membership page offer copy switch only during the claim window; FAQ and terms disclose first and renewal prices. Production is live. Staging site version `759554f2-5762-40b8-827a-8089467e214b` visibly exposes the $19.99 first month and $10/7-day offers. Checkout Worker version `a0231942-780b-4c4a-bda9-164758cdad1c` is deployed to staging from clean `origin/main`. Its Stripe test-mode checkout deterministically created/validated the one-time $13 coupon and visibly showed Sandbox, $19.99 due today, and $32.99/month starting next month. No test subscription was submitted and no staging Discord authorization or role change was made.
 
 Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth turns; use `GROWTH_AUDIT.md` for classification. Local tests do not certify the paid production funnel.
 
@@ -29,7 +29,7 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 
 ## In progress
 
-- Finish the staging $19.99 Stripe-to-Discord test after a test-mode $13 first-month coupon is configured. Production payment, refund, and role state were not mutated.
+- Finish the staging $19.99 Stripe-to-Discord lifecycle by submitting the already-verified Stripe Sandbox checkout and authorizing the designated staging Discord identity. The test-mode $13 one-time coupon and displayed $19.99/$32.99 billing are verified; the remaining payment submission and Discord authorization require an approved test identity. Production payment, refund, and role state were not mutated.
 - `free-writeups` is currently private in Discord even though the new format is intended for free members. Changing `@everyone` visibility and creating/confirming the official invite requires an explicit Discord access-control confirmation.
 
 ## Architecture and relevant files
@@ -66,5 +66,5 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 - The 2026-09-21 recap had 25 results pending before the morning window, so final delivery may wait beyond 07:00 until all are verified. The former stale Free Pick copy test failures are corrected in PR #24.
 - Targeted SEO inspection found the live `/join` canonical pointed at `/join.html`, while the sitemap used `/join`. PR #26 aligned the canonical URLs and labeled `/recaps` as selective, not a full pick record; site Worker version `a6e8f1a4-30ae-4be7-a883-9932d9133f49` is live and verified. No fabricated results were introduced.
 - Cancellation events were not collected historically. PR #27 starts idempotent collection going forward; older cancellations cannot be reconstructed reliably from that event stream. It changes no cancellation or VIP-role lifecycle logic.
-- Staging schema is current through migration 015. The remaining $19.99 test blocker is the empty staging `STRIPE_FIRST_MONTH_COUPON`, not the database.
+- Staging schema is current through migration 015. The empty staging `STRIPE_FIRST_MONTH_COUPON` variable is not used by the released offer path: the Worker deterministically creates and validates test coupon `kbh_first_month_back_2026_09_22`. Stripe Sandbox visibly verified $19.99 due today and $32.99/month starting next month. The remaining lifecycle step is an approved test checkout submission plus staging Discord authorization.
 - The authenticated dashboard response is verified. No live payment, refund, cancellation, or Discord role mutation was made. Cancellation counts before the new webhook event are not historically available and must not be reported as zero.
