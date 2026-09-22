@@ -7,6 +7,7 @@ const source = await readFile(new URL('../first-month-promo.js', import.meta.url
 
 function renderAt(now, search = '') {
   const defaults = [{ hidden: false }, { hidden: false }];
+  const retained = { hidden: false };
   const promos = [{ hidden: true }, { hidden: true }];
   const message = { textContent: '' };
   class Clock extends Date { static now() { return now; } }
@@ -14,12 +15,12 @@ function renderAt(now, search = '') {
     Date: Clock, URLSearchParams, window: { location: { search } },
     document: {
       querySelectorAll(selector) {
-        return selector === '[data-promo-default]' ? defaults : selector === '[data-promo-only]' ? promos : [];
+        return selector === '[data-promo-default]:not([data-promo-retain])' ? defaults : selector === '[data-promo-only]' ? promos : [];
       },
       querySelector(selector) { return selector === '[data-checkout-message]' ? message : null; },
     },
   });
-  return { defaults, promos, message };
+  return { defaults, retained, promos, message };
 }
 
 test('the $19.99 first month is visible only during the 30-day Arizona offer window', () => {
@@ -29,8 +30,9 @@ test('the $19.99 first month is visible only during the 30-day Arizona offer win
   ]) {
     const view = renderAt(Date.parse(at));
     assert.ok(view.defaults.every(element => element.hidden === expected));
+    assert.equal(view.retained.hidden, false);
     assert.ok(view.promos.every(element => element.hidden !== expected));
-    if (expected) assert.match(view.message.textContent, /\$19\.99 today.*\$32\.99 per month/);
+    if (expected) assert.match(view.message.textContent, /\$19\.99 today.*\$10 today for the first 7 days.*\$32\.99 per month/);
   }
 });
 
