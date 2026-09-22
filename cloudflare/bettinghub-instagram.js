@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 
-const TARGET = 'kobeslocks';
+const TARGET = 'kobesbettinhub';
 const SCOPES = ['instagram_business_basic', 'instagram_business_content_publish'];
 const CALLBACK = '/auth/instagram/callback';
 const COOKIE = '__Host-kbh-ig-state';
@@ -27,7 +27,7 @@ function json(value, status = 200) {
 }
 function page(message, { invite, status = 200, cookie } = {}) {
   const form = invite ? `<form method="post" action="/auth/instagram/start"><input type="hidden" name="invite" value="${invite}"><button>Authorize @${TARGET}</button></form>` : '';
-  return response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Instagram connection · Kobe's Betting Hub</title><style>body{margin:0;background:#090909;color:#f4f0e8;font:18px/1.6 system-ui}main{max-width:620px;margin:10vh auto;padding:32px}h1{line-height:1.1}span{color:#ff6a00}button{background:#ff6a00;color:#090909;border:0;padding:18px 24px;font:700 18px system-ui;cursor:pointer}p{overflow-wrap:anywhere}</style><main><h1>Kobe's <span>Betting Hub</span></h1><h2>Instagram account connection</h2><p>${message}</p>${form}<p>Instagram posting remains off. This connection is limited to @${TARGET}; it does not publish a Story, send messages, or connect @bettinhub.</p></main></html>`, status, {
+  return response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Instagram connection · Kobe's Betting Hub</title><style>body{margin:0;background:#090909;color:#f4f0e8;font:18px/1.6 system-ui}main{max-width:620px;margin:10vh auto;padding:32px}h1{line-height:1.1}span{color:#ff6a00}button{background:#ff6a00;color:#090909;border:0;padding:18px 24px;font:700 18px system-ui;cursor:pointer}p{overflow-wrap:anywhere}</style><main><h1>Kobe's <span>Betting Hub</span></h1><h2>Instagram account connection</h2><p>${message}</p>${form}<p>This connection is limited to @${TARGET}. Story publishing is controlled separately; connecting does not publish a Story or send messages.</p></main></html>`, status, {
     'content-type': 'text/html; charset=utf-8', ...(cookie ? { 'set-cookie': cookie } : {}),
   });
 }
@@ -208,9 +208,19 @@ async function providerPost(env, operation, endpoint, fields, fetchImpl = fetch)
 
 async function currentFreePick(env, fetchImpl = fetch) {
   const origin = String(env.FREE_PICK_API_ORIGIN || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
-  const response = await fetchImpl(`${origin}/api/free-pick/current`, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10000) });
+  const currentUrl = `${origin}/api/free-pick/current`;
+  let response;
+  if (env.PUBLISHER_SERVICE) {
+    try { response = await env.PUBLISHER_SERVICE.fetch(currentUrl, { headers: { accept: 'application/json' } }); }
+    catch { throw new SafeError('FREE_PICK_BINDING_FAILED', 502); }
+  } else {
+    try { response = await fetchImpl(currentUrl, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10000) }); }
+    catch { throw new SafeError('FREE_PICK_LOOKUP_FAILED', 502); }
+  }
   if (!response.ok) throw new SafeError('FREE_PICK_NOT_READY', 409);
-  const data = await readJson(response.body);
+  let data;
+  try { data = await readJson(response.body); }
+  catch { throw new SafeError('FREE_PICK_RESPONSE_INVALID', 502); }
   const pickId = String(data?.pickId || '');
   const operatingDate = String(data?.publishedDate || '');
   const storyUrl = String(data?.storyUrl || '');
@@ -221,18 +231,27 @@ async function currentFreePick(env, fetchImpl = fetch) {
 
 async function deliverCurrentStory(env, fetchImpl = fetch) {
   if (!configured(env) || !publishingEnabled(env)) return { status: 'disabled' };
-  await schema(env);
-  const connection = await env.DB.prepare('SELECT * FROM instagram_connections WHERE target = ?').bind(TARGET).first();
+  try { await schema(env); }
+  catch { throw new SafeError('INSTAGRAM_SCHEMA_FAILED', 503); }
+  let connection;
+  try { connection = await env.DB.prepare('SELECT * FROM instagram_connections WHERE target = ?').bind(TARGET).first(); }
+  catch { throw new SafeError('INSTAGRAM_CONNECTION_READ_FAILED', 503); }
   if (!connection || connection.expires_at <= Date.now()) return { status: 'not_connected' };
   const pick = await currentFreePick(env, fetchImpl);
   if (!publicationDateAllowed(env, pick.operatingDate)) return { status: 'before_activation_date' };
-  let row = await env.DB.prepare('SELECT * FROM instagram_story_deliveries WHERE pick_id = ?').bind(pick.pickId).first();
+  let row;
+  try { row = await env.DB.prepare('SELECT * FROM instagram_story_deliveries WHERE pick_id = ?').bind(pick.pickId).first(); }
+  catch { throw new SafeError('INSTAGRAM_STORY_READ_FAILED', 503); }
   if (row?.state === 'published') return { status: 'published', mediaId: row.media_id };
   if (row && !['container_created'].includes(row.state)) return { status: row.state };
   const operation = crypto.randomUUID();
-  const token = await decrypt(connection.encrypted_token, env);
+  let token;
+  try { token = await decrypt(connection.encrypted_token, env); }
+  catch { throw new SafeError('INSTAGRAM_TOKEN_DECRYPT_FAILED', 503); }
   if (!row) {
-    const reserved = await env.DB.prepare(`INSERT INTO instagram_story_deliveries (pick_id, operating_date, story_url, state, attempted_at, updated_at) VALUES (?, ?, ?, 'creating_container', ?, ?) ON CONFLICT DO NOTHING`).bind(pick.pickId, pick.operatingDate, pick.storyUrl, Date.now(), Date.now()).run();
+    let reserved;
+    try { reserved = await env.DB.prepare(`INSERT INTO instagram_story_deliveries (pick_id, operating_date, story_url, state, attempted_at, updated_at) VALUES (?, ?, ?, 'creating_container', ?, ?) ON CONFLICT DO NOTHING`).bind(pick.pickId, pick.operatingDate, pick.storyUrl, Date.now(), Date.now()).run(); }
+    catch { throw new SafeError('INSTAGRAM_STORY_RESERVATION_FAILED', 503); }
     if (reserved.meta.changes !== 1) return { status: 'already_reserved' };
     try {
       const containerId = await providerPost(env, operation, 'story_create', { accountId: connection.account_id, storyUrl: pick.storyUrl, token }, fetchImpl);
@@ -267,7 +286,7 @@ function single(data) {
 }
 function identity(data, expectedId) {
   const profile = single(data);
-  if (typeof profile.username !== 'string' || profile.username.toLowerCase() !== TARGET) throw new SafeError('WRONG_INSTAGRAM_ACCOUNT_USE_KOBESLOCKS', 403);
+  if (typeof profile.username !== 'string' || profile.username.toLowerCase() !== TARGET) throw new SafeError('WRONG_INSTAGRAM_ACCOUNT_USE_KOBESBETTINHUB', 403);
   if (String(profile.account_type).toUpperCase() !== 'BUSINESS') throw new SafeError('INSTAGRAM_BUSINESS_ACCOUNT_REQUIRED', 403);
   if (typeof profile.user_id !== 'string' || !/^\d+$/.test(profile.user_id)) throw new SafeError('INSTAGRAM_ACCOUNT_ID_MISSING', 502);
   if (expectedId && String(profile.user_id) !== expectedId) throw new SafeError('INSTAGRAM_ACCOUNT_ID_CHANGED', 409);

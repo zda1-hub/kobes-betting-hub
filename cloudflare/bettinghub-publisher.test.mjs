@@ -99,6 +99,44 @@ test('text-only Free Pick remains readable after publication', async () => {
   assert.equal(current.storyUrl, null);
 });
 
+test('Free Pick reports the connected kobesbettinhub Instagram account', async () => {
+  const queries = [];
+  const env = {
+    FREE_PICK_KV: memoryKv(),
+    FREE_PICK_SITE_PUBLISH_SECRET: 'test-publisher-secret',
+    DB: {
+      prepare(sql) {
+        const statement = {
+          sql,
+          bind() { return this; },
+          async first() {
+            if (sql.includes('FROM instagram_connections')) {
+              return { accountId: '17841462044214309', expiresAt: Date.now() + 86400000, checkedAt: Date.now() };
+            }
+            return null;
+          },
+        };
+        queries.push(statement);
+        return statement;
+      },
+    },
+  };
+  const publishResponse = await worker.fetch(new Request('https://publisher.test/api/free-pick/publish', {
+    method: 'POST',
+    headers: { authorization: 'Bearer test-publisher-secret', 'content-type': 'application/json' },
+    body: JSON.stringify({ date: '2026-09-21', caption: 'Today’s free pick', details: { selection: 'Test selection' } }),
+  }), env);
+  assert.equal(publishResponse.status, 201);
+
+  const response = await worker.fetch(new Request('https://publisher.test/api/free-pick/current'), env);
+  assert.equal(response.status, 200);
+  const current = await response.json();
+  assert.equal(current.instagramConnectionStatus, 'connected');
+  assert.equal(current.instagramAccountId, '17841462044214309');
+  const connectionQuery = queries.find((statement) => statement.sql.includes('FROM instagram_connections'));
+  assert.match(connectionQuery.sql, /target = 'kobesbettinhub'/);
+});
+
 test('verified Free Pick results require authorization and expose only the approved snapshot', async () => {
   const env = { FREE_PICK_KV: memoryKv(), FREE_PICK_SITE_PUBLISH_SECRET: 'test-publisher-secret' };
   const snapshot = {
