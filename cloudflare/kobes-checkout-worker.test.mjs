@@ -22,6 +22,18 @@ test('checkout worker health endpoint responds without credentials', async () =>
   assert.deepEqual(await response.json(), { ok: true, version: null });
 });
 
+test('checkout association retains distinct owned-X and TikTok attribution', () => {
+  for (const source of ['x', 'kobe_x', 'discord', 'instagram', 'tiktok', 'google', 'email', 'affiliate']) {
+    const attribution = workerTest.cleanAttribution({ first_source: source, last_source: source, first_campaign: 'sprint', first_content: 'creative_a', utm_source: source });
+    assert.equal(attribution.first_source, source);
+    assert.equal(attribution.last_source, source);
+    assert.equal(attribution.first_campaign, 'sprint');
+    assert.equal(attribution.first_content, 'creative_a');
+    assert.equal(attribution.utm_source, source);
+  }
+  assert.equal(workerTest.cleanAttribution({ first_source: 'creator_test', utm_source: 'creator_test' }).utm_source, 'creator_test');
+});
+
 test('dashboard database reads page past the first batch and flag a safety cap', async () => {
   const originalFetch = globalThis.fetch;
   const offsets = [];

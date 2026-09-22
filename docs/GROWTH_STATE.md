@@ -1,6 +1,6 @@
 # Growth work state
 
-Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth turns; use `GROWTH_AUDIT.md` for classification. This is a repository audit, not a certification of production.
+Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth turns; use `GROWTH_AUDIT.md` for classification. Local tests do not certify the paid production funnel.
 
 ## Completed
 
@@ -10,10 +10,13 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 - Added an explicit dashboard warning when its session/event/billing query limits or Stripe payment page are reached. This prevents capped long-range figures from silently appearing complete; pagination/aggregation is still needed for truly complete all-time reporting.
 - Released paginated dashboard reads across Supabase tables and Stripe invoices/charges with conservative safety caps and visible incompleteness warnings in PR #22. Checkout Worker version `acbbb9e8-9e51-47a4-a397-6fe2a3b2295a` and site Worker version `33aed0d3-eb09-40a7-81e2-5dc0465f0c4e` are live. The authenticated dashboard's data response still needs a live admin-session check.
 - Released next-morning automatic official, writeup, and exclusive recap eligibility at `RECAP_MORNING_REVIEW_AT` (default 07:00 Arizona). Render deploy `dep-dap4mrjrjlhs73f8tas0` is live. Final delivery still waits for verified results and public Discord recaps still require Kobe approval. The next 07:00 cycle has not yet been observed.
+- Verified 2026-09-22 production checkout `/health` (HTTP 200), website `/` and `/join` (HTTP 200), and admin API rejects unauthenticated requests (HTTP 401). Render bot deploy `dep-dap4phbrjlhs73f900u0` is live. This is not a completed paid-funnel test.
+- Added a compact, responsive executive scoreboard to the existing authenticated admin dashboard: active paid, MRR, Arizona-day new paid/cancelled/net, and new paid in the last seven rolling days. Source UTM tags now remain intact through the site return path, while rollup sources distinguish TikTok and Kobe X. The bot's X link carries `utm_source=kobe_x`. These changes are **pending production release/verification** until their PR and coordinated Worker/site/bot deployments complete.
+- The entire repository test suite passes in the isolated release worktree: 498/498. Site build and both Worker dry-runs pass. Stale Free Pick caption assertions were updated to match already-live professional/age-neutral copy.
 
 ## In progress
 
-- Validate real `utm_source=tiktok` and `utm_source=kobe_x` visits and checkout association after the coordinated release; do not make a paid test purchase without approval.
+- Publish the coordinated attribution/mobile release and verify its live assets/API; validate non-purchase visits and checkout association without a real charge. A logged-in admin check remains necessary for the private scoreboard.
 
 ## Architecture and relevant files
 
@@ -33,7 +36,7 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 
 ## Remaining, ordered
 
-1. Release the Pages asset, checkout Worker, and bot X-link change together, then verify TikTok and Kobe-X UTM → checkout association in production using non-purchase test visits.
+1. Release the site asset, checkout Worker, and bot X-link change together; verify live assets and authenticated scoreboard, then validate TikTok/Kobe-X UTM → checkout association using non-purchase test visits.
 2. Add a distinct, measurable free-Discord click only if there is an approved public join link; do not infer joins from page views.
 3. At scale, replace the 20,000-row/2,000-payment safety caps with database aggregation; continue showing warnings whenever caps are reached.
 4. Controlled Stripe → Discord VIP and member/creator referral purchases, cancellation, failed-payment and refund checks. Do not spend money without owner approval.
@@ -45,4 +48,5 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 - Free Pick posts in production still showed a 150-like CTA in the latest screenshot; local branch has a 10-like copy change not yet released.
 - Dashboard uses `join_page_view`; this is not the same as Discord join or click.
 - No public Free Discord invite URL was found in the site or environment example; adding a free-Discord click CTA requires an approved destination.
-- The existing full test suite has Free Pick copy-assertion failures unrelated to PR #22; focused dashboard/recap tests passed (43/43). The 2026-09-21 recap had 25 results still pending before the morning window, so a final recap may wait beyond 07:00 until all are verified.
+- The 2026-09-21 recap had 25 results pending before the morning window, so final delivery may wait beyond 07:00 until all are verified. The former stale Free Pick copy test failures are corrected in the pending release.
+- The authenticated dashboard data response has not been verified from a real admin session; active paid count is not yet independently confirmed. No live payment, refund, cancellation, or Discord role mutation was made for this release.
