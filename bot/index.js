@@ -1827,10 +1827,16 @@ async function handleSourceEditSubmit(interaction) {
   if (copy.length > 4000) throw new Error('The edited writeup is too long for one card.');
   draft.approval.exact_final_copy = copy;
   draft.approval.exact_final_copy_sha256 = approvalCopySha256(copy);
+  draft.status = 'READY_FOR_APPROVAL';
+  draft.approval_ready = true;
   presentation.approval = { ...draft.approval };
   const channel = await interaction.client.channels.fetch(interaction.channelId);
   const message = await channel.messages.fetch(packet.discord_review_message_id);
-  const components = message.components;
+  const components = message.components.map((row) => {
+    const data = row.toJSON();
+    data.components = data.components.map((button) => ({ ...button, disabled: false }));
+    return data;
+  });
   await message.edit({ components: [] });
   await fs.writeFile(packetPath, `${JSON.stringify(draft, null, 2)}\n`);
   await message.edit({ embeds: [buildSourcePickApprovalEmbed(presentation, 'APPROVED PICK')], components });
