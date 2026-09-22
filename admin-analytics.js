@@ -18,16 +18,16 @@ const issueDetails=[...d.alerts.awaitingDiscord.map(x=>`Awaiting Discord · ${x.
 function renderExecutive(d){
   const s=d.scoreboard;
   if(!s)return;
-  metrics(document.querySelector('[data-primary]'),[['Active paid',s.activePaid],['MRR',money(s.mrrCents)],['New paid today',s.newPaidToday],['Cancelled today',s.cancelledToday],['Net adds today',s.netAddsToday],['New paid · last 7 days',s.newPaidLast7]]);
+  metrics(document.querySelector('[data-primary]'),[['Active paid',s.activePaid],['MRR',money(s.mrrCents)],['New paid today',s.newPaidToday],['Cancelled today',s.cancelledToday??'Unavailable'],['Net adds today',s.netAddsToday??'Unavailable'],['New paid · last 7 days',s.newPaidLast7]]);
 }
 function renderTarget(d){
   const s=d.scoreboard;
   if(!s)return;
   const remaining=Math.max(0,1000-s.activePaid),deadline=Date.parse('2027-01-01T07:00:00Z');
   const days=Math.max(1,(deadline-Date.parse(d.generatedAt))/86400000);
-  const avg=(s.netAddsLast7/7),required=remaining/days;
+  const avg=s.netAddsLast7===null?null:s.netAddsLast7/7,required=remaining/days;
   const milestones=[25,50,100,250,500,750,1000].map(goal=>`${goal}${s.activePaid>=goal?' ✓':''}`).join(' · ');
-  metrics(document.querySelector('[data-target]'),[['Remaining',remaining],['Net adds · last 7 days',s.netAddsLast7],['Average net adds/day · last 7',avg.toFixed(2)],['Required net adds/day by Dec 31',required.toFixed(2)],['Milestones',milestones]]);
+  metrics(document.querySelector('[data-target]'),[['Remaining',remaining],['Net adds · last 7 days',s.netAddsLast7??'Unavailable'],['Average net adds/day · last 7',avg===null?'Unavailable':avg.toFixed(2)],['Required net adds/day by Dec 31',required.toFixed(2)],['Milestones',milestones]]);
 }
 function renderPaymentAndReferralDetails(d){
   const failed=d.alerts.failedPayments||[];

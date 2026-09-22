@@ -34,6 +34,27 @@ test('checkout association retains distinct owned-X and TikTok attribution', () 
   assert.equal(workerTest.cleanAttribution({ first_source: 'creator_test', utm_source: 'creator_test' }).utm_source, 'creator_test');
 });
 
+test('a completed subscription cancellation records one stable analytics event', async () => {
+  const originalFetch = globalThis.fetch;
+  const posted = [];
+  globalThis.fetch = async (input, options) => {
+    posted.push({ url: String(input), body: JSON.parse(options.body) });
+    return new Response('', { status: 201 });
+  };
+  try {
+    const env = { SUPABASE_URL: 'https://database.test', SUPABASE_SECRET_KEY: 'db_test' };
+    await workerTest.recordSubscriptionCancellation(env, { id: 'sub_cancelled', customer: 'cus_member', status: 'canceled' });
+    await workerTest.recordSubscriptionCancellation(env, { id: 'sub_active', customer: 'cus_member', status: 'active' });
+    assert.equal(posted.length, 1);
+    assert.match(posted[0].url, /analytics_events/);
+    assert.equal(posted[0].body.event_name, 'cancellation_completed');
+    assert.equal(posted[0].body.dedupe_key, 'cancellation_completed:sub_cancelled');
+    assert.equal(posted[0].body.stripe_subscription_id, 'sub_cancelled');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('dashboard database reads page past the first batch and flag a safety cap', async () => {
   const originalFetch = globalThis.fetch;
   const offsets = [];
