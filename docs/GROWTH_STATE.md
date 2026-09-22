@@ -11,12 +11,13 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 - Released paginated dashboard reads across Supabase tables and Stripe invoices/charges with conservative safety caps and visible incompleteness warnings in PR #22. Checkout Worker version `acbbb9e8-9e51-47a4-a397-6fe2a3b2295a` and site Worker version `33aed0d3-eb09-40a7-81e2-5dc0465f0c4e` are live. The authenticated dashboard's data response still needs a live admin-session check.
 - Released next-morning automatic official, writeup, and exclusive recap eligibility at `RECAP_MORNING_REVIEW_AT` (default 07:00 Arizona). Render deploy `dep-dap4mrjrjlhs73f8tas0` is live. Final delivery still waits for verified results and public Discord recaps still require Kobe approval. The next 07:00 cycle has not yet been observed.
 - Verified 2026-09-22 production checkout `/health` (HTTP 200), website `/` and `/join` (HTTP 200), and admin API rejects unauthenticated requests (HTTP 401). Render bot deploy `dep-dap4phbrjlhs73f900u0` is live. This is not a completed paid-funnel test.
-- Added a compact, responsive executive scoreboard to the existing authenticated admin dashboard: active paid, MRR, Arizona-day new paid/cancelled/net, and new paid in the last seven rolling days. Source UTM tags now remain intact through the site return path, while rollup sources distinguish TikTok and Kobe X. The bot's X link carries `utm_source=kobe_x`. These changes are **pending production release/verification** until their PR and coordinated Worker/site/bot deployments complete.
+- Released a compact, responsive executive scoreboard to the existing authenticated admin dashboard: active paid, MRR, Arizona-day new paid/cancelled/net, and new paid in the last seven rolling days. Source UTM tags now remain intact through the site return path, while rollup sources distinguish TikTok and Kobe X. The bot's X link carries `utm_source=kobe_x`. PR #24 merged as `e750f7a`; checkout Worker version `d9df5a99-fc9a-4753-93e3-a4abe9e5ff1b`, site Worker version `e1f26632-ce33-476d-b567-5e8630156268`, Render bot deploy `dep-dap528e8bjmc73apt030`, and GitHub Pages are live. Public assets and unauthenticated API boundary were verified; the private scoreboard still needs a logged-in admin verification.
 - The entire repository test suite passes in the isolated release worktree: 498/498. Site build and both Worker dry-runs pass. Stale Free Pick caption assertions were updated to match already-live professional/age-neutral copy.
+- A lightweight 1,000-member target panel (remaining, seven-day net pace, required daily pace by Dec 31, and milestones) is implemented in the existing private dashboard; it is **local until the next site release** and labels pace as a run-rate estimate.
 
 ## In progress
 
-- Publish the coordinated attribution/mobile release and verify its live assets/API; validate non-purchase visits and checkout association without a real charge. A logged-in admin check remains necessary for the private scoreboard.
+- Add the lightweight 1,000-member target tracker to the existing private dashboard. After release, validate non-purchase acquisition/checkout associations and the logged-in scoreboard. A real paid transaction remains untested.
 
 ## Architecture and relevant files
 
@@ -36,7 +37,7 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 
 ## Remaining, ordered
 
-1. Release the site asset, checkout Worker, and bot X-link change together; verify live assets and authenticated scoreboard, then validate TikTok/Kobe-X UTM → checkout association using non-purchase test visits.
+1. Verify the logged-in scoreboard and tagged-visit checkout association; do not make a paid test purchase without an appropriate safe test mechanism.
 2. Add a distinct, measurable free-Discord click only if there is an approved public join link; do not infer joins from page views.
 3. At scale, replace the 20,000-row/2,000-payment safety caps with database aggregation; continue showing warnings whenever caps are reached.
 4. Controlled Stripe → Discord VIP and member/creator referral purchases, cancellation, failed-payment and refund checks. Do not spend money without owner approval.
