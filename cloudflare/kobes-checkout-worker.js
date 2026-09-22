@@ -2453,12 +2453,17 @@ async function saveCancellationFeedback(request, env, origin) {
   return json({ ok: true }, 201, origin);
 }
 
-function analyticsRange(url) {
-  const now = new Date();
+function phoenixDayStart(date) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const part = type => Number(parts.find(item => item.type === type)?.value);
+  return new Date(Date.UTC(part('year'), part('month') - 1, part('day'), 7));
+}
+
+function analyticsRange(url, now = new Date()) {
   const preset = url.searchParams.get('range') || '30d';
   let start = null; let end = now;
-  if (preset === 'today') start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  else if (preset === 'yesterday') { end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())); start = new Date(end.getTime() - 86400000); }
+  if (preset === 'today') start = phoenixDayStart(now);
+  else if (preset === 'yesterday') { end = phoenixDayStart(now); start = new Date(end.getTime() - 86400000); }
   else if (preset === '7d') start = new Date(now.getTime() - 7 * 86400000);
   else if (preset === '30d') start = new Date(now.getTime() - 30 * 86400000);
   else if (preset === 'custom') {
@@ -2590,9 +2595,9 @@ async function adminAnalytics(request, env, origin) {
     ? stripePayments.filter(item => Number(item.created || 0) * 1000 >= start).reduce((sum, item) => sum + item.amountPaid, 0)
     : (billing || []).filter(item => item.event_type === 'invoice_paid' && new Date(item.occurred_at).getTime() >= start).reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
   const currentDate = new Date();
-  const startOfDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()).getTime();
-  const startOfWeek = startOfDay - ((currentDate.getDay() + 6) % 7) * 86400000;
-  const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getTime();
+  const startOfDay = phoenixDayStart(currentDate).getTime();
+  const startOfWeek = startOfDay - ((new Date(startOfDay).getUTCDay() + 6) % 7) * 86400000;
+  const startOfMonth = Date.UTC(new Date(startOfDay).getUTCFullYear(), new Date(startOfDay).getUTCMonth(), 1, 7);
   const allTimeRevenue = stripePayments.length
     ? stripePayments.reduce((sum, item) => sum + item.amountPaid, 0)
     : (billing || []).filter(item => item.event_type === 'invoice_paid').reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
@@ -2958,6 +2963,8 @@ export default {
 };
 
 export const __test = {
+  analyticsRange,
+  phoenixDayStart,
   recordSubscriptionCancellation,
   cleanAttribution,
   supabasePages,
