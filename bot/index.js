@@ -47,6 +47,7 @@ const {
 const { fillMissingEvidence } = require('./lib/espn-pick-research');
 const { createFreePickDelivery } = require('./lib/free-pick-delivery');
 const { manualFreePickRecord } = require('./lib/manual-free-pick');
+const { nearEvenAmericanOdds, assertWriteupOdds } = require('./lib/writeup-odds');
 const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
 const { createTelegramReader } = require('./lib/telegram-reader');
 const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/daily-writeup-board');
@@ -1905,6 +1906,7 @@ async function handleSourceReviewButton(interaction) {
     if (!termsOnly) {
       assertCompleteWriteup(publicationPacket);
       assertApprovalCopyMatches(publicationPacket);
+      if (action === 'paid') assertWriteupOdds(publicationPacket);
     }
     trace('event verification started');
     if (configuredTermsOnly && !exclusiveSourceIsCurrent(publicationPacket)) {
@@ -2695,6 +2697,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const channel = await destinationFor(interaction, defaultChannelId, pickOptions.sport.toLowerCase());
+    if (/writeups?/i.test(channel.name || '') && !nearEvenAmericanOdds(pickOptions.publishedOdds)) {
+      throw new Error('VIP writeups require actual published odds between -125 and +125. Choose a different play; do not alter its odds.');
+    }
     if (channel.id === freePickChannelId) await enforceDailyFreePickLimit();
     await postAndLogOfficialPick({
       channel,
