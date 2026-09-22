@@ -624,6 +624,15 @@ async function recordAnalyticsEvent(env, values) {
   }
 }
 
+async function recordSubscriptionCancellation(env, subscription) {
+  if (!subscription?.id || subscription.status !== 'canceled') return;
+  await recordAnalyticsEvent(env, {
+    eventName: 'cancellation_completed', subscriptionId: subscription.id,
+    customerId: stripeId(subscription.customer),
+    dedupeKey: `cancellation_completed:${subscription.id}`,
+  });
+}
+
 async function recordBillingEvent(env, event, values) {
   try { await supabase(env, 'membership_billing_events?on_conflict=stripe_event_id', {
     method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal',
@@ -2641,6 +2650,10 @@ async function adminAnalytics(request, env, origin) {
   };
   const todayPhoenix = phoenixDay(now);
   const last7Start = now - 7 * 86400000;
+  const cancellationTrackingStart = Date.parse('2026-09-23T07:00:00Z');
+  const cancellationTodayComplete = now >= cancellationTrackingStart;
+  const cancellationLast7Complete = last7Start >= cancellationTrackingStart;
+  if (!range.start || range.start.getTime() < cancellationTrackingStart) dataCompletenessWarnings.push('Cancellation event history before Sep 23, 2026 is unavailable; do not interpret it as zero.');
   let newPaidToday = 0, cancelledToday = 0, newPaidLast7 = 0, cancelledLast7 = 0;
   for (const item of events || []) {
     if (!['payment_completed', 'cancellation_completed'].includes(item.event_name)) continue;
@@ -2716,7 +2729,7 @@ async function adminAnalytics(request, env, origin) {
   return json({
     generatedAt: new Date().toISOString(), range: { preset: range.preset, start: range.start?.toISOString() || null, end: range.end.toISOString() },
     dataCompletenessWarnings,
-    scoreboard: { todayPhoenix, activePaid: eligible.length, mrrCents: Math.round(mrr), newPaidToday, cancelledToday, netAddsToday: newPaidToday - cancelledToday, newPaidLast7, netAddsLast7: newPaidLast7 - cancelledLast7 },
+    scoreboard: { todayPhoenix, activePaid: eligible.length, mrrCents: Math.round(mrr), newPaidToday, cancelledToday: cancellationTodayComplete ? cancelledToday : null, netAddsToday: cancellationTodayComplete ? newPaidToday - cancelledToday : null, newPaidLast7, netAddsLast7: cancellationLast7Complete ? newPaidLast7 - cancelledLast7 : null },
     traffic: { uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
     conversion: { funnel, offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), purchaseConversionRate: rangedSessions.length ? countEvents('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: countEvents('payment_completed') ? countEvents('vip_activated') / countEvents('payment_completed') : 0 },
     revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPayments.length, introRevenueCents: invoiceWithinRange.filter(item => item.amountPaid === 1000).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
@@ -2818,6 +2831,7 @@ async function handleWebhook(request, env) {
     } else if (['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
       const subscription = event.data?.object;
       await persistSubscription(env, subscription, event.id);
+      await recordSubscriptionCancellation(env, subscription);
       if (event.type === 'customer.subscription.updated') await recordRetentionRedemption(env, subscription, event.id);
       outcome = await syncMemberRole(subscription, env);
     } else if (event.type === 'invoice.paid') {
@@ -2944,6 +2958,7 @@ export default {
 };
 
 export const __test = {
+  recordSubscriptionCancellation,
   cleanAttribution,
   supabasePages,
   memberWelcomeMessage,
