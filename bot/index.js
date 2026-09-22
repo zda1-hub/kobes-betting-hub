@@ -58,6 +58,7 @@ const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
 const { datedTimeOverride, nextArizonaDailyStartMs } = require('./lib/daily-window');
+const { createDiscordJoinAttribution, parseCampaigns } = require('./lib/discord-join-attribution');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { exclusiveSourceIsCurrent } = require('../pipeline/exclusive-text');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -229,7 +230,17 @@ const sportChannelMap = new Map(
     .filter(([sport, channelId]) => sport && channelId)
     .map(([sport, channelId]) => [sport.toLowerCase(), channelId])
 );
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });
+const discordJoinAttributionEnabled = process.env.DISCORD_JOIN_ATTRIBUTION_ENABLED === 'true';
+const client = new Client({ intents: [
+  GatewayIntentBits.Guilds,
+  GatewayIntentBits.MessageContent,
+  ...(discordJoinAttributionEnabled ? [GatewayIntentBits.GuildMembers] : [])
+] });
+const discordJoinAttribution = discordJoinAttributionEnabled ? createDiscordJoinAttribution({
+  campaigns: parseCampaigns(process.env.DISCORD_INVITE_CAMPAIGNS_JSON),
+  supabaseUrl: process.env.SUPABASE_URL,
+  supabaseKey: process.env.SUPABASE_SECRET_KEY
+}) : null;
 
 async function ensureFreeWriteupsChannel() {
   if (configuredFreeWriteupsChannelId) return approvedTextChannel(configuredFreeWriteupsChannelId);
@@ -2261,6 +2272,13 @@ async function refreshPendingResearchApprovals() {
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  if (discordJoinAttribution) {
+    const guild = process.env.DISCORD_GUILD_ID ? readyClient.guilds.cache.get(process.env.DISCORD_GUILD_ID) : null;
+    if (!guild) console.error('Discord join attribution needs attention: DISCORD_GUILD_ID must identify a guild cached by this bot.');
+    else void discordJoinAttribution.initialize(guild)
+      .then((receipt) => console.log('Discord join attribution receipt:', JSON.stringify(receipt)))
+      .catch((error) => console.error('Discord join attribution needs attention:', error.message));
+  }
   // Independent boards/readers must not wait behind historical card research.
   startInjuryReports();
   startTelegramReader();
@@ -2354,6 +2372,20 @@ client.once(Events.ClientReady, async (readyClient) => {
   // yesterday's still-pending cards now so Kobe sees the current controls.
   void queueDiscordRecapApprovals(previousPacificOperatingDate())
     .catch((error) => console.error('Unable to refresh pending recap approval controls:', error));
+});
+
+client.on(Events.GuildMemberAdd, async (member) => {
+  if (!discordJoinAttribution || member.guild.id !== process.env.DISCORD_GUILD_ID) return;
+  try {
+    const event = await discordJoinAttribution.joined(member);
+    console.log('Discord join recorded:', JSON.stringify({
+      status: event.properties.attribution_status,
+      source: event.properties.source,
+      campaign: event.properties.campaign
+    }));
+  } catch (error) {
+    console.error('Discord join attribution write needs attention:', error.message);
+  }
 });
 
 async function registerCommandsOnStart() {
