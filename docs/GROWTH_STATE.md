@@ -15,11 +15,11 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 - The entire repository test suite passes in the isolated release worktree: 499/499. Site build and both Worker dry-runs pass. Stale Free Pick caption assertions were updated to match already-live professional/age-neutral copy.
 - A lightweight 1,000-member target panel (remaining, seven-day net pace, required daily pace by Dec 31, and milestones) is live in the existing private dashboard after PR #25; site Worker version `9969af61-4ac8-4443-be95-170f2ddfd211`. It labels pace as a run-rate estimate. The HTML/JS assets were verified live, but a logged-in admin data response still needs checking.
 - PR #27 fixed missing cancellation analytics at the existing Stripe subscription webhook, with a subscription-scoped dedupe key. Checkout Worker version `333d6064-8717-4a6c-8099-d0a66c398206` and site Worker version `d56f4d4c-b402-40e4-8958-9e6252e59188` are live. Admin now displays unavailable—not zero—for cancellation/net windows before a full tracked Arizona day. GitHub Pages and Render bot deploy `dep-dap59d0473hc73966qh0` are live. Read-only production smoke checks passed for checkout health, publisher health, current Free Pick API, public Free Pick page, and client asset.
-- The date-filtered Today/Yesterday and revenue Today/Week/Month cards used UTC day boundaries while the executive cards used Phoenix. A targeted timezone correction and regression test are local pending checkout Worker release; no billing data is changed.
+- PR #29 aligned date-filtered Today/Yesterday and Today/Week/Month revenue with Phoenix day boundaries; checkout Worker version `d3ed88a6-3d74-4ef0-b6a4-597d1d2264b2` is live. Full suite passed 500/500 and read-only production smoke passed. No billing data was changed.
 
 ## In progress
 
-- Verify the authenticated private dashboard response with a real admin session and validate tagged-visit association without a charge. A real payment, refund, and Discord role lifecycle still need a safe controlled test mechanism.
+- Verify the authenticated private dashboard response with a real admin session. A safe staging pre-checkout test is blocked because the staging Supabase project lacks `membership_checkout_associations`; the latest staging Worker (`f8486cc0-dbde-4cfa-801d-229fb1a9f190`) returns HTTP 500 with a confirmed PostgREST missing-table error. A staging DB connection or migration application is needed before a no-charge Stripe/Discord lifecycle test. Production payment, refund, and role state were not mutated.
 
 ## Architecture and relevant files
 
@@ -40,6 +40,7 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 ## Remaining, ordered
 
 1. Verify the logged-in scoreboard and tagged-visit checkout association; do not make a paid test purchase without an appropriate safe test mechanism.
+   Staging currently cannot prepare checkout until its membership schema is installed.
 2. Add a distinct, measurable free-Discord click only if there is an approved public join link; do not infer joins from page views.
 3. At scale, replace the 20,000-row/2,000-payment safety caps with database aggregation; continue showing warnings whenever caps are reached.
 4. Controlled Stripe → Discord VIP and member/creator referral purchases, cancellation, failed-payment and refund checks. Do not spend money without owner approval.
@@ -54,4 +55,5 @@ Updated: 2026-09-22 (America/Phoenix). Read this file first on future growth tur
 - The 2026-09-21 recap had 25 results pending before the morning window, so final delivery may wait beyond 07:00 until all are verified. The former stale Free Pick copy test failures are corrected in PR #24.
 - Targeted SEO inspection found the live `/join` canonical pointed at `/join.html`, while the sitemap used `/join`. PR #26 aligned the canonical URLs and labeled `/recaps` as selective, not a full pick record; site Worker version `a6e8f1a4-30ae-4be7-a883-9932d9133f49` is live and verified. No fabricated results were introduced.
 - Cancellation events were not collected historically. PR #27 starts idempotent collection going forward; older cancellations cannot be reconstructed reliably from that event stream. It changes no cancellation or VIP-role lifecycle logic.
+- Staging has its named Worker secrets but not the required membership table. Do not mistake staging `/health` (HTTP 200) for a working checkout. The diagnostic request used a synthetic campaign and incurred no charge.
 - The authenticated dashboard data response has not been verified from a real admin session; active paid count is not yet independently confirmed. No live payment, refund, cancellation, or Discord role mutation was made for this release. Cancellation counts before the new webhook event are not historically available and must not be reported as zero.
