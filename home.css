@@ -105,3 +105,4 @@ footer { display:flex; flex-direction:column; align-items:center; justify-conten
 .vip-preview-foot a{color:#fff}
 @media(max-width:700px){.vip-preview{margin:22px 16px 56px;padding:28px 20px}.vip-preview-heading,.vip-preview-foot{align-items:start;flex-direction:column}.vip-preview-grid{grid-template-columns:1fr 1fr}.vip-preview-card{min-height:0;padding:16px}.vip-preview-card h3{font-size:1rem}}
 @media(max-width:430px){.vip-preview-grid{grid-template-columns:1fr}}
+[data-promo-only][hidden], [data-promo-default][hidden] { display:none !important; }

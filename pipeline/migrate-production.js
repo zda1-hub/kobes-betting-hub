@@ -41,6 +41,11 @@ const APPROVED_MIGRATIONS = [
     version: '014_email_creator_referrals',
     sha256: '2489772c780d615c1362538bdbcddd78d5ce173c6be2c26fabcd462f627e4cbe',
   },
+  {
+    name: '015_first_month_back_offer.sql',
+    version: '015_first_month_back_offer',
+    sha256: 'da3945267380a047f4e36382424c0c3d3c4c1c44cfd49d4c813c884480c47020',
+  },
 ];
 const PROTECTED_TABLES = [
   'source_posts',

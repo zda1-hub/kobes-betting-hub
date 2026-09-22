@@ -21,10 +21,11 @@ test('home and purchase page share the same six truthful membership benefits', (
 });
 
 test('reference design does not change intro offers or recurring prices', () => {
-  assert.match(join, /data-checkout="starter">Start for \$10 \/ 7 days/);
-  assert.match(join, /data-checkout="trial_2_day">Try 2 days free/);
+  assert.match(join, /data-checkout="starter" data-promo-default>Start for \$10 \/ 7 days/);
+  assert.match(join, /data-checkout="trial_2_day" data-promo-default>Try 2 days free/);
+  assert.match(join, /data-checkout="first_month_back" data-promo-only hidden>Get your first month for \$19\.99/);
   assert.match(join, /Each automatically renews at \$32\.99\/month/);
-  assert.doesNotMatch(join, /\$9\.99|\$19\.99|\$109\.99|\$199\.99/);
+  assert.doesNotMatch(join, /\$9\.99|\$109\.99|\$199\.99/);
 });
 
 test('benefits use a narrow-screen layout without changing shared sticky header offsets', () => {

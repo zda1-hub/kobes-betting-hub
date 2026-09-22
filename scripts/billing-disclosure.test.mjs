@@ -47,7 +47,7 @@ test('join and membership routes use one complete recurring-billing disclosure',
   const checkoutOffers = (html) => [...html.matchAll(/data-checkout=["']([^"']+)["']/gi)]
     .map((match) => match[1])
     .sort();
-  assert.deepEqual(checkoutOffers(join), ['annual', 'six_month', 'starter', 'trial_2_day']);
+  assert.deepEqual(checkoutOffers(join), ['annual', 'first_month_back', 'six_month', 'starter', 'trial_2_day']);
   assert.deepEqual(checkoutOffers(membership), checkoutOffers(join));
   for (const html of [join, membership]) {
     const text = visibleText(html);
