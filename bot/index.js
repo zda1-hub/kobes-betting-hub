@@ -47,7 +47,6 @@ const {
 const { fillMissingEvidence } = require('./lib/espn-pick-research');
 const { createFreePickDelivery } = require('./lib/free-pick-delivery');
 const { manualFreePickRecord } = require('./lib/manual-free-pick');
-const { nearEvenAmericanOdds, assertWriteupOdds } = require('./lib/writeup-odds');
 const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
 const { createTelegramReader } = require('./lib/telegram-reader');
 const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/daily-writeup-board');
@@ -1827,10 +1826,16 @@ async function handleSourceEditSubmit(interaction) {
   if (copy.length > 4000) throw new Error('The edited writeup is too long for one card.');
   draft.approval.exact_final_copy = copy;
   draft.approval.exact_final_copy_sha256 = approvalCopySha256(copy);
+  draft.status = 'READY_FOR_APPROVAL';
+  draft.approval_ready = true;
   presentation.approval = { ...draft.approval };
   const channel = await interaction.client.channels.fetch(interaction.channelId);
   const message = await channel.messages.fetch(packet.discord_review_message_id);
-  const components = message.components;
+  const components = message.components.map((row) => {
+    const data = row.toJSON();
+    data.components = data.components.map((button) => ({ ...button, disabled: false }));
+    return data;
+  });
   await message.edit({ components: [] });
   await fs.writeFile(packetPath, `${JSON.stringify(draft, null, 2)}\n`);
   await message.edit({ embeds: [buildSourcePickApprovalEmbed(presentation, 'APPROVED PICK')], components });
@@ -1906,7 +1911,6 @@ async function handleSourceReviewButton(interaction) {
     if (!termsOnly) {
       assertCompleteWriteup(publicationPacket);
       assertApprovalCopyMatches(publicationPacket);
-      if (action === 'paid') assertWriteupOdds(publicationPacket);
     }
     trace('event verification started');
     if (configuredTermsOnly && !exclusiveSourceIsCurrent(publicationPacket)) {
@@ -2697,9 +2701,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const channel = await destinationFor(interaction, defaultChannelId, pickOptions.sport.toLowerCase());
-    if (/writeups?/i.test(channel.name || '') && !nearEvenAmericanOdds(pickOptions.publishedOdds)) {
-      throw new Error('VIP writeups require actual published odds between -125 and +125. Choose a different play; do not alter its odds.');
-    }
     if (channel.id === freePickChannelId) await enforceDailyFreePickLimit();
     await postAndLogOfficialPick({
       channel,

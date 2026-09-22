@@ -525,6 +525,7 @@ async function notifyApprovalChannel(packet) {
   }
 
   let embeds;
+  let needsDetails = false;
   try {
     // A clear card is shown exactly as members will see it after approval.
     // Publishing does not add a second layer of wording or formatting.
@@ -545,35 +546,54 @@ async function notifyApprovalChannel(packet) {
     }
     embeds = [buildSourcePickApprovalEmbed(presentationPacket, 'APPROVED PICK')];
   } catch (error) {
-    // Kobe's review room is for decisions, not diagnostics. Retain the held
-    // packet in durable storage for audit, but do not send an unpublishable
-    // card with buttons that cannot safely work.
-    packet.status = 'HELD_NOT_READY';
+    // Do not hide a recognizable wager merely because its writeup is thin.
+    // Kobe can add the missing factual details privately or reject it. Posting
+    // remains disabled until the standard complete-writeup checks pass.
+    const extraction = packet.analysis?.extraction || {};
+    const play = visiblePlays(packet)[0] || extraction;
+    const terms = [play.selection, play.line, play.odds_american].filter(Boolean).join(' ')
+      || packet.source?.text?.slice(0, 800)
+      || 'Terms need review';
+    const existing = sourceEvidence(packet);
+    packet.status = 'NEEDS_DETAILS';
     packet.approval_ready = false;
     packet.hold_reason = error instanceof Error ? error.message : 'The candidate is incomplete or not publishable.';
-    await upsertPickCandidate(packet, { status: 'HELD_NOT_READY', rejectionCodes: ['APPROVAL_CARD_NOT_READY'] });
-    await recordWorkflowEvent(packet, {
-      eventType: 'CANDIDATE_HELD',
-      beforeState: 'ELIGIBLE',
-      afterState: 'HELD_NOT_READY',
-      details: { rejection_code: 'APPROVAL_CARD_NOT_READY', reason: packet.hold_reason }
-    });
-    console.log(`Held ${packet.pick_id}; ${packet.hold_reason}`);
-    return null;
+    needsDetails = true;
+    embeds = [{
+      color: 0xf4a62a,
+      title: 'WRITEUP CANDIDATE — DETAILS NEEDED',
+      description: [
+        `**Play:** ${terms}`,
+        extraction.event ? `**Event:** ${extraction.event}` : null,
+        `**Current supporting details:** ${existing.length}/4 required`,
+        existing.length ? existing.map((line) => `• ${line}`).join('\n') : 'No usable supporting facts were extracted.',
+        '',
+        '**Action:** Add 4–8 factual details or reject this candidate. Posting is disabled until the writeup is complete.'
+      ].filter((line) => line !== null).join('\n').slice(0, 4000),
+      footer: { text: packet.pick_id }
+    }];
   }
-  packet.status = 'READY_FOR_APPROVAL';
-  packet.approval_ready = true;
+  if (!needsDetails) {
+    packet.status = 'READY_FOR_APPROVAL';
+    packet.approval_ready = true;
+  }
   const labels = await approvalButtonLabels(packet);
+  const components = reviewButtons(packet.pick_id, labels);
+  if (needsDetails) {
+    for (const button of components[0]?.components || []) {
+      if (button.custom_id?.endsWith(':free') || button.custom_id?.endsWith(':paid')) button.disabled = true;
+    }
+  }
   const payload = {
     embeds,
-    components: reviewButtons(packet.pick_id, labels)
+    components
   };
-  await upsertPickCandidate(packet, { status: 'READY_FOR_APPROVAL' });
+  await upsertPickCandidate(packet, { status: packet.status, rejectionCodes: needsDetails ? ['WRITEUP_DETAILS_REQUIRED'] : [] });
   await recordWorkflowEvent(packet, {
     eventType: 'APPROVAL_CARD_SEND_STARTED',
     beforeState: 'ELIGIBLE',
     afterState: 'SENDING_APPROVAL_CARD',
-    details: { channel_id: channelId }
+    details: { channel_id: channelId, needs_details: needsDetails }
   });
   const response = await discordRateLimitedFetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
