@@ -16,6 +16,7 @@ on:
           - encrypted-backup
           - apply-membership-migrations
           - provision-sports-centered-creator
+          - provision-rsk-media-creator
 
 permissions:
   contents: read
@@ -122,4 +123,27 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Provision only the approved Sports Centered creator invitation
+        run: node scripts/provision-sports-centered-creator.mjs
+
+  provision-rsk-media-creator:
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'provision-rsk-media-creator'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCTION_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      CREATOR_EMAIL: rskskmain@gmail.com
+      CREATOR_NAME: RSK Media
+      CREATOR_CONFIRMATION: PROVISION_RSK_MEDIA_CREATOR_IN_PRODUCTION
+      CREATOR_PROVISION_CONFIRM: PROVISION_RSK_MEDIA_CREATOR_IN_PRODUCTION
+    steps:
+      - name: Check out the approved release source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Provision only the approved RSK Media creator invitation
         run: node scripts/provision-sports-centered-creator.mjs

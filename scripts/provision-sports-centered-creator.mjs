@@ -6,11 +6,11 @@ const require = createRequire(import.meta.url);
 const { Pool } = require('pg');
 const { EXPECTED_PRODUCTION_PROJECT_REF, projectRefFromDatabaseUrl } = require('../pipeline/migrate-production');
 
-const CREATOR_EMAIL = 'sportscenteredpod@gmail.com';
-const CREATOR_NAME = 'Sports Centered';
+const CREATOR_EMAIL = String(process.env.CREATOR_EMAIL || 'sportscenteredpod@gmail.com').trim().toLowerCase();
+const CREATOR_NAME = String(process.env.CREATOR_NAME || 'Sports Centered').trim();
 const CHECKOUT_ORIGIN = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
 const SITE_ORIGIN = 'https://kobesbettinghub.com';
-const CONFIRMATION = 'PROVISION_SPORTS_CENTERED_CREATOR_IN_PRODUCTION';
+const CONFIRMATION = String(process.env.CREATOR_CONFIRMATION || 'PROVISION_SPORTS_CENTERED_CREATOR_IN_PRODUCTION');
 
 export function validateProvisioningEnvironment(env = process.env) {
   if (env.CREATOR_PROVISION_CONFIRM !== CONFIRMATION) throw new Error('Creator provisioning confirmation is missing.');
