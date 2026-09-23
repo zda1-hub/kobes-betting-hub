@@ -72,3 +72,8 @@ test('TikTok referral host and Kobe X tagged link remain distinct sources', () =
   assert.equal(visit({ url: 'https://kobesbettinghub.com/', referrer: 'https://www.tiktok.com/@creator/video/123' }).attribution.first_source, 'tiktok');
   assert.equal(visit({ url: 'https://kobesbettinghub.com/join?utm_source=kobe_x' }).attribution.first_source, 'kobe_x');
 });
+
+test('YouTube and Facebook remain distinct promotional sources', () => {
+  assert.equal(visit({ url: 'https://kobesbettinghub.com/join?utm_source=youtube' }).attribution.first_source, 'youtube');
+  assert.equal(visit({ url: 'https://kobesbettinghub.com/join?utm_source=facebook' }).attribution.first_source, 'facebook');
+});

@@ -23,7 +23,7 @@ test('checkout worker health endpoint responds without credentials', async () =>
 });
 
 test('checkout association retains distinct owned-X and TikTok attribution', () => {
-  for (const source of ['x', 'kobe_x', 'discord', 'instagram', 'tiktok', 'google', 'email', 'affiliate']) {
+  for (const source of ['x', 'kobe_x', 'discord', 'instagram', 'tiktok', 'youtube', 'facebook', 'google', 'email', 'affiliate']) {
     const attribution = workerTest.cleanAttribution({ first_source: source, last_source: source, first_campaign: 'sprint', first_content: 'creative_a', utm_source: source });
     assert.equal(attribution.first_source, source);
     assert.equal(attribution.last_source, source);

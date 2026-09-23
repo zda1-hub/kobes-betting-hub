@@ -1,7 +1,7 @@
 (() => {
   const workerOrigin = window.__KBH_MEMBERSHIP_CONFIG__?.workerOrigin || 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
   const uuid = /^[0-9a-f-]{36}$/i;
-  const allowedSources = new Set(['discord', 'x', 'kobe_x', 'instagram', 'tiktok', 'google', 'email', 'referral', 'affiliate', 'direct', 'other']);
+  const allowedSources = new Set(['discord', 'x', 'kobe_x', 'instagram', 'tiktok', 'youtube', 'facebook', 'google', 'email', 'referral', 'affiliate', 'direct', 'other']);
   const clean = (value, limit = 160) => String(value || '').trim().replace(/[\u0000-\u001f]/g, '').slice(0, limit);
   const normalizeSource = (value) => {
     const raw = clean(value).toLowerCase();
@@ -11,6 +11,8 @@
     if (/^(x|twitter)$/.test(raw) || /(^|\.)x\.com$|twitter\.com|t\.co/.test(raw)) return 'x';
     if (/instagram|(^|\.)ig\.me$/.test(raw)) return 'instagram';
     if (/tiktok|(^|\.)vm\.tiktok\.com$/.test(raw)) return 'tiktok';
+    if (/youtube|youtu\.be/.test(raw)) return 'youtube';
+    if (/facebook|fb\.com|fb\.me/.test(raw)) return 'facebook';
     if (/google/.test(raw)) return 'google';
     if (/mail|newsletter/.test(raw)) return 'email';
     if (/referr/.test(raw)) return 'referral';
@@ -28,7 +30,7 @@
   const taggedSource = normalizeSource(query.get('utm_source'));
   const referrerSource = isInternalReferrer ? '' : normalizeSource(referrerHost);
   const incomingSource = referralIdentifier ? 'referral' : taggedSource || referrerSource;
-  const inferredMedium = !incomingSource ? '' : ['x', 'kobe_x', 'instagram', 'tiktok'].includes(incomingSource) ? 'organic_social' : incomingSource === 'discord' ? 'community' : incomingSource;
+  const inferredMedium = !incomingSource ? '' : ['x', 'kobe_x', 'instagram', 'tiktok', 'youtube', 'facebook'].includes(incomingSource) ? 'organic_social' : incomingSource === 'discord' ? 'community' : incomingSource;
   let sessionId;
   try {
     sessionId = localStorage.getItem('kbh.analytics.session');

@@ -599,7 +599,7 @@ function cleanAttribution(value = {}) {
   const text = (input, maximum = 160) => String(input || '').replace(/[\u0000-\u001f]/g, '').slice(0, maximum);
   const source = input => {
     const raw = text(input).trim().toLowerCase();
-    if (['discord','x','kobe_x','instagram','tiktok','google','email','referral','affiliate','direct','other'].includes(raw)) return raw;
+    if (['discord','x','kobe_x','instagram','tiktok','youtube','facebook','google','email','referral','affiliate','direct','other'].includes(raw)) return raw;
     if (/discord/.test(raw)) return 'discord';
     if (/^(x|twitter)$/.test(raw) || /(^|\.)x\.com$|twitter\.com|t\.co/.test(raw)) return 'x';
     if (/instagram|(^|\.)ig\.me$/.test(raw)) return 'instagram';
