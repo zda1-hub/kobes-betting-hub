@@ -26,7 +26,7 @@ function renderAt(now, search = '') {
 test('the $19.99 first month is visible only during the 30-day Arizona offer window', () => {
   for (const [at, expected] of [
     ['2026-09-22T06:59:59Z', false], ['2026-09-22T07:00:00Z', true],
-    ['2026-10-22T06:59:59Z', true], ['2026-10-22T07:00:00Z', false],
+    ['2026-10-23T06:59:59Z', true], ['2026-10-23T07:00:00Z', false],
   ]) {
     const view = renderAt(Date.parse(at));
     assert.ok(view.defaults.every(element => element.hidden === expected));

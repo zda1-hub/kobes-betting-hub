@@ -15,6 +15,7 @@ const referralRewardMigrationPath = path.join(
   '006_referral_reward_ten_dollars.sql',
 );
 const creatorMigrationPath = path.join(__dirname, 'migrations', '014_email_creator_referrals.sql');
+const creatorPartnershipMigrationPath = path.join(__dirname, 'migrations', '017_creator_partnership_access.sql');
 
 test('legacy OpenAI cost migration only relabels keyless snapshots and is repeat-safe', async () => {
   const sql = await fs.readFile(migrationPath, 'utf8');
@@ -48,4 +49,11 @@ test('creator referral migration does not re-add its ownership constraint on bot
   assert.match(sql, /IF NOT EXISTS\s*\([\s\S]*pg_constraint[\s\S]*referral_rewards_one_owner/i);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS creator_referral_profiles/i);
   assert.match(sql, /DROP TRIGGER IF EXISTS referral_rewards_validate_owner/i);
+});
+
+test('creator partnership access migration preserves trials and supports open-ended terms', async () => {
+  const sql = await fs.readFile(creatorPartnershipMigrationPath, 'utf8');
+  assert.match(sql, /access_mode text NOT NULL DEFAULT 'TRIAL'/i);
+  assert.match(sql, /'PARTNERSHIP'/i);
+  assert.match(sql, /access_ends_at timestamptz/i);
 });

@@ -9,6 +9,13 @@ const workerTest = workerModule.__test;
 
 const encoder = new TextEncoder();
 
+async function signedSession(payload, secret) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
+  return `${body}.${[...new Uint8Array(signature)].map(byte => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
 async function stripeSignature(payload, secret, timestamp = Math.floor(Date.now() / 1000)) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const digest = await crypto.subtle.sign('HMAC', key, encoder.encode(`${timestamp}.${payload}`));
@@ -64,6 +71,45 @@ test('Today and yesterday ranges follow Phoenix midnight, not UTC midnight', () 
   assert.equal(yesterday.end.toISOString(), '2026-09-21T07:00:00.000Z');
   assert.equal(today.includes('2026-09-21T23:00:00Z'), true);
   assert.equal(yesterday.includes('2026-09-21T23:00:00Z'), false);
+});
+
+test('creator partnership access lasts until the partnership ends or is paused', () => {
+  const now = Date.parse('2026-09-23T20:00:00Z');
+  assert.equal(workerTest.creatorAccessActive({ status: 'ACTIVE', access_mode: 'PARTNERSHIP', access_ends_at: null }, now), true);
+  assert.equal(workerTest.creatorAccessActive({ status: 'ACTIVE', access_mode: 'PARTNERSHIP', access_ends_at: '2026-09-24T20:00:00Z' }, now), true);
+  assert.equal(workerTest.creatorAccessActive({ status: 'ACTIVE', access_mode: 'PARTNERSHIP', access_ends_at: '2026-09-22T20:00:00Z' }, now), false);
+  assert.equal(workerTest.creatorAccessActive({ status: 'PAUSED', access_mode: 'PARTNERSHIP', access_ends_at: null }, now), false);
+  assert.equal(workerTest.creatorAccessActive({ status: 'ACTIVE', access_mode: 'TRIAL', trial_expires_at: '2026-09-24T20:00:00Z' }, now), true);
+});
+
+test('partner report is aggregate-only and every database read is scoped to that creator', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  const creatorId = 'a7000000-0000-4000-8000-000000000001';
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    requests.push(url.toString());
+    if (!url.pathname.startsWith('/rest/v1/')) return Response.json({});
+    const table = url.pathname.split('/').at(-1);
+    if (table === 'creator_referral_profiles') return Response.json([{ id: creatorId, contact_email: 'sports@example.com', display_name: 'Sports Centered', referral_code: 'KBC-ABCDEF1234', discord_user_id: '123456789012345678', status: 'ACTIVE', access_mode: 'PARTNERSHIP', access_ends_at: null }]);
+    if (table === 'analytics_sessions') return Response.json([{ id: 'session_1', started_at: '2026-09-23T18:00:00Z' }]);
+    if (table === 'membership_checkout_associations') return Response.json([{ id: 'checkout_1', status: 'PAYMENT_CONFIRMED', stripe_subscription_id: 'sub_1', created_at: '2026-09-23T18:05:00Z' }]);
+    if (table === 'referral_rewards') return Response.json([{ status: 'READY', reward_amount_cents: 1000, referred_subscription_id: 'sub_1', created_at: '2026-09-23T18:06:00Z', first_paid_at: '2026-09-23T18:06:00Z' }]);
+    if (table === 'membership_billing_events') return Response.json([]);
+    return Response.json([]);
+  };
+  try {
+    const secret = 'partner-session-secret';
+    const token = await signedSession({ discordUserId: '123456789012345678', creatorProfileId: creatorId, expiresAt: Math.floor(Date.now() / 1000) + 600, purpose: 'partner' }, secret);
+    const response = await worker.fetch(new Request('https://worker.test/partner/dashboard?range=all', { headers: { authorization: `Bearer ${token}` } }), { SUPABASE_URL: 'https://database.test', SUPABASE_SECRET_KEY: 'db_test', DISCORD_OAUTH_STATE_SECRET: secret });
+    assert.equal(response.status, 200);
+    const report = await response.json();
+    assert.deepEqual(report.metrics, { visits: 1, checkoutStarts: 1, paidConversions: 1, conversionRate: 1, pendingCommissionCents: 0, approvedCommissionCents: 1000, paidCommissionCents: 0, refunds: 0, chargebacks: 0 });
+    assert.equal(JSON.stringify(report).includes('sports@example.com'), false);
+    assert.ok(requests.some(url => url.includes(`creator_profile_id=eq.${creatorId}`)));
+    assert.ok(requests.some(url => url.includes('referral_code=eq.KBC-ABCDEF1234')));
+    assert.ok(requests.every(url => !url.includes('/admin/analytics')));
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test('dashboard database reads page past the first batch and flag a safety cap', async () => {
@@ -382,18 +428,45 @@ test('first-month-back checkout charges $19.99 now and renews on the $32.99 mont
   assert.equal(checkout.has('line_items[1][price]'), false);
 });
 
-test('first-month-back offer expires after October 21 Arizona time', async (t) => {
+test('first-month-back offer remains available through October 22 Arizona time', async (t) => {
   assert.equal(workerTest.firstMonthBackActive(Date.parse('2026-09-22T07:00:00Z')), true);
-  assert.equal(workerTest.firstMonthBackActive(Date.parse('2026-10-22T06:59:59Z')), true);
-  assert.equal(workerTest.firstMonthBackActive(Date.parse('2026-10-22T07:00:00Z')), false);
+  assert.equal(workerTest.firstMonthBackActive(Date.parse('2026-10-23T06:59:59Z')), true);
+  assert.equal(workerTest.firstMonthBackActive(Date.parse('2026-10-23T07:00:00Z')), false);
   const originalNow = Date.now;
   t.after(() => { Date.now = originalNow; });
-  Date.now = () => Date.parse('2026-10-22T07:00:00Z');
+  Date.now = () => Date.parse('2026-10-23T07:00:00Z');
   const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
     method: 'POST', body: JSON.stringify({ offer: 'first_month_back' }),
   }), {});
   assert.equal(response.status, 400);
   assert.match((await response.json()).error, /ended/);
+});
+
+test('creator first-month offer earns ten dollars after a $19.99 paid invoice and seven-day hold', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const patches = [];
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.stripe.com' && url.pathname.endsWith('/subscriptions/sub_creator_promo')) return Response.json({
+      id: 'sub_creator_promo', customer: 'cus_creator_customer',
+      metadata: { offer: 'first_month_back', referral_code: 'KBC-ABCDEF1234', creator_profile_id: 'a7000000-0000-4000-8000-000000000001' },
+      items: { data: [{ price: { id: 'price_monthly' } }] },
+    });
+    if (url.pathname.endsWith('/api_call_events') || url.pathname.endsWith('/referral_events')) return new Response(null, { status: 204 });
+    if (url.pathname.endsWith('/referral_rewards') && options.method === 'PATCH') {
+      patches.push(JSON.parse(options.body));
+      return Response.json([{ id: 'reward_creator_promo', status: 'HOLDING' }]);
+    }
+    if (url.pathname.endsWith('/referral_rewards')) return Response.json([{ id: 'reward_creator_promo', status: 'PENDING_PAYMENT', referred_stripe_customer_id: 'cus_creator_customer', first_paid_invoice_id: null }]);
+    throw new Error(`Unexpected request: ${options.method || 'GET'} ${url}`);
+  };
+  const result = await workerTest.processReferralInvoicePaid({ STRIPE_SECRET_KEY: 'sk_test', STRIPE_MONTHLY_PRICE_ID: 'price_monthly', SUPABASE_URL: 'https://project.supabase.test', SUPABASE_SECRET_KEY: 'sb_secret' }, {
+    id: 'in_creator_promo', currency: 'usd', amount_paid: 1999, customer: 'cus_creator_customer', subscription: 'sub_creator_promo', created: 1790186400,
+  }, 'evt_creator_promo');
+  assert.equal(result, 'REFERRAL_HOLD_STARTED');
+  assert.equal(patches[0].status, 'HOLDING');
+  assert.equal(Date.parse(patches[0].eligible_at) - Date.parse(patches[0].first_paid_at), 7 * 24 * 60 * 60 * 1000);
 });
 
 test('checkout offer composition matches the published intro pricing without charging in the test', async (t) => {

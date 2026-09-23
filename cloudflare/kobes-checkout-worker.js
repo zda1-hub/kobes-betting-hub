@@ -46,7 +46,7 @@ const RETENTION_50_COUPON_METADATA_KEY = 'kbh_retention_offer_50_coupon';
 const RETENTION_75_COUPON_METADATA_KEY = 'kbh_retention_offer_75_coupon';
 const MEMBERSHIP_OFFERS = new Set(['starter', 'trial_2_day', 'referral_trial', 'first_month_back', 'six_month', 'annual']);
 const FIRST_MONTH_BACK_START = Date.parse('2026-09-22T07:00:00Z');
-const FIRST_MONTH_BACK_END = Date.parse('2026-10-22T07:00:00Z');
+const FIRST_MONTH_BACK_END = Date.parse('2026-10-23T07:00:00Z');
 const FIRST_MONTH_BACK_COUPON_ID = 'kbh_first_month_back_2026_09_22';
 const firstMonthBackActive = (now = Date.now()) => now >= FIRST_MONTH_BACK_START && now < FIRST_MONTH_BACK_END;
 
@@ -420,12 +420,12 @@ async function referralProfileForCode(env, referralCode) {
 }
 
 async function creatorProfileForCode(env, referralCode) {
-  const rows = await supabase(env, `creator_referral_profiles?referral_code=eq.${encodeURIComponent(referralCode)}&select=id,contact_email,display_name,referral_code,discord_user_id,trial_expires_at,stripe_recipient_account_id,payout_status,status&limit=1`);
+  const rows = await supabase(env, `creator_referral_profiles?referral_code=eq.${encodeURIComponent(referralCode)}&select=id,contact_email,display_name,referral_code,discord_user_id,trial_expires_at,access_mode,access_ends_at,stripe_recipient_account_id,payout_status,status&limit=1`);
   return rows?.[0] || null;
 }
 
 async function creatorProfileForId(env, id) {
-  const rows = await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(id)}&select=id,contact_email,display_name,referral_code,discord_user_id,trial_expires_at,stripe_recipient_account_id,payout_status,status&limit=1`);
+  const rows = await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(id)}&select=id,contact_email,display_name,referral_code,discord_user_id,trial_expires_at,access_mode,access_ends_at,stripe_recipient_account_id,payout_status,status&limit=1`);
   return rows?.[0] || null;
 }
 
@@ -845,10 +845,10 @@ async function readDiscordState(state, env) {
   const [body, signature, ...extra] = state.split('.');
   if (!body || !signature || extra.length || !await secureEqual(await sign(body, env.DISCORD_OAUTH_STATE_SECRET), signature)) throw new Error('Invalid Discord connection request.');
   const value = JSON.parse(decode.decode(fromBase64Url(body)));
-  if (!['connect', 'portal', 'referral', 'creator', 'retention75', 'precheckout', 'admin', 'member', 'feedback'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
+  if (!['connect', 'portal', 'referral', 'creator', 'partner', 'retention75', 'precheckout', 'admin', 'member', 'feedback'].includes(value.intent) || value.expiresAt < Math.floor(Date.now() / 1000)) throw new Error('That Discord authorization link expired. Please try again.');
   if (value.intent === 'connect' && !value.sessionId) throw new Error('That Discord connection request is incomplete.');
   if (value.intent === 'precheckout' && !value.associationToken) throw new Error('That checkout verification request is incomplete.');
-  if (value.intent === 'creator' && !/^KBC-[A-Z0-9]{10}$/.test(value.referralCode || '')) throw new Error('That creator connection request is incomplete.');
+  if (['creator', 'partner'].includes(value.intent) && !/^KBC-[A-Z0-9]{10}$/.test(value.referralCode || '')) throw new Error('That creator connection request is incomplete.');
   return value;
 }
 
@@ -1240,7 +1240,7 @@ function discordAuthorizationUrl(state, env, intent) {
     client_id: env.DISCORD_CLIENT_ID,
     response_type: 'code',
     redirect_uri: env.DISCORD_REDIRECT_URI,
-    scope: ['connect', 'precheckout'].includes(intent) ? 'identify guilds.join' : intent === 'creator' ? 'identify email guilds.join' : intent === 'referral' ? 'identify email' : 'identify',
+    scope: ['connect', 'precheckout'].includes(intent) ? 'identify guilds.join' : ['creator', 'partner'].includes(intent) ? 'identify email guilds.join' : intent === 'referral' ? 'identify email' : 'identify',
     state,
     prompt: 'consent',
   }).toString();
@@ -1260,6 +1260,21 @@ async function startCreatorLogin(request, env) {
   if (!profile || profile.status === 'PAUSED') return new Response('Creator invitation not found.', { status: 404 });
   const state = await createDiscordState({ intent: 'creator', referralCode }, env);
   return redirect(discordAuthorizationUrl(state, env, 'creator'));
+}
+
+async function startPartnerLogin(request, env) {
+  if (!discordReady(env) || !supabaseReady(env)) return new Response('Partner reporting is being configured.', { status: 503 });
+  const referralCode = String(new URL(request.url).searchParams.get('code') || '').toUpperCase();
+  const profile = /^KBC-[A-Z0-9]{10}$/.test(referralCode) ? await creatorProfileForCode(env, referralCode) : null;
+  if (!profile || profile.status !== 'ACTIVE' || !profile.discord_user_id) return new Response('Partner reporting is not active for this invitation.', { status: 404 });
+  const state = await createDiscordState({ intent: 'partner', referralCode }, env);
+  return redirect(discordAuthorizationUrl(state, env, 'partner'));
+}
+
+function creatorAccessActive(profile, now = Date.now()) {
+  if (!profile || profile.status === 'PAUSED') return false;
+  if (profile.access_mode === 'PARTNERSHIP') return !profile.access_ends_at || Date.parse(profile.access_ends_at) > now;
+  return Boolean(profile.trial_expires_at) && Date.parse(profile.trial_expires_at) > now;
 }
 
 async function createCreatorInvitation(request, env, origin, authorize = authorizedOperationsRequest) {
@@ -1292,6 +1307,7 @@ async function createCreatorInvitation(request, env, origin, authorize = authori
   }
   return json({ email: profile.contact_email, status: profile.status,
     onboardingUrl: `${new URL(request.url).origin}/creators/login?code=${encodeURIComponent(profile.referral_code)}`,
+    partnerDashboardUrl: `${siteOrigin(env)}${SITE_PATH}/partner?code=${encodeURIComponent(profile.referral_code)}`,
     referralUrl: `${siteOrigin(env)}${SITE_PATH}/join?ref=${encodeURIComponent(profile.referral_code)}`,
     rewardCents: REFERRAL_REWARD_CENTS }, 200, origin);
 }
@@ -1314,16 +1330,38 @@ async function activateCreator(request, env, origin) {
   return json({ status: 'ACTIVE', referralUrl: `${siteOrigin(env)}${SITE_PATH}/join?ref=${encodeURIComponent(code)}` }, 200, origin);
 }
 
+async function updateCreatorAccess(request, env, origin, authorize = readAdminSession) {
+  if (!await authorize(request, env)) return json({ error: 'Unauthorized.' }, 401, origin);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  const code = String(data.code || '').trim().toUpperCase();
+  const mode = String(data.mode || '').trim().toUpperCase();
+  if (!/^KBC-[A-Z0-9]{10}$/.test(code) || !['TRIAL', 'PARTNERSHIP'].includes(mode)) return json({ error: 'A valid creator code and access mode are required.' }, 400, origin);
+  const profile = await creatorProfileForCode(env, code);
+  if (!profile) return json({ error: 'Creator not found.' }, 404, origin);
+  let accessEndsAt = null;
+  if (data.endsAt) {
+    const parsed = new Date(data.endsAt);
+    if (!Number.isFinite(parsed.getTime()) || parsed.getTime() <= Date.now()) return json({ error: 'The access end date must be in the future.' }, 400, origin);
+    accessEndsAt = parsed.toISOString();
+  }
+  const body = mode === 'PARTNERSHIP'
+    ? { access_mode: mode, access_ends_at: accessEndsAt, trial_role_removed_at: null, updated_at: new Date().toISOString() }
+    : { access_mode: mode, access_ends_at: null, trial_role_removed_at: null, updated_at: new Date().toISOString() };
+  await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(profile.id)}`, { method: 'PATCH', prefer: 'return=minimal', body });
+  return json({ code, mode, endsAt: mode === 'PARTNERSHIP' ? accessEndsAt : profile.trial_expires_at || null }, 200, origin);
+}
+
 async function expireCreatorTrials(env) {
   if (!supabaseReady(env) || !env.DISCORD_BOT_TOKEN) return;
   const now = new Date().toISOString();
-  const expired = await supabase(env, `creator_referral_profiles?trial_expires_at=lte.${encodeURIComponent(now)}&trial_role_removed_at=is.null&discord_user_id=not.is.null&select=id,discord_user_id&limit=50`);
-  for (const profile of expired || []) {
+  const candidates = await supabase(env, 'creator_referral_profiles?trial_role_removed_at=is.null&discord_user_id=not.is.null&select=id,discord_user_id,status,trial_expires_at,access_mode,access_ends_at&limit=50');
+  for (const profile of (candidates || []).filter(item => !creatorAccessActive(item))) {
     try {
       if (!await activeMembershipForDiscord(env, profile.discord_user_id)) {
         await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${profile.discord_user_id}/roles/${env.DISCORD_MEMBER_ROLE_ID}`, {
           method: 'DELETE', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
-        }, env, { memberId: profile.discord_user_id, triggerType: 'creator_trial_expired' });
+        }, env, { memberId: profile.discord_user_id, triggerType: profile.access_mode === 'PARTNERSHIP' ? 'creator_partnership_ended' : 'creator_trial_expired' });
       }
       await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(profile.id)}&trial_role_removed_at=is.null`, {
         method: 'PATCH', prefer: 'return=minimal', body: { trial_role_removed_at: now, updated_at: now },
@@ -1482,7 +1520,7 @@ async function finishDiscordConnection(request, env) {
         if (!updated?.length) throw new Error('Creator identity was changed during verification.');
       }
       let trialExpiresAt = profile.trial_expires_at;
-      if (!trialExpiresAt) {
+      if (profile.access_mode !== 'PARTNERSHIP' && !trialExpiresAt) {
         trialExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
         const claimed = await supabase(env, `creator_referral_profiles?id=eq.${encodeURIComponent(profile.id)}&trial_expires_at=is.null`, {
           method: 'PATCH', prefer: 'return=representation',
@@ -1490,14 +1528,26 @@ async function finishDiscordConnection(request, env) {
         });
         if (!claimed?.length) trialExpiresAt = (await creatorProfileForId(env, profile.id))?.trial_expires_at;
       }
-      if (trialExpiresAt && Date.parse(trialExpiresAt) > Date.now()) {
+      if (creatorAccessActive({ ...profile, trial_expires_at: trialExpiresAt })) {
         const botHeaders = { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' };
         await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, {
           method: 'PUT', headers: botHeaders, body: JSON.stringify({ access_token: token.access_token }),
-        }, env, { memberId: user.id, triggerType: 'creator_trial' });
+        }, env, { memberId: user.id, triggerType: profile.access_mode === 'PARTNERSHIP' ? 'creator_partnership' : 'creator_trial' });
         await grantMemberRole(user.id, env);
       }
       return redirect(await creatorPayoutOnboarding(env, profile));
+    }
+    if (state.intent === 'partner') {
+      const profile = await creatorProfileForCode(env, state.referralCode);
+      if (!profile || profile.status !== 'ACTIVE' || !user?.id || user.verified !== true
+          || profile.discord_user_id !== user.id
+          || String(user.email || '').trim().toLowerCase() !== profile.contact_email) {
+        throw new Error('Use the verified Discord account connected to this active partnership.');
+      }
+      const expiresAt = Math.floor(Date.now() / 1000) + ADMIN_SESSION_TTL_SECONDS;
+      const body = toBase64Url(encode.encode(JSON.stringify({ discordUserId: user.id, creatorProfileId: profile.id, expiresAt, purpose: 'partner' })));
+      const partnerToken = `${body}.${await sign(body, env.DISCORD_OAUTH_STATE_SECRET)}`;
+      return redirect(`${siteOrigin(env)}${SITE_PATH}/partner#session=${encodeURIComponent(partnerToken)}`);
     }
     if (state.intent === 'member') {
       const membership = await membershipCustomerForDiscord(env, user.id);
@@ -1642,8 +1692,10 @@ async function prepareCheckout(request, env, origin) {
   if (!MEMBERSHIP_OFFERS.has(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
   if (data.offer === 'first_month_back' && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
   const referralCode = String(data.referral_code || '').toUpperCase();
-  if (data.offer === 'referral_trial') {
-    if (!await referralOwnerForCode(env, referralCode)) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
+  let referralOwner = null;
+  if (data.offer === 'referral_trial' || (data.offer === 'first_month_back' && referralCode)) {
+    referralOwner = await referralOwnerForCode(env, referralCode);
+    if (!referralOwner || (data.offer === 'first_month_back' && referralOwner.kind !== 'creator')) return json({ error: 'That referral link is not currently eligible for this offer.' }, 400, origin);
   }
   const sessionId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(data.analytics_session_id || '')
     ? data.analytics_session_id.toLowerCase() : null;
@@ -1652,7 +1704,7 @@ async function prepareCheckout(request, env, origin) {
     method: 'POST', prefer: 'return=representation',
     body: {
       public_token_hash: await sha256Text(token), offer: data.offer,
-      referral_code: data.offer === 'referral_trial' ? referralCode : null,
+      referral_code: referralOwner ? referralCode : null,
       analytics_session_id: sessionId, attribution: cleanAttribution(data.attribution),
       expires_at: new Date(Date.now() + CHECKOUT_ASSOCIATION_TTL_MS).toISOString(),
     },
@@ -1729,11 +1781,11 @@ async function createCheckout(request, env, origin) {
   }
 
   let referralOwner = null;
-  if (data.offer === 'referral_trial') {
+  if (data.offer === 'referral_trial' || (data.offer === 'first_month_back' && data.referral_code)) {
     const referralCode = String(data.referral_code || '').toUpperCase();
     if (!supabaseReady(env)) return json({ error: 'That referral link is invalid or expired.' }, 400, origin);
     referralOwner = await referralOwnerForCode(env, referralCode);
-    if (!referralOwner) return json({ error: 'That referral link is not currently eligible.' }, 400, origin);
+    if (!referralOwner || (data.offer === 'first_month_back' && referralOwner.kind !== 'creator')) return json({ error: 'That referral link is not currently eligible for this offer.' }, 400, origin);
   }
 
   // Go straight to the canonical confirmation page, avoiding the legacy
@@ -1795,10 +1847,14 @@ async function referralRewardForSubscription(env, subscriptionId) {
 
 async function processReferralInvoicePaid(env, invoice, eventId) {
   const subscriptionId = invoiceSubscriptionId(invoice);
-  if (!subscriptionId || String(invoice?.currency || '').toLowerCase() !== 'usd' || Number(invoice?.amount_paid || 0) < 3299) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
+  if (!subscriptionId || String(invoice?.currency || '').toLowerCase() !== 'usd') return 'INVOICE_NOT_REFERRAL_QUALIFIED';
   const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
   const metadata = subscription.metadata || {};
-  if (metadata.offer !== 'referral_trial' || !metadata.referral_code || !(metadata.referrer_discord_user_id || metadata.creator_profile_id)) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
+  const creatorFirstMonth = metadata.offer === 'first_month_back' && Boolean(metadata.creator_profile_id);
+  const memberOrCreatorTrial = metadata.offer === 'referral_trial';
+  const minimumPaid = creatorFirstMonth ? 1999 : 3299;
+  if ((!creatorFirstMonth && !memberOrCreatorTrial) || Number(invoice?.amount_paid || 0) < minimumPaid
+      || !metadata.referral_code || !(metadata.referrer_discord_user_id || metadata.creator_profile_id)) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
   if (stripeId(subscription.items?.data?.[0]?.price) !== env.STRIPE_MONTHLY_PRICE_ID) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
   let reward = await referralRewardForSubscription(env, subscriptionId);
   if (!reward) {
@@ -2469,6 +2525,67 @@ async function readMemberSession(request, env) {
   } catch { return null; }
 }
 
+async function readPartnerSession(request, env) {
+  const token = String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  const [body, signature, ...extra] = token.split('.');
+  if (!body || !signature || extra.length || !await secureEqual(await sign(body, env.DISCORD_OAUTH_STATE_SECRET), signature)) return null;
+  try {
+    const value = JSON.parse(decode.decode(fromBase64Url(body)));
+    if (value.purpose !== 'partner' || value.expiresAt < Math.floor(Date.now() / 1000)
+        || !/^\d{10,25}$/.test(value.discordUserId) || !/^[0-9a-f-]{36}$/i.test(value.creatorProfileId)) return null;
+    const profile = await creatorProfileForId(env, value.creatorProfileId);
+    return profile?.status === 'ACTIVE' && profile.discord_user_id === value.discordUserId ? { ...value, profile } : null;
+  } catch { return null; }
+}
+
+async function partnerDashboard(request, env, origin) {
+  const auth = await readPartnerSession(request, env);
+  if (!auth) return json({ error: 'Partner sign-in required.' }, 401, origin);
+  let range;
+  try { range = analyticsRange(new URL(request.url)); } catch (error) { return json({ error: error.message }, 400, origin); }
+  const profile = auth.profile;
+  const code = profile.referral_code;
+  const creatorId = profile.id;
+  const [sessionPage, associationPage, rewardPage] = await Promise.all([
+    supabasePages(env, `analytics_sessions?first_touch->>referral_identifier=eq.${encodeURIComponent(code)}&select=id,started_at&order=started_at.desc,id.desc`),
+    supabasePages(env, `membership_checkout_associations?referral_code=eq.${encodeURIComponent(code)}&select=id,status,stripe_subscription_id,created_at&order=created_at.desc,id.desc`),
+    supabasePages(env, `referral_rewards?creator_profile_id=eq.${encodeURIComponent(creatorId)}&select=status,reward_amount_cents,referred_subscription_id,created_at,first_paid_at&order=created_at.desc,id.desc`),
+  ]);
+  const sessions = sessionPage.rows.filter(item => range.includes(item.started_at));
+  const associations = associationPage.rows.filter(item => range.includes(item.created_at));
+  const rewards = rewardPage.rows.filter(item => range.includes(item.created_at));
+  const subscriptionIds = [...new Set(rewards.map(item => item.referred_subscription_id).filter(Boolean))];
+  let billing = [];
+  if (subscriptionIds.length) {
+    const filter = subscriptionIds.map(encodeURIComponent).join(',');
+    const page = await supabasePages(env, `membership_billing_events?stripe_subscription_id=in.(${filter})&event_type=in.(refund,dispute)&select=event_type,amount_cents,stripe_subscription_id,occurred_at&order=occurred_at.desc`, { pageSize: 500 });
+    billing = page.rows.filter(item => range.includes(item.occurred_at));
+  }
+  const paidConversions = rewards.filter(item => ['READY', 'PAYOUT_SENT'].includes(item.status)).length;
+  const pendingRewards = rewards.filter(item => !['READY', 'PAYOUT_SENT', 'VOID'].includes(item.status));
+  const approvedRewards = rewards.filter(item => item.status === 'READY');
+  const paidRewards = rewards.filter(item => item.status === 'PAYOUT_SENT');
+  const checkoutStarts = associations.length;
+  return json({
+    generatedAt: new Date().toISOString(),
+    range: { preset: range.preset, start: range.start?.toISOString() || null, end: range.end.toISOString() },
+    partner: { name: profile.display_name, code, referralUrl: `${siteOrigin(env)}${SITE_PATH}/join?ref=${encodeURIComponent(code)}`, status: profile.status },
+    metrics: {
+      visits: sessions.length,
+      checkoutStarts,
+      paidConversions,
+      conversionRate: sessions.length ? paidConversions / sessions.length : 0,
+      pendingCommissionCents: pendingRewards.reduce((sum, item) => sum + Number(item.reward_amount_cents || 0), 0),
+      approvedCommissionCents: approvedRewards.reduce((sum, item) => sum + Number(item.reward_amount_cents || 0), 0),
+      paidCommissionCents: paidRewards.reduce((sum, item) => sum + Number(item.reward_amount_cents || 0), 0),
+      refunds: billing.filter(item => item.event_type === 'refund').length,
+      chargebacks: billing.filter(item => item.event_type === 'dispute').length,
+    },
+    access: { active: creatorAccessActive(profile), mode: profile.access_mode || 'TRIAL', endsAt: profile.access_mode === 'PARTNERSHIP' ? profile.access_ends_at : profile.trial_expires_at },
+    dataCompletenessWarnings: [sessionPage, associationPage, rewardPage].some(page => page.truncated) ? ['Some older partner history may be incomplete.'] : [],
+  }, 200, origin);
+}
+
 async function memberDashboard(request, env, origin) {
   const auth = await readMemberSession(request, env);
   if (!auth) return json({ error: 'Member sign-in required.' }, 401, origin);
@@ -2579,7 +2696,7 @@ async function adminAnalytics(request, env, origin) {
     supabasePages(env, 'membership_billing_events?select=*&order=occurred_at.desc,stripe_event_id.desc'),
     supabasePages(env, 'referral_rewards?select=referrer_discord_user_id,creator_profile_id,status,reward_amount_cents,created_at,first_paid_at&order=created_at.desc,id.desc'),
     supabasePages(env, 'referral_profiles?select=discord_user_id,referral_code,payout_status&order=discord_user_id.asc'),
-    supabasePages(env, 'creator_referral_profiles?select=id,contact_email,display_name,referral_code,discord_user_id,trial_expires_at,status,payout_status&order=id.asc'),
+    supabasePages(env, 'creator_referral_profiles?select=id,contact_email,display_name,referral_code,discord_user_id,trial_expires_at,access_mode,access_ends_at,status,payout_status&order=id.asc'),
     supabasePages(env, 'cancellation_feedback?select=reason_code,retention_offer_shown,retention_offer_accepted,created_at&order=created_at.desc,id.desc'),
     supabasePages(env, 'stripe_webhook_events?status=eq.FAILED&select=event_id,event_type,error_detail,received_at&order=received_at.desc,event_id.desc', { pageSize: 100 }),
   ]);
@@ -2621,7 +2738,7 @@ async function adminAnalytics(request, env, origin) {
     }
     const entitledDiscordIds = new Set(mappedEligible.map(item => item.customer?.discord_user_id).filter(Boolean));
     for (const creator of creators || []) {
-      if (creator.discord_user_id && creator.trial_expires_at && Date.parse(creator.trial_expires_at) > Date.now()) entitledDiscordIds.add(creator.discord_user_id);
+      if (creator.discord_user_id && creatorAccessActive(creator)) entitledDiscordIds.add(creator.discord_user_id);
     }
     vipWithoutEntitlement = vipMembers.filter(id => !entitledDiscordIds.has(id)).length;
   } catch { /* Surface unavailable rather than inventing a zero. */ }
@@ -2776,7 +2893,8 @@ async function adminAnalytics(request, env, origin) {
     ...(profiles || []).map(profile => ({ type: 'member', name: members.find(member => member.discordUserId === profile.discord_user_id)?.name || profile.discord_user_id, code: profile.referral_code, status: profile.payout_status || 'NOT_CONNECTED', discordUserId: profile.discord_user_id })),
     ...(creators || []).map(profile => ({ type: 'creator', name: profile.display_name, email: profile.contact_email || '', code: profile.referral_code,
       status: profile.status, discordUserId: profile.discord_user_id || '', discordConnected: Boolean(profile.discord_user_id),
-      trialExpiresAt: profile.trial_expires_at || null, payoutStatus: profile.payout_status || 'NOT_CONNECTED' })),
+      trialExpiresAt: profile.trial_expires_at || null, accessMode: profile.access_mode || 'TRIAL', accessEndsAt: profile.access_ends_at || null,
+      accessActive: creatorAccessActive(profile), payoutStatus: profile.payout_status || 'NOT_CONNECTED' })),
   ].filter(item => item.code).map(item => {
     const creatorId = item.type === 'creator' ? (creators || []).find(profile => profile.referral_code === item.code)?.id : null;
     const rewards = rangedReferrals.filter(reward => creatorId ? reward.creator_profile_id === creatorId : !reward.creator_profile_id && reward.referrer_discord_user_id === item.discordUserId);
@@ -2876,7 +2994,7 @@ async function handleWebhook(request, env) {
           outcome = 'PAYMENT_CONFIRMED_VIP_ACTIVATED';
         }
       }
-      if (session?.metadata?.offer === 'referral_trial') {
+      if (session?.metadata?.referral_code && (session.metadata.referrer_discord_user_id || session.metadata.creator_profile_id)) {
         await createReferralAttribution(env, {
           referralCode: session.metadata.referral_code,
           referrerDiscordUserId: session.metadata.referrer_discord_user_id,
@@ -2967,6 +3085,7 @@ export default {
     if (request.method === 'POST' && url.pathname === '/ops/creators') return createCreatorInvitation(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/ops/creators/activate') return activateCreator(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/admin/creators') return createCreatorInvitation(request, env, origin, readAdminSession);
+    if (request.method === 'POST' && url.pathname === '/admin/creators/access') return updateCreatorAccess(request, env, origin);
     if (request.method === 'GET' && url.pathname === '/cancel/offer') return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'GET' && url.pathname === '/admin/login') {
       if (!discordReady(env) || !env.ADMIN_DISCORD_USER_IDS) return new Response('Admin access is not configured.', { status: 503 });
@@ -2979,6 +3098,7 @@ export default {
       return redirect(discordAuthorizationUrl(state, env, 'member'));
     }
     if (request.method === 'GET' && url.pathname === '/member/dashboard') return memberDashboard(request, env, origin);
+    if (request.method === 'GET' && url.pathname === '/partner/dashboard') return partnerDashboard(request, env, origin);
     if (request.method === 'GET' && url.pathname === '/cancel/feedback-login') {
       if (!discordReady(env)) return discordNotReadyResponse(env);
       const state = await createDiscordState({ intent: 'feedback' }, env);
@@ -2998,6 +3118,7 @@ export default {
     if (request.method === 'GET' && url.pathname === '/discord/login') return startPortalLogin(request, env);
     if (request.method === 'GET' && url.pathname === '/referrals/login') return startReferralLogin(request, env);
     if (request.method === 'GET' && url.pathname === '/creators/login') return startCreatorLogin(request, env);
+    if (request.method === 'GET' && url.pathname === '/partners/login') return startPartnerLogin(request, env);
     if (request.method === 'GET' && url.pathname === '/referrals/onboard') return startPayoutOnboarding(request, env);
     if (request.method === 'GET' && url.pathname === '/discord/callback') return finishDiscordConnection(request, env);
     if (request.method === 'POST' && url.pathname === '/create-checkout') {
@@ -3032,7 +3153,9 @@ export const __test = {
   createDiscordState,
   createReferralAttribution,
   checkCreatorIdentity,
+  creatorAccessActive,
   expireCreatorTrials,
+  partnerDashboard,
   discordAuthorizationUrl,
   discordRoleReadiness,
   ensurePerMemberRetentionCoupon,

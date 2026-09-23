@@ -88,15 +88,18 @@ if (referralCode && !checkoutState) {
   const trialButton = document.querySelector('[data-checkout="trial_2_day"]');
   const offerBadge = document.querySelector('.offer-badge');
   const priceDescription = document.querySelector('.membership-price span');
+  const priceAmount = document.querySelector('.membership-price strong');
+  const creatorPromotionActive = referralCode.startsWith('KBC-') && Date.now() >= Date.parse('2026-09-22T07:00:00Z') && Date.now() < Date.parse('2026-10-23T07:00:00Z');
   if (starterButton) starterButton.hidden = true;
   document.querySelectorAll('[data-term-plans], [data-term-note]').forEach(element => { element.hidden = true; });
   if (trialButton) {
-    trialButton.dataset.checkout = 'referral_trial';
-    trialButton.innerHTML = 'Start with 2 days free <span aria-hidden="true">→</span>';
+    trialButton.dataset.checkout = creatorPromotionActive ? 'first_month_back' : 'referral_trial';
+    trialButton.innerHTML = creatorPromotionActive ? 'Join for $19.99 this month <span aria-hidden="true">→</span>' : 'Start with 2 days free <span aria-hidden="true">→</span>';
   }
-  if (offerBadge) offerBadge.innerHTML = '<strong>REFERRAL OFFER</strong><span>Exclusive two-day free trial</span>';
-  if (priceDescription) priceDescription.textContent = 'per month after your 2-day free trial';
-  setCheckoutMessage('Referral offer: 2 days free, then $32.99/month until canceled. The $10 starter option is not available with referrals.');
+  if (offerBadge) offerBadge.innerHTML = creatorPromotionActive ? '<strong>CREATOR OFFER</strong><span>$19.99 first month through October 22</span>' : '<strong>REFERRAL OFFER</strong><span>Exclusive two-day free trial</span>';
+  if (priceAmount && creatorPromotionActive) priceAmount.textContent = '$19.99';
+  if (priceDescription) priceDescription.textContent = creatorPromotionActive ? 'for your first month, then $32.99/month' : 'per month after your 2-day free trial';
+  setCheckoutMessage(creatorPromotionActive ? 'Creator offer: $19.99 for the first month, then $32.99/month until canceled.' : 'Referral offer: 2 days free, then $32.99/month until canceled. The $10 starter option is not available with referrals.');
 }
 
 if (checkoutState === 'success') {
@@ -138,7 +141,7 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
       headers: { 'Content-Type': 'application/json', 'X-Checkout-Request-Id': requestId },
       body: JSON.stringify({
         offer,
-        ...(offer === 'referral_trial' ? { referral_code: referralCode } : {}),
+        ...(['referral_trial','first_month_back'].includes(offer) && referralCode ? { referral_code: referralCode } : {}),
         analytics_session_id: window.KBHAnalytics?.sessionId || null,
         attribution: window.KBHAnalytics?.attribution || {},
       }),
