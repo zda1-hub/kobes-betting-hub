@@ -121,6 +121,12 @@ test('Discord role readiness requires Manage Roles and a lower configured role',
   assert.equal(workerTest.discordRoleReadiness(botUserId, roles.map((role) => role.id === targetRoleId ? { ...role, position: 11 } : role), targetRoleId).hierarchyReady, false);
 });
 
+test('manual VIP members qualify for referral access until their role is removed', () => {
+  const env = { DISCORD_MEMBER_ROLE_ID: 'vip_role' };
+  assert.equal(workerTest.memberHasConfiguredVipRole({ roles: ['everyone', 'vip_role'] }, env), true);
+  assert.equal(workerTest.memberHasConfiguredVipRole({ roles: ['everyone'] }, env), false);
+});
+
 test('legacy checkout-session cancellation endpoints are disabled', async () => {
   const response = await worker.fetch(new Request('https://worker.test/cancel/offer?session_id=cs_test_leaked'), {});
   assert.equal(response.status, 410);

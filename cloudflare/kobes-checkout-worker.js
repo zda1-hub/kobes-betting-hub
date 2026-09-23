@@ -388,6 +388,21 @@ async function activeMembershipForDiscord(env, discordUserId) {
   return rows?.[0] || null;
 }
 
+function memberHasConfiguredVipRole(member, env) {
+  return Boolean(env.DISCORD_MEMBER_ROLE_ID && Array.isArray(member?.roles) && member.roles.includes(env.DISCORD_MEMBER_ROLE_ID));
+}
+
+async function activeReferralAccessForDiscord(env, discordUserId) {
+  if (await activeMembershipForDiscord(env, discordUserId)) return true;
+  if (!env.DISCORD_BOT_TOKEN || !env.DISCORD_GUILD_ID || !env.DISCORD_MEMBER_ROLE_ID) return false;
+  try {
+    const member = await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${discordUserId}`, {
+      headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
+    }, env, { memberId: discordUserId, triggerType: 'referral_access_check' });
+    return memberHasConfiguredVipRole(member, env);
+  } catch { return false; }
+}
+
 async function membershipEntitlementBlock(env, subscriptionId) {
   if (!subscriptionId) return null;
   const rows = await supabase(env, `membership_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(subscriptionId)}&select=entitlement_blocked,entitlement_block_reason,entitlement_blocked_at&limit=1`);
@@ -1534,7 +1549,7 @@ async function finishDiscordConnection(request, env) {
       return redirect(checkout.url);
     }
     if (state.intent === 'referral') {
-      if (!await activeMembershipForDiscord(env, user.id)) throw new Error('Connect the Discord account tied to an active Kobe’s Betting Hub membership.');
+      if (!await activeReferralAccessForDiscord(env, user.id)) throw new Error('Connect the Discord account that currently has Kobe’s Betting Hub VIP access.');
       const profile = await ensureReferralProfile(env, user.id);
       const auth = await createReferralAuthSession(env, user);
       await recordReferralEvent(env, { eventType: 'REFERRAL_LINK_ACCESSED', actorType: 'discord_user', actorId: user.id, details: { referral_code: profile.referral_code } });
@@ -3037,4 +3052,5 @@ export const __test = {
   stripeV2IncludeQuery,
   readDiscordState,
   verifyStripeSignature,
+  memberHasConfiguredVipRole,
 };
