@@ -1,7 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const { buildCapperRecap } = require('./capper-recap');
+const { buildCapperRecap, buildOverallRecap } = require('./capper-recap');
 const { splitRecapBody } = require('./recap-review');
 const { isPublishedRow } = require('./recap');
 
@@ -9,12 +9,13 @@ const hash = value => createHash('sha256').update(JSON.stringify(value)).digest(
 const noMentions = { parse: [] };
 const validDate = date => /^\d{4}-\d{2}-\d{2}$/.test(date);
 
-function recapApprovalGroups({ date, rows, sourceChannelIds }) {
+function recapApprovalGroups({ date, rows, sourceChannelIds, grouping = 'source' }) {
   if (!validDate(date)) throw new Error('Invalid recap date.');
   const selected = rows.filter(row => row.operating_date === date && isPublishedRow(row)
     && sourceChannelIds.includes(String(row.post_reference).match(/^https:\/\/discord\.com\/channels\/\d+\/(\d+)\/\d+$/)?.[1]));
   if (!selected.length) return [];
-  return buildCapperRecap({ date, rows: selected }).reviews.map(review => ({ ...review, date,
+  const recap = grouping === 'overall' ? buildOverallRecap({ date, rows: selected }) : buildCapperRecap({ date, rows: selected });
+  return recap.reviews.map(review => ({ ...review, date,
     key: hash([date, review.name.toLowerCase().replace(/[^a-z0-9]/g, '')]).slice(0, 20),
     digest: hash([date, review.body, review.evidence]).slice(0, 20),
     parts: splitRecapBody(review.body, 3400)

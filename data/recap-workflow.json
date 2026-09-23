@@ -15,6 +15,7 @@
     "review_channel_id": "1550992474367983677",
     "destination_channel_id": "1539062059306848368",
     "source_channel_ids": ["1539055413633228881", "1487451739459293336"],
+    "grouping": "overall",
     "approve_label": "Post to writeup recaps",
     "public_title": "Writeup recap"
   }

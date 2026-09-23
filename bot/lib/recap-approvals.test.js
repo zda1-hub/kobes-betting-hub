@@ -69,6 +69,14 @@ test('capper cards preserve every wager, original terms and exact source channel
   assert.throws(() => recapApprovalGroups({ date: '../secret', rows: [], sourceChannelIds: [] }), /date/);
 });
 
+test('overall writeup grouping creates one source-free recap card', () => {
+  const groups = recapApprovalGroups({ date: row.operating_date, sourceChannelIds: config.source_channel_ids,
+    grouping: 'overall', rows: [row, { ...row, pick_id: 'loss', source_name: '', selection: 'Bills -3.5 -115', result: 'L' }] });
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].body, 'Overall record 1-1\n\nReds ML -110 (1U) ☘️\nBills -3.5 -115 💥');
+  assert.doesNotMatch(groups[0].body, /Codycoverspreads|Source not stated/);
+});
+
 test('private preparation never publishes; only Kobe’s exact-card approval sends, with double-click/restart deduplication', async () => {
   const f = await fixture(), engine = f.create();
   const receipts = await engine.prepare(f.groups());

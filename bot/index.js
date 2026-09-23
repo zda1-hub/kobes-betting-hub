@@ -307,7 +307,7 @@ async function cachedRecapGroups(date, workflow = exclusiveRecapWorkflow) {
   const result = await gradeWagerRows({ rows: await readPickLog(), date, root: reviewQueueRoot,
     file: path.join(path.dirname(pickLogPath()), `wager-results-${date}.json`),
     grade: async () => ({ status: 'PENDING', reason: 'Verified result not yet available.' }) });
-  return recapApprovalGroups({ date, rows: result.rows, sourceChannelIds: workflow.source_channel_ids });
+  return recapApprovalGroups({ date, rows: result.rows, sourceChannelIds: workflow.source_channel_ids, grouping: workflow.grouping });
 }
 
 function recapApprovalEngine(workflow, directory, recapType) {
@@ -354,7 +354,7 @@ async function queueDiscordRecapApprovals(date, rows) {
   if (!due) return;
   for (const workflow of recapApprovalWorkflows) {
     const groups = rows
-      ? recapApprovalGroups({ date, rows, sourceChannelIds: workflow.config.source_channel_ids })
+      ? recapApprovalGroups({ date, rows, sourceChannelIds: workflow.config.source_channel_ids, grouping: workflow.config.grouping })
       : await cachedRecapGroups(date, workflow.config);
     if (!groups.length) continue;
     try {

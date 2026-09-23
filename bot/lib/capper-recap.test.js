@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildCapperRecap } = require('./capper-recap');
+const { buildCapperRecap, buildOverallRecap } = require('./capper-recap');
 const base = { operating_date: '2026-09-17', published_at: '2026-09-17T18:00:00Z', post_reference: 'https://discord.com/channels/1/2/3', status: 'GRADED', source_name: 'Codycoverspreads', result_verified_source: 'https://www.espn.com/game/1', wager_scope: 'individual' };
 test('groups actual individual wagers by capper with requested record and symbols', () => {
   const rows = ['W', 'W', 'L', 'W'].map((result, i) => ({ ...base, pick_id: `test-${i}`, result, selection: ['Reds ML', 'Blues ML', 'Bills -3.5', 'Potters ML'][i] }));
@@ -49,4 +49,14 @@ test('same selection with changed odds remains a distinct published wager', () =
   const recap = buildCapperRecap({ date: base.operating_date, rows });
   assert.equal(recap.total, 2);
   assert.match(recap.body, /2-0💸/);
+});
+
+test('writeup recap shows only the overall record and plays', () => {
+  const rows = [
+    { ...base, source_name: '', pick_id: 'writeup-1', selection: 'Player A over 5.5 assists', result: 'W' },
+    { ...base, source_name: 'Some capper', pick_id: 'writeup-2', selection: 'Player B under 22.5 points', result: 'L' }
+  ];
+  const recap = buildOverallRecap({ date: base.operating_date, rows });
+  assert.equal(recap.body, 'Overall record 1-1\n\nPlayer A over 5.5 assists ☘️\nPlayer B under 22.5 points 💥');
+  assert.doesNotMatch(recap.body, /source|capper|verified|gambling|record label/i);
 });

@@ -87,4 +87,20 @@ function buildCapperRecap({ date, rows, attempts = new Map() }) {
   return { body, pending, total, includedPickIds: picks.map(row => row.pick_id), reviews };
 }
 
-module.exports = { buildCapperRecap, distinctCapperWagers, verifiedResult };
+function buildOverallRecap({ date, rows }) {
+  const picks = recapRows(rows, date);
+  const entries = distinctCapperWagers(picks);
+  const wagers = entries.map(entry => entry.row);
+  const counts = { W: 0, L: 0, P: 0, V: 0, PENDING: 0 };
+  for (const row of wagers) counts[verifiedResult(row)]++;
+  const notes = [counts.P && `${counts.P} push`, counts.V && `${counts.V} void`, counts.PENDING && `${counts.PENDING} pending`].filter(Boolean);
+  const body = `Overall record ${counts.W}-${counts.L}${notes.length ? ` (${notes.join(', ')})` : ''}\n\n`
+    + wagers.map(row => `${String(row.selection || 'Published terms missing').replace(/[\r\n]+/g, ' ')} ${SYMBOLS[verifiedResult(row)]}`).join('\n');
+  return { body, pending: counts.PENDING, total: wagers.length, includedPickIds: picks.map(row => row.pick_id), reviews: [{
+    name: 'Overall', body, pending: counts.PENDING, total: wagers.length,
+    includedPickIds: picks.map(row => row.pick_id),
+    evidence: entries.map(entry => entry.sources.map(row => [row.pick_id, verifiedResult(row), row.result_verified_source, row.post_reference]))
+  }] };
+}
+
+module.exports = { buildCapperRecap, buildOverallRecap, distinctCapperWagers, verifiedResult };
