@@ -38,6 +38,7 @@ const {
   expertOnlyButtonsFromMessage,
   independentWriteupPacket,
   isTermsOnlyMode,
+  researchHoldLabel,
   reviewButtons,
   sourceEvidence,
   sourceCapperName,
@@ -2221,9 +2222,10 @@ async function refreshPendingResearchApprovals() {
         delete packet.approval.exact_final_copy_sha256;
         const presentationPacket = independentWriteupPacket(packet);
         const message = await approvalChannel.messages.fetch(packet.discord_review_message_id);
+        const holdLabel = researchHoldLabel(research.reason);
         await message.edit({
           embeds: [buildSourcePickApprovalEmbed(presentationPacket, 'APPROVED PICK')],
-          components: reviewButtons(packet.pick_id, { testOnly: true, freeLabel: 'Verified research needed', paidLabel: 'Verified research needed' })
+          components: reviewButtons(packet.pick_id, { testOnly: true, freeLabel: holdLabel, paidLabel: holdLabel })
         });
         packet.status = 'RESEARCH_REQUIRED';
         packet.approval_ready = false;

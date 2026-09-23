@@ -410,6 +410,13 @@ test('uses destination names directly on approval buttons', () => {
   assert.equal(normalized[0].components[0].disabled, false);
 });
 
+test('explains why research-gated approval buttons are locked', () => {
+  const { researchHoldLabel } = require('./source-review');
+  assert.equal(researchHoldLabel('STARTED_OR_FINISHED.'), 'Game already started · posting locked');
+  assert.equal(researchHoldLabel('ESPN could not resolve the player on the matched event roster.'), 'Player not verified on game roster');
+  assert.equal(researchHoldLabel('ESPN could not supply enough relevant facts for the locked writeup format.'), 'Not enough verified ESPN research');
+});
+
 test('does not treat a leaked-source account as the original capper', () => {
   const leakedPacket = {
     ...packet,

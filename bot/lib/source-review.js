@@ -537,6 +537,15 @@ function buttonLabel(value, fallback) {
   return label.slice(0, 80);
 }
 
+function researchHoldLabel(reason) {
+  const value = String(reason || '');
+  if (/STARTED_OR_FINISHED/i.test(value)) return 'Game already started · posting locked';
+  if (/resolve the player.*roster/i.test(value)) return 'Player not verified on game roster';
+  if (/enough relevant facts|insufficient verified evidence/i.test(value)) return 'Not enough verified ESPN research';
+  if (/event|matchup|scheduled/i.test(value)) return 'Game could not be verified';
+  return 'Verified research unavailable';
+}
+
 function reviewButtons(pickId, { testOnly = false, freeDisabled = false, paidOnly = false, freeLabel, paidLabel } = {}) {
   const components = [];
   if (!paidOnly) {
@@ -589,6 +598,7 @@ module.exports = {
   monitoredTermsPacket,
   presentationConfidence,
   publicPickTerms,
+  researchHoldLabel,
   reviewButtons,
   sourceCapperName,
   sourceEvidence,
