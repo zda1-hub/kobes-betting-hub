@@ -146,7 +146,19 @@ function payloadFor(report, records = []) {
     const sports = [...new Set(expert.results.filter((item) => item.grade === 'W' && item.sport).map((item) => item.sport))];
     return { name: expert.name, days, label: sports.length === 1 ? sports[0] : 'all sports' };
   }).filter((item) => item.days >= 2).sort((a, b) => b.days - a.days || a.name.localeCompare(b.name));
-  const lines = (items, mapper = format) => items.length ? items.map(mapper).join('\n') : 'No verified expert currently meets this threshold.';
+  const lines = (items, mapper = format, budget = 500) => {
+    if (!items.length) return 'No verified expert currently meets this threshold.';
+    const selected = [];
+    for (const item of items) {
+      const line = mapper(item);
+      const omitted = items.length - selected.length - 1;
+      const suffix = omitted > 0 ? `\n…and ${omitted} more qualifying expert${omitted === 1 ? '' : 's'}.` : '';
+      if ([...selected, line].join('\n').length + suffix.length > budget) break;
+      selected.push(line);
+    }
+    const omitted = items.length - selected.length;
+    return `${selected.join('\n')}${omitted > 0 ? `\n…and ${omitted} more qualifying expert${omitted === 1 ? '' : 's'}.` : ''}`;
+  };
   return {
     allowedMentions: { parse: [] },
     embeds: [{

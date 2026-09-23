@@ -74,6 +74,18 @@ test('expert feedback applies Kobe thresholds and ranks by verified win rate', (
   assert.match(text, /Too Few: 4-0/);
 });
 
+test('large expert histories stay within the Discord embed description limit', () => {
+  const records = Array.from({ length: 120 }, (_, index) => ({
+    name: `Verified Expert ${String(index + 1).padStart(3, '0')}`,
+    wins: 100 - (index % 20), losses: index % 10, pushes: 0, voids: 0,
+    references: [`https://discord.com/channels/123/456/${1000 + index}`], results: []
+  }));
+  const description = payloadFor({ date: '2026-09-23', active: [], repeated: [], playCount: 0, sourceCount: 0 }, records).embeds[0].description;
+  assert.ok(description.length <= 4096);
+  assert.match(description, /more qualifying experts/);
+  assert.match(description, /Best exclusive records · all time/);
+});
+
 test('refuses to draft or publish when review or VIP destination privacy is public or unverified', async () => {
   const guild = { id: '123', roles: { everyone: { id: 'everyone' } } };
   const source = { id: '456', guild };
