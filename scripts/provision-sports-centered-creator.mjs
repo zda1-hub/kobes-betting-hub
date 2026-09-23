@@ -32,10 +32,10 @@ export async function provisionSportsCentered(client, codeFactory = creatorCode)
   try {
     await client.query("SET LOCAL statement_timeout = '10s'");
     const migration = await client.query(
-      'SELECT 1 FROM pick_operations_schema_migrations WHERE version = $1',
-      ['014_email_creator_referrals'],
+      'SELECT version FROM pick_operations_schema_migrations WHERE version = ANY($1)',
+      [['014_email_creator_referrals', '017_creator_partnership_access']],
     );
-    if (migration.rowCount !== 1) throw new Error('Creator referral migration 014 is not applied.');
+    if (migration.rowCount !== 2) throw new Error('Creator referral migrations 014 and 017 must be applied.');
 
     let profile;
     for (let attempt = 0; attempt < 3 && !profile; attempt += 1) {
@@ -58,6 +58,16 @@ export async function provisionSportsCentered(client, codeFactory = creatorCode)
     }
     if (!profile) throw new Error('Unable to provision a unique creator code.');
     if (profile.contact_email !== CREATOR_EMAIL) throw new Error('Creator email mismatch.');
+    const partnership = await client.query(
+      `UPDATE creator_referral_profiles
+          SET access_mode = 'PARTNERSHIP', access_ends_at = NULL,
+              trial_role_removed_at = NULL, updated_at = now()
+        WHERE contact_email = $1
+        RETURNING contact_email, display_name, referral_code, status, access_mode, access_ends_at`,
+      [CREATOR_EMAIL],
+    );
+    profile = partnership.rows[0];
+    if (!profile || profile.access_mode !== 'PARTNERSHIP') throw new Error('Unable to activate partnership-duration creator access.');
     await client.query('COMMIT');
     return {
       ...profile,
@@ -79,6 +89,7 @@ async function main() {
       creator: profile.display_name,
       email: profile.contact_email,
       status: profile.status,
+      accessMode: profile.access_mode,
       onboardingUrl: profile.onboardingUrl,
       referralUrl: profile.referralUrl,
       note: 'The referral URL is inactive until the creator verifies Discord email and completes Stripe payout onboarding. Do not send before partner terms are agreed.',
