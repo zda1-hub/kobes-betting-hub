@@ -1262,8 +1262,8 @@ async function startCreatorLogin(request, env) {
   return redirect(discordAuthorizationUrl(state, env, 'creator'));
 }
 
-async function createCreatorInvitation(request, env, origin) {
-  if (!await authorizedOperationsRequest(request, env)) return json({ error: 'Unauthorized.' }, 401, origin);
+async function createCreatorInvitation(request, env, origin, authorize = authorizedOperationsRequest) {
+  if (!await authorize(request, env)) return json({ error: 'Unauthorized.' }, 401, origin);
   if (!supabaseReady(env)) return json({ error: 'Creator records are unavailable.' }, 503, origin);
   let data;
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
@@ -2579,7 +2579,7 @@ async function adminAnalytics(request, env, origin) {
     supabasePages(env, 'membership_billing_events?select=*&order=occurred_at.desc,stripe_event_id.desc'),
     supabasePages(env, 'referral_rewards?select=referrer_discord_user_id,creator_profile_id,status,reward_amount_cents,created_at,first_paid_at&order=created_at.desc,id.desc'),
     supabasePages(env, 'referral_profiles?select=discord_user_id,referral_code,payout_status&order=discord_user_id.asc'),
-    supabasePages(env, 'creator_referral_profiles?select=id,display_name,referral_code,discord_user_id,trial_expires_at,status,payout_status&order=id.asc'),
+    supabasePages(env, 'creator_referral_profiles?select=id,contact_email,display_name,referral_code,discord_user_id,trial_expires_at,status,payout_status&order=id.asc'),
     supabasePages(env, 'cancellation_feedback?select=reason_code,retention_offer_shown,retention_offer_accepted,created_at&order=created_at.desc,id.desc'),
     supabasePages(env, 'stripe_webhook_events?status=eq.FAILED&select=event_id,event_type,error_detail,received_at&order=received_at.desc,event_id.desc', { pageSize: 100 }),
   ]);
@@ -2774,7 +2774,9 @@ async function adminAnalytics(request, env, origin) {
   });
   const referralLinks = [
     ...(profiles || []).map(profile => ({ type: 'member', name: members.find(member => member.discordUserId === profile.discord_user_id)?.name || profile.discord_user_id, code: profile.referral_code, status: profile.payout_status || 'NOT_CONNECTED', discordUserId: profile.discord_user_id })),
-    ...(creators || []).map(profile => ({ type: 'creator', name: profile.display_name, code: profile.referral_code, status: profile.status, discordUserId: profile.discord_user_id || '' })),
+    ...(creators || []).map(profile => ({ type: 'creator', name: profile.display_name, email: profile.contact_email || '', code: profile.referral_code,
+      status: profile.status, discordUserId: profile.discord_user_id || '', discordConnected: Boolean(profile.discord_user_id),
+      trialExpiresAt: profile.trial_expires_at || null, payoutStatus: profile.payout_status || 'NOT_CONNECTED' })),
   ].filter(item => item.code).map(item => {
     const creatorId = item.type === 'creator' ? (creators || []).find(profile => profile.referral_code === item.code)?.id : null;
     const rewards = rangedReferrals.filter(reward => creatorId ? reward.creator_profile_id === creatorId : !reward.creator_profile_id && reward.referrer_discord_user_id === item.discordUserId);
@@ -2964,6 +2966,7 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/ops/creators') return createCreatorInvitation(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/ops/creators/activate') return activateCreator(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/admin/creators') return createCreatorInvitation(request, env, origin, readAdminSession);
     if (request.method === 'GET' && url.pathname === '/cancel/offer') return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'GET' && url.pathname === '/admin/login') {
       if (!discordReady(env) || !env.ADMIN_DISCORD_USER_IDS) return new Response('Admin access is not configured.', { status: 503 });
