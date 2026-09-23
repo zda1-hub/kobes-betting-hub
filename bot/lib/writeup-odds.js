@@ -4,14 +4,14 @@ function nearEvenAmericanOdds(value) {
   const match = String(value ?? '').trim().replaceAll('−', '-').match(/^([+-])(\d{3,4})$/);
   if (!match) return false;
   const magnitude = Number(match[2]);
-  return magnitude >= 100 && magnitude <= 125;
+  return magnitude >= 100 && magnitude <= 200;
 }
 
 function assertWriteupOdds(packet) {
   const extraction = packet?.analysis?.extraction || {};
   const plays = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays : [extraction];
   if (plays.some((play) => !nearEvenAmericanOdds(play.odds_american))) {
-    throw new Error('VIP writeups require verified, source-stated odds between -125 and +125. Do not change a -309 play to -110; choose a different play.');
+    throw new Error('VIP writeups require verified, source-stated odds between -200 and +200. Do not alter the published odds; choose a different play.');
   }
 }
 

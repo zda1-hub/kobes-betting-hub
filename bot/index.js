@@ -2739,7 +2739,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     const channel = await destinationFor(interaction, defaultChannelId, pickOptions.sport.toLowerCase());
     if (/writeups?/i.test(channel.name || '') && !nearEvenAmericanOdds(pickOptions.publishedOdds)) {
-      throw new Error('VIP writeups require actual published odds between -125 and +125. Choose a different play; do not alter its odds.');
+      throw new Error('VIP writeups require actual published odds between -200 and +200. Choose a different play; do not alter its odds.');
     }
     if (channel.id === freePickChannelId) await enforceDailyFreePickLimit();
     await postAndLogOfficialPick({
