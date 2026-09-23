@@ -19,8 +19,8 @@ test('formats every current writeup as a redacted two-column preview', () => {
   assert.match(text, /Recent production/);
   assert.match(text, /Over 4\.5 receptions/);
   assert.match(text, /Over 38\.5 yards/);
-  assert.match(text, /Full breakdown in #vip-writeups/);
-  assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '████ · Over 4.5 receptions', breakdown: 'Recent production. Full breakdown in #vip-writeups.' }]);
+  assert.match(text, /Full breakdown is in the private VIP writeup channel/);
+  assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '████ · Over 4.5 receptions', breakdown: 'Recent production. Full breakdown is in the private VIP writeup channel.' }]);
   assert.doesNotMatch(text, /Bijan|Boutte|Higbee|Blake|Corum|Giants|Cowboys|Rams|43\.9|6-2|-150|-115|Old exact|Not a writeup/);
 });
 
@@ -35,7 +35,7 @@ test('keeps a split market visible while redacting the paid player and price', (
     number: 1, emoji: '⚾', sport: 'baseball',
     topics: ['Recent production', 'Matchup context'],
     prop: '████ · over 14.5 outs',
-    breakdown: 'Recent production · Matchup context. Full breakdown in #vip-writeups.'
+    breakdown: 'Recent production · Matchup context. Full breakdown is in the private VIP writeup channel.'
   }]);
   assert.doesNotMatch(JSON.stringify(previews), /Payton|Tolle|-125|CLE|27th|OPS/);
 
@@ -65,6 +65,9 @@ test('restart reuses the newest board and deletes duplicate bot boards', async (
     const receipt = await service.refresh();
     assert.equal(receipt.status, 'UPDATED');
     assert.deepEqual(deleted, ['100']);
+    assert.equal(edited.length, 1);
+    const quietReceipt = await service.refresh();
+    assert.equal(quietReceipt.status, 'UNCHANGED');
     assert.equal(edited.length, 1);
   } finally {
     await rm(directory, { recursive: true, force: true });

@@ -64,7 +64,7 @@ function publicPropLine(row) {
 
 function shortBreakdown(topics) {
   if (!topics.length) return 'Full supporting research is in VIP.';
-  return `${topics.join(' · ')}. Full breakdown in #vip-writeups.`;
+  return `${topics.join(' · ')}. Full breakdown is in the private VIP writeup channel.`;
 }
 
 function publicPreviews(rows, date) {
@@ -99,7 +99,7 @@ function freeWriteupBoardPayload(rows, date) {
         { name: `${emoji} Player or Game prop`, value: prop, inline: true },
         { name: 'Short breakdown, full breakdown in channel', value: breakdown, inline: true }
       ]),
-      footer: { text: `${FREE_BOARD_MARKER} · Full writeups in #vip-writeups` },
+      footer: { text: `${FREE_BOARD_MARKER} · Full writeups are private for VIP members` },
       timestamp: new Date().toISOString()
     }))
   };
@@ -123,6 +123,12 @@ function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate,
     const rows = await rowsFor();
     const payload = freeWriteupBoardPayload(rows, date);
     const previews = publicPreviews(rows, date);
+    const signature = payload ? JSON.stringify(payload.embeds.map((embed) => ({
+      title: embed.title,
+      description: embed.description,
+      fields: embed.fields,
+      footer: embed.footer
+    }))) : '';
     const state = await readState(stateFile);
     // Deploys can start with an empty local state file. Recover the bot's
     // existing public board by its footer instead of publishing a duplicate.
@@ -154,8 +160,12 @@ function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate,
     const current = state.date === date && state.message_id
       ? await channel.messages.fetch(state.message_id).catch(() => null)
       : null;
+    if (current && state.signature === signature) {
+      await syncSite({ date, previews });
+      return { status: 'UNCHANGED', date, messageId: current.id, previews: previews.length };
+    }
     const message = current ? await current.edit(payload) : await channel.send(payload);
-    await writeState(stateFile, { date, message_id: message.id, updated_at: new Date().toISOString() });
+    await writeState(stateFile, { date, message_id: message.id, signature, updated_at: new Date().toISOString() });
     await syncSite({ date, previews });
     return { status: current ? 'UPDATED' : 'CREATED', date, messageId: message.id,
       previews: rows.filter((row) => row.operating_date === date && isWriteup(row)).length };
