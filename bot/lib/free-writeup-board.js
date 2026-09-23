@@ -36,6 +36,30 @@ function safeEvidenceTopics(row) {
   ].filter(([pattern]) => pattern.test(source)).slice(0, 3).map(([, label]) => label);
 }
 
+function publicPropLine(row) {
+  const published = String(row.published_line || '').trim();
+  const selection = String(row.selection || '').trim();
+  const source = published || selection;
+  if (!source) return 'Player/game hidden · Prop available in VIP';
+
+  // Show the market and threshold Kobe requested, but never the player/team or
+  // price. Prefer the separately stored published line; for manual Discord
+  // writeups, start at the first recognisable market word in the selection.
+  const match = source.match(/\b(over|under|moneyline|draw no bet|to score|anytime touchdown|first touchdown|spread)\b[\s\S]*/i);
+  if (!match) return 'Player/game hidden · Prop available in VIP';
+  const market = match[0]
+    .replace(/(?:\s+|\s+at\s+)[+-]\d{3,4}\b.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 140);
+  return market ? `████ · ${market}` : 'Player/game hidden · Prop available in VIP';
+}
+
+function shortBreakdown(topics) {
+  if (!topics.length) return 'Full supporting research is in VIP.';
+  return `${topics.join(' · ')}. Full breakdown in #vip-writeups.`;
+}
+
 function publicPreviews(rows, date) {
   const eligible = [];
   const seen = new Set();
@@ -47,30 +71,30 @@ function publicPreviews(rows, date) {
   }
   return eligible.map((row, index) => {
     const [emoji, sport] = sportLabel(row);
-    return { number: index + 1, emoji, sport, topics: safeEvidenceTopics(row) };
+    const topics = safeEvidenceTopics(row);
+    return { number: index + 1, emoji, sport, topics, prop: publicPropLine(row), breakdown: shortBreakdown(topics) };
   });
 }
 
 function freeWriteupBoardPayload(rows, date) {
   const previews = publicPreviews(rows, date);
   if (!previews.length) return null;
-  const lines = previews.map(({ number, emoji, topics }) =>
-    `**${emoji} PLAYER / GAME PROP ${number} · PICK HIDDEN**\n${topics.length ? `Short breakdown: ${topics.join(', ')}.` : 'Short breakdown: Full supporting research is in VIP.'}`);
-  const description = [
-    '**Today’s writeup board**\nShort breakdown here. Full pick and full breakdown stay in the member channel.',
-    ...lines,
-    '🔒 **Open VIP for the player/team, line, odds, and complete writeup.**'
-  ].join('\n\n');
-  if (description.length > 4000) throw new Error('Free writeup preview exceeds one Discord embed.');
+  const groups = [];
+  for (let index = 0; index < previews.length; index += 12) groups.push(previews.slice(index, index + 12));
+  if (groups.length > 10) throw new Error('Free writeup preview exceeds Discord embed limits.');
   return {
     allowedMentions: { parse: [] },
-    embeds: [{
+    embeds: groups.map((group, groupIndex) => ({
       color: 0xFF7900,
-      title: 'Today’s Writeups · Free Preview',
-      description,
-      footer: { text: `${FREE_BOARD_MARKER} · Exact plays remain in VIP` },
+      title: groupIndex ? 'Today’s Free Writeups · Continued' : 'Today’s Free Writeups',
+      description: groupIndex ? undefined : 'Player/team names and full analysis stay private. The market and a short research summary are shown below.',
+      fields: group.flatMap(({ emoji, prop, breakdown }) => [
+        { name: `${emoji} Player or Game prop`, value: prop, inline: true },
+        { name: 'Short breakdown, full breakdown in channel', value: breakdown, inline: true }
+      ]),
+      footer: { text: `${FREE_BOARD_MARKER} · Full writeups in #vip-writeups` },
       timestamp: new Date().toISOString()
-    }]
+    }))
   };
 }
 
