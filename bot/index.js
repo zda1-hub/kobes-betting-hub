@@ -60,6 +60,7 @@ const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
 const { datedTimeOverride, nextArizonaDailyStartMs } = require('./lib/daily-window');
 const { createDiscordJoinAttribution, parseCampaigns } = require('./lib/discord-join-attribution');
+const { createArbitragePaperMonitor } = require('./lib/arbitrage-paper-monitor');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { exclusiveSourceIsCurrent } = require('../pipeline/exclusive-text');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -278,6 +279,37 @@ let telegramTimer = null;
 let telegramStopTimer = null;
 let telegramDailyTimer = null;
 let telegramReader = null;
+let arbitragePaperMonitor = null;
+
+async function ensureArbitrageTestChannel() {
+  const configured = String(process.env.ARBITRAGE_TEST_CHANNEL_ID || '').trim();
+  if (configured) return approvedTextChannel(configured);
+  const sourceId = writeupRecapWorkflow.review_channel_id || exclusiveRecapWorkflow.review_channel_id;
+  const source = await approvedTextChannel(sourceId);
+  const channels = await source.guild.channels.fetch();
+  const existing = channels.find(channel => channel?.isTextBased?.() && channel.name === 'arbitrage-test');
+  if (existing) return existing;
+  const created = await source.clone({ name: 'arbitrage-test', reason: 'Owner requested a private arbitrage paper test.' });
+  await created.setTopic('Private paper test only: automated arbitrage detection, timing, expiration and accuracy checks. No member alerts or wagering recommendations.');
+  console.log(`Created private Arbitrage Test channel ${created.id} from the existing recap-review permissions.`);
+  return created;
+}
+
+async function startArbitragePaperTest() {
+  if (process.env.ARBITRAGE_PAPER_TEST_ENABLED !== 'true') return;
+  if (!process.env.ODDS_API_KEY) throw new Error('ODDS_API_KEY is required for the private arbitrage paper test.');
+  const channel = await ensureArbitrageTestChannel();
+  arbitragePaperMonitor = createArbitragePaperMonitor({
+    apiKey: process.env.ODDS_API_KEY,
+    channel,
+    stateFile: path.join(path.dirname(pickLogPath()), 'arbitrage-paper-test.json'),
+    bankroll: Number(process.env.ARBITRAGE_EXAMPLE_BANKROLL || 1000),
+    minimumEdgePercent: Number(process.env.ARBITRAGE_MIN_EDGE_PERCENT || 2),
+    windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '09:30,12:30,16:00').split(',').map(value => value.trim()).filter(Boolean)
+  });
+  const receipt = await arbitragePaperMonitor.start();
+  console.log('Arbitrage paper test receipt:', JSON.stringify({ ...receipt, channelId: channel.id }));
+}
 
 async function ensureReferralInfoCard() {
   if (!referralWorkflow.enabled) return;
@@ -2291,6 +2323,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   startFreeRecapSchedule();
   startFreePickDelivery();
   startFreePickResultsSync();
+  void startArbitragePaperTest().catch(error => console.error('Arbitrage paper test needs attention:', error.message));
   if (process.env.PRIVATE_EXCLUSIVE_IMPORT_FILE && process.env.PRIVATE_EXCLUSIVE_IMPORT_DATE) {
     void import('../scripts/import-manual-exclusives.mjs')
       .then(({ runManualExclusiveImport }) => runManualExclusiveImport({
@@ -2809,7 +2842,7 @@ async function shutdown() {
   }
   // Leave enough time for Discord receipt writes before Render's forced stop.
   const deadline = setTimeout(() => process.exit(0), 25000);
-  try { await Promise.all([injuryDelivery?.stop(), telegramReader?.stop(), ...recapApprovalWorkflows.map((workflow) => workflow.engine.stop())]); }
+  try { await Promise.all([injuryDelivery?.stop(), telegramReader?.stop(), arbitragePaperMonitor?.stop(), ...recapApprovalWorkflows.map((workflow) => workflow.engine.stop())]); }
   catch { console.error('Cloud drain interrupted; uncertain sends will be reconciled on restart.'); }
   while (xCollectionInProgress || trendsPublicationInProgress || trendsInboxInProgress || freeRecapInProgress) {
     await new Promise(resolve => setTimeout(resolve, 250));
