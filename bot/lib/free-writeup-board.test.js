@@ -5,7 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { createFreeWriteupBoard, freeWriteupBoardPayload, publicPreviews } = require('./free-writeup-board');
 
-test('formats every current writeup as a redacted two-column preview', () => {
+test('formats every current writeup as its own full-width redacted preview', () => {
   const payload = freeWriteupBoardPayload([
     { pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson', published_line: 'Over 4.5 receptions', published_odds_american: '-150', teaser_source: '- Higbee had 2 catches against the Giants in Week 1.\n- Blake Corum averaged 43.9 rushing yards for the Rams.\n- Over 4.5 receptions at -150 is the pick.' },
     { pick_id: '2', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Kayshon Boutte Over 38.5 yards -115', source_type: 'discord_manual', teaser_source: '- Cowboys and Giants are 6-2 ATS in the last 8 games against the Rams.' },
@@ -15,12 +15,13 @@ test('formats every current writeup as a redacted two-column preview', () => {
   const text = JSON.stringify(payload.embeds);
   assert.match(text, /Today’s Free Writeups/);
   assert.match(text, /Player or Game prop/);
-  assert.match(text, /Short breakdown, full breakdown in channel/);
-  assert.match(text, /Recent production/);
+  assert.match(text, /quick stat teaser/i);
   assert.match(text, /Over 4\.5 receptions/);
   assert.match(text, /Over 38\.5 yards/);
-  assert.match(text, /Full breakdown is in the private VIP writeup channel/);
-  assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '||VIP PICK|| · Over 4.5 receptions', breakdown: 'Recent production. Full breakdown is in the private VIP writeup channel.' }]);
+  assert.equal(payload.embeds[0].fields.every((field) => field.inline === false), true);
+  assert.equal(payload.embeds[0].fields.length, 2);
+  assert.doesNotMatch(text, /Recent production|Matchup context|Full breakdown/);
+  assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '||VIP PICK|| · Over 4.5 receptions', breakdown: '' }]);
   assert.doesNotMatch(text, /Bijan|Boutte|Higbee|Blake|Corum|Giants|Cowboys|Rams|43\.9|6-2|-150|-115|Old exact|Not a writeup/);
 });
 
@@ -35,7 +36,7 @@ test('keeps a split market visible while redacting the paid player and price', (
     number: 1, emoji: '⚾', sport: 'baseball',
     topics: ['Recent production', 'Matchup context'],
     prop: '||VIP PICK|| · over 14.5 outs',
-    breakdown: 'Hit in 4/4 recent games · Hit in 2/2 the stated matchup sample. Full breakdown is in the private VIP writeup channel.'
+    breakdown: 'Hit in 4/4 recent games · Hit in 2/2 the stated matchup sample.'
   }]);
   assert.doesNotMatch(JSON.stringify(previews), /Payton|Tolle|-125|CLE|27th|OPS|64/);
 

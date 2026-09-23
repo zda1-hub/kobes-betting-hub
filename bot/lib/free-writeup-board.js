@@ -96,10 +96,12 @@ function publicPropLine(row) {
   return market ? `||VIP PICK|| · ${market}` : '||VIP PICK|| · Market available in VIP';
 }
 
-function shortBreakdown(topics, stats) {
-  const summary = stats.length ? stats : topics;
-  if (!summary.length) return 'Full supporting research is in VIP.';
-  return `${summary.join(' · ')}. Full breakdown is in the private VIP writeup channel.`;
+function shortBreakdown(stats) {
+  // Kobe wants the free board to be a true teaser: one or two normalized
+  // hit-rate facts and nothing from the paid analysis. If a safe hit rate
+  // cannot be extracted, omit the teaser field instead of filling it with
+  // generic context or a sentence that hints at the writeup.
+  return stats.length ? `${stats.join(' · ')}.` : '';
 }
 
 function publicPreviews(rows, date) {
@@ -115,7 +117,7 @@ function publicPreviews(rows, date) {
     const [emoji, sport] = sportLabel(row);
     const topics = safeEvidenceTopics(row);
     const stats = safeEvidenceStats(row);
-    return { number: index + 1, emoji, sport, topics, prop: publicPropLine(row), breakdown: shortBreakdown(topics, stats) };
+    return { number: index + 1, emoji, sport, topics, prop: publicPropLine(row), breakdown: shortBreakdown(stats) };
   });
 }
 
@@ -130,11 +132,12 @@ function freeWriteupBoardPayload(rows, date) {
     embeds: groups.map((group, groupIndex) => ({
       color: 0xFF7900,
       title: groupIndex ? 'Today’s Free Writeups · Continued' : 'Today’s Free Writeups',
-      description: groupIndex ? undefined : 'Player/team names and full analysis stay private. The market and a short research summary are shown below.',
-      fields: group.flatMap(({ emoji, prop, breakdown }) => [
-        { name: `${emoji} Player or Game prop`, value: prop, inline: true },
-        { name: 'Short breakdown, full breakdown in channel', value: breakdown, inline: true }
-      ]),
+      description: groupIndex ? undefined : 'A quick stat teaser for each VIP writeup.',
+      fields: group.map(({ emoji, prop, breakdown }) => ({
+        name: `${emoji} Player or Game prop`,
+        value: [prop, breakdown ? `**Relevant stat:** ${breakdown}` : ''].filter(Boolean).join('\n'),
+        inline: false
+      })),
       footer: { text: `${FREE_BOARD_MARKER} · Full writeups are private for VIP members` },
       timestamp: new Date().toISOString()
     }))
