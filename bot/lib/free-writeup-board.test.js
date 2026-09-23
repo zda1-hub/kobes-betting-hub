@@ -38,6 +38,14 @@ test('keeps a split market visible while redacting the paid player and price', (
     breakdown: 'Recent production · Matchup context. Full breakdown in #vip-writeups.'
   }]);
   assert.doesNotMatch(JSON.stringify(previews), /Payton|Tolle|-125|CLE|27th|OPS/);
+
+  const alreadyCombined = publicPreviews([{
+    pick_id: 'combined', operating_date: '2026-09-22', status: 'PUBLISHED',
+    destination: '#mlb-writeups', sport: 'baseball',
+    selection: 'Payton Tolle over 14.5 outs', published_line: '14.5 outs',
+    published_odds_american: '-125', teaser_source: 'Over in L10.'
+  }], '2026-09-22');
+  assert.equal(alreadyCombined[0].prop, '████ · over 14.5 outs');
 });
 
 test('stays empty until a writeup is published', () => {

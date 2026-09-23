@@ -43,11 +43,10 @@ function publicPropLine(row) {
   // example, "Payton Tolle over") and the threshold across `published_line`
   // ("14.5 outs"). Read them together so the public preview does not collapse
   // to a generic placeholder while the paid post still has the full wager.
-  const source = [selection, published]
-    .filter(Boolean)
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const comparable = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9.+-]+/g, ' ').trim();
+  const source = published && comparable(selection).includes(comparable(published))
+    ? selection
+    : [selection, published].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
   if (!source) return 'Player/game hidden · Prop available in VIP';
 
   // Show the market and threshold Kobe requested, but never the player/team or
