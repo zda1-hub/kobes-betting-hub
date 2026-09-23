@@ -36,6 +36,37 @@ function safeEvidenceTopics(row) {
   ].filter(([pattern]) => pattern.test(source)).slice(0, 3).map(([, label]) => label);
 }
 
+function safeEvidenceStats(row) {
+  // Only publish normalized hit-rate facts. We deliberately rebuild the text
+  // instead of copying source sentences so names, teams, averages, rankings,
+  // odds, and other clues from the paid writeup cannot leak into the preview.
+  const source = String(row.teaser_source || '');
+  const stats = [];
+  const seen = new Set();
+  const ratio = /\b(\d{1,2})\s*\/\s*(\d{1,2})\b/g;
+  for (const match of source.matchAll(ratio)) {
+    const hits = Number(match[1]);
+    const sample = Number(match[2]);
+    if (!sample || hits > sample || sample > 25) continue;
+    const priorBoundary = Math.max(source.lastIndexOf('.', match.index), source.lastIndexOf('\n', match.index), source.lastIndexOf(';', match.index));
+    const following = source.slice(match.index + match[0].length).search(/[.\n;]/);
+    const end = following < 0 ? source.length : match.index + match[0].length + following;
+    const context = source.slice(priorBoundary + 1, end).toLowerCase();
+    let label = 'recent games';
+    if (/\b(?:against|versus|vs\.?)\b/.test(context)) label = 'the stated matchup sample';
+    else if (/\b(?:when|without|inactive|doesn['’]?t play|lineup)\b/.test(context)) label = 'the stated lineup condition';
+    else if (/\b(?:at home|home games?)\b/.test(context)) label = 'recent home games';
+    else if (/\b(?:on the road|away games?)\b/.test(context)) label = 'recent away games';
+    const fact = `Hit in ${hits}/${sample} ${label}`;
+    if (!seen.has(fact)) {
+      seen.add(fact);
+      stats.push(fact);
+    }
+    if (stats.length === 2) break;
+  }
+  return stats;
+}
+
 function publicPropLine(row) {
   const published = String(row.published_line || '').trim();
   const selection = String(row.selection || '').trim();
@@ -65,9 +96,10 @@ function publicPropLine(row) {
   return market ? `||VIP PICK|| · ${market}` : '||VIP PICK|| · Market available in VIP';
 }
 
-function shortBreakdown(topics) {
-  if (!topics.length) return 'Full supporting research is in VIP.';
-  return `${topics.join(' · ')}. Full breakdown is in the private VIP writeup channel.`;
+function shortBreakdown(topics, stats) {
+  const summary = stats.length ? stats : topics;
+  if (!summary.length) return 'Full supporting research is in VIP.';
+  return `${summary.join(' · ')}. Full breakdown is in the private VIP writeup channel.`;
 }
 
 function publicPreviews(rows, date) {
@@ -82,7 +114,8 @@ function publicPreviews(rows, date) {
   return eligible.map((row, index) => {
     const [emoji, sport] = sportLabel(row);
     const topics = safeEvidenceTopics(row);
-    return { number: index + 1, emoji, sport, topics, prop: publicPropLine(row), breakdown: shortBreakdown(topics) };
+    const stats = safeEvidenceStats(row);
+    return { number: index + 1, emoji, sport, topics, prop: publicPropLine(row), breakdown: shortBreakdown(topics, stats) };
   });
 }
 

@@ -29,15 +29,15 @@ test('keeps a split market visible while redacting the paid player and price', (
     pick_id: 'payton', operating_date: '2026-09-22', status: 'PUBLISHED',
     destination: '#mlb-writeups', sport: 'baseball',
     selection: 'Payton Tolle over', published_line: '14.5 outs', published_odds_american: '-125',
-    teaser_source: 'Over in L10. Over in L5 at home. CLE is 27th in OPS away.'
+    teaser_source: 'Over in 4/4 recent games. Over in 2/2 against CLE. Averaging 64 this season. CLE is 27th in OPS away.'
   }], '2026-09-22');
   assert.deepEqual(previews, [{
     number: 1, emoji: '⚾', sport: 'baseball',
     topics: ['Recent production', 'Matchup context'],
     prop: '||VIP PICK|| · over 14.5 outs',
-    breakdown: 'Recent production · Matchup context. Full breakdown is in the private VIP writeup channel.'
+    breakdown: 'Hit in 4/4 recent games · Hit in 2/2 the stated matchup sample. Full breakdown is in the private VIP writeup channel.'
   }]);
-  assert.doesNotMatch(JSON.stringify(previews), /Payton|Tolle|-125|CLE|27th|OPS/);
+  assert.doesNotMatch(JSON.stringify(previews), /Payton|Tolle|-125|CLE|27th|OPS|64/);
 
   const alreadyCombined = publicPreviews([{
     pick_id: 'combined', operating_date: '2026-09-22', status: 'PUBLISHED',
