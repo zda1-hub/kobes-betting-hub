@@ -47,19 +47,22 @@ function publicPropLine(row) {
   const source = published && comparable(selection).includes(comparable(published))
     ? selection
     : [selection, published].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-  if (!source) return 'Player/game hidden · Prop available in VIP';
+  if (!source) return '||VIP PICK|| · Market available in VIP';
 
   // Show the market and threshold Kobe requested, but never the player/team or
   // price. Prefer the separately stored published line; for manual Discord
   // writeups, start at the first recognisable market word in the selection.
   const match = source.match(/\b(over|under|moneyline|draw no bet|to score|anytime touchdown|first touchdown|spread)\b[\s\S]*/i);
-  if (!match) return 'Player/game hidden · Prop available in VIP';
+  if (!match) return '||VIP PICK|| · Market available in VIP';
   const market = match[0]
     .replace(/(?:\s+|\s+at\s+)[+-]\d{3,4}\b.*$/i, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 140);
-  return market ? `████ · ${market}` : 'Player/game hidden · Prop available in VIP';
+  // Discord spoiler styling gives this a native blurred/frosted appearance.
+  // The concealed text is only the harmless label "VIP PICK"—never the
+  // actual player or team—so tapping the blur cannot reveal paid information.
+  return market ? `||VIP PICK|| · ${market}` : '||VIP PICK|| · Market available in VIP';
 }
 
 function shortBreakdown(topics) {
