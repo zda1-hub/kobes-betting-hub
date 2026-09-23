@@ -24,6 +24,22 @@ test('formats every current writeup as a redacted two-column preview', () => {
   assert.doesNotMatch(text, /Bijan|Boutte|Higbee|Blake|Corum|Giants|Cowboys|Rams|43\.9|6-2|-150|-115|Old exact|Not a writeup/);
 });
 
+test('keeps a split market visible while redacting the paid player and price', () => {
+  const previews = publicPreviews([{
+    pick_id: 'payton', operating_date: '2026-09-22', status: 'PUBLISHED',
+    destination: '#mlb-writeups', sport: 'baseball',
+    selection: 'Payton Tolle over', published_line: '14.5 outs', published_odds_american: '-125',
+    teaser_source: 'Over in L10. Over in L5 at home. CLE is 27th in OPS away.'
+  }], '2026-09-22');
+  assert.deepEqual(previews, [{
+    number: 1, emoji: '⚾', sport: 'baseball',
+    topics: ['Recent production', 'Matchup context'],
+    prop: '████ · over 14.5 outs',
+    breakdown: 'Recent production · Matchup context. Full breakdown in #vip-writeups.'
+  }]);
+  assert.doesNotMatch(JSON.stringify(previews), /Payton|Tolle|-125|CLE|27th|OPS/);
+});
+
 test('stays empty until a writeup is published', () => {
   assert.equal(freeWriteupBoardPayload([], '2026-09-20'), null);
 });

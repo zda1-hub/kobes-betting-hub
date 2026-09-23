@@ -29,9 +29,9 @@ function safeEvidenceTopics(row) {
   // the wager can identify a player, team, or target line indirectly.
   const source = String(row.teaser_source || '').toLowerCase();
   return [
-    [/\b(?:targets?|carries|snaps?|attempts?|usage|workload|opportunities)\b/, 'Usage and opportunity'],
-    [/\b(?:last|recent|season|games?|weeks?|averag\w*|form)\b/, 'Recent production'],
-    [/\b(?:defense|opponent|matchup|coverage|rank\w*|allowed)\b/, 'Matchup context'],
+    [/\b(?:targets?|carries|snaps?|attempts?|usage|workload|opportunities|pitches|pit\/g)\b/, 'Usage and opportunity'],
+    [/\b(?:last|recent|season|games?|weeks?|averag\w*|form|l\d{1,2})\b/, 'Recent production'],
+    [/\b(?:defense|opponent|matchup|coverage|rank\w*|allowed|vs\.?|home|away|oba|ops|whiff)\b/, 'Matchup context'],
     [/\b(?:injur\w*|questionable|availability|absence|inactive)\b/, 'Availability context']
   ].filter(([pattern]) => pattern.test(source)).slice(0, 3).map(([, label]) => label);
 }
@@ -39,7 +39,15 @@ function safeEvidenceTopics(row) {
 function publicPropLine(row) {
   const published = String(row.published_line || '').trim();
   const selection = String(row.selection || '').trim();
-  const source = published || selection;
+  // A canonical writeup can split the direction across `selection` (for
+  // example, "Payton Tolle over") and the threshold across `published_line`
+  // ("14.5 outs"). Read them together so the public preview does not collapse
+  // to a generic placeholder while the paid post still has the full wager.
+  const source = [selection, published]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (!source) return 'Player/game hidden · Prop available in VIP';
 
   // Show the market and threshold Kobe requested, but never the player/team or
