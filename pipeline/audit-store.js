@@ -66,7 +66,21 @@ async function initializeAuditStore() {
       const migrations = (await fs.readdir(MIGRATION_DIRECTORY))
         .filter((name) => /^\d+.*\.sql$/.test(name))
         .sort();
-      for (const migration of migrations) {
+      // The first migration creates the ledger itself and is safe to replay.
+      // Every later migration must run only once: replaying an older CHECK
+      // constraint can reject rows that were validly introduced by a newer
+      // migration (for example, discord_join analytics events).
+      const bootstrapMigration = migrations[0];
+      if (bootstrapMigration) {
+        await currentPool.query(await fs.readFile(path.join(MIGRATION_DIRECTORY, bootstrapMigration), 'utf8'));
+      }
+      const appliedResult = await currentPool.query(
+        'SELECT version FROM pick_operations_schema_migrations'
+      );
+      const appliedVersions = new Set(appliedResult.rows.map((row) => row.version));
+      for (const migration of migrations.slice(1)) {
+        const version = migration.replace(/\.sql$/, '');
+        if (appliedVersions.has(version)) continue;
         await currentPool.query(await fs.readFile(path.join(MIGRATION_DIRECTORY, migration), 'utf8'));
       }
       initialized = true;
