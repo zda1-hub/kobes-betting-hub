@@ -146,7 +146,10 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
       await save();
       await message.edit({
         embeds: [{ color: current ? 0xE8A317 : 0x777777, title: 'Arbitrage approval', description: alertDescription(current || original, current ? `STILL AVAILABLE AFTER ${seconds} SECONDS` : `EXPIRED WITHIN ${seconds} SECONDS`) }],
-        components: reviewComponents(original.id, { disabled: !current })
+        // Keep the card actionable. Odds can move back into arbitrage after a
+        // scheduled check; Kobe's click always performs a fresh live recheck
+        // before anything reaches members.
+        components: reviewComponents(original.id)
       });
     } catch (error) {
       if (error.quotaExhausted) quotaExhausted = true;
@@ -191,6 +194,20 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
   return {
     async start() {
       await load();
+      // Deploys and earlier monitor versions may leave existing approval
+      // cards disabled after a temporary odds move. Restore their controls so
+      // Kobe can request a fresh live recheck from the original card.
+      if (reviewChannel.messages?.fetch) {
+        for (const [id, record] of Object.entries(state.opportunities)) {
+          if (!record?.messageId || ['PUBLISHED', 'DRY_RUN_APPROVED', 'REJECTED'].includes(record.status)) continue;
+          try {
+            const message = await reviewChannel.messages.fetch(record.messageId);
+            await message.edit({ components: reviewComponents(id) });
+          } catch (error) {
+            console.warn(`Could not restore arbitrage approval card ${record.messageId}:`, error.message);
+          }
+        }
+      }
       const first = await scan();
       timer = setInterval(() => {
         if (quotaExhausted) { clearInterval(timer); timer = null; return; }
@@ -219,7 +236,7 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
       if (!current) {
         record.status = 'EXPIRED_AT_APPROVAL'; record.decidedAt = now().toISOString(); record.decidedBy = userId;
         await save();
-        await message.edit({ embeds: [{ color: 0x777777, title: 'Arbitrage approval', description: alertDescription(record, 'EXPIRED — NOT POSTED') }], components: reviewComponents(id, { disabled: true }) });
+        await message.edit({ embeds: [{ color: 0x777777, title: 'Arbitrage approval', description: alertDescription(record, 'CURRENTLY UNAVAILABLE — RECHECK AGAIN IF ODDS MOVE') }], components: reviewComponents(id) });
         return { status: 'EXPIRED_AT_APPROVAL' };
       }
       record.decidedAt = now().toISOString(); record.decidedBy = userId;

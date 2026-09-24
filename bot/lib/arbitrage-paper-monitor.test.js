@@ -100,6 +100,27 @@ test('a rediscovered opportunity gets a fresh card after the earlier card expire
   assert.equal(monitor.snapshot().opportunities['game-1:h2h'].status, 'DETECTED');
 });
 
+test('restart restores controls on existing expired approval cards', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
+  const stateFile = path.join(root, 'state.json');
+  const opportunity = findArbitrage([event], { minimumEdgePercent: 2, bankroll: 1000 })[0];
+  await fs.writeFile(stateFile, JSON.stringify({ scans: [], opportunities: {
+    [opportunity.id]: { ...opportunity, status: 'EXPIRED_AT_APPROVAL', messageId: 'old-card', rechecks: [] }
+  } }));
+  const edits = [];
+  const oldMessage = { edit: async (payload) => edits.push(payload) };
+  const reviewChannel = { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' },
+    messages: { fetch: async (id) => { assert.equal(id, 'old-card'); return oldMessage; } },
+    send: async () => ({ id: 'fresh', edit: async () => {} }) };
+  const fetchImpl = async () => new Response(JSON.stringify([]), { status: 200, headers: { 'x-requests-remaining': '490' } });
+  const monitor = createArbitragePaperMonitor({ apiKey: 'test', reviewChannel, destinationChannel: null,
+    stateFile, fetchImpl, now: () => new Date('2026-09-23T23:00:00Z'), windows: ['08:00-15:00'] });
+  await monitor.start();
+  await monitor.stop();
+  assert.equal(edits.length, 1);
+  assert.equal(edits[0].components[0].components[0].data.disabled, false);
+});
+
 test('unauthorized arbitrage review is blocked', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
   const message = { id: 'review-message', edit: async () => {} };
