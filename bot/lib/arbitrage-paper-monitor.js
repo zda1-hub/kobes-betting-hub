@@ -169,7 +169,8 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
       state.scans = state.scans.slice(-500);
       for (const opportunity of opportunities) {
         const prior = state.opportunities[opportunity.id];
-        if (prior && Date.parse(opportunity.detectedAt) - Date.parse(prior.detectedAt) < 30 * 60000) continue;
+        const priorExpired = prior && String(prior.status || '').startsWith('EXPIRED_');
+        if (prior && !priorExpired && Date.parse(opportunity.detectedAt) - Date.parse(prior.detectedAt) < 30 * 60000) continue;
         const message = await reviewChannel.send({
           allowedMentions: { parse: [] },
           embeds: [{ color: 0xFF7900, title: 'Arbitrage approval', description: alertDescription(opportunity) }],
