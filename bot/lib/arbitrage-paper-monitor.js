@@ -1,5 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const DEFAULT_BOOKS = ['draftkings', 'fanduel', 'betmgm'];
 const DEFAULT_WINDOWS = ['09:30', '12:30', '16:00'];
@@ -65,6 +66,21 @@ function alertDescription(opportunity, status = 'PAPER TEST — VERIFYING') {
   ].join('\n');
 }
 
+function reviewComponents(opportunityId, { disabled = false } = {}) {
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`arbitrage-review:approve:${opportunityId}`)
+      .setLabel('Approve arbitrage')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(`arbitrage-review:reject:${opportunityId}`)
+      .setLabel('Reject')
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(disabled)
+  )];
+}
+
 function arizonaClock(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Phoenix', hour12: false, hour: '2-digit', minute: '2-digit' }).formatToParts(now);
   return `${parts.find(part => part.type === 'hour').value}:${parts.find(part => part.type === 'minute').value}`;
@@ -85,8 +101,9 @@ function activeWindow(now = new Date(), windows = DEFAULT_WINDOWS, durationMinut
   }) || null;
 }
 
-function createArbitragePaperMonitor({ apiKey, channel, stateFile, fetchImpl = fetch, now = () => new Date(),
-  bookmakers = DEFAULT_BOOKS, windows = DEFAULT_WINDOWS, intervalMinutes = 5, minimumEdgePercent = 2, bankroll = 1000 }) {
+function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel, stateFile, fetchImpl = fetch, now = () => new Date(),
+  bookmakers = DEFAULT_BOOKS, windows = DEFAULT_WINDOWS, intervalMinutes = 5, minimumEdgePercent = 2, bankroll = 1000,
+  memberPostingEnabled = false, isApprover = () => false }) {
   let timer = null, scanning = false, quotaExhausted = false, state = { scans: [], opportunities: {} };
   const save = async () => {
     await fs.mkdir(path.dirname(stateFile), { recursive: true, mode: 0o700 });
@@ -107,17 +124,24 @@ function createArbitragePaperMonitor({ apiKey, channel, stateFile, fetchImpl = f
     const remaining = response.headers.get('x-requests-remaining');
     return { events: await response.json(), remaining, used: response.headers.get('x-requests-used'), quotaExhausted: remaining !== null && Number(remaining) <= 0 };
   };
+  const currentOpportunity = async (original) => {
+    const { events, quotaExhausted: exhausted } = await fetchOdds();
+    if (exhausted) quotaExhausted = true;
+    return findArbitrage(events, { minimumEdgePercent, bankroll }).find(item => item.id === original.id) || null;
+  };
   const recheck = async (original, message, seconds) => {
     try {
       if (quotaExhausted) return;
-      const { events, quotaExhausted: exhausted } = await fetchOdds();
-      if (exhausted) quotaExhausted = true;
-      const current = findArbitrage(events, { minimumEdgePercent, bankroll }).find(item => item.id === original.id);
+      const current = await currentOpportunity(original);
       const record = state.opportunities[original.id];
+      if (!record || ['PUBLISHED', 'DRY_RUN_APPROVED', 'REJECTED'].includes(record.status)) return;
       record.rechecks.push({ seconds, checkedAt: now().toISOString(), survived: Boolean(current), edgePercent: current?.edgePercent || null });
       record.status = current ? `SURVIVED_${seconds}S` : `EXPIRED_${seconds}S`;
       await save();
-      await message.edit({ embeds: [{ color: current ? 0xE8A317 : 0x777777, title: 'Arbitrage paper test', description: alertDescription(current || original, current ? `STILL AVAILABLE AFTER ${seconds} SECONDS` : `EXPIRED WITHIN ${seconds} SECONDS`) }] });
+      await message.edit({
+        embeds: [{ color: current ? 0xE8A317 : 0x777777, title: 'Arbitrage approval', description: alertDescription(current || original, current ? `STILL AVAILABLE AFTER ${seconds} SECONDS` : `EXPIRED WITHIN ${seconds} SECONDS`) }],
+        components: reviewComponents(original.id, { disabled: !current })
+      });
     } catch (error) {
       if (error.quotaExhausted) quotaExhausted = true;
       console.error('Arbitrage paper recheck needs attention:', error.message);
@@ -140,7 +164,11 @@ function createArbitragePaperMonitor({ apiKey, channel, stateFile, fetchImpl = f
       for (const opportunity of opportunities) {
         const prior = state.opportunities[opportunity.id];
         if (prior && Date.parse(opportunity.detectedAt) - Date.parse(prior.detectedAt) < 30 * 60000) continue;
-        const message = await channel.send({ allowedMentions: { parse: [] }, embeds: [{ color: 0xFF7900, title: 'Arbitrage paper test', description: alertDescription(opportunity) }] });
+        const message = await reviewChannel.send({
+          allowedMentions: { parse: [] },
+          embeds: [{ color: 0xFF7900, title: 'Arbitrage approval', description: alertDescription(opportunity) }],
+          components: reviewComponents(opportunity.id)
+        });
         state.opportunities[opportunity.id] = { ...opportunity, status: 'DETECTED', messageId: message.id, rechecks: [] };
         setTimeout(() => void recheck(opportunity, message, 15), 15000).unref();
         setTimeout(() => void recheck(opportunity, message, 30), 30000).unref();
@@ -165,9 +193,48 @@ function createArbitragePaperMonitor({ apiKey, channel, stateFile, fetchImpl = f
       return first;
     },
     async stop() { if (timer) clearInterval(timer); timer = null; await save(); },
+    async decide({ customId, userId, guildId, channelId, message }) {
+      const match = String(customId).match(/^arbitrage-review:(approve|reject):(.+)$/);
+      if (!match) throw new Error('That arbitrage action is invalid.');
+      const [, action, id] = match;
+      if (guildId !== reviewChannel.guildId || channelId !== reviewChannel.id) throw new Error('Use the private arbitrage approval channel.');
+      if (!isApprover({ userId, ownerId: reviewChannel.guild.ownerId })) throw new Error('Only Kobe or an authorized approver can review arbitrage cards.');
+      const record = state.opportunities[id];
+      if (!record) throw new Error('That arbitrage card is no longer in the active test state.');
+      if (['PUBLISHED', 'DRY_RUN_APPROVED', 'REJECTED'].includes(record.status)) return { status: record.status, duplicate: true };
+      if (action === 'reject') {
+        record.status = 'REJECTED'; record.decidedAt = now().toISOString(); record.decidedBy = userId;
+        await save();
+        await message.edit({ embeds: [{ color: 0x777777, title: 'Arbitrage approval', description: alertDescription(record, 'REJECTED BY KOBE') }], components: reviewComponents(id, { disabled: true }) });
+        return { status: 'REJECTED' };
+      }
+      const current = await currentOpportunity(record);
+      if (!current) {
+        record.status = 'EXPIRED_AT_APPROVAL'; record.decidedAt = now().toISOString(); record.decidedBy = userId;
+        await save();
+        await message.edit({ embeds: [{ color: 0x777777, title: 'Arbitrage approval', description: alertDescription(record, 'EXPIRED — NOT POSTED') }], components: reviewComponents(id, { disabled: true }) });
+        return { status: 'EXPIRED_AT_APPROVAL' };
+      }
+      record.decidedAt = now().toISOString(); record.decidedBy = userId;
+      if (!memberPostingEnabled) {
+        record.status = 'DRY_RUN_APPROVED';
+        await save();
+        await message.edit({ embeds: [{ color: 0x2ECC71, title: 'Arbitrage approval', description: alertDescription(current, 'DRY RUN APPROVED — MEMBER POST HELD') }], components: reviewComponents(id, { disabled: true }) });
+        return { status: 'DRY_RUN_APPROVED' };
+      }
+      if (!destinationChannel) throw new Error('The VIP arbitrage destination is not configured.');
+      const published = await destinationChannel.send({
+        allowedMentions: { parse: [] },
+        embeds: [{ color: 0xFF7900, title: 'Arbitrage opportunity', description: alertDescription(current, 'KOBE APPROVED — RECHECK ODDS BEFORE PLACING') }]
+      });
+      record.status = 'PUBLISHED'; record.publishedAt = now().toISOString(); record.publishedMessageId = published.id;
+      await save();
+      await message.edit({ embeds: [{ color: 0x2ECC71, title: 'Arbitrage approval', description: alertDescription(current, 'POSTED TO VIP ARBITRAGE') }], components: reviewComponents(id, { disabled: true }) });
+      return { status: 'PUBLISHED', messageId: published.id };
+    },
     scan,
     snapshot: () => JSON.parse(JSON.stringify(state))
   };
 }
 
-module.exports = { activeWindow, alertDescription, createArbitragePaperMonitor, findArbitrage };
+module.exports = { activeWindow, alertDescription, createArbitragePaperMonitor, findArbitrage, reviewComponents };

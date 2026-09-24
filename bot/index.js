@@ -281,34 +281,62 @@ let telegramDailyTimer = null;
 let telegramReader = null;
 let arbitragePaperMonitor = null;
 
-async function ensureArbitrageTestChannel() {
-  const configured = String(process.env.ARBITRAGE_TEST_CHANNEL_ID || '').trim();
-  if (configured) return approvedTextChannel(configured);
-  const sourceId = writeupRecapWorkflow.review_channel_id || exclusiveRecapWorkflow.review_channel_id;
+async function ensureArbitrageChannel({ configuredId, name, sourceId, topic, reason }) {
+  if (configuredId) {
+    allowedChannelIds.add(configuredId);
+    return approvedTextChannel(configuredId);
+  }
   const source = await approvedTextChannel(sourceId);
   const channels = await source.guild.channels.fetch();
-  const existing = channels.find(channel => channel?.isTextBased?.() && channel.name === 'arbitrage-test');
-  if (existing) return existing;
-  const created = await source.clone({ name: 'arbitrage-test', reason: 'Owner requested a private arbitrage paper test.' });
-  await created.setTopic('Private paper test only: automated arbitrage detection, timing, expiration and accuracy checks. No member alerts or wagering recommendations.');
-  console.log(`Created private Arbitrage Test channel ${created.id} from the existing recap-review permissions.`);
+  const existing = channels.find(channel => channel?.isTextBased?.() && channel.name === name);
+  if (existing) {
+    allowedChannelIds.add(existing.id);
+    return approvedTextChannel(existing.id);
+  }
+  const created = await source.clone({ name, reason });
+  await created.setTopic(topic);
+  allowedChannelIds.add(created.id);
+  console.log(`Created ${name} channel ${created.id} from ${source.name} permissions.`);
   return created;
+}
+
+async function ensureArbitrageChannels() {
+  const reviewSourceId = writeupRecapWorkflow.review_channel_id || exclusiveRecapWorkflow.review_channel_id;
+  const reviewChannel = await ensureArbitrageChannel({
+    configuredId: String(process.env.ARBITRAGE_APPROVAL_CHANNEL_ID || '').trim(),
+    name: 'arbitrage-approvals', sourceId: reviewSourceId,
+    topic: 'Private arbitrage cards for Kobe review. Every approval rechecks live odds; expired cards never publish.',
+    reason: 'Owner requested a separate private arbitrage approval channel.'
+  });
+  const everyone = reviewChannel.permissionOverwrites.cache.get(reviewChannel.guildId);
+  if (!everyone?.deny.has(PermissionFlagsBits.ViewChannel)) throw new Error('Arbitrage approvals must deny @everyone View Channel.');
+  const destinationChannel = await ensureArbitrageChannel({
+    configuredId: String(process.env.ARBITRAGE_DESTINATION_CHANNEL_ID || '').trim(),
+    name: 'arbitrage', sourceId: expertPicksChannelId,
+    topic: 'Kobe-approved arbitrage opportunities. Odds move quickly—always confirm both prices before placing either side.',
+    reason: 'Owner requested a separate VIP arbitrage channel.'
+  });
+  return { reviewChannel, destinationChannel };
 }
 
 async function startArbitragePaperTest() {
   if (process.env.ARBITRAGE_PAPER_TEST_ENABLED !== 'true') return;
   if (!process.env.ODDS_API_KEY) throw new Error('ODDS_API_KEY is required for the private arbitrage paper test.');
-  const channel = await ensureArbitrageTestChannel();
+  const { reviewChannel, destinationChannel } = await ensureArbitrageChannels();
   arbitragePaperMonitor = createArbitragePaperMonitor({
     apiKey: process.env.ODDS_API_KEY,
-    channel,
+    reviewChannel,
+    destinationChannel,
     stateFile: path.join(path.dirname(pickLogPath()), 'arbitrage-paper-test.json'),
     bankroll: Number(process.env.ARBITRAGE_EXAMPLE_BANKROLL || 1000),
     minimumEdgePercent: Number(process.env.ARBITRAGE_MIN_EDGE_PERCENT || 2),
-    windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '08:00-15:00').split(',').map(value => value.trim()).filter(Boolean)
+    windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '08:00-15:00').split(',').map(value => value.trim()).filter(Boolean),
+    memberPostingEnabled: process.env.ARBITRAGE_MEMBER_POSTING_ENABLED === 'true',
+    isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId)
   });
   const receipt = await arbitragePaperMonitor.start();
-  console.log('Arbitrage paper test receipt:', JSON.stringify({ ...receipt, channelId: channel.id }));
+  console.log('Arbitrage paper test receipt:', JSON.stringify({ ...receipt, approvalChannelId: reviewChannel.id,
+    destinationChannelId: destinationChannel.id, memberPostingEnabled: process.env.ARBITRAGE_MEMBER_POSTING_ENABLED === 'true' }));
 }
 
 async function ensureReferralInfoCard() {
@@ -2447,6 +2475,24 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isButton() && interaction.customId.startsWith('arbitrage-review:')) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      if (!arbitragePaperMonitor) throw new Error('The arbitrage paper test is not running.');
+      const result = await arbitragePaperMonitor.decide({
+        customId: interaction.customId, userId: interaction.user.id,
+        guildId: interaction.guildId, channelId: interaction.channelId, message: interaction.message
+      });
+      await interaction.editReply(result.status === 'PUBLISHED' ? 'Rechecked and posted to the VIP arbitrage channel.'
+        : result.status === 'DRY_RUN_APPROVED' ? 'Recheck passed. Dry-run approval recorded; member posting is still safely disabled.'
+        : result.status === 'EXPIRED_AT_APPROVAL' ? 'The prices changed or the edge disappeared. Nothing was posted.'
+        : result.status === 'REJECTED' ? 'Rejected. Nothing was posted.'
+        : 'This card was already decided; no duplicate action was taken.');
+    } catch (error) {
+      await respondToInteractionFailure(interaction, error.message || 'Arbitrage review needs attention. Nothing was posted.', 'Arbitrage review interaction');
+    }
+    return;
+  }
   if (interaction.isButton() && interaction.customId.startsWith('expert-pulse:')) {
     try {
       await interaction.deferReply({ ephemeral: true });
