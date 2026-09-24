@@ -305,7 +305,7 @@ async function startArbitragePaperTest() {
     stateFile: path.join(path.dirname(pickLogPath()), 'arbitrage-paper-test.json'),
     bankroll: Number(process.env.ARBITRAGE_EXAMPLE_BANKROLL || 1000),
     minimumEdgePercent: Number(process.env.ARBITRAGE_MIN_EDGE_PERCENT || 2),
-    windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '09:30,12:30,16:00').split(',').map(value => value.trim()).filter(Boolean)
+    windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '08:00-15:00').split(',').map(value => value.trim()).filter(Boolean)
   });
   const receipt = await arbitragePaperMonitor.start();
   console.log('Arbitrage paper test receipt:', JSON.stringify({ ...receipt, channelId: channel.id }));

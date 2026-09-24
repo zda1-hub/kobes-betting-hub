@@ -27,3 +27,9 @@ test('uses short Arizona monitoring windows', () => {
   assert.equal(activeWindow(new Date('2026-09-23T16:35:00Z'), ['09:30'], 25), '09:30');
   assert.equal(activeWindow(new Date('2026-09-23T16:56:00Z'), ['09:30'], 25), null);
 });
+
+test('supports a continuous 8 AM to 3 PM Arizona monitoring range', () => {
+  assert.equal(activeWindow(new Date('2026-09-23T15:00:00Z'), ['08:00-15:00']), '08:00-15:00');
+  assert.equal(activeWindow(new Date('2026-09-23T21:59:00Z'), ['08:00-15:00']), '08:00-15:00');
+  assert.equal(activeWindow(new Date('2026-09-23T22:00:00Z'), ['08:00-15:00']), null);
+});

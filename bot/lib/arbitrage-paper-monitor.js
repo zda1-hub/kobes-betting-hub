@@ -4,6 +4,14 @@ const path = require('node:path');
 const DEFAULT_BOOKS = ['draftkings', 'fanduel', 'betmgm'];
 const DEFAULT_WINDOWS = ['09:30', '12:30', '16:00'];
 
+function minuteOfDay(value) {
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]), minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
 function decimal(value) {
   const number = Number(value);
   return Number.isFinite(number) && number > 1 ? number : null;
@@ -66,6 +74,11 @@ function activeWindow(now = new Date(), windows = DEFAULT_WINDOWS, durationMinut
   const [hour, minute] = arizonaClock(now).split(':').map(Number);
   const current = hour * 60 + minute;
   return windows.find(value => {
+    const [rangeStart, rangeEnd] = String(value).split('-').map(part => part.trim());
+    if (rangeEnd) {
+      const start = minuteOfDay(rangeStart), end = minuteOfDay(rangeEnd);
+      return start !== null && end !== null && current >= start && current < end;
+    }
     const [startHour, startMinute] = value.split(':').map(Number);
     const start = startHour * 60 + startMinute;
     return current >= start && current < start + durationMinutes;
@@ -74,7 +87,7 @@ function activeWindow(now = new Date(), windows = DEFAULT_WINDOWS, durationMinut
 
 function createArbitragePaperMonitor({ apiKey, channel, stateFile, fetchImpl = fetch, now = () => new Date(),
   bookmakers = DEFAULT_BOOKS, windows = DEFAULT_WINDOWS, intervalMinutes = 5, minimumEdgePercent = 2, bankroll = 1000 }) {
-  let timer = null, scanning = false, state = { scans: [], opportunities: {} };
+  let timer = null, scanning = false, quotaExhausted = false, state = { scans: [], opportunities: {} };
   const save = async () => {
     await fs.mkdir(path.dirname(stateFile), { recursive: true, mode: 0o700 });
     await fs.writeFile(`${stateFile}.tmp`, JSON.stringify(state, null, 2), { mode: 0o600 });
@@ -86,21 +99,32 @@ function createArbitragePaperMonitor({ apiKey, channel, stateFile, fetchImpl = f
     url.searchParams.set('apiKey', apiKey); url.searchParams.set('regions', 'us'); url.searchParams.set('markets', 'h2h');
     url.searchParams.set('bookmakers', bookmakers.join(',')); url.searchParams.set('oddsFormat', 'decimal'); url.searchParams.set('dateFormat', 'iso');
     const response = await fetchImpl(url, { signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error(`Odds feed returned ${response.status}.`);
-    return { events: await response.json(), remaining: response.headers.get('x-requests-remaining'), used: response.headers.get('x-requests-used') };
+    if (!response.ok) {
+      const error = new Error(`Odds feed returned ${response.status}.`);
+      error.quotaExhausted = response.status === 401 || response.status === 429;
+      throw error;
+    }
+    const remaining = response.headers.get('x-requests-remaining');
+    return { events: await response.json(), remaining, used: response.headers.get('x-requests-used'), quotaExhausted: remaining !== null && Number(remaining) <= 0 };
   };
   const recheck = async (original, message, seconds) => {
     try {
-      const { events } = await fetchOdds();
+      if (quotaExhausted) return;
+      const { events, quotaExhausted: exhausted } = await fetchOdds();
+      if (exhausted) quotaExhausted = true;
       const current = findArbitrage(events, { minimumEdgePercent, bankroll }).find(item => item.id === original.id);
       const record = state.opportunities[original.id];
       record.rechecks.push({ seconds, checkedAt: now().toISOString(), survived: Boolean(current), edgePercent: current?.edgePercent || null });
       record.status = current ? `SURVIVED_${seconds}S` : `EXPIRED_${seconds}S`;
       await save();
       await message.edit({ embeds: [{ color: current ? 0xE8A317 : 0x777777, title: 'Arbitrage paper test', description: alertDescription(current || original, current ? `STILL AVAILABLE AFTER ${seconds} SECONDS` : `EXPIRED WITHIN ${seconds} SECONDS`) }] });
-    } catch (error) { console.error('Arbitrage paper recheck needs attention:', error.message); }
+    } catch (error) {
+      if (error.quotaExhausted) quotaExhausted = true;
+      console.error('Arbitrage paper recheck needs attention:', error.message);
+    }
   };
   const scan = async ({ force = false } = {}) => {
+    if (quotaExhausted) return { status: 'QUOTA_EXHAUSTED' };
     if (scanning) return { status: 'BUSY' };
     const window = activeWindow(now(), windows);
     if (!force && !window) return { status: 'OUTSIDE_WINDOW' };
@@ -108,7 +132,8 @@ function createArbitragePaperMonitor({ apiKey, channel, stateFile, fetchImpl = f
     if (!force && last && Date.parse(now().toISOString()) - Date.parse(last.scannedAt) < intervalMinutes * 60000) return { status: 'TOO_SOON' };
     scanning = true;
     try {
-      const { events, remaining, used } = await fetchOdds();
+      const { events, remaining, used, quotaExhausted: exhausted } = await fetchOdds();
+      if (exhausted) quotaExhausted = true;
       const opportunities = findArbitrage(events, { minimumEdgePercent, bankroll });
       state.scans.push({ scannedAt: now().toISOString(), window, eventCount: events.length, opportunityCount: opportunities.length, remaining, used });
       state.scans = state.scans.slice(-500);
@@ -123,10 +148,22 @@ function createArbitragePaperMonitor({ apiKey, channel, stateFile, fetchImpl = f
       }
       await save();
       return { status: 'SCANNED', eventCount: events.length, opportunityCount: opportunities.length, remaining, used };
+    } catch (error) {
+      if (error.quotaExhausted) quotaExhausted = true;
+      throw error;
     } finally { scanning = false; }
   };
   return {
-    async start() { await load(); const first = await scan(); timer = setInterval(() => void scan().catch(error => console.error('Arbitrage paper scan needs attention:', error.message)), 60000); timer.unref(); return first; },
+    async start() {
+      await load();
+      const first = await scan();
+      timer = setInterval(() => {
+        if (quotaExhausted) { clearInterval(timer); timer = null; return; }
+        void scan().catch(error => console.error('Arbitrage paper scan needs attention:', error.message));
+      }, 60000);
+      timer.unref();
+      return first;
+    },
     async stop() { if (timer) clearInterval(timer); timer = null; await save(); },
     scan,
     snapshot: () => JSON.parse(JSON.stringify(state))
