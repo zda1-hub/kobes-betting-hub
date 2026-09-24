@@ -51,7 +51,7 @@ function findArbitrage(events, { minimumEdgePercent = 2, bankroll = 1000 } = {})
 
 function money(value) { return `$${Number(value).toFixed(2)}`; }
 
-function alertDescription(opportunity, status = 'PAPER TEST — VERIFYING') {
+function alertDescription(opportunity, status = 'LIVE OPPORTUNITY — AWAITING KOBE APPROVAL') {
   return [
     `**${status}**`,
     `**${opportunity.event}** · ${opportunity.sport}`,
@@ -62,7 +62,7 @@ function alertDescription(opportunity, status = 'PAPER TEST — VERIFYING') {
     `Projected profit: **${money(opportunity.projectedProfit)}**`,
     `Detected: <t:${Math.floor(Date.parse(opportunity.detectedAt) / 1000)}:T>`,
     '',
-    'Private paper test only. No wager recommendation and no member notification.'
+    'Odds move quickly. Confirm both prices before placing either side; no outcome or profit is guaranteed.'
   ].join('\n');
 }
 
@@ -202,7 +202,10 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
           if (!record?.messageId || ['PUBLISHED', 'DRY_RUN_APPROVED', 'REJECTED'].includes(record.status)) continue;
           try {
             const message = await reviewChannel.messages.fetch(record.messageId);
-            await message.edit({ components: reviewComponents(id) });
+            await message.edit({
+              embeds: [{ color: 0xE8A317, title: 'Arbitrage approval', description: alertDescription(record, 'RECHECK LIVE ODDS & APPROVE') }],
+              components: reviewComponents(id)
+            });
           } catch (error) {
             console.warn(`Could not restore arbitrage approval card ${record.messageId}:`, error.message);
           }

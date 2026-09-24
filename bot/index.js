@@ -335,7 +335,7 @@ async function startArbitragePaperTest() {
     isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId)
   });
   const receipt = await arbitragePaperMonitor.start();
-  console.log('Arbitrage paper test receipt:', JSON.stringify({ ...receipt, approvalChannelId: reviewChannel.id,
+  console.log('Arbitrage monitor receipt:', JSON.stringify({ ...receipt, approvalChannelId: reviewChannel.id,
     destinationChannelId: destinationChannel.id, memberPostingEnabled: process.env.ARBITRAGE_MEMBER_POSTING_ENABLED === 'true' }));
 }
 

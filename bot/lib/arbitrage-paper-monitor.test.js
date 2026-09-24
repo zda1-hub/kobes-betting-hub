@@ -17,6 +17,8 @@ test('finds a two-book arbitrage and produces a balanced $1,000 example', () => 
   assert.equal(opportunity.legs[0].book, 'fanduel');
   assert.equal(opportunity.legs[1].book, 'draftkings');
   assert.match(alertDescription(opportunity), /Total example: \*\*\$1000\.00\*\*/);
+  assert.doesNotMatch(alertDescription(opportunity), /paper test/i);
+  assert.match(alertDescription(opportunity), /AWAITING KOBE APPROVAL/);
 });
 
 test('rejects non-arbitrage, same-book, draw markets and sub-threshold edges', () => {
@@ -119,6 +121,7 @@ test('restart restores controls on existing expired approval cards', async () =>
   await monitor.stop();
   assert.equal(edits.length, 1);
   assert.equal(edits[0].components[0].components[0].data.disabled, false);
+  assert.doesNotMatch(edits[0].embeds[0].description, /paper test/i);
 });
 
 test('unauthorized arbitrage review is blocked', async () => {
