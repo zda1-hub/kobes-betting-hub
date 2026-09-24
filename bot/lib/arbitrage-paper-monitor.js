@@ -127,7 +127,13 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
   const currentOpportunity = async (original) => {
     const { events, quotaExhausted: exhausted } = await fetchOdds();
     if (exhausted) quotaExhausted = true;
-    return findArbitrage(events, { minimumEdgePercent, bankroll }).find(item => item.id === original.id) || null;
+    // The configured threshold controls which opportunities are noisy enough
+    // to create a new approval card. Once Kobe is reviewing a card, accept any
+    // still-positive arbitrage and rebuild the stakes from the newest prices.
+    // Reusing the discovery threshold here caused valid cards to expire when
+    // a 2.01% edge merely moved to 1.99%, even though both sides still locked
+    // a positive return.
+    return findArbitrage(events, { minimumEdgePercent: 0, bankroll }).find(item => item.id === original.id) || null;
   };
   const recheck = async (original, message, seconds) => {
     try {

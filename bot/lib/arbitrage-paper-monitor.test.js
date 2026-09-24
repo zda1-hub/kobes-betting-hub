@@ -57,6 +57,30 @@ test('Kobe can approve a current card in dry-run mode without member publication
   assert.match(edits.at(-1).embeds[0].description, /MEMBER POST HELD/);
 });
 
+test('approval survives when the edge slips below the discovery threshold but remains positive', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
+  const message = { id: 'review-message', edit: async () => {} };
+  const reviewChannel = { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' }, send: async () => message };
+  const detected = structuredClone(event);
+  const narrowed = structuredClone(event);
+  narrowed.bookmakers[0].markets[0].outcomes = [{ name: 'Away', price: 2.03 }, { name: 'Home', price: 1.7 }];
+  narrowed.bookmakers[1].markets[0].outcomes = [{ name: 'Away', price: 2.0 }, { name: 'Home', price: 2.03 }];
+  let calls = 0;
+  const fetchImpl = async () => new Response(JSON.stringify(calls++ === 0 ? [detected] : [narrowed]), {
+    status: 200, headers: { 'x-requests-remaining': '490', 'x-requests-used': '10' }
+  });
+  const monitor = createArbitragePaperMonitor({ apiKey: 'test', reviewChannel, destinationChannel: null,
+    stateFile: path.join(root, 'state.json'), fetchImpl, now: () => new Date('2026-09-23T18:00:00Z'),
+    windows: ['08:00-15:00'], minimumEdgePercent: 2, memberPostingEnabled: false,
+    isApprover: ({ userId }) => userId === 'kobe' });
+  await monitor.start();
+  const result = await monitor.decide({ customId: 'arbitrage-review:approve:game-1:h2h', userId: 'kobe',
+    guildId: 'guild', channelId: 'review', message });
+  await monitor.stop();
+  assert.equal(result.status, 'DRY_RUN_APPROVED');
+  assert.ok(monitor.snapshot().opportunities['game-1:h2h'].status === 'DRY_RUN_APPROVED');
+});
+
 test('unauthorized arbitrage review is blocked', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
   const message = { id: 'review-message', edit: async () => {} };

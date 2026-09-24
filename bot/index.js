@@ -2053,7 +2053,7 @@ async function handleSourceReviewButton(interaction) {
         notes: `Approved from public X source: ${packet.source.post_url || ''}`
       }
     });
-    trace('official Discord post and canonical log completed');
+    trace(`official Discord post and canonical log completed in #${channel.name || channel.id} (${channel.id})`);
     approval.decision = action === 'free' ? 'FREE_PUBLISHED' : 'PAID_PUBLISHED';
     approval.destination_sport = action === 'free' ? 'free' : sport;
     packet.status = 'PUBLISHED';
