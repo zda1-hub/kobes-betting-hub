@@ -40,6 +40,7 @@ const publicFiles = [
   'first-month-promo.js',
   'membership-theme.css',
   'analytics.js',
+  'meta-pixel.js',
   'welcome.html',
   'welcome.js',
   'admin-analytics.html',
@@ -134,6 +135,27 @@ export async function preparePublicSite({ env = process.env } = {}) {
     const source = await readFile(outputPath, 'utf8');
     if (source.includes('src="analytics.js')) return;
     await writeFile(outputPath, source.replace('</body>', '  <script src="/analytics.js?v=20260920-attribution"></script>\n  </body>'));
+  }));
+
+  // Meta campaign measurement belongs only on public marketing and checkout
+  // pages. Keep it out of private admin, member, creator and partner portals
+  // so internal activity cannot contaminate ad results.
+  const metaPixelFiles = new Set([
+    'index.html', 'exclusives.html', 'join.html', 'membership.html',
+    'cancel.html', 'welcome.html', 'recaps.html', 'free-pick.html',
+    'faq.html', 'support.html', 'terms.html', 'privacy.html',
+    'responsible-gambling.html', 'refer.html', '404.html'
+  ]);
+  await Promise.all([...metaPixelFiles].map(async file => {
+    const outputPath = path.join(outputRoot, file);
+    let source = await readFile(outputPath, 'utf8');
+    if (!source.includes('src="/meta-pixel.js')) {
+      source = source.replace('</head>', '  <script src="/meta-pixel.js?v=20260924" defer></script>\n</head>');
+    }
+    if (!source.includes('facebook.com/tr?id=4640857832799621')) {
+      source = source.replace(/<body([^>]*)>/i, '<body$1>\n  <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=4640857832799621&amp;ev=PageView&amp;noscript=1"></noscript>');
+    }
+    await writeFile(outputPath, source);
   }));
 
   // One source of truth, including environment-specific secure portal config.
