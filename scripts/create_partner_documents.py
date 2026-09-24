@@ -142,7 +142,7 @@ def build_agreement():
     data = [
         ("Commission", "$10.00 per qualifying new paid VIP subscriber"),
         ("Current consumer offer", "$19.99/month through October 22; then $32.99/month, subject to KBH’s written updates"),
-        ("Tracking link/code", "To be issued by KBH; use the exact assigned link/code"),
+        ("Tracking link/code", "https://kobesbettinghub.com/join?ref=KBC-EA1532FF19"),
         ("Reconciliation", "Monthly; partner-specific statement"),
         ("Creative approval", "Written approval required before first publication and material edits"),
         ("Complimentary access", "Active partnership only; removable at termination or for cause"),
@@ -180,15 +180,15 @@ def build_kit():
         "Daily sports picks, full pick writeups, tracked results, free Discord access, and paid VIP membership.",
         "New beta feature: time-sensitive arbitrage opportunity monitoring with percentage-based examples; members must verify live lines before wagering.",
         "$19.99/month through October 22; regular monthly price $32.99 afterward.",
-        "Use only the exact Sports Centered tracking link/code supplied by KBH.",
+        "Use only this Sports Centered tracking link: https://kobesbettinghub.com/join?ref=KBC-EA1532FF19",
     ])
     d.add_heading("Approved primary caption", level=1)
     p = d.add_paragraph()
     p.paragraph_format.left_indent = Inches(.25)
     p.paragraph_format.right_indent = Inches(.25)
-    p.add_run("Paid partnership with Kobe’s Betting Hub.\n\nDaily picks, full writeups, and transparent tracked results—plus free Discord access and an optional VIP membership. NEW: beta arbitrage monitoring identifies potential time-sensitive opportunities across supported sportsbooks, with percentage-based examples to help members compare both sides. Always verify current lines before wagering. VIP is $19.99/month through October 22, then $32.99/month.\n\nJoin through our link: [SPORTS CENTERED TRACKING LINK]\n\n21+ • Where legal • Bet responsibly • No guaranteed outcomes").bold = True
+    p.add_run("Paid partnership with Kobe’s Betting Hub.\n\nDaily picks, full writeups, and transparent tracked results—plus free Discord access and an optional VIP membership. NEW: beta arbitrage monitoring identifies potential time-sensitive opportunities across supported sportsbooks, with percentage-based examples to help members compare both sides. Always verify current lines before wagering. VIP is $19.99/month through October 22, then $32.99/month.\n\nJoin through our link: https://kobesbettinghub.com/join?ref=KBC-EA1532FF19\n\n21+ • Where legal • Bet responsibly • No guaranteed outcomes").bold = True
     d.add_heading("Short story / post copy", level=1)
-    d.add_paragraph("Ad — Daily picks. Full writeups. Tracked results. NEW beta arbitrage monitoring for potential time-sensitive opportunities. Verify live lines before wagering. VIP $19.99/month through October 22. Join Kobe’s Betting Hub through our link. 21+ • Where legal • Bet responsibly • No guaranteed outcomes.")
+    d.add_paragraph("Ad — Daily picks. Full writeups. Tracked results. NEW beta arbitrage monitoring for potential time-sensitive opportunities. Verify live lines before wagering. VIP $19.99/month through October 22. Join: https://kobesbettinghub.com/join?ref=KBC-EA1532FF19. 21+ • Where legal • Bet responsibly • No guaranteed outcomes.")
     d.add_heading("Creative guardrails", level=1)
     add_bullets(d, [
         "Send the final image/video and exact caption to KBH for written approval before it goes live.",
