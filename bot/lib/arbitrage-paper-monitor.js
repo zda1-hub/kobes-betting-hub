@@ -4,6 +4,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const DEFAULT_BOOKS = ['draftkings', 'fanduel', 'betmgm'];
 const DEFAULT_WINDOWS = ['09:30', '12:30', '16:00'];
+const MAX_QUOTE_AGE_MS = 5 * 60 * 1000;
 
 function minuteOfDay(value) {
   const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
@@ -51,6 +52,16 @@ function findArbitrage(events, { minimumEdgePercent = 2, bankroll = 1000 } = {})
 
 function money(value) { return `$${Number(value).toFixed(2)}`; }
 
+function freshOpportunity(opportunity, now = new Date()) {
+  const current = now.getTime();
+  const start = Date.parse(opportunity.commenceTime);
+  if (!Number.isFinite(start) || start <= current) return false;
+  return opportunity.legs.every(leg => {
+    const updated = Date.parse(leg.updatedAt);
+    return Number.isFinite(updated) && updated <= current + 60_000 && current - updated <= MAX_QUOTE_AGE_MS;
+  });
+}
+
 function alertDescription(opportunity, status = 'LIVE OPPORTUNITY — AWAITING KOBE APPROVAL') {
   return [
     `**${status}**`,
@@ -58,6 +69,7 @@ function alertDescription(opportunity, status = 'LIVE OPPORTUNITY — AWAITING K
     `Projected edge: **${opportunity.edgePercent.toFixed(2)}%**`,
     `Total example: **${money(opportunity.bankroll)}**`,
     ...opportunity.legs.map((leg, index) => `Bet ${index + 1}: **${leg.stakePercent.toFixed(2)}% — ${money(leg.stake)}** on ${leg.name} at ${leg.bookName} (${leg.price.toFixed(3)})`),
+    ...opportunity.legs.map((leg, index) => `Quote ${index + 1} updated: ${leg.updatedAt ? `<t:${Math.floor(Date.parse(leg.updatedAt) / 1000)}:R>` : '**timestamp unavailable**'}`),
     `Projected return: **${money(opportunity.projectedReturn)}**`,
     `Projected profit: **${money(opportunity.projectedProfit)}**`,
     `Detected: <t:${Math.floor(Date.parse(opportunity.detectedAt) / 1000)}:T>`,
@@ -133,7 +145,8 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
     // Reusing the discovery threshold here caused valid cards to expire when
     // a 2.01% edge merely moved to 1.99%, even though both sides still locked
     // a positive return.
-    return findArbitrage(events, { minimumEdgePercent: 0, bankroll }).find(item => item.id === original.id) || null;
+    return findArbitrage(events, { minimumEdgePercent: 0, bankroll })
+      .find(item => item.id === original.id && freshOpportunity(item, now())) || null;
   };
   const recheck = async (original, message, seconds) => {
     try {
@@ -167,7 +180,8 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
     try {
       const { events, remaining, used, quotaExhausted: exhausted } = await fetchOdds();
       if (exhausted) quotaExhausted = true;
-      const opportunities = findArbitrage(events, { minimumEdgePercent, bankroll });
+      const opportunities = findArbitrage(events, { minimumEdgePercent, bankroll })
+        .filter(item => freshOpportunity(item, now()));
       state.scans.push({ scannedAt: now().toISOString(), window, eventCount: events.length, opportunityCount: opportunities.length, remaining, used });
       state.scans = state.scans.slice(-500);
       for (const opportunity of opportunities) {
