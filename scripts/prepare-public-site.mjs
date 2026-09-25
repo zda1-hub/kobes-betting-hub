@@ -9,6 +9,16 @@ export const productionMembershipWorkerOrigin = 'https://kobes-betting-hub-check
 const membershipConfigFiles = ['join.html', 'membership.html', 'cancel.html', 'welcome.html', 'admin-analytics.html', 'member.html', 'partner.html'];
 const membershipConfigPattern = /window\.__KBH_MEMBERSHIP_CONFIG__ = Object\.freeze\(\{[^\n]*\}\);/g;
 
+const guideFiles = [
+  'guides/index.html',
+  'guides/guide.css',
+  'guides/how-to-choose-a-sports-betting-discord.html',
+  'guides/sports-betting-arbitrage-explained.html',
+  'guides/how-to-read-betting-odds-and-line-movement.html',
+  'guides/bankroll-management-for-sports-betting.html',
+  'guides/what-a-sports-betting-writeup-should-include.html'
+];
+
 const publicFiles = [
   '_redirects',
   'index.html',
@@ -120,6 +130,10 @@ export async function preparePublicSite({ env = process.env } = {}) {
     path.join(projectRoot, file),
     path.join(outputRoot, file)
   )));
+  await Promise.all(guideFiles.map((file) => cp(
+    path.join(projectRoot, file),
+    path.join(outputRoot, file)
+  )));
 
   await Promise.all(membershipConfigFiles.map(async (file) => {
     const outputPath = path.join(outputRoot, file);
@@ -129,7 +143,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
 
   // First-party page views are injected into every public HTML artifact so the
   // funnel has one consistent session identity without third-party trackers.
-  const htmlFiles = publicFiles.filter(file => file.endsWith('.html'));
+  const htmlFiles = [...publicFiles, ...guideFiles].filter(file => file.endsWith('.html'));
   await Promise.all(htmlFiles.map(async file => {
     const outputPath = path.join(outputRoot, file);
     const source = await readFile(outputPath, 'utf8');
@@ -144,7 +158,8 @@ export async function preparePublicSite({ env = process.env } = {}) {
     'index.html', 'exclusives.html', 'join.html', 'membership.html',
     'cancel.html', 'welcome.html', 'recaps.html', 'free-pick.html',
     'faq.html', 'support.html', 'terms.html', 'privacy.html',
-    'responsible-gambling.html', 'refer.html', '404.html'
+    'responsible-gambling.html', 'refer.html', '404.html',
+    ...guideFiles.filter(file => file.endsWith('.html'))
   ]);
   await Promise.all([...metaPixelFiles].map(async file => {
     const outputPath = path.join(outputRoot, file);
@@ -162,17 +177,13 @@ export async function preparePublicSite({ env = process.env } = {}) {
   await cp(path.join(outputRoot, 'cancel.html'), path.join(outputRoot, 'managemembership.html'));
   await cp(path.join(outputRoot, 'admin-analytics.html'), path.join(outputRoot, 'admin', 'analytics', 'index.html'));
 
-  await cp(
-    path.join(projectRoot, 'guides', 'how-to-choose-a-sports-betting-discord.html'),
-    path.join(outputRoot, 'guides', 'how-to-choose-a-sports-betting-discord.html')
-  );
   await cp(path.join(projectRoot, 'assets'), path.join(outputRoot, 'assets'), { recursive: true });
   await cp(
     path.join(projectRoot, 'data', 'exclusive-directory.json'),
     path.join(outputRoot, 'data', 'exclusive-directory.json')
   );
 
-  console.log(`Prepared ${publicFiles.length + 2} public site entries in ${outputRoot} for ${membershipConfig.environment}.`);
+  console.log(`Prepared ${publicFiles.length + guideFiles.length + 2} public site entries in ${outputRoot} for ${membershipConfig.environment}.`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
