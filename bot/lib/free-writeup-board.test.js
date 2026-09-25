@@ -12,14 +12,11 @@ test('formats every current writeup as its own full-width redacted preview', () 
     { pick_id: '3', operating_date: '2026-09-19', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Old exact pick -110' },
     { pick_id: '4', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#expert-picks', sport: 'football', selection: 'Not a writeup' }
   ], '2026-09-20');
-  const text = JSON.stringify(payload.embeds);
-  assert.match(text, /Today’s Free Writeups/);
-  assert.match(text, /Player or Game prop/);
-  assert.match(text, /quick stat teaser/i);
+  const text = JSON.stringify(payload);
+  assert.equal(payload.length, 2);
+  assert.equal(payload.every((card) => card.embeds.length === 1), true);
   assert.match(text, /Over 4\.5 receptions/);
   assert.match(text, /Over 38\.5 yards/);
-  assert.equal(payload.embeds[0].fields.every((field) => field.inline === false), true);
-  assert.equal(payload.embeds[0].fields.length, 2);
   assert.doesNotMatch(text, /Recent production|Matchup context|Full breakdown/);
   assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '||VIP PICK|| · Over 4.5 receptions', breakdown: '' }]);
   assert.doesNotMatch(text, /Bijan|Boutte|Higbee|Blake|Corum|Giants|Cowboys|Rams|43\.9|6-2|-150|-115|Old exact|Not a writeup/);
@@ -61,15 +58,17 @@ test('restart reuses the newest board and deletes duplicate bot boards', async (
     const board = (id) => ({ id, author: { id: 'bot' }, embeds: [{ footer: { text: 'KBH free-writeups-v1' } }], delete: async () => deleted.push(id), edit: async (payload) => { edited.push(payload); return { id }; } });
     const old = board('100');
     const current = board('200');
-    const channel = { client: { user: { id: 'bot' } }, messages: { fetch: async (id) => typeof id === 'object' ? new Map([['100', old], ['200', current]]) : id === '200' ? current : null }, send: async () => { throw new Error('must not create another board'); } };
+    const sent = [];
+    const channel = { client: { user: { id: 'bot' } }, messages: { fetch: async () => new Map([['100', old], ['200', current], ...sent.map((m) => [m.id, m])].filter(([id]) => !deleted.includes(id))) }, send: async (payload) => { const m = { ...board(String(300 + sent.length)), embeds: payload.embeds }; sent.push(m); return m; } };
     const service = createFreeWriteupBoard({ channelFor: async () => channel, rowsFor: async () => [{ pick_id: 'pick', operating_date: '2026-09-21', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', teaser_source: '10 targets in recent games' }], stateFile: path.join(directory, 'state.json'), operatingDate: () => '2026-09-21' });
     const receipt = await service.refresh();
     assert.equal(receipt.status, 'UPDATED');
-    assert.deepEqual(deleted, ['100']);
-    assert.equal(edited.length, 1);
+    assert.deepEqual(deleted, ['100', '200']);
+    assert.equal(sent.length, 1);
+    assert.equal(edited.length, 0);
     const quietReceipt = await service.refresh();
     assert.equal(quietReceipt.status, 'UNCHANGED');
-    assert.equal(edited.length, 1);
+    assert.equal(sent.length, 1);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

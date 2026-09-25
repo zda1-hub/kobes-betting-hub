@@ -124,24 +124,15 @@ function publicPreviews(rows, date) {
 function freeWriteupBoardPayload(rows, date) {
   const previews = publicPreviews(rows, date);
   if (!previews.length) return null;
-  const groups = [];
-  for (let index = 0; index < previews.length; index += 12) groups.push(previews.slice(index, index + 12));
-  if (groups.length > 10) throw new Error('Free writeup preview exceeds Discord embed limits.');
-  return {
+  return previews.map(({ emoji, sport, prop, breakdown }, index) => ({
     allowedMentions: { parse: [] },
-    embeds: groups.map((group, groupIndex) => ({
+    embeds: [{
       color: 0xFF7900,
-      title: groupIndex ? 'Today’s Free Writeups · Continued' : 'Today’s Free Writeups',
-      description: groupIndex ? undefined : 'A quick stat teaser for each VIP writeup.',
-      fields: group.map(({ emoji, prop, breakdown }) => ({
-        name: `${emoji} Player or Game prop`,
-        value: [prop, breakdown ? `**Relevant stat:** ${breakdown}` : ''].filter(Boolean).join('\n'),
-        inline: false
-      })),
-      footer: { text: `${FREE_BOARD_MARKER} · Full writeups are private for VIP members` },
-      timestamp: new Date().toISOString()
-    }))
-  };
+      title: `${emoji} ${sport[0].toUpperCase()}${sport.slice(1)} VIP writeup · ${index + 1}`,
+      description: [prop, breakdown ? `**Relevant stat:** ${breakdown}` : '', 'Full pick and analysis are in VIP.'].filter(Boolean).join('\n\n'),
+      footer: { text: `${FREE_BOARD_MARKER} · ${date} · ${index + 1}` }
+    }]
+  }));
 }
 
 async function readState(file) {
@@ -155,59 +146,46 @@ async function writeState(file, state) {
 }
 
 function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate, syncSite = async () => {} }) {
-  let reconciled = false;
   async function refresh() {
     const channel = await channelFor();
     const date = operatingDate();
     const rows = await rowsFor();
     const payload = freeWriteupBoardPayload(rows, date);
     const previews = publicPreviews(rows, date);
-    const signature = payload ? JSON.stringify(payload.embeds.map((embed) => ({
-      title: embed.title,
-      description: embed.description,
-      fields: embed.fields,
-      footer: embed.footer
-    }))) : '';
     const state = await readState(stateFile);
-    // Deploys can start with an empty local state file. Recover the bot's
-    // existing public board by its footer instead of publishing a duplicate.
-    if (!reconciled) {
-      const recent = await channel.messages.fetch({ limit: 50 });
-      const boards = [...recent.values()].filter((message) =>
-        message.author?.id === channel.client?.user?.id &&
-        message.embeds?.some((embed) => String(embed.footer?.text || '').includes(FREE_BOARD_MARKER))
-      ).sort((a, b) => Number(BigInt(b.id) - BigInt(a.id)));
-      if (boards.length) {
-        const [newest, ...duplicates] = boards;
-        state.message_id = newest.id;
-        state.date = date;
-        for (const duplicate of duplicates) await duplicate.delete();
-      }
-      reconciled = true;
-    }
-    if (state.message_id && state.date !== date) {
-      const prior = await channel.messages.fetch(state.message_id).catch(() => null);
-      if (prior) await prior.delete();
-      delete state.message_id;
-      delete state.date;
+    const recent = await channel.messages.fetch({ limit: 100 });
+    const existing = [...recent.values()].filter(message => message.author?.id === channel.client?.user?.id &&
+      message.embeds?.some(embed => String(embed.footer?.text || '').includes(FREE_BOARD_MARKER)));
+    const desired = new Map((payload || []).map((item, index) => [item.embeds[0].footer.text, { item, index }]));
+    const retained = new Map();
+    for (const message of existing) {
+      const marker = String(message.embeds?.[0]?.footer?.text || '');
+      if (!desired.has(marker) || retained.has(marker)) await message.delete();
+      else retained.set(marker, message);
     }
     if (!payload) {
       await syncSite({ date, previews: [] });
-      await writeState(stateFile, state);
+      await writeState(stateFile, { date, message_ids: [], signatures: [] });
       return { status: 'EMPTY', date, previews: 0 };
     }
-    const current = state.date === date && state.message_id
-      ? await channel.messages.fetch(state.message_id).catch(() => null)
-      : null;
-    if (current && state.signature === signature) {
-      await syncSite({ date, previews });
-      return { status: 'UNCHANGED', date, messageId: current.id, previews: previews.length };
+    const messageIds = [], signatures = [];
+    let changed = false;
+    for (const item of payload) {
+      const marker = item.embeds[0].footer.text;
+      const signature = JSON.stringify(item.embeds);
+      const current = retained.get(marker);
+      const index = desired.get(marker).index;
+      const needsEdit = Boolean(current) && state.signatures?.[index] !== signature;
+      const message = current
+        ? needsEdit ? await current.edit(item) : current
+        : await channel.send(item);
+      if (!current || needsEdit) changed = true;
+      messageIds.push(message.id);
+      signatures.push(signature);
     }
-    const message = current ? await current.edit(payload) : await channel.send(payload);
-    await writeState(stateFile, { date, message_id: message.id, signature, updated_at: new Date().toISOString() });
+    await writeState(stateFile, { date, message_ids: messageIds, signatures, updated_at: new Date().toISOString() });
     await syncSite({ date, previews });
-    return { status: current ? 'UPDATED' : 'CREATED', date, messageId: message.id,
-      previews: rows.filter((row) => row.operating_date === date && isWriteup(row)).length };
+    return { status: changed ? 'UPDATED' : 'UNCHANGED', date, messageIds, previews: previews.length };
   }
   return { refresh };
 }
