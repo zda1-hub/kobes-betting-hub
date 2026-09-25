@@ -9,6 +9,7 @@ const MAX_POST_LENGTH = 280;
 const FREE_PICK_STATE_KEY = "free-picks/current.json";
 const FREE_PICK_BY_DATE_PREFIX = "free-picks/by-date/";
 const FREE_PICK_RESULTS_KEY = "free-picks/verified-results.json";
+const PUBLIC_RESULTS_KEY = "results/verified-results.json";
 const FREE_PICK_MAX_BYTES = 5 * 1024 * 1024;
 const TREND_EMAIL_MAX_BYTES = 12 * 1024;
 const TREND_EMAIL_LEAGUES = new Set(["mlb", "nfl"]);
@@ -160,6 +161,8 @@ async function handleRequest(request, env) {
   if (url.pathname === "/api/free-pick/current" && request.method === "GET") return getCurrentFreePick(request, env);
   if (url.pathname === "/api/free-pick/results" && request.method === "GET") return getFreePickResults(request, env);
   if (url.pathname === "/api/free-pick/results" && request.method === "PUT") return putFreePickResults(request, env);
+  if (url.pathname === "/api/results" && request.method === "GET") return getPublicResults(request, env);
+  if (url.pathname === "/api/results" && request.method === "PUT") return putPublicResults(request, env);
   if (url.pathname === "/api/vip-preview/current" && request.method === "GET") return getVipPreview(request, env);
   if (url.pathname === "/api/vip-preview/current" && request.method === "PUT") return putVipPreview(request, env);
   if (url.pathname === "/media/free-pick/current" && request.method === "GET") return getCurrentFreePickImage(request, env);
@@ -627,6 +630,52 @@ async function getFreePickResults(request, env) {
   let snapshot;
   try { snapshot = normalizedFreePickResults(JSON.parse(raw)); } catch { snapshot = null; }
   if (!snapshot) return json({ error: 'Verified Free Pick results are unavailable' }, 503, corsHeaders(request));
+  const headers = corsHeaders(request);
+  headers.set('cache-control', 'no-store');
+  return json(snapshot, 200, headers);
+}
+
+function normalizedPublicResults(input) {
+  const validDate = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const count = (value) => Number.isSafeInteger(value) && value >= 0 && value <= 1000000 ? value : null;
+  const record = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    const wins = count(value.wins), losses = count(value.losses), pushes = count(value.pushes), voids = count(value.voids);
+    return [wins, losses, pushes, voids].every((item) => item !== null) ? { wins, losses, pushes, voids } : null;
+  };
+  const item = (value) => {
+    if (!value || !validDate(value.date) || typeof value.selection !== 'string' || !value.selection.trim()) return null;
+    if (!['W', 'L', 'P', 'V'].includes(value.result)) return null;
+    return { id: String(value.id || '').slice(0, 90), date: value.date, sport: String(value.sport || '').slice(0, 40), selection: value.selection.slice(0, 180), line: String(value.line || '').slice(0, 80), odds: String(value.odds || '').slice(0, 24), result: value.result };
+  };
+  if (!input || !validDate(input.operatingDate) || !Number.isFinite(Date.parse(input.generatedAt || ''))) return null;
+  const overall = record(input.overall), today = record(input.today), pending = count(input.pending), settled = count(input.settled);
+  if (!overall || !today || pending === null || settled === null || !Array.isArray(input.recent) || input.recent.length > 50) return null;
+  const recent = input.recent.map(item);
+  if (recent.some((value) => !value)) return null;
+  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, settled, recent };
+}
+
+async function putPublicResults(request, env) {
+  if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({ error: 'Unauthorized' }, 401);
+  if (!hasFreePickStore(env)) return json({ error: 'Results storage is unavailable' }, 503);
+  const raw = await request.text();
+  if (raw.length > 50000) return json({ error: 'Results snapshot is too large' }, 413);
+  let input;
+  try { input = JSON.parse(raw); } catch { return json({ error: 'Invalid JSON' }, 400); }
+  const snapshot = normalizedPublicResults(input);
+  if (!snapshot) return json({ error: 'Invalid verified results snapshot' }, 400);
+  await putFreePickObject(env, PUBLIC_RESULTS_KEY, JSON.stringify(snapshot), 'application/json; charset=UTF-8', 'no-store');
+  return json({ status: 'updated', generatedAt: snapshot.generatedAt });
+}
+
+async function getPublicResults(request, env) {
+  if (!hasFreePickStore(env)) return json({ error: 'Results storage is unavailable' }, 503, corsHeaders(request));
+  const raw = await getFreePickText(env, PUBLIC_RESULTS_KEY);
+  if (!raw) return json({ error: 'Verified results are not available yet' }, 404, corsHeaders(request));
+  let snapshot;
+  try { snapshot = normalizedPublicResults(JSON.parse(raw)); } catch { snapshot = null; }
+  if (!snapshot) return json({ error: 'Verified results are unavailable' }, 503, corsHeaders(request));
   const headers = corsHeaders(request);
   headers.set('cache-control', 'no-store');
   return json(snapshot, 200, headers);

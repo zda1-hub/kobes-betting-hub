@@ -23,6 +23,7 @@ const writeupRecapWorkflow = {
 const recapWorkflowConfigs = [exclusiveRecapWorkflow, writeupRecapWorkflow].filter((config) => config.enabled);
 const { freePickRecapRows } = require('./lib/free-recap');
 const { buildFreePickResults } = require('./lib/free-pick-results');
+const { buildPublicResults } = require('./lib/public-results');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
 const { gradeWagerRows, sourcePacketPath } = require('./lib/wager-ledger');
@@ -637,6 +638,42 @@ function startFreePickResultsSync() {
       console.log('Verified Free Pick results updated on the website.');
     } catch (error) {
       console.error('Verified Free Pick results sync needs attention:', error.message);
+    } finally {
+      running = false;
+    }
+  };
+  void run();
+  const timer = setInterval(() => void run(), 60000);
+  timer.unref();
+}
+
+function startPublicResultsSync() {
+  const secret = process.env.FREE_PICK_SITE_PUBLISH_SECRET;
+  if (!secret) {
+    console.warn('Verified public results website sync is not configured.');
+    return;
+  }
+  const origin = (process.env.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
+  let lastContent = '';
+  let running = false;
+  const run = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const snapshot = buildPublicResults(await readPickLog(), dailyPickOperatingDate(new Date()));
+      const content = JSON.stringify({ ...snapshot, generatedAt: null });
+      if (content === lastContent) return;
+      const response = await fetch(`${origin}/api/results`, {
+        method: 'PUT',
+        headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
+        body: JSON.stringify(snapshot),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error(`website returned ${response.status}`);
+      lastContent = content;
+      console.log('Verified complete results updated on the website.');
+    } catch (error) {
+      console.error('Verified complete results sync needs attention:', error.message);
     } finally {
       running = false;
     }
@@ -2351,6 +2388,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   startFreeRecapSchedule();
   startFreePickDelivery();
   startFreePickResultsSync();
+  startPublicResultsSync();
   void startArbitragePaperTest().catch(error => console.error('Arbitrage paper test needs attention:', error.message));
   if (process.env.PRIVATE_EXCLUSIVE_IMPORT_FILE && process.env.PRIVATE_EXCLUSIVE_IMPORT_DATE) {
     void import('../scripts/import-manual-exclusives.mjs')

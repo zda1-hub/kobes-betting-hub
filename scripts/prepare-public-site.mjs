@@ -32,6 +32,9 @@ const publicFiles = [
   'recaps.html',
   'recaps.js',
   'recaps-data.json',
+  'results.html',
+  'results.css',
+  'results.js',
   'free-pick.html',
   'free-pick.js',
   'free-pick.css',
@@ -157,7 +160,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
   // so internal activity cannot contaminate ad results.
   const metaPixelFiles = new Set([
     'index.html', 'exclusives.html', 'join.html', 'membership.html',
-    'cancel.html', 'welcome.html', 'recaps.html', 'free-pick.html',
+    'cancel.html', 'welcome.html', 'recaps.html', 'results.html', 'free-pick.html',
     'faq.html', 'support.html', 'terms.html', 'privacy.html',
     'responsible-gambling.html', 'refer.html', '404.html',
     ...guideFiles.filter(file => file.endsWith('.html'))
