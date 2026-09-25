@@ -67,6 +67,7 @@ const publicFiles = [
   'referral.js',
   'robots.txt',
   'sitemap.xml',
+  'db1ee41902e983e26660d3cdd202f302.txt',
   'betting-hub-logo.png',
   'betting-hub-logo-v2.png',
   'betting-hub-logo-final.png',
