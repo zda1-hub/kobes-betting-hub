@@ -2646,6 +2646,13 @@ function groupCount(values, key) {
   return values.reduce((out, value) => { const label = key(value) || 'Unknown'; out[label] = (out[label] || 0) + 1; return out; }, {});
 }
 
+function partitionVipRoleChecks(roleChecks) {
+  return {
+    confirmedMissing: roleChecks.filter(item => ['MISSING_DISCORD', 'MISSING'].includes(item.role)),
+    unavailable: roleChecks.filter(item => item.role === 'CHECK_FAILED'),
+  };
+}
+
 async function adminAnalytics(request, env, origin) {
   if (!await readAdminSession(request, env)) return json({ error: 'Admin sign-in required.' }, 401, origin);
   let range;
@@ -2743,17 +2750,20 @@ async function adminAnalytics(request, env, origin) {
     vipWithoutEntitlement = vipMembers.filter(id => !entitledDiscordIds.has(id)).length;
   } catch { /* Surface unavailable rather than inventing a zero. */ }
   const activeIds = new Set(roleChecks.filter(item => item.role === 'ACTIVE').map(item => item.subscription.stripe_subscription_id));
-  const paidWithoutVip = roleChecks.filter(item => item.role !== 'ACTIVE').map(item => item.subscription);
-  const paidWithoutVipDetails = paidWithoutVip.map(subscription => {
+  const { confirmedMissing: confirmedMissingRole, unavailable: roleCheckUnavailable } = partitionVipRoleChecks(roleChecks);
+  const accessDetail = ({ subscription, role }) => {
     const association = (associations || []).find(item => item.stripe_subscription_id === subscription.stripe_subscription_id);
     return {
       associationId: association?.id || null, plan: subscription.offer || 'unknown', entitlementStatus: subscription.status,
       subscriptionId: subscription.stripe_subscription_id,
       discordConnected: Boolean((customers || []).find(item => item.stripe_customer_id === subscription.stripe_customer_id)?.discord_user_id), vipStatus: association?.status || roleChecks.find(item => item.subscription.stripe_subscription_id === subscription.stripe_subscription_id)?.role || 'DISCORD_MISSING',
+      roleCheck: role,
       activationAttempts: association?.activation_attempts || 0, lastAttempt: association?.last_activation_attempt_at || null,
       failureReason: association?.last_error_code || null, retryAt: association?.next_retry_at || null,
     };
-  });
+  };
+  const paidWithoutVipDetails = confirmedMissingRole.map(accessDetail);
+  const roleCheckUnavailableDetails = roleCheckUnavailable.map(accessDetail);
   const invoiceWithinRange = stripePayments.filter(item => range.includes(new Date(Number(item.created || 0) * 1000).toISOString()));
   const collected = stripePayments.length
     ? invoiceWithinRange.reduce((sum, item) => sum + item.amountPaid, 0)
@@ -2910,7 +2920,7 @@ async function adminAnalytics(request, env, origin) {
     conversion: { funnel, offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), purchaseConversionRate: rangedSessions.length ? countEvents('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: countEvents('payment_completed') ? countEvents('vip_activated') / countEvents('payment_completed') : 0 },
     revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPayments.length, introRevenueCents: invoiceWithinRange.filter(item => [1000, 1999].includes(item.amountPaid)).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
     membership: { active: eligible.length, intro: eligible.filter(item => item.offer === 'starter').length, monthly: eligible.filter(item => ['trial_2_day','referral_trial','first_month_back'].includes(item.offer)).length, sixMonth: eligible.filter(item => item.offer === 'six_month').length, annual: eligible.filter(item => item.offer === 'annual').length, newMembers: countEvents('payment_completed'), renewals: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason === 'subscription_cycle').length, scheduledCancellations: eligible.filter(item => item.cancel_at_period_end || item.cancel_at).length, actualCancellations: canceled.filter(item => range.includes(item.updated_at)).length, duplicateGroups, duplicateCount: duplicateGroups.length, highRiskDuplicateCount: duplicateGroups.filter(item => item.risk === 'high').length, members },
-    discord: { paidWithoutVip: paidWithoutVip.length, vipActive: activeIds.size, pending: (associations || []).filter(item => item.status === 'VIP_PENDING').length, failed: (associations || []).filter(item => item.status === 'VIP_FAILED').length, recovered: (associations || []).filter(item => item.status === 'VIP_ACTIVE' && Number(item.activation_attempts || 0) > 1).length, paidDiscordMissing: paidWithoutVipDetails.filter(item => !item.discordConnected).length, vipWithoutEntitlement, details: paidWithoutVipDetails },
+    discord: { paidWithoutVip: paidWithoutVipDetails.length, roleCheckUnavailable: roleCheckUnavailableDetails.length, vipActive: activeIds.size, pending: (associations || []).filter(item => item.status === 'VIP_PENDING').length, failed: (associations || []).filter(item => item.status === 'VIP_FAILED').length, recovered: (associations || []).filter(item => item.status === 'VIP_ACTIVE' && Number(item.activation_attempts || 0) > 1).length, paidDiscordMissing: paidWithoutVipDetails.filter(item => !item.discordConnected).length, vipWithoutEntitlement, details: [...paidWithoutVipDetails, ...roleCheckUnavailableDetails] },
     referrals: { visits: countEvents('referral_visit') + rangedSessions.filter(item => item.first_touch?.first_source === 'referral' || item.first_touch?.referral_identifier).length, referredPurchases: rangedReferrals.length, pending: referralStatus('PENDING_PAYMENT') + referralStatus('HOLDING'), qualified: rangedReferrals.filter(item => ['READY','PAYOUT_SENT'].includes(item.status)).length, paidCashCents: rangedReferrals.filter(item => item.status === 'PAYOUT_SENT').reduce((sum, item) => sum + Number(item.reward_amount_cents || 0), 0), links: referralLinks, leaderboard: [...leaderboardMap.values()].map(item => ({ ...item, conversionRate: item.successfulReferrals + item.pendingReferrals ? item.successfulReferrals / (item.successfulReferrals + item.pendingReferrals) : 0 })).sort((a,b)=>b.successfulReferrals-a.successfulReferrals) },
     retention: {
       churnRate: (eligible.length + canceled.length) ? canceled.length / (eligible.length + canceled.length) : 0,
@@ -2926,7 +2936,7 @@ async function adminAnalytics(request, env, origin) {
     },
     history: [...historyMap.values()],
     operations: { freePick },
-    alerts: { total: awaitingDiscord.length + paidWithoutVipDetails.length + webhookFailures.length + failedPayments.length + referralReview.length + duplicateGroups.length, awaitingDiscord, paidWithoutVip: paidWithoutVipDetails, webhookFailures, failedPayments: failedPaymentDetails, referralReview, duplicates: duplicateGroups },
+    alerts: { total: awaitingDiscord.length + paidWithoutVipDetails.length + roleCheckUnavailableDetails.length + webhookFailures.length + failedPayments.length + referralReview.length + duplicateGroups.length, awaitingDiscord, paidWithoutVip: paidWithoutVipDetails, vipCheckUnavailable: roleCheckUnavailableDetails, webhookFailures, failedPayments: failedPaymentDetails, referralReview, duplicates: duplicateGroups },
   }, 200, origin);
 }
 
@@ -3140,6 +3150,7 @@ export default {
 export const __test = {
   firstMonthBackActive,
   analyticsRange,
+  partitionVipRoleChecks,
   phoenixDayStart,
   recordSubscriptionCancellation,
   cleanAttribution,
