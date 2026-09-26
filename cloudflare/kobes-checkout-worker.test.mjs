@@ -73,6 +73,18 @@ test('Today and yesterday ranges follow Phoenix midnight, not UTC midnight', () 
   assert.equal(yesterday.includes('2026-09-21T23:00:00Z'), false);
 });
 
+test('unavailable Discord role checks are not counted as confirmed missing VIP access', () => {
+  const checks = [
+    { role: 'ACTIVE', subscription: { id: 'active' } },
+    { role: 'MISSING', subscription: { id: 'missing-role' } },
+    { role: 'MISSING_DISCORD', subscription: { id: 'missing-link' } },
+    { role: 'CHECK_FAILED', subscription: { id: 'unverified' } },
+  ];
+  const result = workerTest.partitionVipRoleChecks(checks);
+  assert.deepEqual(result.confirmedMissing.map(item => item.subscription.id), ['missing-role', 'missing-link']);
+  assert.deepEqual(result.unavailable.map(item => item.subscription.id), ['unverified']);
+});
+
 test('creator partnership access lasts until the partnership ends or is paused', () => {
   const now = Date.parse('2026-09-23T20:00:00Z');
   assert.equal(workerTest.creatorAccessActive({ status: 'ACTIVE', access_mode: 'PARTNERSHIP', access_ends_at: null }, now), true);
