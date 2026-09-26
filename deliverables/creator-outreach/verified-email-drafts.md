@@ -1,6 +1,8 @@
 # Creator outreach: verified email queue
 
-Source: `creator_outreach_100.xlsx` (checked 2026-09-23). 22 creator rows have public email addresses; 20 unique inboxes are queued below. No messages have been sent.
+Source: `creator_outreach_100.xlsx` (checked 2026-09-23). 22 creator rows have public email addresses; 20 unique inboxes are listed below.
+
+Outreach status (owner report, 2026-09-25): 19 of the 20 unique inboxes were sent. Father Son & Holy Sport was skipped and should not be sent. The two shared inboxes below were held to avoid duplicate outreach; this status records the owner's report and was not independently checked against Sent mail.
 
 The owner confirmed the working offer on 2026-09-25: a proposed $10 one-time reward for each qualifying new paid VIP subscriber, excluding refunds, chargebacks, duplicates, self-referrals, and fraud. These drafts remain unsent and subject to final agreement.
 
@@ -210,6 +212,8 @@ https://kobesbettinghub.com
 ```
 
 ## 33. Father Son & Holy Sport
+
+Status: skipped at the owner's request; do not send.
 
 - To: gary@fathersonandholyfootball.com
 - Public source: https://fathersonandholyfootball.com/contact/
