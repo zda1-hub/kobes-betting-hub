@@ -5,10 +5,11 @@ const os = require('node:os');
 const path = require('node:path');
 const { activeWindow, alertDescription, arbitrageBookmakers, createArbitragePaperMonitor, findArbitrage } = require('./arbitrage-paper-monitor');
 
-test('uses eight Arizona books within one Odds API quota group and allows a narrower member list', () => {
+test('uses all nine Arizona books covered by the feed within one quota group and allows a narrower member list', () => {
   const books = arbitrageBookmakers();
-  assert.equal(books.length, 8);
+  assert.equal(books.length, 9);
   assert.ok(books.includes('hardrockbet_az'));
+  assert.ok(books.includes('espnbet'));
   assert.deepEqual(arbitrageBookmakers('fanduel, betrivers, fanduel'), ['fanduel', 'betrivers']);
   assert.throws(() => arbitrageBookmakers('bad-key'), /ARBITRAGE_BOOKMAKERS/);
 });

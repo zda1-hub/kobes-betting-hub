@@ -3,11 +3,12 @@ const path = require('node:path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 // Keep the first scan within one Odds API bookmaker group (up to ten books).
-// These keys are for Arizona-licensed books covered by the feed; availability
+// These keys cover every currently launched Arizona-licensed sportsbook listed
+// in The Odds API's US catalog; availability
 // of an individual price still depends on the sport, market, and plan.
 const DEFAULT_BOOKS = [
   'draftkings', 'fanduel', 'betmgm', 'betrivers', 'williamhill_us',
-  'fanatics', 'ballybet', 'hardrockbet_az'
+  'fanatics', 'ballybet', 'hardrockbet_az', 'espnbet'
 ];
 
 function arbitrageBookmakers(value) {
