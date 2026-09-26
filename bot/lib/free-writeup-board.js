@@ -41,6 +41,9 @@ function safeEvidenceStats(row) {
   // instead of copying source sentences so names, teams, averages, rankings,
   // odds, and other clues from the paid writeup cannot leak into the preview.
   const source = String(row.teaser_source || '');
+  const subject = String(row.selection || '').trim().split(/\s+/).slice(0, 2);
+  const surname = subject.length === 2 && !/^(over|under|vs\.?|at)$/i.test(subject[1])
+    ? subject[1].replace(/[^a-z]/gi, '') : '';
   const stats = [];
   const seen = new Set();
   const ratio = /\b(\d{1,2})\s*\/\s*(\d{1,2})\b/g;
@@ -52,12 +55,15 @@ function safeEvidenceStats(row) {
     const following = source.slice(match.index + match[0].length).search(/[.\n;]/);
     const end = following < 0 ? source.length : match.index + match[0].length + following;
     const context = source.slice(priorBoundary + 1, end).toLowerCase();
+    // A long approved writeup can discuss other players. Do not turn one of
+    // their records into a public claim about the selected wager.
+    if (!surname || !new RegExp(`\\b${surname.toLowerCase()}\\b`).test(context)) continue;
     let label = 'recent games';
     if (/\b(?:against|versus|vs\.?)\b/.test(context)) label = 'the stated matchup sample';
     else if (/\b(?:when|without|inactive|doesn['’]?t play|lineup)\b/.test(context)) label = 'the stated lineup condition';
     else if (/\b(?:at home|home games?)\b/.test(context)) label = 'recent home games';
     else if (/\b(?:on the road|away games?)\b/.test(context)) label = 'recent away games';
-    const fact = `Hit in ${hits}/${sample} ${label}`;
+    const fact = `${hits}/${sample} in ${label}`;
     if (!seen.has(fact)) {
       seen.add(fact);
       stats.push(fact);
@@ -67,41 +73,16 @@ function safeEvidenceStats(row) {
   return stats;
 }
 
-function publicPropLine(row) {
-  const published = String(row.published_line || '').trim();
-  const selection = String(row.selection || '').trim();
-  // A canonical writeup can split the direction across `selection` (for
-  // example, "Payton Tolle over") and the threshold across `published_line`
-  // ("14.5 outs"). Read them together so the public preview does not collapse
-  // to a generic placeholder while the paid post still has the full wager.
-  const comparable = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9.+-]+/g, ' ').trim();
-  const source = published && comparable(selection).includes(comparable(published))
-    ? selection
-    : [selection, published].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-  if (!source) return '||VIP PICK|| · Market available in VIP';
-
-  // Show the market and threshold Kobe requested, but never the player/team or
-  // price. Prefer the separately stored published line; for manual Discord
-  // writeups, start at the first recognisable market word in the selection.
-  const match = source.match(/\b(over|under|moneyline|draw no bet|to score|anytime touchdown|first touchdown|spread)\b[\s\S]*/i);
-  if (!match) return '||VIP PICK|| · Market available in VIP';
-  const market = match[0]
-    .replace(/(?:\s+|\s+at\s+)[+-]\d{3,4}\b.*$/i, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 140);
-  // Discord spoiler styling gives this a native blurred/frosted appearance.
-  // The concealed text is only the harmless label "VIP PICK"—never the
-  // actual player or team—so tapping the blur cannot reveal paid information.
-  return market ? `||VIP PICK|| · ${market}` : '||VIP PICK|| · Market available in VIP';
+function publicPropLine() {
+  // Even the direction and threshold can make a rare prop identifiable. The
+  // free board promises the exact wager without exposing any of its terms.
+  return '🔒 Exact prop, line and odds inside VIP';
 }
 
-function shortBreakdown(stats) {
-  // Kobe wants the free board to be a true teaser: one or two normalized
-  // hit-rate facts and nothing from the paid analysis. If a safe hit rate
-  // cannot be extracted, omit the teaser field instead of filling it with
-  // generic context or a sentence that hints at the writeup.
-  return stats.length ? `${stats.join(' · ')}.` : '';
+function shortBreakdown(stats, topics) {
+  const topicText = topics.length ? `The full writeup examines ${topics.map((topic) => topic.toLowerCase()).join(' and ')}.` : '';
+  const statText = stats.length ? `One cited sample: ${stats[0]}.` : '';
+  return [topicText, statText].filter(Boolean).join(' ');
 }
 
 function publicPreviews(rows, date) {
@@ -117,7 +98,7 @@ function publicPreviews(rows, date) {
     const [emoji, sport] = sportLabel(row);
     const topics = safeEvidenceTopics(row);
     const stats = safeEvidenceStats(row);
-    return { number: index + 1, emoji, sport, topics, prop: publicPropLine(row), breakdown: shortBreakdown(stats) };
+    return { number: index + 1, emoji, sport, topics, prop: publicPropLine(), breakdown: shortBreakdown(stats, topics) };
   });
 }
 
@@ -129,7 +110,7 @@ function freeWriteupBoardPayload(rows, date) {
     embeds: [{
       color: 0xFF7900,
       title: `${emoji} ${sport[0].toUpperCase()}${sport.slice(1)} VIP writeup · ${index + 1}`,
-      description: [prop, breakdown ? `**Relevant stat:** ${breakdown}` : '', 'Full pick and analysis are in VIP.'].filter(Boolean).join('\n\n'),
+      description: [breakdown ? `**Why it made the board:** ${breakdown}` : '**Why it made the board:** The full evidence is in the member writeup.', prop, 'See the player, exact wager and complete reasoning in VIP.'].join('\n\n'),
       footer: { text: `${FREE_BOARD_MARKER} · ${date} · ${index + 1}` }
     }]
   }));

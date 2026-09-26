@@ -15,27 +15,34 @@ test('formats every current writeup as its own full-width redacted preview', () 
   const text = JSON.stringify(payload);
   assert.equal(payload.length, 2);
   assert.equal(payload.every((card) => card.embeds.length === 1), true);
-  assert.match(text, /Over 4\.5 receptions/);
-  assert.match(text, /Over 38\.5 yards/);
-  assert.doesNotMatch(text, /Recent production|Matchup context|Full breakdown/);
-  assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '||VIP PICK|| · Over 4.5 receptions', breakdown: '' }]);
+  assert.match(text, /Exact prop, line and odds inside VIP/);
+  assert.match(text, /Why it made the board/);
+  assert.doesNotMatch(text, /Over 4\.5 receptions|Over 38\.5 yards/);
+  assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '🔒 Exact prop, line and odds inside VIP', breakdown: 'The full writeup examines recent production.' }]);
   assert.doesNotMatch(text, /Bijan|Boutte|Higbee|Blake|Corum|Giants|Cowboys|Rams|43\.9|6-2|-150|-115|Old exact|Not a writeup/);
 });
 
-test('keeps a split market visible while redacting the paid player and price', () => {
+test('hints at the evidence while keeping a split market and paid terms private', () => {
   const previews = publicPreviews([{
     pick_id: 'payton', operating_date: '2026-09-22', status: 'PUBLISHED',
     destination: '#mlb-writeups', sport: 'baseball',
     selection: 'Payton Tolle over', published_line: '14.5 outs', published_odds_american: '-125',
-    teaser_source: 'Over in 4/4 recent games. Over in 2/2 against CLE. Averaging 64 this season. CLE is 27th in OPS away.'
+    teaser_source: 'Tolle went over in 4/4 recent games. Tolle went over in 2/2 against CLE. Averaging 64 this season. CLE is 27th in OPS away.'
   }], '2026-09-22');
   assert.deepEqual(previews, [{
     number: 1, emoji: '⚾', sport: 'baseball',
     topics: ['Recent production', 'Matchup context'],
-    prop: '||VIP PICK|| · over 14.5 outs',
-    breakdown: 'Hit in 4/4 recent games · Hit in 2/2 the stated matchup sample.'
+    prop: '🔒 Exact prop, line and odds inside VIP',
+    breakdown: 'The full writeup examines recent production and matchup context. One cited sample: 4/4 in recent games.'
   }]);
   assert.doesNotMatch(JSON.stringify(previews), /Payton|Tolle|-125|CLE|27th|OPS|64/);
+
+  const unrelated = publicPreviews([{
+    pick_id: 'unrelated', operating_date: '2026-09-22', status: 'PUBLISHED',
+    destination: '#mlb-writeups', sport: 'baseball', selection: 'Payton Tolle over',
+    teaser_source: 'Another player hit in 4/4 recent games. Tolle has a matchup note.'
+  }], '2026-09-22');
+  assert.doesNotMatch(unrelated[0].breakdown, /4\/4/);
 
   const alreadyCombined = publicPreviews([{
     pick_id: 'combined', operating_date: '2026-09-22', status: 'PUBLISHED',
@@ -43,7 +50,7 @@ test('keeps a split market visible while redacting the paid player and price', (
     selection: 'Payton Tolle over 14.5 outs', published_line: '14.5 outs',
     published_odds_american: '-125', teaser_source: 'Over in L10.'
   }], '2026-09-22');
-  assert.equal(alreadyCombined[0].prop, '||VIP PICK|| · over 14.5 outs');
+  assert.equal(alreadyCombined[0].prop, '🔒 Exact prop, line and odds inside VIP');
 });
 
 test('stays empty until a writeup is published', () => {
