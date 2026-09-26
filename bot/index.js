@@ -60,6 +60,7 @@ const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
 const { isTrendOnlySource } = require('./lib/trend-only-source');
+const retiredTrendCardIds = new Set(['20260926-167-X']);
 const { datedTimeOverride, nextArizonaDailyStartMs } = require('./lib/daily-window');
 const { createDiscordJoinAttribution, parseCampaigns } = require('./lib/discord-join-attribution');
 const { arbitrageBookmakers, createArbitragePaperMonitor } = require('./lib/arbitrage-paper-monitor');
@@ -1908,6 +1909,7 @@ async function findReviewPacket(pickId, interaction) {
 
 async function handleSourceEditButton(interaction) {
   const [, pickId] = interaction.customId.split(':');
+  if (retiredTrendCardIds.has(pickId)) throw new Error('This trend card was retired and cannot become a writeup.');
   if (!isPickApprover(interaction)) throw new Error('Only Kobe can edit approval details.');
   const found = await findReviewPacket(pickId, interaction);
   if (!found || found.packet.approval?.decision || found.packet.discord_review_message_id !== interaction.message.id)
@@ -1929,6 +1931,7 @@ async function handleSourceEditSubmit(interaction) {
   if (!isPickApprover(interaction)) throw new Error('Only Kobe can edit approval details.');
   const match = interaction.customId.match(/^source-edit:([A-Za-z0-9_-]+):([a-f0-9]{20}|none)$/);
   if (!match) throw new Error('Invalid edit request.');
+  if (retiredTrendCardIds.has(match[1])) throw new Error('This trend card was retired and cannot become a writeup.');
   const found = await findReviewPacket(match[1], interaction);
   if (!found || found.packet.approval?.decision || isTermsOnlyMode(found.packet) || isTrendOnlySource(found.packet)) throw new Error('This approval is no longer editable.');
   const { packet, packetPath } = found;
@@ -1975,6 +1978,10 @@ async function handleSourceReviewButton(interaction) {
   }
   if (!['free', 'paid', 'reject'].includes(action)) {
     await interaction.editReply('This review action is not recognized.');
+    return;
+  }
+  if (retiredTrendCardIds.has(pickId)) {
+    await interaction.editReply('This TrendsCenter stat card was retired. It cannot be posted as a pick.');
     return;
   }
   const found = await findReviewPacket(pickId, interaction);
@@ -2296,6 +2303,32 @@ async function refreshPendingDetailEditControls() {
   return refreshed;
 }
 
+async function retireVisibleTrendCards() {
+  if (!pickApprovalChannelId) return;
+  const channel = await client.channels.fetch(pickApprovalChannelId);
+  if (!channel?.messages) return;
+  let before;
+  for (let page = 0; page < 5; page += 1) {
+    const batch = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+    if (!batch.size) break;
+    for (const message of batch.values()) {
+      if (message.author?.id !== client.user?.id || !message.components?.length) continue;
+      const cardText = message.embeds.map((embed) => `${embed.title || ''}\n${embed.description || ''}\n${embed.footer?.text || ''}`).join('\n');
+      const pickId = [...retiredTrendCardIds].find((id) => cardText.includes(id));
+      if (!pickId) continue;
+      await message.edit({
+        embeds: [{ title: 'TREND SOURCE — NOT A WRITEUP',
+          description: 'This TrendsCenter stat was mistaken for a pick. It is retired and cannot be posted.',
+          footer: { text: `Retired trend card ${pickId}` } }],
+        components: []
+      });
+      console.log(`Retired visible trend approval card ${pickId}.`);
+    }
+    before = batch.last()?.id;
+    if (batch.size < 100) break;
+  }
+}
+
 async function refreshPendingResearchApprovals() {
   if (!pickApprovalChannelId) return;
   const date = pacificClock().date;
@@ -2502,6 +2535,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.error('Unable to refresh pending expert-picks approval cards:', error);
   }
   try {
+    await retireVisibleTrendCards();
     await refreshPendingResearchApprovals();
     await refreshPendingDetailEditControls();
   } catch (error) {
