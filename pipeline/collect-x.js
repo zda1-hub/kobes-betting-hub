@@ -116,6 +116,7 @@ function sourceSupportSignalCount(text) {
 }
 
 function shouldQueueForReview(source, post, postMediaUrls) {
+  if (source.monitoring_mode === 'trend_only') return false;
   if (exclusiveTextExtraction(source, post.text)) return true;
   if (likelyPick(post.text)) return true;
   if (postMediaUrls.length === 0) return false;
