@@ -120,7 +120,7 @@ function payloadFor(report, records = []) {
     const losses = decisions.length - wins;
     return { wins, losses, decisions: decisions.length, rate: decisions.length ? wins / decisions.length : 0 };
   };
-  const format = ({ name, wins, losses, rate, references }) => `${name}: ${wins}-${losses} (${Math.round(rate * 100)}%)${references?.[0] ? ` · [latest post](${references[0]})` : ''}`;
+  const format = ({ name, wins, losses, rate }) => `${name} (${wins}-${losses}, ${Math.round(rate * 100)}%)`;
   const ranked = (rows) => rows.sort((a, b) => b.rate - a.rate || b.wins - a.wins || a.name.localeCompare(b.name));
   const yesterday = ranked(records.map((expert) => ({ name: expert.name, references: expert.references, ...recordWithin(expert, end - day, end) }))
     .filter((item) => item.decisions && item.rate > 0.61));
@@ -140,33 +140,47 @@ function payloadFor(report, records = []) {
     const dates = [...byDate.keys()].sort().reverse();
     let days = 0;
     for (const date of dates) {
+      const expected = new Date(Date.parse(`${dates[0]}T12:00:00Z`) - days * 86400000).toISOString().slice(0, 10);
+      if (date !== expected) break;
       if (byDate.get(date).includes('L') || !byDate.get(date).includes('W')) break;
       days += 1;
     }
-    const sports = [...new Set(expert.results.filter((item) => item.grade === 'W' && item.sport).map((item) => item.sport))];
+    const streakDates = new Set(dates.slice(0, days));
+    const sports = [...new Set(expert.results.filter((item) => item.grade === 'W' && item.sport && streakDates.has(operatingDate(item.at))).map((item) => item.sport))];
     return { name: expert.name, days, label: sports.length === 1 ? sports[0] : 'all sports' };
   }).filter((item) => item.days >= 2).sort((a, b) => b.days - a.days || a.name.localeCompare(b.name));
-  const lines = (items, mapper = format, budget = 500) => {
+  const lines = (items, mapper = format) => {
     if (!items.length) return 'No verified expert currently meets this threshold.';
-    const selected = [];
-    for (const item of items) {
-      const line = mapper(item);
-      const omitted = items.length - selected.length - 1;
-      const suffix = omitted > 0 ? `\n…and ${omitted} more qualifying expert${omitted === 1 ? '' : 's'}.` : '';
-      if ([...selected, line].join('\n').length + suffix.length > budget) break;
-      selected.push(line);
-    }
-    const omitted = items.length - selected.length;
-    return `${selected.join('\n')}${omitted > 0 ? `\n…and ${omitted} more qualifying expert${omitted === 1 ? '' : 's'}.` : ''}`;
+    return items.map(mapper).join('\n');
   };
+  const sections = [
+    ['Yesterday’s best · above 61%', lines(yesterday, (item) => `${item.name} (${item.wins}-${item.losses})`)],
+    ['Hottest Experts · 2+ winning days', lines(hot, (item) => `${item.name} (${item.days}-day verified streak, ${item.label})`)],
+    ['Best Exclusive records L7 days · above 60%', lines(sevenDays)],
+    ['Best exclusive records ALL TIME · above 54%', lines(allTime)]
+  ];
+  const descriptions = [];
+  let current = '';
+  for (const [heading, body] of sections) {
+    for (const line of [`**${heading}**`, ...body.split('\n'), '']) {
+      if (current.length + line.length + 1 > 3500) {
+        descriptions.push(current.trim());
+        current = '';
+      }
+      current += `${line}\n`;
+    }
+  }
+  if (current.trim()) descriptions.push(current.trim());
+  if (descriptions.length > 10 || descriptions.reduce((total, item) => total + item.length, 0) > 6000)
+    throw new Error('Expert list exceeds Discord’s message limit; no names were silently omitted.');
   return {
     allowedMentions: { parse: [] },
-    embeds: [{
+    embeds: descriptions.map((description, index) => ({
       color: 0xFF7900,
-      title: 'Expert Play Feedback',
-      description: `**Yesterday’s best · above 61%**\n${lines(yesterday)}\n\n**Hottest experts · 2+ winning days**\n${lines(hot, (item) => `${item.name}: ${item.days}-day verified streak (${item.label})`)}\n\n**Best exclusive records · last 7 days · above 60%**\n${lines(sevenDays)}\n\n**Best exclusive records · all time · above 54%**\n${lines(allTime)}\n\n**Today’s source activity (${report.date} Arizona)**\n${report.playCount} selections parsed from ${report.sourceCount} text-card sources.\n${active}\n\n**Exact-text repeats today**\n${repeated}\n\nVerified tracked results ${coverage}. Records count only linked, individually graded paid picks; pushes and voids are excluded from percentages. Image-only picks and unavailable history are not invented.`,
-      footer: { text: `${MARKER} · Approved #expert-picks posts and verified pick log` }
-    }]
+      title: index ? 'Expert Play Feedback · continued' : 'Expert Play Feedback',
+      description,
+      ...(index === 0 ? { footer: { text: `${MARKER} · Approved #expert-picks posts and verified pick log` } } : {})
+    }))
   };
 }
 
@@ -220,7 +234,7 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     const rows = await rowsFor();
     const channels = typeof paidChannelIds === 'function' ? paidChannelIds() : paidChannelIds;
     const payload = payloadFor(summary(messages, now()), verifiedRecords(rows, channels));
-    const digest = createHash('sha256').update(`${payload.embeds[0].title}\n${payload.embeds[0].description}`).digest('hex').slice(0, 20);
+    const digest = createHash('sha256').update(payload.embeds.map((embed) => `${embed.title}\n${embed.description}`).join('\n')).digest('hex').slice(0, 20);
     return { payload, digest };
   }
   function reviewPayload(payload, digest, status) {
@@ -228,7 +242,9 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
       allowedMentions: { parse: [] },
       content: status === 'PENDING' ? 'Private review: verify the figures, then approve this exact snapshot for VIP.'
         : status === 'REJECTED' ? 'Rejected. Nothing was posted to VIP.' : 'Approved and posted to VIP.',
-      embeds: [{ ...payload.embeds[0], title: 'Review Best Experts & Today’s Trends', footer: { text: `${REVIEW_MARKER} · ${digest}` } }],
+      embeds: payload.embeds.map((embed, index) => index === 0
+        ? { ...embed, title: 'Review Best Experts & Today’s Trends', footer: { text: `${REVIEW_MARKER} · ${digest}` } }
+        : embed),
       components: [{ type: 1, components: [
         { type: 2, style: 3, label: 'Approve for VIP', custom_id: `expert-pulse:approve:${digest}`, disabled: status !== 'PENDING' },
         { type: 2, style: 4, label: 'Reject', custom_id: `expert-pulse:reject:${digest}`, disabled: status !== 'PENDING' },

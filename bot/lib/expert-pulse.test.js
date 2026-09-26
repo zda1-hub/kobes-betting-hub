@@ -31,7 +31,7 @@ test('reads production-style bot embeds but never merges odds or team-alias vari
   ], now);
   assert.equal(report.playCount, 3);
   assert.deepEqual(report.repeated, []);
-  assert.match(payloadFor(report).embeds[0].description, /Exact-text repeats today/);
+  assert.match(payloadFor(report).embeds[0].description, /Best Exclusive records L7 days/);
 });
 
 test('shows all-time linked, individually graded paid expert results, including losses and pushes', () => {
@@ -70,8 +70,8 @@ test('expert feedback applies Kobe thresholds and ranks by verified win rate', (
     { name: 'Too Few', wins: 4, losses: 0, pushes: 0, voids: 0, streak: 4, references: ['https://discord.com/3'], results: [] }
   ];
   const text = payloadFor({ date: '2026-09-21', active: [], repeated: [], playCount: 0, sourceCount: 0 }, rows).embeds[0].description;
-  assert.ok(text.indexOf('Better Rate: 4-1') < text.indexOf('More Wins: 6-4'));
-  assert.match(text, /Too Few: 4-0/);
+  assert.ok(text.indexOf('Better Rate (4-1') < text.indexOf('More Wins (6-4'));
+  assert.match(text, /Too Few \(4-0/);
 });
 
 test('large expert histories stay within the Discord embed description limit', () => {
@@ -80,10 +80,12 @@ test('large expert histories stay within the Discord embed description limit', (
     wins: 100 - (index % 20), losses: index % 10, pushes: 0, voids: 0,
     references: [`https://discord.com/channels/123/456/${1000 + index}`], results: []
   }));
-  const description = payloadFor({ date: '2026-09-23', active: [], repeated: [], playCount: 0, sourceCount: 0 }, records).embeds[0].description;
-  assert.ok(description.length <= 4096);
-  assert.match(description, /more qualifying experts/);
-  assert.match(description, /Best exclusive records · all time/);
+  const embeds = payloadFor({ date: '2026-09-23', active: [], repeated: [], playCount: 0, sourceCount: 0 }, records).embeds;
+  const description = embeds.map((embed) => embed.description).join('\n');
+  assert.ok(embeds.every((embed) => embed.description.length <= 4096));
+  assert.doesNotMatch(description, /more qualifying experts/);
+  assert.match(description, /Best exclusive records ALL TIME/);
+  assert.match(description, /Verified Expert 120/);
 });
 
 test('refuses to draft or publish when review or VIP destination privacy is public or unverified', async () => {
@@ -128,6 +130,7 @@ test('owner approves an exact private review card once; changes require another 
     const posts = new Map();
     const now = Date.parse('2026-09-21T18:00:00Z');
     let sourceMessages = [{ content: 'Ben Burns\n• Broncos ML -110', createdTimestamp: now - 1000 }];
+    let gradedRows = [];
     const source = { id: '456', guild, messages: { fetch: async () => new Map(sourceMessages.map((message, index) => [String(index), message])) } };
     function channel(id, map) {
       return { id, guild, permissionsFor: () => ({ has: () => false }), messages: { fetch: async (messageId) => typeof messageId === 'object' ? map : map.get(messageId) || null },
@@ -144,6 +147,7 @@ test('owner approves an exact private review card once; changes require another 
       sourceChannelFor: async () => source,
       reviewChannelFor: async () => review,
       destinationChannelFor: async () => destination,
+      rowsFor: async () => gradedRows, paidChannelIds: ['789'],
       isApprover: ({ userId, ownerId }) => userId === ownerId,
       stateFile: path.join(directory, 'state.json'), now: () => now
     });
@@ -158,6 +162,11 @@ test('owner approves an exact private review card once; changes require another 
     assert.equal(posts.size, 1);
     await assert.rejects(pulse.decide(args), /already decided/);
     sourceMessages = [...sourceMessages, { content: 'Kelly In Vegas\n• Cowboys +3', createdTimestamp: now - 500 }];
+    // A source-only change does not alter a results-only pulse. A new verified
+    // grade is what must invalidate Kobe's exact approval snapshot.
+    gradedRows = [{ pick_id: 'graded-1', source_name: 'Kelly In Vegas', status: 'GRADED', result: 'W', wager_scope: 'individual',
+      published_at: new Date(now - 86400000).toISOString(), result_verified_source: 'https://www.espn.com/game/1',
+      result_verified_at: new Date(now).toISOString(), post_reference: 'https://discord.com/channels/123/789/111' }];
     assert.equal((await pulse.refresh()).status, 'REVIEW_UPDATED');
     assert.equal(posts.size, 1);
     await assert.rejects(pulse.decide(args), /stale/);

@@ -15,10 +15,10 @@ test('formats every current writeup as its own full-width redacted preview', () 
   const text = JSON.stringify(payload);
   assert.equal(payload.length, 2);
   assert.equal(payload.every((card) => card.embeds.length === 1), true);
-  assert.match(text, /Exact prop, line and odds inside VIP/);
+  assert.match(text, /Player or game prop · exact play inside VIP/);
   assert.match(text, /Why it made the board/);
   assert.doesNotMatch(text, /Over 4\.5 receptions|Over 38\.5 yards/);
-  assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '🔒 Exact prop, line and odds inside VIP', breakdown: 'The full writeup examines recent production.' }]);
+  assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '🔒 Player or game prop · exact play inside VIP', breakdown: 'The full writeup examines recent production.' }]);
   assert.doesNotMatch(text, /Bijan|Boutte|Higbee|Blake|Corum|Giants|Cowboys|Rams|43\.9|6-2|-150|-115|Old exact|Not a writeup/);
 });
 
@@ -32,8 +32,8 @@ test('hints at the evidence while keeping a split market and paid terms private'
   assert.deepEqual(previews, [{
     number: 1, emoji: '⚾', sport: 'baseball',
     topics: ['Recent production', 'Matchup context'],
-    prop: '🔒 Exact prop, line and odds inside VIP',
-    breakdown: 'The full writeup examines recent production and matchup context. One cited sample: 4/4 in recent games.'
+    prop: '🔒 Player or game prop · exact play inside VIP',
+    breakdown: 'Verified samples: 4/4 in recent games; 2/2 in the stated matchup sample. The full writeup examines recent production and matchup context.'
   }]);
   assert.doesNotMatch(JSON.stringify(previews), /Payton|Tolle|-125|CLE|27th|OPS|64/);
 
@@ -50,7 +50,7 @@ test('hints at the evidence while keeping a split market and paid terms private'
     selection: 'Payton Tolle over 14.5 outs', published_line: '14.5 outs',
     published_odds_american: '-125', teaser_source: 'Over in L10.'
   }], '2026-09-22');
-  assert.equal(alreadyCombined[0].prop, '🔒 Exact prop, line and odds inside VIP');
+  assert.equal(alreadyCombined[0].prop, '🔒 Player or game prop · exact play inside VIP');
 });
 
 test('stays empty until a writeup is published', () => {
