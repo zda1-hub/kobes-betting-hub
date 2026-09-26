@@ -76,13 +76,13 @@ function safeEvidenceStats(row) {
 function publicPropLine() {
   // Even the direction and threshold can make a rare prop identifiable. The
   // free board promises the exact wager without exposing any of its terms.
-  return '🔒 Exact prop, line and odds inside VIP';
+  return '🔒 Player or game prop · exact play inside VIP';
 }
 
 function shortBreakdown(stats, topics) {
   const topicText = topics.length ? `The full writeup examines ${topics.map((topic) => topic.toLowerCase()).join(' and ')}.` : '';
-  const statText = stats.length ? `One cited sample: ${stats[0]}.` : '';
-  return [topicText, statText].filter(Boolean).join(' ');
+  const statText = stats.length ? `Verified samples: ${stats.join('; ')}.` : '';
+  return [statText, topicText].filter(Boolean).join(' ');
 }
 
 function publicPreviews(rows, date) {
@@ -110,7 +110,9 @@ function freeWriteupBoardPayload(rows, date) {
     embeds: [{
       color: 0xFF7900,
       title: `${emoji} ${sport[0].toUpperCase()}${sport.slice(1)} VIP writeup · ${index + 1}`,
-      description: [breakdown ? `**Why it made the board:** ${breakdown}` : '**Why it made the board:** The full evidence is in the member writeup.', prop, 'See the player, exact wager and complete reasoning in VIP.'].join('\n\n'),
+      description: [`**Player or game prop**  |  **Short breakdown; full breakdown in VIP**`, prop,
+        breakdown ? `**Why it made the board:** ${breakdown}` : '**Why it made the board:** The full evidence is in the member writeup.',
+        'Player and team names, exact wager, and full reasoning are inside VIP.'].join('\n\n'),
       footer: { text: `${FREE_BOARD_MARKER} · ${date} · ${index + 1}` }
     }]
   }));
