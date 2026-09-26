@@ -2,7 +2,22 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-const DEFAULT_BOOKS = ['draftkings', 'fanduel', 'betmgm'];
+// Keep the first scan within one Odds API bookmaker group (up to ten books).
+// These keys are for Arizona-licensed books covered by the feed; availability
+// of an individual price still depends on the sport, market, and plan.
+const DEFAULT_BOOKS = [
+  'draftkings', 'fanduel', 'betmgm', 'betrivers', 'williamhill_us',
+  'fanatics', 'ballybet', 'hardrockbet_az'
+];
+
+function arbitrageBookmakers(value) {
+  if (!value) return [...DEFAULT_BOOKS];
+  const books = [...new Set(String(value).split(',').map(book => book.trim().toLowerCase()).filter(Boolean))];
+  if (!books.length || books.length > 10 || books.some(book => !/^[a-z0-9_]+$/.test(book))) {
+    throw new Error('ARBITRAGE_BOOKMAKERS must contain 1-10 comma-separated Odds API bookmaker keys.');
+  }
+  return books;
+}
 const DEFAULT_WINDOWS = ['09:30', '12:30', '16:00'];
 const MAX_QUOTE_AGE_MS = 5 * 60 * 1000;
 
@@ -278,4 +293,4 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
   };
 }
 
-module.exports = { activeWindow, alertDescription, createArbitragePaperMonitor, findArbitrage, reviewComponents };
+module.exports = { activeWindow, alertDescription, arbitrageBookmakers, createArbitragePaperMonitor, findArbitrage, reviewComponents };
