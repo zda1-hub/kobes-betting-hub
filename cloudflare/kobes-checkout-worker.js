@@ -2265,7 +2265,7 @@ function memberWelcomeMessage(session, subscription, env) {
       'Already connected? Use that same Discord account in Kobe’s server. Do not buy another membership to fix missing access.',
       'Keep this connection link private — it belongs to your membership.', '',
       'Manage billing or cancel: ' + siteOrigin(env) + '/managemembership',
-      'Need help connecting? Reply to this email or email zakai@kaimaz.com.', '',
+      'Need help connecting? Email support@kobesbettinghub.com.', '',
       'For adults 21+ where permitted. No betting outcome is guaranteed. Wager responsibly.',
     ].join('\n'),
   };
