@@ -33,6 +33,7 @@ test('requires exactly one visible play for each approval card', () => {
 });
 
 test('requires a caption signal for generic media while preserving dedicated photo review', () => {
+  assert.equal(shouldQueueForReview({ monitoring_mode: 'trend_only' }, { text: 'Troy +2.5, 20–5 ATS' }, []), false);
   assert.equal(shouldQueueForReview({ monitoring_mode: 'standard' }, { text: '' }, ['https://example.com/pick.png']), false);
   assert.equal(shouldQueueForReview({ monitoring_mode: 'writeup_or_trend' }, { text: 'Tonight\'s ladder card' }, ['https://example.com/ladder.png']), true);
   assert.equal(shouldQueueForReview({ monitoring_mode: 'photo_review' }, { text: '' }, ['https://example.com/card.png']), true);

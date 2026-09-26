@@ -59,6 +59,7 @@ const { createExpertPulse } = require('./lib/expert-pulse');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
+const { isTrendOnlySource } = require('./lib/trend-only-source');
 const { datedTimeOverride, nextArizonaDailyStartMs } = require('./lib/daily-window');
 const { createDiscordJoinAttribution, parseCampaigns } = require('./lib/discord-join-attribution');
 const { arbitrageBookmakers, createArbitragePaperMonitor } = require('./lib/arbitrage-paper-monitor');
@@ -1911,6 +1912,7 @@ async function handleSourceEditButton(interaction) {
   const found = await findReviewPacket(pickId, interaction);
   if (!found || found.packet.approval?.decision || found.packet.discord_review_message_id !== interaction.message.id)
     throw new Error('This approval card is no longer editable.');
+  if (isTrendOnlySource(found.packet)) throw new Error('This trend is not a writeup candidate. Reject this card.');
   if (isTermsOnlyMode(found.packet)) throw new Error('Exclusive terms have no writeup details to edit. Reject an incorrect wager.');
   const packet = found.packet;
   const details = sourceEvidence(packet).map((line) => `- ${line}`).join('\n');
@@ -1928,7 +1930,7 @@ async function handleSourceEditSubmit(interaction) {
   const match = interaction.customId.match(/^source-edit:([A-Za-z0-9_-]+):([a-f0-9]{20}|none)$/);
   if (!match) throw new Error('Invalid edit request.');
   const found = await findReviewPacket(match[1], interaction);
-  if (!found || found.packet.approval?.decision || isTermsOnlyMode(found.packet)) throw new Error('This approval is no longer editable.');
+  if (!found || found.packet.approval?.decision || isTermsOnlyMode(found.packet) || isTrendOnlySource(found.packet)) throw new Error('This approval is no longer editable.');
   const { packet, packetPath } = found;
   if (String(packet.approval?.exact_final_copy_sha256 || 'none').slice(0, 20) !== match[2])
     throw new Error('This edit is stale. Open Edit details from the latest card.');
@@ -1988,6 +1990,10 @@ async function handleSourceReviewButton(interaction) {
   }
   if (packet.test_only && action !== 'reject') {
     await interaction.editReply('This is a safety test card. Only Reject is enabled; no member-facing post can be made from it.');
+    return;
+  }
+  if (isTrendOnlySource(packet) && action !== 'reject') {
+    await interaction.editReply('This source is trend-only. The card cannot be posted as a free or paid writeup.');
     return;
   }
 
@@ -2310,6 +2316,29 @@ async function refreshPendingResearchApprovals() {
     try {
       packet = JSON.parse(await fs.readFile(packetPath, 'utf8'));
     } catch {
+      continue;
+    }
+    if (isTrendOnlySource(packet) && packet.discord_review_message_id && !packet.approval?.decision) {
+      try {
+        const message = await approvalChannel.messages.fetch(packet.discord_review_message_id);
+        const embed = message.embeds?.[0]?.toJSON?.() || {};
+        await message.edit({
+          embeds: [{ ...embed, title: 'TREND SOURCE — NOT A WRITEUP',
+            description: 'This source supplies betting trends, not Kobe-approved plays. This card cannot be posted. Reject it to clear the queue.',
+            footer: { text: `Held trend card ${packet.pick_id}` } }],
+          components: reviewButtons(packet.pick_id, { testOnly: true,
+            freeLabel: 'Not a free pick', paidLabel: 'Not a paid writeup' })
+        });
+        packet.status = 'HELD_TREND_ONLY';
+        packet.approval_ready = false;
+        packet.approval ||= {};
+        delete packet.approval.exact_final_copy;
+        delete packet.approval.exact_final_copy_sha256;
+        await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+        console.log(`Held trend-only approval card ${packet.pick_id}.`);
+      } catch (error) {
+        console.error(`Could not hold trend-only approval card ${packet.pick_id}:`, error);
+      }
       continue;
     }
     const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED'

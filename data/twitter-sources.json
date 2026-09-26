@@ -249,7 +249,7 @@
     "handle": "trendscenterapp",
     "display_name": "TrendsCenter",
     "enabled": true,
-    "monitoring_mode": "writeup_or_trend",
+    "monitoring_mode": "trend_only",
     "credit_line": "Source: @trendscenterapp",
     "reuse_permission": "PENDING_SOURCE_TERMS",
     "notes": "Staged at user request. Do not collect or publish until monitoring is explicitly enabled."
