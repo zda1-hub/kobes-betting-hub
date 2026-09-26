@@ -36,6 +36,8 @@ services:
         sync: false
       - key: ODDS_API_KEY
         sync: false
+      - key: ARBITRAGE_BOOKMAKERS
+        sync: false
       - key: ARBITRAGE_APPROVAL_CHANNEL_ID
         sync: false
       - key: ARBITRAGE_DESTINATION_CHANNEL_ID

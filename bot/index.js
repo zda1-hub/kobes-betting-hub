@@ -61,7 +61,7 @@ const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
 const { datedTimeOverride, nextArizonaDailyStartMs } = require('./lib/daily-window');
 const { createDiscordJoinAttribution, parseCampaigns } = require('./lib/discord-join-attribution');
-const { createArbitragePaperMonitor } = require('./lib/arbitrage-paper-monitor');
+const { arbitrageBookmakers, createArbitragePaperMonitor } = require('./lib/arbitrage-paper-monitor');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { exclusiveSourceIsCurrent } = require('../pipeline/exclusive-text');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -338,6 +338,7 @@ async function startArbitragePaperTest() {
     stateFile: path.join(path.dirname(pickLogPath()), 'arbitrage-paper-test.json'),
     bankroll: Number(process.env.ARBITRAGE_EXAMPLE_BANKROLL || 1000),
     minimumEdgePercent: Number(process.env.ARBITRAGE_MIN_EDGE_PERCENT || 2),
+    bookmakers: arbitrageBookmakers(process.env.ARBITRAGE_BOOKMAKERS),
     windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '08:00-15:00').split(',').map(value => value.trim()).filter(Boolean),
     memberPostingEnabled: process.env.ARBITRAGE_MEMBER_POSTING_ENABLED === 'true',
     isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId)

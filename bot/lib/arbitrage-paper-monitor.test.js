@@ -3,7 +3,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { activeWindow, alertDescription, createArbitragePaperMonitor, findArbitrage } = require('./arbitrage-paper-monitor');
+const { activeWindow, alertDescription, arbitrageBookmakers, createArbitragePaperMonitor, findArbitrage } = require('./arbitrage-paper-monitor');
+
+test('uses eight Arizona books within one Odds API quota group and allows a narrower member list', () => {
+  const books = arbitrageBookmakers();
+  assert.equal(books.length, 8);
+  assert.ok(books.includes('hardrockbet_az'));
+  assert.deepEqual(arbitrageBookmakers('fanduel, betrivers, fanduel'), ['fanduel', 'betrivers']);
+  assert.throws(() => arbitrageBookmakers('bad-key'), /ARBITRAGE_BOOKMAKERS/);
+});
 
 const event = { id: 'game-1', sport_title: 'NBA', away_team: 'Away', home_team: 'Home', commence_time: '2026-09-24T01:00:00Z', bookmakers: [
   { key: 'fanduel', title: 'FanDuel', last_update: '2026-09-23T17:59:00Z', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.2 }, { name: 'Home', price: 1.7 }] }] },
