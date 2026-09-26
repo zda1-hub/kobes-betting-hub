@@ -2,6 +2,8 @@
 
 Status: creative preparation only. No ad has been launched or purchased. Obtain Meta's applicable gambling/gaming written permission and confirm legal targeting before launch; use the stricter of Meta’s minimum age and each permitted location’s legal age. Do not imply that this is ordinary sports content to evade review.
 
+The owner reports that written Meta approval already exists. The approval document, approved ad account, allowed jurisdictions, and account status have not yet been inspected here; verify those exact details in Ads Manager before creating a live campaign.
+
 ## Creative 1: Show the work
 - Format: 9:16, 15 seconds, captions and safe margins for Reels/Stories.
 - 0–3 s visual: quick scroll through a generic game slate, no sportsbook logos or fake balances. On-screen: “A pick needs a reason.”
@@ -34,5 +36,12 @@ Status: creative preparation only. No ad has been launched or purchased. Obtain 
 - Before spend: implement and test a deduplicated Meta Purchase event from a confirmed Stripe payment, verify event value/currency and consent handling, and check Meta Events Manager diagnostics. Do not fire Purchase from a redirect alone.
 - Use UTM source=meta, medium=paid_social, campaign/ad identifiers, then compare landing visits, checkout starts, confirmed payments, refunds, and VIP activations in the internal dashboard. Evaluate creative after a meaningful sample; do not optimize on clicks alone.
 - Launch requires Meta permission, appropriate jurisdiction/age review, user approval of final creative and budget, and a working purchase event.
+
+## Ads Manager draft configuration
+- Campaign objective: Sales, website destination `/join`; optimize for Purchase only after the Stripe-confirmed Purchase event passes Meta Events Manager testing. Until then, keep the campaign unpublished.
+- One initial ad set using only the locations covered by the written approval and the applicable legal age (use 21+ for U.S. sports betting where required). Avoid narrow gambling-interest audiences or any targeting based on vulnerability.
+- Upload the three creative angles as separate ads, with the real results-page capture in the results version. Link Creative 2 to `/results` for a landing-page test; link the analysis creative to `/join` only after the conversion path is verified.
+- Use distinct `utm_campaign`, `utm_content`, and `utm_term` values per ad. Keep the initial budget as an owner-approved variable, not a default spend amount.
+- Before activation, inspect the full ad preview, landing page, pixel diagnostics, approval status, and audience restrictions in the selected account.
 
 Sources checked: Meta Community Standards gambling permission (https://www.facebook.com/help/477434105621119); Meta/Facebook responsible gambling operator guide (https://assets.ctfassets.net/j16ev64qyf6l/38YGDeAUw7DX5F1eiLCbfx/2e2ab1c8ec3ca175de0b3155ac9c601b/Facebook_Operator_Guide__FINAL.pdf); Higgsfield Marketing Studio (https://higgsfield.ai/marketing-automation).

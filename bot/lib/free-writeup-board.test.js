@@ -50,7 +50,7 @@ test('stays empty until a writeup is published', () => {
   assert.equal(freeWriteupBoardPayload([], '2026-09-20'), null);
 });
 
-test('restart reuses the newest board and deletes duplicate bot boards', async () => {
+test('restart replaces legacy combined boards with individual cards without duplicates', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'kbh-free-board-'));
   try {
     const deleted = [];

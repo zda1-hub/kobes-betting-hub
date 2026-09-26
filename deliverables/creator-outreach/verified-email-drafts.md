@@ -2,7 +2,7 @@
 
 Source: `creator_outreach_100.xlsx` (checked 2026-09-23). 22 creator rows have public email addresses; 20 unique inboxes are queued below. No messages have been sent.
 
-Commercial terms need final confirmation before sending. These drafts invite a discussion and make no payout, access, or product availability promise.
+The owner confirmed the working offer on 2026-09-25: a proposed $10 one-time reward for each qualifying new paid VIP subscriber, excluding refunds, chargebacks, duplicates, self-referrals, and fraud. These drafts remain unsent and subject to final agreement.
 
 ## Shared inboxes held for coordination
 
@@ -22,7 +22,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Virtual Ball Boys, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Virtual Ball Boys, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -47,7 +47,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Locked On Sun Belt - Daily Podcast On Sun Belt Conference Football & Basketball, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Locked On Sun Belt - Daily Podcast On Sun Belt Conference Football & Basketball, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -72,7 +72,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Foxx Den Sports, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Foxx Den Sports, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -97,7 +97,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with The Ticket Top 10, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with The Ticket Top 10, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -122,7 +122,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Sports Day Tampa Bay, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Sports Day Tampa Bay, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -147,7 +147,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Effectively Wild: A FanGraphs Baseball Podcast, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Effectively Wild: A FanGraphs Baseball Podcast, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -172,7 +172,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Cleveland Fandom Podcast, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Cleveland Fandom Podcast, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -197,7 +197,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Kreckman & Lindahl, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Kreckman & Lindahl, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -222,7 +222,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Father Son & Holy Sport, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Father Son & Holy Sport, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -247,7 +247,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with The Fast Lane, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with The Fast Lane, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -272,7 +272,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Sports Radio WSBT, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Sports Radio WSBT, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -297,7 +297,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Joshua 's Proximity, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Joshua 's Proximity, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -322,7 +322,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Out Of Bounds 12-3pm, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Out Of Bounds 12-3pm, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -347,7 +347,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Rothman & Ice, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Rothman & Ice, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -372,7 +372,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Overtime with Bert Remien from ESPN Sioux Falls, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Overtime with Bert Remien from ESPN Sioux Falls, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -397,7 +397,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with The Drive, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with The Drive, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -422,7 +422,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Big Ben & K Winn, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Big Ben & K Winn, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -447,7 +447,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with AllScoringNoDefense, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with AllScoringNoDefense, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -472,7 +472,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with The GIST of It, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with The GIST of It, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
@@ -497,7 +497,7 @@ I’m Zakai, co-owner of Kobe’s Betting Hub. I’m reaching out because the au
 
 Kobe’s Betting Hub offers sports pick writeups, tracked results, free Discord access, and a paid VIP membership.
 
-I’d like to discuss a possible creator partnership with Jomboy Media, including a trackable link and a promotion that fits your audience. We can share the proposed terms and assets for your review before either side commits.
+I’d like to discuss a possible creator partnership with Jomboy Media, including a trackable link and a promotion that fits your audience. The proposed reward is $10 once for each qualifying new paid VIP subscriber, subject to refund, chargeback, duplicate, self-referral, and fraud exclusions. We can share the full terms and promotional assets for your review before either side commits.
 
 You would not need to change your normal content or make guaranteed-win claims. We can tailor the promotion to fit your voice, and nothing goes live without your approval.
 
