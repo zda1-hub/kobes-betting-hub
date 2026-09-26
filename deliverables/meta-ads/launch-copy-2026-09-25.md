@@ -1,6 +1,6 @@
 # Kobe's Betting Hub: ad drafts
 
-Status: creative drafts. Do not publish on Meta until the Instagram account review is resolved and the written approval is confirmed to cover this account, offer, destination, and eligible locations.
+Status: creative drafts. Instagram access was restored on September 25. Before publishing on Meta, confirm that the written approval covers the selected ad account, Kobe's Page and Instagram account, this offer, destination, and eligible locations. The currently signed-in Ads Manager onboarding shows the unrelated XskinZ Page.
 
 ## Ad A — Show the work
 
