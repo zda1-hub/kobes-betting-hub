@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071321"/><stop offset="1" stop-color="#122b3c"/></linearGradient><linearGradient id="gold" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#ffac43"/><stop offset="1" stop-color="#f36f21"/></linearGradient></defs>
+<rect width="1080" height="1920" fill="url(#bg)"/>
+<circle cx="1020" cy="245" r="365" fill="none" stroke="#ff8931" stroke-opacity=".13" stroke-width="70"/>
+<circle cx="70" cy="1570" r="420" fill="none" stroke="#62a7b8" stroke-opacity=".08" stroke-width="90"/>
+<rect x="78" y="84" width="924" height="8" rx="4" fill="url(#gold)"/>
+<text x="78" y="168" fill="#f7f8f6" font-family="Arial,sans-serif" font-size="35" font-weight="700" letter-spacing="5">KOBE’S BETTING HUB</text>
+<text x="78" y="405" fill="#fff" font-family="Arial,sans-serif" font-size="92" font-weight="800">A PICK NEEDS</text>
+<text x="78" y="515" fill="#ff9737" font-family="Arial,sans-serif" font-size="92" font-weight="800">A REASON.</text>
+<text x="82" y="595" fill="#b9c8d1" font-family="Arial,sans-serif" font-size="35">See the analysis behind the play.</text>
+<rect x="78" y="690" width="924" height="785" rx="35" fill="#142b3a" stroke="#3c5965" stroke-width="3"/>
+<rect x="78" y="690" width="924" height="15" rx="7" fill="url(#gold)"/>
+<text x="126" y="790" fill="#ffab4c" font-family="Arial,sans-serif" font-size="29" font-weight="700" letter-spacing="3">INSIDE THE WRITEUP</text>
+<line x1="126" y1="850" x2="954" y2="850" stroke="#3c5965" stroke-width="2"/>
+<text x="126" y="950" fill="#f5f5f1" font-family="Arial,sans-serif" font-size="48" font-weight="700">01  Matchup context</text>
+<text x="126" y="1060" fill="#f5f5f1" font-family="Arial,sans-serif" font-size="48" font-weight="700">02  Published line</text>
+<text x="126" y="1170" fill="#f5f5f1" font-family="Arial,sans-serif" font-size="48" font-weight="700">03  Risk and timing</text>
+<line x1="126" y1="1240" x2="954" y2="1240" stroke="#3c5965" stroke-width="2"/>
+<text x="126" y="1335" fill="#a8bdc6" font-family="Arial,sans-serif" font-size="31">Every result belongs in the record.</text>
+<rect x="78" y="1555" width="924" height="130" rx="25" fill="url(#gold)"/>
+<text x="540" y="1638" text-anchor="middle" fill="#101b23" font-family="Arial,sans-serif" font-size="47" font-weight="800">EXPLORE THE RECORD</text>
+<text x="78" y="1768" fill="#d6e0e2" font-family="Arial,sans-serif" font-size="30">21+ where legal · Betting involves risk.</text>
+<text x="78" y="1822" fill="#91a9b4" font-family="Arial,sans-serif" font-size="26">No outcome or profit is guaranteed.</text>
+</svg>

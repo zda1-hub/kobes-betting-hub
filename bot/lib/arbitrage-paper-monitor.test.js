@@ -6,8 +6,8 @@ const path = require('node:path');
 const { activeWindow, alertDescription, createArbitragePaperMonitor, findArbitrage } = require('./arbitrage-paper-monitor');
 
 const event = { id: 'game-1', sport_title: 'NBA', away_team: 'Away', home_team: 'Home', commence_time: '2026-09-24T01:00:00Z', bookmakers: [
-  { key: 'fanduel', title: 'FanDuel', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.2 }, { name: 'Home', price: 1.7 }] }] },
-  { key: 'draftkings', title: 'DraftKings', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.0 }, { name: 'Home', price: 2.2 }] }] }
+  { key: 'fanduel', title: 'FanDuel', last_update: '2026-09-23T17:59:00Z', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.2 }, { name: 'Home', price: 1.7 }] }] },
+  { key: 'draftkings', title: 'DraftKings', last_update: '2026-09-23T17:59:00Z', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.0 }, { name: 'Home', price: 2.2 }] }] }
 ] };
 
 test('finds a two-book arbitrage and produces a balanced $1,000 example', () => {
@@ -37,6 +37,22 @@ test('supports a continuous 8 AM to 3 PM Arizona monitoring range', () => {
   assert.equal(activeWindow(new Date('2026-09-23T15:00:00Z'), ['08:00-15:00']), '08:00-15:00');
   assert.equal(activeWindow(new Date('2026-09-23T21:59:00Z'), ['08:00-15:00']), '08:00-15:00');
   assert.equal(activeWindow(new Date('2026-09-23T22:00:00Z'), ['08:00-15:00']), null);
+});
+
+test('stale source quotes do not create arbitrage approval cards', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
+  const stale = structuredClone(event);
+  stale.bookmakers.forEach(book => { book.last_update = '2026-09-23T17:40:00Z'; });
+  const sends = [];
+  const reviewChannel = { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' }, send: async payload => sends.push(payload) };
+  const monitor = createArbitragePaperMonitor({ apiKey: 'test', reviewChannel, destinationChannel: null,
+    stateFile: path.join(root, 'state.json'),
+    fetchImpl: async () => new Response(JSON.stringify([stale]), { status: 200 }),
+    now: () => new Date('2026-09-23T18:00:00Z'), windows: ['08:00-15:00'] });
+  const result = await monitor.start();
+  await monitor.stop();
+  assert.equal(result.opportunityCount, 0);
+  assert.equal(sends.length, 0);
 });
 
 test('Kobe can approve a current card in dry-run mode without member publication', async () => {

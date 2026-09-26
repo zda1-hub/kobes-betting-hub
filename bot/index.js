@@ -317,6 +317,13 @@ async function ensureArbitrageChannels() {
     topic: 'Kobe-approved arbitrage opportunities. Odds move quickly—always confirm both prices before placing either side.',
     reason: 'Owner requested a separate VIP arbitrage channel.'
   });
+  const destinationEveryone = destinationChannel.permissionOverwrites.cache.get(destinationChannel.guildId);
+  if (!destinationEveryone?.deny.has(PermissionFlagsBits.ViewChannel)) {
+    throw new Error('VIP arbitrage destination must deny @everyone View Channel.');
+  }
+  if (destinationChannel.id === reviewChannel.id) {
+    throw new Error('VIP arbitrage destination must be separate from approvals.');
+  }
   return { reviewChannel, destinationChannel };
 }
 
