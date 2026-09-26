@@ -54,7 +54,9 @@ async function loadFreePick() {
     if (!pick?.publishedDate) throw new Error('Free pick response is incomplete');
 
     dateNode.textContent = formatDate(pick.publishedDate);
-    captionNode.textContent = pick.caption || 'Today’s free pick is live.';
+    captionNode.textContent = pick.details?.selection
+      ? 'Read today’s public play and its quick breakdown.'
+      : 'Today’s free pick is live.';
     statusNode.textContent = 'LIVE';
     cardNode.hidden = false;
     if (pick.imageUrl) {
