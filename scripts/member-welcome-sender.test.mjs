@@ -32,7 +32,7 @@ test('cloud welcome sender claims before sending and records delivery afterward'
   assert.match(context.deliverMemberWelcomeEmails(), /1 member welcome/);
   const steps = calls.map(c => c.type === 'mail' ? 'mail' : c.url.split('/').at(-1));
   assert.deepEqual(steps, ['member-welcomes', 'claim', 'mail', 'deliver']);
-  assert.equal(calls.find(c => c.type === 'mail').message.replyTo, 'zakai@kaimaz.com');
+  assert.equal(calls.find(c => c.type === 'mail').message.replyTo, 'support@kobesbettinghub.com');
   assert.equal(released(), true);
   context.deliverMemberWelcomeEmails();
   assert.equal(calls.filter(c => c.type === 'mail').length, 1);
