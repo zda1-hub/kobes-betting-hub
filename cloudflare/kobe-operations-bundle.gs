@@ -372,7 +372,7 @@ function deliverMemberWelcomeEmails() {
       const message = JSON.parse(claim.getContentText());
       try {
         MailApp.sendEmail({ to: message.recipient, subject: message.subject, body: message.body,
-          name: 'Kobe’s Betting Hub', replyTo: 'zakai@kaimaz.com' });
+          name: 'Kobe’s Betting Hub', replyTo: 'support@kobesbettinghub.com' });
       } catch (error) {
         // MailApp has no idempotency key. Unknown sends are held, never replayed.
         memberWelcomeRequest_('/hold', secret, { id: message.id, claimToken: message.claimToken });
