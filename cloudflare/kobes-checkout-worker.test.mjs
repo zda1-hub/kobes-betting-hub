@@ -85,6 +85,17 @@ test('unavailable Discord role checks are not counted as confirmed missing VIP a
   assert.deepEqual(result.unavailable.map(item => item.subscription.id), ['unverified']);
 });
 
+test('guild list role checks preserve uncertainty and distinguish missing connections', () => {
+  const item = { subscription: { id: 'sub_1' }, customer: { discord_user_id: '123' } };
+  const members = new Map([['123', { roles: ['vip'] }], ['456', { roles: [] }]]);
+  assert.equal(workerTest.roleCheckFromGuildList(item, members, true, 'vip').role, 'ACTIVE');
+  assert.equal(workerTest.roleCheckFromGuildList({ ...item, customer: { discord_user_id: '456' } }, members, true, 'vip').role, 'MISSING');
+  assert.equal(workerTest.roleCheckFromGuildList({ ...item, customer: { discord_user_id: '789' } }, members, true, 'vip').role, 'MISSING');
+  assert.equal(workerTest.roleCheckFromGuildList({ ...item, customer: { discord_user_id: '789' } }, members, false, 'vip').role, 'CHECK_FAILED');
+  assert.equal(workerTest.roleCheckFromGuildList(item, null, false, 'vip').role, 'CHECK_FAILED');
+  assert.equal(workerTest.roleCheckFromGuildList({ ...item, customer: {} }, null, false, 'vip').role, 'MISSING_DISCORD');
+});
+
 test('creator partnership access lasts until the partnership ends or is paused', () => {
   const now = Date.parse('2026-09-23T20:00:00Z');
   assert.equal(workerTest.creatorAccessActive({ status: 'ACTIVE', access_mode: 'PARTNERSHIP', access_ends_at: null }, now), true);

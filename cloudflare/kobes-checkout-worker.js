@@ -2653,6 +2653,15 @@ function partitionVipRoleChecks(roleChecks) {
   };
 }
 
+function roleCheckFromGuildList(item, guildMembers, complete, vipRoleId) {
+  const discordId = item.customer?.discord_user_id;
+  if (!discordId) return { ...item, role: 'MISSING_DISCORD' };
+  if (!guildMembers) return { ...item, role: 'CHECK_FAILED' };
+  const member = guildMembers.get(discordId);
+  if (!member && !complete) return { ...item, role: 'CHECK_FAILED' };
+  return { ...item, role: member?.roles?.includes(vipRoleId) ? 'ACTIVE' : 'MISSING' };
+}
+
 async function adminAnalytics(request, env, origin) {
   if (!await readAdminSession(request, env)) return json({ error: 'Admin sign-in required.' }, 401, origin);
   let range;
@@ -2723,32 +2732,32 @@ async function adminAnalytics(request, env, origin) {
   const countEvents = name => rangedEvents.filter(event => event.event_name === name).length;
   const eligible = (subscriptions || []).filter(item => ACTIVE_SUBSCRIPTION_STATUSES.has(item.status) && !item.entitlement_blocked);
   const mappedEligible = eligible.map(subscription => ({ subscription, customer: (customers || []).find(item => item.stripe_customer_id === subscription.stripe_customer_id) }));
-  const roleChecks = await Promise.all(mappedEligible.map(async item => {
-    if (!item.customer?.discord_user_id) return { ...item, role: 'MISSING_DISCORD' };
-    try {
-      const member = await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${item.customer.discord_user_id}`, { headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }, env, { memberId: item.customer.discord_user_id, triggerType: 'admin_access_health' });
-      return { ...item, role: member?.roles?.includes(env.DISCORD_MEMBER_ROLE_ID) ? 'ACTIVE' : 'MISSING' };
-    } catch { return { ...item, role: 'CHECK_FAILED' }; }
-  }));
-  let vipWithoutEntitlement = null;
+  let guildMembers = null;
+  let guildMemberListComplete = false;
   try {
-    const vipMembers = [];
+    guildMembers = new Map();
     let after = '';
     for (let page = 0; page < 5; page += 1) {
       const query = new URLSearchParams({ limit: '1000', ...(after ? { after } : {}) });
       const members = await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members?${query}`, { headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }, env, { triggerType: 'admin_access_health' });
       const current = Array.isArray(members) ? members : [];
-      vipMembers.push(...current.filter(member => member.roles?.includes(env.DISCORD_MEMBER_ROLE_ID)).map(member => member.user?.id).filter(Boolean));
-      if (current.length < 1000) break;
+      for (const member of current) {
+        if (member.user?.id) guildMembers.set(member.user.id, member);
+      }
+      if (current.length < 1000) { guildMemberListComplete = true; break; }
       after = current.at(-1)?.user?.id || '';
       if (!after) break;
     }
+  } catch { guildMembers = null; /* A failed list check must not be mistaken for missing access. */ }
+  const roleChecks = mappedEligible.map(item => roleCheckFromGuildList(item, guildMembers, guildMemberListComplete, env.DISCORD_MEMBER_ROLE_ID));
+  let vipWithoutEntitlement = null;
+  if (guildMembers && guildMemberListComplete) {
     const entitledDiscordIds = new Set(mappedEligible.map(item => item.customer?.discord_user_id).filter(Boolean));
     for (const creator of creators || []) {
       if (creator.discord_user_id && creatorAccessActive(creator)) entitledDiscordIds.add(creator.discord_user_id);
     }
-    vipWithoutEntitlement = vipMembers.filter(id => !entitledDiscordIds.has(id)).length;
-  } catch { /* Surface unavailable rather than inventing a zero. */ }
+    vipWithoutEntitlement = [...guildMembers.values()].filter(member => member.roles?.includes(env.DISCORD_MEMBER_ROLE_ID) && !entitledDiscordIds.has(member.user?.id)).length;
+  }
   const activeIds = new Set(roleChecks.filter(item => item.role === 'ACTIVE').map(item => item.subscription.stripe_subscription_id));
   const { confirmedMissing: confirmedMissingRole, unavailable: roleCheckUnavailable } = partitionVipRoleChecks(roleChecks);
   const accessDetail = ({ subscription, role }) => {
@@ -3151,6 +3160,7 @@ export const __test = {
   firstMonthBackActive,
   analyticsRange,
   partitionVipRoleChecks,
+  roleCheckFromGuildList,
   phoenixDayStart,
   recordSubscriptionCancellation,
   cleanAttribution,
