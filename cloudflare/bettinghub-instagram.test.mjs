@@ -49,7 +49,7 @@ function request(path, { key, method = 'GET', body, cookie, origin } = {}) {
   });
 }
 function operatorRequest(path, method = 'POST') { return request(`/operator/instagram/${path}`, { key: secret, method }); }
-function providerMock({ username = 'kobesbettinhub', type = 'Business', granted = __test.SCOPES.join(','), expires = 5184000, nested = true } = {}) {
+function providerMock({ username = 'kobebettinghub', type = 'Business', granted = __test.SCOPES.join(','), expires = 5184000, nested = true } = {}) {
   const calls = [];
   return {
     calls,
@@ -125,11 +125,11 @@ test('invitation GET is preview-safe; POST starts consent with only two scopes a
 test('correct Business account stores only encrypted token and redacted append-only audit', async () => {
   const env = environment(); const { result, mock } = await connected(env);
   assert.equal(result.status, 200);
-  assert.match(await result.text(), /Connected @kobesbettinhub successfully/);
+  assert.match(await result.text(), /Connected @kobebettinghub successfully/);
   assert.equal(mock.calls.length, 3);
   assert.equal(mock.calls[0].body.get('grant_type'), 'authorization_code');
   assert.equal(mock.calls[0].body.get('redirect_uri'), `${ORIGIN}/auth/instagram/callback`);
-  const row = env.DB.sql.prepare('SELECT * FROM instagram_connections').get();
+  const row = env.DB.sql.prepare('SELECT * FROM instagram_connections_v2').get();
   assert.equal(row.account_id, '98765432101234567');
   assert.equal(await __test.decrypt(row.encrypted_token, env), longToken);
   assert.doesNotMatch(row.encrypted_token, /long-token/);
@@ -148,22 +148,22 @@ test('root-shaped provider responses also connect without assuming data arrays',
   assert.equal((await connected(environment(), providerMock({ nested: false }))).result.status, 200);
 });
 
-test('owner account switch pins invites, consent, stored credentials and status to kobesbettinhub', async () => {
+test('owner account switch pins invites, consent, stored credentials and status to kobebettinghub', async () => {
   const env = environment();
   const invite = await (await handle(operatorRequest('invite'), env)).json();
-  assert.equal(invite.target, 'kobesbettinhub');
+  assert.equal(invite.target, 'kobebettinghub');
   const url = new URL(invite.authorizeUrl);
   const consent = await (await handle(request(url.pathname + url.search), env)).text();
-  assert.match(consent, /Authorize @kobesbettinhub/);
+  assert.match(consent, /Authorize @kobebettinghub/);
   assert.doesNotMatch(consent, /Authorize @bettinhub|or connect Kobe's Locks/);
-  assert.equal((await connected(env, providerMock({ username: 'KobesBettinHub' }))).result.status, 200);
-  assert.equal(env.DB.sql.prepare('SELECT target FROM instagram_connections').get().target, 'kobesbettinhub');
-  assert.equal((await (await handle(operatorRequest('status', 'GET'), env)).json()).target, 'kobesbettinhub');
-  assert.throws(() => __test.identity({ username: 'bettinhub', account_type: 'Business', user_id: '111' }), /USE_KOBESBETTINHUB/);
-  assert.throws(() => env.DB.sql.exec("UPDATE instagram_connections SET target='bettinhub'"), /CHECK constraint/);
+  assert.equal((await connected(env, providerMock({ username: 'KobeBettingHub' }))).result.status, 200);
+  assert.equal(env.DB.sql.prepare('SELECT target FROM instagram_connections_v2').get().target, 'kobebettinghub');
+  assert.equal((await (await handle(operatorRequest('status', 'GET'), env)).json()).target, 'kobebettinghub');
+  assert.throws(() => __test.identity({ username: 'bettinhub', account_type: 'Business', user_id: '111' }), /USE_KOBEBETTINGHUB/);
+  assert.throws(() => env.DB.sql.exec("UPDATE instagram_connections_v2 SET target='bettinhub'"), /CHECK constraint/);
 });
 
-test('scheduled Story delivery finds the connected kobesbettinhub account before reading the current pick', async () => {
+test('scheduled Story delivery finds the connected kobebettinghub account before reading the current pick', async () => {
   const env = environment();
   env.INSTAGRAM_PUBLISHING_ENABLED = 'true';
   env.INSTAGRAM_NOT_BEFORE_DATE = '2026-09-21';
@@ -211,7 +211,7 @@ test('scheduled Story reads the current Free Pick through the publisher service 
 });
 
 test('wrong username, Creator account, missing grant and invalid expiration cannot install credentials', async () => {
-  for (const options of [{ username: 'bettinhub' }, { type: 'Media_Creator' }, { granted: 'instagram_business_basic' }, { expires: undefined }, { expires: 0 }]) {
+  for (const options of [{ username: 'bettinhub' }, { username: 'kobesbettinhub' }, { type: 'Media_Creator' }, { granted: 'instagram_business_basic' }, { expires: undefined }, { expires: 0 }]) {
     const env = environment(); const mock = providerMock(options);
     // Undefined intentionally exercises a truly missing expiration field.
     if (Object.hasOwn(options, 'expires') && options.expires === undefined) {
@@ -219,7 +219,7 @@ test('wrong username, Creator account, missing grant and invalid expiration cann
     }
     const result = (await connected(env, mock)).result;
     assert.ok([403, 502].includes(result.status));
-    assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_connections').get().n, 0);
+    assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_connections_v2').get().n, 0);
     assert.equal(env.DB.sql.prepare("SELECT count(*) AS n FROM instagram_connection_audit WHERE event='ACCOUNT_CONNECTED'").get().n, 0);
   }
 });
@@ -247,9 +247,9 @@ test('denied authorization is consumed and never exchanges a code', async () => 
 
 test('failed reauthorization preserves the existing verified account and token', async () => {
   const env = environment(); await connected(env);
-  const before = env.DB.sql.prepare('SELECT encrypted_token FROM instagram_connections').get().encrypted_token;
+  const before = env.DB.sql.prepare('SELECT encrypted_token FROM instagram_connections_v2').get().encrypted_token;
   assert.equal((await connected(env, providerMock({ username: 'bettinhub' }))).result.status, 403);
-  assert.equal(env.DB.sql.prepare('SELECT encrypted_token FROM instagram_connections').get().encrypted_token, before);
+  assert.equal(env.DB.sql.prepare('SELECT encrypted_token FROM instagram_connections_v2').get().encrypted_token, before);
 });
 
 test('disconnect during callback prevents in-flight credential reinstallation', async () => {
@@ -260,7 +260,7 @@ test('disconnect during callback prevents in-flight credential reinstallation', 
     return result;
   };
   assert.equal((await connected(env, mock)).result.status, 409);
-  assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_connections').get().n, 0);
+  assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_connections_v2').get().n, 0);
 });
 
 test('read-only account check makes only a profile GET, never publishes or refreshes', async () => {
@@ -285,10 +285,10 @@ test('refresh refuses young/expired tokens; eligible refresh persists a new expi
   const youngBefore = mock.calls.length;
   assert.equal((await handle(operatorRequest('refresh'), env, mock.fetch)).status, 409);
   assert.equal(mock.calls.length, youngBefore);
-  env.DB.sql.prepare('UPDATE instagram_connections SET issued_at = ?').run(Date.now() - 2 * 86400000);
+  env.DB.sql.prepare('UPDATE instagram_connections_v2 SET issued_at = ?').run(Date.now() - 2 * 86400000);
   assert.equal((await handle(operatorRequest('refresh'), env, mock.fetch)).status, 200);
   assert.equal(mock.calls.at(-1).url.searchParams.get('grant_type'), 'ig_refresh_token');
-  env.DB.sql.exec('UPDATE instagram_connections SET expires_at = 0');
+  env.DB.sql.exec('UPDATE instagram_connections_v2 SET expires_at = 0');
   const before = mock.calls.length;
   assert.equal((await handle(operatorRequest('refresh'), env, mock.fetch)).status, 409);
   assert.equal(mock.calls.length, before);
@@ -304,7 +304,7 @@ test('provider errors, malformed or oversized replies are redacted and fail clos
     const env = environment(); const auth = await authorization(env);
     const result = await handle(request(`/auth/instagram/callback?code=fixture&state=${auth.state}`, { cookie: auth.cookie }), env, fetchImpl);
     assert.equal(result.status, 502); assert.equal((await result.text()).includes(longToken), false);
-    assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_connections').get().n, 0);
+    assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_connections_v2').get().n, 0);
     assert.equal(JSON.stringify(env.DB.sql.prepare('SELECT * FROM instagram_connection_audit').all()).includes(longToken), false);
   }
 });
@@ -425,4 +425,17 @@ test('connection form supports browser Origin checks while other replies hide re
   }
   const started = await handle(request('/auth/instagram/start', { method: 'POST', origin: ORIGIN, body: { invite: value } }), env);
   assert.equal(started.status, 302);
+});
+
+
+test('owner-corrected account does not reuse legacy credentials', async () => {
+  const env = environment();
+  env.DB.sql.exec(`CREATE TABLE instagram_connections (target TEXT PRIMARY KEY, account_id TEXT, encrypted_token TEXT);
+    INSERT INTO instagram_connections VALUES ('kobesbettinhub', '12345', 'legacy-token-must-not-be-read');`);
+  const status = await (await handle(operatorRequest('status', 'GET'), env)).json();
+  assert.equal(status.target, 'kobebettinghub');
+  assert.equal(status.connected, false);
+  assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_connections').get().n, 1);
+  assert.equal((await connected(env)).result.status, 200);
+  assert.equal(env.DB.sql.prepare('SELECT target FROM instagram_connections_v2').get().target, 'kobebettinghub');
 });
