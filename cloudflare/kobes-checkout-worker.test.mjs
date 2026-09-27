@@ -26,7 +26,43 @@ async function stripeSignature(payload, secret, timestamp = Math.floor(Date.now(
 test('checkout worker health endpoint responds without credentials', async () => {
   const response = await worker.fetch(new Request('https://worker.test/health'), {});
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
   assert.deepEqual(await response.json(), { ok: true, version: null });
+});
+
+test('dashboard excludes only configured test customers and their linked reporting history without changing source records', () => {
+  const raw = {
+    customers: [{ stripe_customer_id: 'cus_test' }, { stripe_customer_id: 'cus_real' }],
+    subscriptions: [
+      { stripe_customer_id: 'cus_test', stripe_subscription_id: 'sub_test', status: 'active' },
+      { stripe_customer_id: 'cus_real', stripe_subscription_id: 'sub_real', status: 'active' },
+    ],
+    associations: [{ stripe_subscription_id: 'sub_test', analytics_session_id: 'session_test' }, { stripe_subscription_id: 'sub_real', analytics_session_id: 'session_real' }],
+    sessions: [{ id: 'session_test' }, { id: 'session_real' }, { id: 'session_anonymous' }],
+    events: [{ session_id: 'session_test' }, { stripe_subscription_id: 'sub_test' }, { stripe_customer_id: 'cus_test' }, { session_id: 'session_real' }],
+    billing: [{ stripe_customer_id: 'cus_test', amount_cents: 1000 }, { stripe_subscription_id: 'sub_test', amount_cents: 2000 }, { stripe_customer_id: 'cus_real', amount_cents: 3299 }],
+    stripePayments: [{ customerId: 'cus_test', amountPaid: 1000 }, { subscriptionId: 'sub_test', amountPaid: 2000 }, { customerId: 'cus_real', amountPaid: 3299 }],
+    feedback: [{ stripe_subscription_id: 'sub_test' }, { stripe_subscription_id: 'sub_real' }],
+  };
+  const before = structuredClone(raw);
+  const report = workerTest.dashboardReportingData(raw, ' cus_test, cus_test ');
+  assert.deepEqual(report.reportingExclusions, { customers: 1, subscriptions: 1 });
+  assert.deepEqual(report.subscriptions.map(row => row.stripe_subscription_id), ['sub_real']);
+  assert.deepEqual(report.customers.map(row => row.stripe_customer_id), ['cus_real']);
+  assert.deepEqual(report.sessions.map(row => row.id), ['session_real', 'session_anonymous']);
+  assert.deepEqual(report.events, [{ session_id: 'session_real' }]);
+  assert.deepEqual(report.associations, [raw.associations[1]]);
+  assert.deepEqual(report.feedback, [raw.feedback[1]]);
+  assert.equal(report.billing.reduce((sum, row) => sum + row.amount_cents, 0), 3299);
+  assert.equal(report.stripePayments.reduce((sum, row) => sum + row.amountPaid, 0), 3299);
+  assert.deepEqual(raw, before);
+  const restored = workerTest.dashboardReportingData(raw);
+  assert.deepEqual(restored.subscriptions, raw.subscriptions);
+  assert.deepEqual(restored.billing, raw.billing);
+  assert.deepEqual(restored.stripePayments, raw.stripePayments);
+  assert.deepEqual(restored.reportingExclusions, { customers: 0, subscriptions: 0 });
+  assert.throws(() => workerTest.dashboardReportingData(raw, 'cus_*'), /Invalid dashboard/);
 });
 
 test('checkout association retains distinct owned-X and TikTok attribution', () => {
