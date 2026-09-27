@@ -419,8 +419,10 @@ export async function handle(request, env, fetchImpl = fetch) {
         env.DB.prepare('INSERT INTO instagram_oauth_states (digest, browser_digest, expires_at) VALUES (?, ?, ?)').bind(await hash(state), await hash(browser), Date.now() + 600000),
         auditStatement(env, operation, 'AUTHORIZATION_STARTED', 'SUCCEEDED'),
       ]);
+      // Reuse Instagram's existing login; the callback still verifies the exact
+      // business username and pins subsequent connections to the account ID.
       const auth = new URL('https://www.instagram.com/oauth/authorize');
-      for (const [name, value] of Object.entries({ client_id: env.INSTAGRAM_APP_ID, redirect_uri: `${origin(env)}${CALLBACK}`, response_type: 'code', scope: SCOPES.join(','), state, force_reauth: 'true', enable_fb_login: 'false' })) auth.searchParams.set(name, value);
+      for (const [name, value] of Object.entries({ client_id: env.INSTAGRAM_APP_ID, redirect_uri: `${origin(env)}${CALLBACK}`, response_type: 'code', scope: SCOPES.join(','), state, enable_fb_login: 'false' })) auth.searchParams.set(name, value);
       return response(null, 302, { location: auth.toString(), 'set-cookie': cookie(browser) });
     }
     if (isCallback) return await connect(request, env, operation, fetchImpl);

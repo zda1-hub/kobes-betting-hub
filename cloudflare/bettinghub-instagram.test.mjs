@@ -114,7 +114,7 @@ test('invitation GET is preview-safe; POST starts consent with only two scopes a
   assert.equal(auth.origin + auth.pathname, 'https://www.instagram.com/oauth/authorize');
   assert.equal(auth.searchParams.get('scope'), __test.SCOPES.join(','));
   assert.equal(auth.searchParams.get('redirect_uri'), `${ORIGIN}/auth/instagram/callback`);
-  assert.equal(auth.searchParams.get('force_reauth'), 'true');
+  assert.equal(auth.searchParams.has('force_reauth'), false);
   assert.match(start.headers.get('set-cookie'), /Secure; HttpOnly; SameSite=Lax/);
   assert.doesNotMatch(start.headers.get('location'), /app-secret|operator-fixture/);
   assert.equal((await handle(request('/auth/instagram/start', { method: 'POST', body: { invite }, origin: ORIGIN }), env)).status, 403);
