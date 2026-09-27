@@ -504,7 +504,9 @@ async function publishFreePick(request, env) {
   const publishedDate = validDate(String(input.date || input.publishedDate || "")) || phoenixDate();
   const details = normalizeFreePickDetails(input.details || input);
   if (!details.selection && !details.pick) return json({ error: "selection or pick is required when no image is supplied" }, 400);
-  const caption = String(input.caption || `Today’s free pick is live. https://kobesbettinghub.com/free-pick`).trim();
+  // Multipart text fields normalize LF to CRLF. Restore the approved X copy
+  // before measuring its length or persisting it for the website.
+  const caption = String(input.caption || `Today’s free pick is live. https://kobesbettinghub.com/free-pick`).replace(/\r\n?/g, '\n').trim();
   if (!caption || caption.length > MAX_POST_LENGTH) return json({ error: `caption must contain 1–${MAX_POST_LENGTH} characters` }, 400);
   const replace = String(input.replace || "").toLowerCase() === "true";
   const existing = await readFreePick(env);
