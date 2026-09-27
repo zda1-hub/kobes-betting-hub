@@ -393,3 +393,18 @@ test('Story creation refuses provider redirects and retains its uncertain-delive
   assert.equal(env.DB.sql.prepare('SELECT state FROM instagram_story_deliveries').get().state, 'held');
   assert.equal(env.DB.sql.prepare("SELECT count(*) AS n FROM instagram_connection_audit WHERE endpoint_class='story_create' AND outcome='FAILED' AND http_status=307").get().n, 1);
 });
+
+
+test('provider diagnostics expose only bounded numeric codes, never messages or arbitrary codes', async () => {
+  for (const [code, subcode, expected] of [[190, 460, 'INSTAGRAM_PROVIDER_REJECTED_190_460'],
+    [longToken, longToken, 'INSTAGRAM_PROVIDER_REJECTED'], [-1, 99999999999, 'INSTAGRAM_PROVIDER_REJECTED']]) {
+    const env = environment(); await connected(env);
+    const result = await handle(operatorRequest('check'), env, async () => Response.json({ error: {
+      code, error_subcode: subcode, message: longToken,
+    } }, { status: 400 }));
+    const data = await result.json();
+    assert.equal(data.error, expected);
+    assert.equal(JSON.stringify(data).includes(longToken), false);
+    assert.equal(JSON.stringify(env.DB.sql.prepare('SELECT * FROM instagram_connection_audit').all()).includes(longToken), false);
+  }
+});
