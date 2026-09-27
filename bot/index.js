@@ -1673,14 +1673,6 @@ async function postAndLogOfficialPick({ channel, payload, entry, packet = null }
   }
 
   const postReference = discordPostReference(channel, message);
-  // Seed useful one-click feedback on official picks from the single bot
-  // account. Members supply any additional reactions themselves.
-  if (typeof message.react === 'function') {
-    void Promise.allSettled(['🔥', '🧠', '💬'].map((emoji) => message.react(emoji)))
-      .then((results) => results.forEach((result, index) => {
-        if (result.status === 'rejected') console.warn(`Could not add ${['🔥', '🧠', '💬'][index]} reaction to ${entry.pick_id}:`, result.reason?.message || result.reason);
-      }));
-  }
   await updateOfficialPick(entry.pick_id, { post_reference: postReference, status: 'PUBLISHED' });
   try {
     await recordPublicationResult(packet, {
