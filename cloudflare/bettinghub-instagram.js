@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 
-const TARGET = 'kobesbettinhub';
+const TARGET = 'kobebettinghub';
 const SCOPES = ['instagram_business_basic', 'instagram_business_content_publish'];
 const CALLBACK = '/auth/instagram/callback';
 const COOKIE = '__Host-kbh-ig-state';
@@ -85,11 +85,13 @@ function cookie(value, age = 600) {
   return `${COOKIE}=${value}; Path=/; Max-Age=${age}; Secure; HttpOnly; SameSite=Lax`;
 }
 
+// v2 installs fresh credentials for the owner-corrected account. Legacy tokens
+// are bound to their former username and must never be relabeled or reused.
 async function schema(env) {
   await env.DB.batch([
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_connect_invites (digest TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, consumed_at INTEGER)`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_oauth_states (digest TEXT PRIMARY KEY, browser_digest TEXT NOT NULL, expires_at INTEGER NOT NULL, consumed_at INTEGER)`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_connections (target TEXT PRIMARY KEY CHECK (target = '${TARGET}'), account_id TEXT NOT NULL, encrypted_token TEXT NOT NULL, granted_scopes TEXT NOT NULL, issued_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, checked_at INTEGER NOT NULL)`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_connections_v2 (target TEXT PRIMARY KEY CHECK (target = '${TARGET}'), account_id TEXT NOT NULL, encrypted_token TEXT NOT NULL, granted_scopes TEXT NOT NULL, issued_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, checked_at INTEGER NOT NULL)`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_story_deliveries (pick_id TEXT PRIMARY KEY, operating_date TEXT NOT NULL, story_url TEXT NOT NULL, state TEXT NOT NULL, container_id TEXT, media_id TEXT, attempted_at INTEGER, published_at INTEGER, last_error TEXT, updated_at INTEGER NOT NULL)`),
     env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS instagram_story_date ON instagram_story_deliveries(operating_date)`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_connection_audit (id TEXT PRIMARY KEY, operation_id TEXT NOT NULL, occurred_at INTEGER NOT NULL, event TEXT NOT NULL, endpoint_class TEXT, method TEXT, outcome TEXT NOT NULL, http_status INTEGER, latency_ms INTEGER, provider_request_id TEXT, response_shape_sha256 TEXT, worker_version TEXT)`),
@@ -261,7 +263,7 @@ async function deliverCurrentStory(env, fetchImpl = fetch) {
   try { await schema(env); }
   catch { throw new SafeError('INSTAGRAM_SCHEMA_FAILED', 503); }
   let connection;
-  try { connection = await env.DB.prepare('SELECT * FROM instagram_connections WHERE target = ?').bind(TARGET).first(); }
+  try { connection = await env.DB.prepare('SELECT * FROM instagram_connections_v2 WHERE target = ?').bind(TARGET).first(); }
   catch { throw new SafeError('INSTAGRAM_CONNECTION_READ_FAILED', 503); }
   if (!connection || connection.expires_at <= Date.now()) return { status: 'not_connected' };
   const pick = await currentFreePick(env, fetchImpl);
@@ -313,7 +315,7 @@ function single(data) {
 }
 function identity(data, expectedId) {
   const profile = single(data);
-  if (typeof profile.username !== 'string' || profile.username.toLowerCase() !== TARGET) throw new SafeError('WRONG_INSTAGRAM_ACCOUNT_USE_KOBESBETTINHUB', 403);
+  if (typeof profile.username !== 'string' || profile.username.toLowerCase() !== TARGET) throw new SafeError('WRONG_INSTAGRAM_ACCOUNT_USE_KOBEBETTINGHUB', 403);
   if (String(profile.account_type).toUpperCase() !== 'BUSINESS') throw new SafeError('INSTAGRAM_BUSINESS_ACCOUNT_REQUIRED', 403);
   if (typeof profile.user_id !== 'string' || !/^\d+$/.test(profile.user_id)) throw new SafeError('INSTAGRAM_ACCOUNT_ID_MISSING', 502);
   if (expectedId && String(profile.user_id) !== expectedId) throw new SafeError('INSTAGRAM_ACCOUNT_ID_CHANGED', 409);
@@ -357,12 +359,12 @@ async function connect(request, env, operation, fetchImpl) {
   if (!SCOPES.every(scope => granted.includes(scope))) throw new SafeError('INSTAGRAM_REQUIRED_PERMISSIONS_NOT_GRANTED', 403);
   if (typeof short.access_token !== 'string' || !short.access_token || short.access_token.length > 8192) throw new SafeError('INSTAGRAM_TOKEN_MISSING', 502);
   const long = tokenResult(await provider(env, operation, 'long_token_exchange', { token: short.access_token }, fetchImpl));
-  const old = await env.DB.prepare('SELECT account_id FROM instagram_connections WHERE target = ?').bind(TARGET).first();
+  const old = await env.DB.prepare('SELECT account_id FROM instagram_connections_v2 WHERE target = ?').bind(TARGET).first();
   const accountId = identity(await provider(env, operation, 'profile', { token: long.access_token }, fetchImpl), old?.account_id);
   const now = Date.now();
   // Recheck state inside the write: disconnect/expiry during provider calls must
   // not allow an in-flight callback to reinstall a removed credential.
-  const stored = await env.DB.prepare(`INSERT INTO instagram_connections (target, account_id, encrypted_token, granted_scopes, issued_at, expires_at, checked_at) SELECT ?, ?, ?, ?, ?, ?, ? FROM instagram_oauth_states WHERE digest = ? AND consumed_at = ? AND expires_at > ? ON CONFLICT(target) DO UPDATE SET encrypted_token = excluded.encrypted_token, granted_scopes = excluded.granted_scopes, issued_at = excluded.issued_at, expires_at = excluded.expires_at, checked_at = excluded.checked_at WHERE instagram_connections.account_id = excluded.account_id RETURNING target`).bind(TARGET, accountId, await encrypt(long.access_token, env), JSON.stringify(SCOPES), now, now + long.expires_in * 1000, now, stateDigest, claimedAt, now).first();
+  const stored = await env.DB.prepare(`INSERT INTO instagram_connections_v2 (target, account_id, encrypted_token, granted_scopes, issued_at, expires_at, checked_at) SELECT ?, ?, ?, ?, ?, ?, ? FROM instagram_oauth_states WHERE digest = ? AND consumed_at = ? AND expires_at > ? ON CONFLICT(target) DO UPDATE SET encrypted_token = excluded.encrypted_token, granted_scopes = excluded.granted_scopes, issued_at = excluded.issued_at, expires_at = excluded.expires_at, checked_at = excluded.checked_at WHERE instagram_connections_v2.account_id = excluded.account_id RETURNING target`).bind(TARGET, accountId, await encrypt(long.access_token, env), JSON.stringify(SCOPES), now, now + long.expires_in * 1000, now, stateDigest, claimedAt, now).first();
   if (!stored) throw new SafeError('INSTAGRAM_CONNECTION_CHANGED_RECHECK', 409);
   await audit(env, operation, 'ACCOUNT_CONNECTED', 'SUCCEEDED');
   return page(`Connected @${TARGET} successfully. Let Zakai know so we can run the read-only account check before any publishing test.`, { cookie: cookie('', 0) });
@@ -422,11 +424,11 @@ export async function handle(request, env, fetchImpl = fetch) {
       return response(null, 302, { location: auth.toString(), 'set-cookie': cookie(browser) });
     }
     if (isCallback) return await connect(request, env, operation, fetchImpl);
-    const row = await env.DB.prepare('SELECT * FROM instagram_connections WHERE target = ?').bind(TARGET).first();
+    const row = await env.DB.prepare('SELECT * FROM instagram_connections_v2 WHERE target = ?').bind(TARGET).first();
     if (url.pathname === '/operator/instagram/status') return json({ connected: Boolean(row), target: TARGET, accountId: row?.account_id || null, expiresAt: row ? new Date(row.expires_at).toISOString() : null, tokenExpired: row ? row.expires_at <= Date.now() : null, lastCheckedAt: row ? new Date(row.checked_at).toISOString() : null, publishingEnabled: publishingEnabled(env) });
     if (url.pathname === '/operator/instagram/disconnect') {
       await env.DB.batch([
-        env.DB.prepare('DELETE FROM instagram_connections WHERE target = ?').bind(TARGET),
+        env.DB.prepare('DELETE FROM instagram_connections_v2 WHERE target = ?').bind(TARGET),
         env.DB.prepare('DELETE FROM instagram_connect_invites'),
         env.DB.prepare('DELETE FROM instagram_oauth_states'),
         auditStatement(env, operation, 'ACCOUNT_DISCONNECTED_LOCALLY', 'SUCCEEDED'),
@@ -439,14 +441,14 @@ export async function handle(request, env, fetchImpl = fetch) {
     const token = await decrypt(row.encrypted_token, env);
     identity(await provider(env, operation, 'profile', { token }, fetchImpl), row.account_id);
     if (url.pathname === '/operator/instagram/check') {
-      const verified = await env.DB.prepare('UPDATE instagram_connections SET checked_at = ? WHERE target = ? AND encrypted_token = ? RETURNING target').bind(Date.now(), TARGET, row.encrypted_token).first();
+      const verified = await env.DB.prepare('UPDATE instagram_connections_v2 SET checked_at = ? WHERE target = ? AND encrypted_token = ? RETURNING target').bind(Date.now(), TARGET, row.encrypted_token).first();
       if (!verified) throw new SafeError('INSTAGRAM_CONNECTION_CHANGED_RECHECK', 409);
       await audit(env, operation, 'READ_ONLY_ACCOUNT_CHECK', 'SUCCEEDED');
       return json({ verified: true, target: TARGET, businessAccount: true, publishingEnabled: publishingEnabled(env), operationId: operation });
     }
     const refreshed = tokenResult(await provider(env, operation, 'refresh', { token }, fetchImpl));
     const now = Date.now();
-    const updated = await env.DB.prepare('UPDATE instagram_connections SET encrypted_token = ?, issued_at = ?, expires_at = ?, checked_at = ? WHERE target = ? AND encrypted_token = ? RETURNING target').bind(await encrypt(refreshed.access_token, env), now, now + refreshed.expires_in * 1000, now, TARGET, row.encrypted_token).first();
+    const updated = await env.DB.prepare('UPDATE instagram_connections_v2 SET encrypted_token = ?, issued_at = ?, expires_at = ?, checked_at = ? WHERE target = ? AND encrypted_token = ? RETURNING target').bind(await encrypt(refreshed.access_token, env), now, now + refreshed.expires_in * 1000, now, TARGET, row.encrypted_token).first();
     if (!updated) throw new SafeError('INSTAGRAM_CONNECTION_CHANGED_RECHECK', 409);
     await audit(env, operation, 'TOKEN_REFRESHED', 'SUCCEEDED');
     return json({ refreshed: true, publishingEnabled: false, expiresAt: new Date(now + refreshed.expires_in * 1000).toISOString() });
