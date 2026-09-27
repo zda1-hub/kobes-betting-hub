@@ -2316,6 +2316,55 @@ async function refreshPendingDetailEditControls() {
   return refreshed;
 }
 
+async function removeIncompleteWriteupApprovals() {
+  if (!pickApprovalChannelId) return 0;
+  const channel = await approvedTextChannel(pickApprovalChannelId);
+  const directory = path.join(reviewQueueRoot, pacificClock().date);
+  let files = [];
+  try {
+    files = (await fs.readdir(directory)).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  let removed = 0;
+  for (const file of files) {
+    const packetPath = path.join(directory, file);
+    const packet = JSON.parse(await fs.readFile(packetPath, 'utf8'));
+    if (!packet.discord_review_message_id || packet.approval?.decision || packet.source?.publish_mode === 'terms_only') continue;
+    if (packet.approval_ready && sourceEvidence(packet).length >= 4) continue;
+    const message = await channel.messages.fetch(packet.discord_review_message_id).catch(() => null);
+    if (!message || message.author?.id !== client.user.id) continue;
+    await message.delete();
+    packet.discord_review_message_id = null;
+    packet.status = 'HELD_NOT_READY';
+    packet.approval_ready = false;
+    packet.approval ||= {};
+    delete packet.approval.exact_final_copy;
+    delete packet.approval.exact_final_copy_sha256;
+    await fs.writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`);
+    removed++;
+  }
+  // Older packets may no longer be on the current disk, but their bot-owned
+  // incomplete cards can still be visible. Only these exact hold titles are
+  // removed; completed review cards and member posts are left untouched.
+  let before;
+  for (let page = 0; page < 5; page++) {
+    const batch = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+    if (!batch.size) break;
+    for (const message of batch.values()) {
+      if (message.author?.id !== client.user.id) continue;
+      const title = message.embeds?.[0]?.title || '';
+      if (!/^WRITEUP (?:REVIEW|CANDIDATE(?:\s*[—-]\s*DETAILS NEEDED)?)$/i.test(title)) continue;
+      await message.delete();
+      removed++;
+    }
+    before = batch.last()?.id;
+    if (batch.size < 100) break;
+  }
+  if (removed) console.log(`Removed ${removed} incomplete writeup approval card(s).`);
+  return removed;
+}
+
 async function retireVisibleTrendCards() {
   if (!pickApprovalChannelId) return;
   const channel = await client.channels.fetch(pickApprovalChannelId);
@@ -2550,6 +2599,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   try {
     await retireVisibleTrendCards();
     await refreshPendingResearchApprovals();
+    await removeIncompleteWriteupApprovals();
     await refreshPendingDetailEditControls();
   } catch (error) {
     console.error('Unable to refresh pending approval research:', error);

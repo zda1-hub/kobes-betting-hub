@@ -526,7 +526,6 @@ async function notifyApprovalChannel(packet) {
   }
 
   let embeds;
-  let needsDetails = false;
   try {
     // A clear card is shown exactly as members will see it after approval.
     // Publishing does not add a second layer of wording or formatting.
@@ -547,54 +546,36 @@ async function notifyApprovalChannel(packet) {
     }
     embeds = [buildSourcePickApprovalEmbed(presentationPacket, 'APPROVED PICK')];
   } catch (error) {
-    // Do not hide a recognizable wager merely because its writeup is thin.
-    // Kobe can add the missing factual details privately or reject it. Posting
-    // remains disabled until the standard complete-writeup checks pass.
-    const extraction = packet.analysis?.extraction || {};
-    const play = visiblePlays(packet)[0] || extraction;
-    const terms = [play.selection, play.line, play.odds_american].filter(Boolean).join(' ')
-      || packet.source?.text?.slice(0, 800)
-      || 'Terms need review';
-    const existing = sourceEvidence(packet);
-    packet.status = 'NEEDS_DETAILS';
+    // Keep incomplete or unpublishable drafts in the audit queue, never in
+    // Kobe's Discord approvals. A new source scan may enrich them later.
+    packet.status = 'HELD_NOT_READY';
     packet.approval_ready = false;
     packet.hold_reason = error instanceof Error ? error.message : 'The candidate is incomplete or not publishable.';
-    needsDetails = true;
-    embeds = [{
-      color: 0xf4a62a,
-      title: 'WRITEUP REVIEW',
-      description: [
-        `**Play:** ${terms}`,
-        extraction.event ? `**Event:** ${extraction.event}` : null,
-        `**Current supporting details:** ${existing.length}/4 required`,
-        existing.length ? existing.map((line) => `• ${line}`).join('\n') : 'No usable supporting facts were extracted.',
-        '',
-        '**Action:** Review the available details and add any missing facts. Posting is disabled until the writeup is complete.'
-      ].filter((line) => line !== null).join('\n').slice(0, 4000),
-      footer: { text: packet.pick_id }
-    }];
+    delete packet.approval?.exact_final_copy;
+    delete packet.approval?.exact_final_copy_sha256;
+    await upsertPickCandidate(packet, { status: packet.status, rejectionCodes: ['WRITEUP_DETAILS_REQUIRED'] });
+    await recordWorkflowEvent(packet, {
+      eventType: 'CANDIDATE_HELD',
+      afterState: packet.status,
+      details: { reason: packet.hold_reason, evidence_count: sourceEvidence(packet).length }
+    });
+    console.log(`Held ${packet.pick_id} before Discord approval: ${packet.hold_reason}`);
+    return null;
   }
-  if (!needsDetails) {
-    packet.status = 'READY_FOR_APPROVAL';
-    packet.approval_ready = true;
-  }
+  packet.status = 'READY_FOR_APPROVAL';
+  packet.approval_ready = true;
   const labels = await approvalButtonLabels(packet);
   const components = reviewButtons(packet.pick_id, labels);
-  if (needsDetails) {
-    for (const button of components[0]?.components || []) {
-      if (button.custom_id?.endsWith(':free') || button.custom_id?.endsWith(':paid')) button.disabled = true;
-    }
-  }
   const payload = {
     embeds,
     components
   };
-  await upsertPickCandidate(packet, { status: packet.status, rejectionCodes: needsDetails ? ['WRITEUP_DETAILS_REQUIRED'] : [] });
+  await upsertPickCandidate(packet, { status: packet.status, rejectionCodes: [] });
   await recordWorkflowEvent(packet, {
     eventType: 'APPROVAL_CARD_SEND_STARTED',
     beforeState: 'ELIGIBLE',
     afterState: 'SENDING_APPROVAL_CARD',
-    details: { channel_id: channelId, needs_details: needsDetails }
+    details: { channel_id: channelId }
   });
   const response = await discordRateLimitedFetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
@@ -1070,8 +1051,9 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
 
       packet.discord_review_message_id = await notifyApprovalChannel(packet);
       await fs.writeFile(outputPath, `${JSON.stringify(packet, null, 2)}\n`);
-      console.log(`Queued #${packet.approval_number} ${packet.pick_id} from @${candidate.source.handle}.`);
-      created += 1;
+      console.log(`${packet.discord_review_message_id ? 'Queued' : 'Held'} #${packet.approval_number} ${packet.pick_id} from @${candidate.source.handle}.`);
+      if (packet.discord_review_message_id) created += 1;
+      else skipped += 1;
       queuedSourcePostIds.add(candidate.postId);
     }
     state.sources[result.source.handle] = result.nextSourceState;
@@ -1265,6 +1247,7 @@ module.exports = {
   isSinglePlayPacket,
   mediaCaptionHasBetSignal,
   nflGamesScheduledToday,
+  notifyApprovalChannel,
   recordModelCallDeferral,
   recoverAuditedExclusive,
   rotateSources,
