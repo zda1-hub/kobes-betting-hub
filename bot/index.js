@@ -2665,16 +2665,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
     return;
   }
-  if (interaction.isButton() && interaction.customId.startsWith('expert-pulse:')) {
+  if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('expert-pulse:')) {
     try {
       await interaction.deferReply({ ephemeral: true });
       if (!expertPulse) throw new Error('Expert pulse review and VIP channels are not configured.');
       const result = await expertPulse.decide({ customId: interaction.customId,
+        values: interaction.isStringSelectMenu() ? interaction.values : [],
         userId: interaction.user.id, ownerId: interaction.guild?.ownerId,
         guildId: interaction.guildId, channelId: interaction.channelId, messageId: interaction.message.id });
       await interaction.editReply(result.status === 'PUBLISHED' ? `${result.expert} approved and posted to the private VIP channel.`
         : result.status === 'REJECTED' ? `${result.expert} rejected; this expert was not posted to VIP.`
-        : 'Expert review cards refreshed. Each expert requires a separate decision.');
+        : result.status === 'PAGE_CHANGED' ? `Showing expert page ${result.page} of ${result.pages}.`
+          : 'Combined expert trends refreshed. Each expert still requires a separate decision.');
     } catch (error) {
       await respondToInteractionFailure(interaction, error.message || 'Expert pulse review needs attention.', 'Expert pulse interaction');
     }
