@@ -576,11 +576,11 @@ async function getCurrentFreePick(request, env) {
     } catch { /* The Instagram worker has not installed its schema or D1 is unavailable. */ }
     try {
       instagramStory = await env.DB.prepare(`SELECT state, published_at AS publishedAt, last_error AS lastError FROM instagram_story_deliveries WHERE pick_id = ?`).bind(pick.pickId).first();
-      instagramStoryStatus = instagramStory?.state || (instagramConnectionStatus === 'connected' ? 'pending' : instagramConnectionStatus);
+      instagramStoryStatus = instagramStory?.state || (!pick.storyObjectKey ? 'not_ready' : instagramConnectionStatus === 'connected' ? 'pending' : instagramConnectionStatus);
     } catch { /* A missing receipt table must never break the Free Pick page. */ }
   }
   const resolved = xReceipt ? { ...pick, xStatus: xReceipt.status, xPublishedAt: xReceipt.xPublishedAt || null, xPostId: xReceipt.xPostId || null, xError: xReceipt.xError || null } : pick;
-  return json({ ...publicFreePick(resolved, new URL(request.url).origin), instagramConnectionStatus,
+  return json({ ...publicFreePick(resolved, new URL(request.url).origin), instagramStatus: instagramStoryStatus, instagramConnectionStatus,
     instagramAccountId: instagramConnectionStatus === 'connected' ? instagram.accountId : null,
     instagramStoryStatus, instagramStoryPublishedAt: instagramStory?.publishedAt ? new Date(instagramStory.publishedAt).toISOString() : null,
     instagramStoryError: instagramStory?.lastError || null }, 200, corsHeaders(request));
@@ -792,7 +792,7 @@ function publicFreePick(pick, origin) {
     xStatus: pick.xStatus || "not_requested",
     xPublishedAt: pick.xPublishedAt || null,
     xPostId: pick.xPostId || null,
-    instagramStatus: pick.storyObjectKey ? "story_ready_manual_post_unverified" : "not_ready",
+    instagramStatus: pick.storyObjectKey ? "story_ready" : "not_ready",
     instagramStoryPreparedAt: pick.storyObjectKey ? (pick.updatedAt || null) : null,
   };
 }
