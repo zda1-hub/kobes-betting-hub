@@ -84,6 +84,8 @@ const headers = (origin) => ({
   'Access-Control-Allow-Headers': 'Content-Type, X-Checkout-Request-Id, Authorization',
   Vary: 'Origin',
   'Content-Type': 'application/json; charset=utf-8',
+  'Cache-Control': 'no-store',
+  'X-Content-Type-Options': 'nosniff',
 });
 
 const json = (body, status = 200, origin) => new Response(JSON.stringify(body), { status, headers: headers(origin) });
@@ -2662,6 +2664,26 @@ function roleCheckFromGuildList(item, guildMembers, complete, vipRoleId) {
   return { ...item, role: member?.roles?.includes(vipRoleId) ? 'ACTIVE' : 'MISSING' };
 }
 
+// Reporting exclusions never modify billing records, entitlements, or access checks.
+function dashboardReportingData(raw, excludedCustomerConfig = '') {
+  const customerIds = new Set(String(excludedCustomerConfig).split(',').map(value => value.trim()).filter(Boolean));
+  if ([...customerIds].some(id => !/^cus_[A-Za-z0-9]+$/.test(id))) throw new Error('Invalid dashboard test customer configuration.');
+  const excludedSubscriptions = (raw.subscriptions || []).filter(row => customerIds.has(row.stripe_customer_id));
+  const subscriptionIds = new Set(excludedSubscriptions.map(row => row.stripe_subscription_id));
+  const matchesAccount = row => customerIds.has(row.stripe_customer_id || row.customerId)
+    || subscriptionIds.has(row.stripe_subscription_id || row.subscriptionId);
+  const sessionIds = new Set((raw.associations || []).filter(matchesAccount).map(row => row.analytics_session_id).filter(Boolean));
+  const keep = row => !matchesAccount(row) && !sessionIds.has(row.session_id || row.analytics_session_id);
+  const data = { ...raw };
+  for (const key of ['subscriptions', 'customers', 'associations', 'billing', 'events', 'feedback', 'stripePayments']) {
+    data[key] = (raw[key] || []).filter(keep);
+  }
+  data.sessions = (raw.sessions || []).filter(row => !sessionIds.has(row.id));
+  const excludedCustomers = (raw.customers || []).filter(row => customerIds.has(row.stripe_customer_id));
+  data.reportingExclusions = { customers: excludedCustomers.length, subscriptions: excludedSubscriptions.length };
+  return data;
+}
+
 async function adminAnalytics(request, env, origin) {
   if (!await readAdminSession(request, env)) return json({ error: 'Admin sign-in required.' }, 401, origin);
   let range;
@@ -2695,7 +2717,7 @@ async function adminAnalytics(request, env, origin) {
       }
     } catch { successfulCharges = []; stripePaymentsTruncated = true; /* The durable billing ledger remains the safe fallback. */ }
   }
-  const stripePayments = paidInvoices.length
+  const allStripePayments = paidInvoices.length
     ? paidInvoices.map(item => ({ created: item.created, amountPaid: Number(item.amount_paid || 0), subscriptionId: invoiceSubscriptionId(item), customerId: stripeId(item.customer) }))
     : successfulCharges.map(item => ({ created: item.created, amountPaid: Number(item.amount_captured || item.amount || 0), subscriptionId: '', customerId: stripeId(item.customer) }));
   let freePick = null;
@@ -2713,10 +2735,15 @@ async function adminAnalytics(request, env, origin) {
     supabasePages(env, 'referral_rewards?select=referrer_discord_user_id,creator_profile_id,status,reward_amount_cents,created_at,first_paid_at&order=created_at.desc,id.desc'),
     supabasePages(env, 'referral_profiles?select=discord_user_id,referral_code,payout_status&order=discord_user_id.asc'),
     supabasePages(env, 'creator_referral_profiles?select=id,contact_email,display_name,referral_code,discord_user_id,trial_expires_at,access_mode,access_ends_at,status,payout_status&order=id.asc'),
-    supabasePages(env, 'cancellation_feedback?select=reason_code,retention_offer_shown,retention_offer_accepted,created_at&order=created_at.desc,id.desc'),
+    supabasePages(env, 'cancellation_feedback?select=stripe_subscription_id,reason_code,retention_offer_shown,retention_offer_accepted,created_at&order=created_at.desc,id.desc'),
     supabasePages(env, 'stripe_webhook_events?status=eq.FAILED&select=event_id,event_type,error_detail,received_at&order=received_at.desc,event_id.desc', { pageSize: 100 }),
   ]);
-  const [sessions, events, subscriptions, customers, associations, billing, referrals, profiles, creators, feedback, webhooks] = [sessionPage, eventPage, subscriptionPage, customerPage, associationPage, billingPage, referralPage, profilePage, creatorPage, feedbackPage, webhookPage].map(page => page.rows);
+  const { sessions, events, subscriptions, customers, associations, billing, feedback, stripePayments, reportingExclusions } = dashboardReportingData({
+    sessions: sessionPage.rows, events: eventPage.rows, subscriptions: subscriptionPage.rows,
+    customers: customerPage.rows, associations: associationPage.rows, billing: billingPage.rows,
+    feedback: feedbackPage.rows, stripePayments: allStripePayments,
+  }, env.DASHBOARD_TEST_CUSTOMER_IDS);
+  const [referrals, profiles, creators, webhooks] = [referralPage, profilePage, creatorPage, webhookPage].map(page => page.rows);
   const rangedSessions = (sessions || []).filter(item => range.includes(item.started_at));
   const dataCompletenessWarnings = [
     sessionPage.truncated && 'Visitor/source history may be incomplete (20,000-row safety limit).',
@@ -2752,7 +2779,9 @@ async function adminAnalytics(request, env, origin) {
   const roleChecks = mappedEligible.map(item => roleCheckFromGuildList(item, guildMembers, guildMemberListComplete, env.DISCORD_MEMBER_ROLE_ID));
   let vipWithoutEntitlement = null;
   if (guildMembers && guildMemberListComplete) {
-    const entitledDiscordIds = new Set(mappedEligible.map(item => item.customer?.discord_user_id).filter(Boolean));
+    const entitledDiscordIds = new Set(subscriptionPage.rows
+      .filter(item => ACTIVE_SUBSCRIPTION_STATUSES.has(item.status) && !item.entitlement_blocked)
+      .map(item => customerPage.rows.find(customer => customer.stripe_customer_id === item.stripe_customer_id)?.discord_user_id).filter(Boolean));
     for (const creator of creators || []) {
       if (creator.discord_user_id && creatorAccessActive(creator)) entitledDiscordIds.add(creator.discord_user_id);
     }
@@ -2924,6 +2953,7 @@ async function adminAnalytics(request, env, origin) {
   return json({
     generatedAt: new Date().toISOString(), range: { preset: range.preset, start: range.start?.toISOString() || null, end: range.end.toISOString() },
     dataCompletenessWarnings,
+    reportingExclusions,
     scoreboard: { todayPhoenix, activePaid: eligible.length, mrrCents: Math.round(mrr), newPaidToday, cancelledToday: cancellationTodayComplete ? cancelledToday : null, netAddsToday: cancellationTodayComplete ? newPaidToday - cancelledToday : null, newPaidLast7, netAddsLast7: cancellationLast7Complete ? newPaidLast7 - cancelledLast7 : null },
     traffic: { uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
     conversion: { funnel, offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), purchaseConversionRate: rangedSessions.length ? countEvents('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: countEvents('payment_completed') ? countEvents('vip_activated') / countEvents('payment_completed') : 0 },
@@ -3157,6 +3187,7 @@ export default {
 };
 
 export const __test = {
+  dashboardReportingData,
   firstMonthBackActive,
   analyticsRange,
   partitionVipRoleChecks,
