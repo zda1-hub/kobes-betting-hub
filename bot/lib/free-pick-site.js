@@ -105,6 +105,15 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
       xPosted: payload.xPosted === true,
     };
   }
+  const rejection = {
+    'Could not read the upload': 'UPLOAD_PARSE_FAILED',
+    'story must be a JPEG file': 'STORY_TYPE_INVALID',
+    'story must be no larger than 5 MB': 'STORY_TOO_LARGE',
+    'selection or pick is required when no image is supplied': 'SELECTION_MISSING',
+    'caption must contain 1–280 characters': 'CAPTION_INVALID',
+    'Unauthorized': 'UNAUTHORIZED',
+  }[payload.error] || 'OTHER';
+  console.error(`Free Pick website rejected ${packet.pick_id}: HTTP ${response.status} ${rejection}.`);
   throw new Error(`Free-pick website publish failed (${response.status}): ${payload.error || 'Unknown error'}`);
 }
 
