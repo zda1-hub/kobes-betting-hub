@@ -137,6 +137,7 @@ test('Free Pick reports the active kobebettinghub Story connection and delivery 
   assert.equal(current.instagramConnectionStatus, 'connected');
   assert.equal(current.instagramAccountId, '17841462044214309');
   assert.equal(current.instagramStoryStatus, 'published');
+  assert.equal(current.instagramStatus, 'published');
   assert.equal(current.instagramStoryPublishedAt, '2026-09-21T19:00:00.000Z');
   const connectionQuery = queries.find((statement) => statement.sql.includes('FROM instagram_connections_v2'));
   assert.match(connectionQuery.sql, /target = 'kobebettinghub'/);
@@ -183,6 +184,7 @@ test('stores and serves a dated Instagram Story without publishing it to X', asy
   assert.equal(published.imageUrl, null);
   assert.equal(published.xPosted, false);
   assert.equal(published.storyUrl, 'https://publisher.test/media/free-pick/story/2026-09-14');
+  assert.equal(published.instagramStatus, 'story_ready');
 
   const storyResponse = await worker.fetch(new Request(published.storyUrl), env);
   assert.equal(storyResponse.status, 200);

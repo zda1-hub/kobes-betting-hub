@@ -41,7 +41,7 @@ function renderFreePick(pick){
   const instagramLabel=stale?'No current-day post':instagramPosted?'Story posted':({
     not_connected:'Not connected',expired:'Connection expired',held:'Needs attention',
     publishing:'Publishing',processing:'Processing',pending:'Story pending',
-    container_created:'Processing',creating_container:'Processing',unavailable:'Status unavailable'
+    container_created:'Processing',creating_container:'Processing',not_ready:'Story not ready',unavailable:'Status unavailable'
   })[pick.instagramStoryStatus]||'Story pending';
   const instagramDetail=instagramPosted?time(pick.instagramStoryPublishedAt):
     pick.instagramStoryError||(!stale&&pick.instagramConnectionStatus==='connected'?'Story publisher checks every 5 minutes.':'Connect the official Instagram account before automation.');
