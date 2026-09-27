@@ -54,6 +54,7 @@ const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
 const { createTelegramReader } = require('./lib/telegram-reader');
 const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/daily-writeup-board');
 const { createFreeWriteupBoard } = require('./lib/free-writeup-board');
+const { archivedWriteupSource } = require('./lib/writeup-archive-source');
 const { createVipExpertList } = require('./lib/vip-expert-list');
 const { createExpertPulse } = require('./lib/expert-pulse');
 const { telegramConfig } = require('./lib/telegram-session');
@@ -161,6 +162,10 @@ async function allWriteupRows() {
       const message = await channel.messages.fetch(match[2]);
       return { ...row, teaser_source: [message.content, ...message.embeds.map((embed) => embed.description)].filter(Boolean).join('\n') };
     } catch (error) {
+      try {
+        const teaser_source = await archivedWriteupSource(reviewQueueRoot, row);
+        if (teaser_source) return { ...row, teaser_source };
+      } catch (archiveError) { console.warn('Writeup archive unavailable:', row.pick_id, archiveError.code || 'READ_FAILED'); }
       console.warn('Writeup teaser source unavailable:', row.pick_id, error.message);
       return row;
     }
