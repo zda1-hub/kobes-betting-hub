@@ -49,6 +49,12 @@ function request(path, { key, method = 'GET', body, cookie, origin } = {}) {
   });
 }
 function operatorRequest(path, method = 'POST') { return request(`/operator/instagram/${path}`, { key: secret, method }); }
+
+test('Story eligibility uses the same Pacific operating date as Free Pick approval', () => {
+  // Phoenix has moved to the next day while Los Angeles is still on November 1.
+  assert.equal(__test.pacificDate(new Date('2026-11-02T07:30:00.000Z')), '2026-11-01');
+  assert.equal(__test.pacificDate(new Date('2026-11-02T08:30:00.000Z')), '2026-11-02');
+});
 function providerMock({ username = 'kobebettinghub', type = 'Business', granted = __test.SCOPES.join(','), expires = 5184000, nested = true } = {}) {
   const calls = [];
   return {
@@ -184,7 +190,7 @@ test('scheduled Story failures identify the safe stage without reserving or publ
   assert.equal((await connected(env)).result.status, 200);
   await assert.rejects(__test.deliverCurrentStory(env, async () => { throw new Error('private lookup detail'); }), /FREE_PICK_LOOKUP_FAILED/);
   env.INSTAGRAM_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 13).toString('base64');
-  const date = __test.phoenixDate();
+  const date = __test.pacificDate();
   await assert.rejects(__test.deliverCurrentStory(env, async () => Response.json({
     pickId: 'today-fixture', publishedDate: date,
     storyUrl: `https://bettinghub-publisher.kobedirwin.workers.dev/media/free-pick/story/${date}`,
@@ -381,7 +387,7 @@ test('profile redirects are refused without following the location or leaking it
 test('Story creation refuses provider redirects and retains its uncertain-delivery hold', async () => {
   const env = environment(); await connected(env);
   env.INSTAGRAM_PUBLISHING_ENABLED = 'true'; env.INSTAGRAM_NOT_BEFORE_DATE = '2026-09-21';
-  const date = __test.phoenixDate();
+  const date = __test.pacificDate();
   env.PUBLISHER_SERVICE = { fetch: async () => Response.json({ pickId: 'today-redirect', publishedDate: date,
     storyUrl: `https://bettinghub-publisher.kobedirwin.workers.dev/media/free-pick/story/${date}` }) };
   let calls = 0;
