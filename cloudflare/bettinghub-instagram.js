@@ -11,6 +11,16 @@ class SafeError extends Error {
   constructor(code, status = 400) { super(code); this.status = status; }
 }
 
+function providerRejection(data) {
+  // Only bounded numeric Meta codes may enter diagnostics, never raw messages.
+  const code = data?.error?.code;
+  const subcode = data?.error?.error_subcode;
+  const valid = value => Number.isSafeInteger(value) && value >= 0 && value <= 10000000;
+  return new SafeError('INSTAGRAM_PROVIDER_REJECTED'
+    + (valid(code) ? `_${code}` : '')
+    + (valid(code) && valid(subcode) ? `_${subcode}` : ''), 502);
+}
+
 function response(body, status = 200, extra = {}) {
   return new Response(body, {
     status,
@@ -148,7 +158,7 @@ async function provider(env, operation, endpoint, init = {}, fetchImpl = fetch) 
     endpoint, method, status: result.status, latency: Date.now() - started,
     requestId: result.headers.get('x-fb-trace-id'), shapeHash: await hash(JSON.stringify(shape(data))),
   });
-  if (!succeeded) throw new SafeError('INSTAGRAM_PROVIDER_REJECTED', 502);
+  if (!succeeded) throw providerRejection(data);
   return data;
 }
 function endpointUrl(endpoint, env, token) {
@@ -208,7 +218,7 @@ async function providerPost(env, operation, endpoint, fields, fetchImpl = fetch)
       requestId: result.headers.get('x-fb-trace-id'), shapeHash: await hash(JSON.stringify(shape(data))),
     });
     recorded = true;
-    if (!succeeded) throw new SafeError('INSTAGRAM_PROVIDER_REJECTED', 502);
+    if (!succeeded) throw providerRejection(data);
     return String(data.id);
   } catch (error) {
     if (!recorded) await audit(env, operation, 'PROVIDER_CALL', 'FAILED', { endpoint, method: 'POST', status: result?.status, latency: Date.now() - started });
