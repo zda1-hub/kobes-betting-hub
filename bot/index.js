@@ -2672,9 +2672,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const result = await expertPulse.decide({ customId: interaction.customId,
         userId: interaction.user.id, ownerId: interaction.guild?.ownerId,
         guildId: interaction.guildId, channelId: interaction.channelId, messageId: interaction.message.id });
-      await interaction.editReply(result.status === 'PUBLISHED' ? 'Approved pulse posted to the private VIP channel.'
-        : result.status === 'REJECTED' ? 'Pulse rejected; nothing was posted to VIP.'
-        : 'Review card refreshed. Approve the current snapshot when ready.');
+      await interaction.editReply(result.status === 'PUBLISHED' ? `${result.expert} approved and posted to the private VIP channel.`
+        : result.status === 'REJECTED' ? `${result.expert} rejected; this expert was not posted to VIP.`
+        : 'Expert review cards refreshed. Each expert requires a separate decision.');
     } catch (error) {
       await respondToInteractionFailure(interaction, error.message || 'Expert pulse review needs attention.', 'Expert pulse interaction');
     }

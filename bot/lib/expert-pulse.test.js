@@ -116,69 +116,81 @@ test('can reuse a private expert source as the VIP destination while keeping rev
     const pulse = createExpertPulse({ sourceChannelFor: async () => source,
       reviewChannelFor: async () => review, destinationChannelFor: async () => source,
       stateFile: path.join(directory, 'state.json') });
-    assert.equal((await pulse.refresh()).status, 'REVIEW_CREATED');
-  } finally {
-    await fs.rm(directory, { recursive: true, force: true });
-  }
-});
-
-test('owner approves an exact private review card once; changes require another approval', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'expert-pulse-'));
-  try {
-    const guild = { id: '123', roles: { everyone: { id: 'everyone' } } };
-    const cards = new Map();
-    const posts = new Map();
-    const now = Date.parse('2026-09-21T18:00:00Z');
-    let sourceMessages = [{ content: 'Ben Burns\n• Broncos ML -110', createdTimestamp: now - 1000 }];
-    let gradedRows = [];
-    const source = { id: '456', guild, messages: { fetch: async () => new Map(sourceMessages.map((message, index) => [String(index), message])) } };
-    function channel(id, map) {
-      return { id, guild, permissionsFor: () => ({ has: () => false }), messages: { fetch: async (messageId) => typeof messageId === 'object' ? map : map.get(messageId) || null },
-        send: async (payload) => {
-          const message = { id: `${id}-${map.size + 1}`, embeds: payload.embeds,
-            edit: async (next) => { message.embeds = next.embeds; return message; } };
-          map.set(message.id, message);
-          return message;
-        } };
-    }
-    const review = channel('567', cards);
-    const destination = channel('789', posts);
-    const pulse = createExpertPulse({
-      sourceChannelFor: async () => source,
-      reviewChannelFor: async () => review,
-      destinationChannelFor: async () => destination,
-      rowsFor: async () => gradedRows, paidChannelIds: ['789'],
-      isApprover: ({ userId, ownerId }) => userId === ownerId,
-      stateFile: path.join(directory, 'state.json'), now: () => now
-    });
-    const initial = await pulse.refresh();
-    assert.equal(initial.status, 'REVIEW_CREATED');
-    assert.equal(posts.size, 0);
-    const state = JSON.parse(await fs.readFile(path.join(directory, 'state.json')));
-    const args = { customId: `expert-pulse:approve:${state.digest}`, userId: 'kobe', ownerId: 'kobe',
-      guildId: '123', channelId: '567', messageId: initial.messageId };
-    await assert.rejects(pulse.decide({ ...args, userId: 'someone-else' }), /Only Kobe/);
-    assert.equal((await pulse.decide(args)).status, 'PUBLISHED');
-    assert.equal(posts.size, 1);
-    await assert.rejects(pulse.decide(args), /already decided/);
-    sourceMessages = [...sourceMessages, { content: 'Kelly In Vegas\n• Cowboys +3', createdTimestamp: now - 500 }];
-    // A source-only change does not alter a results-only pulse. A new verified
-    // grade is what must invalidate Kobe's exact approval snapshot.
-    gradedRows = [{ pick_id: 'graded-1', source_name: 'Kelly In Vegas', status: 'GRADED', result: 'W', wager_scope: 'individual',
-      published_at: new Date(now - 86400000).toISOString(), result_verified_source: 'https://www.espn.com/game/1',
-      result_verified_at: new Date(now).toISOString(), post_reference: 'https://discord.com/channels/123/789/111' }];
-    assert.equal((await pulse.refresh()).status, 'REVIEW_UPDATED');
-    assert.equal(posts.size, 1);
-    await assert.rejects(pulse.decide(args), /stale/);
-    const updated = JSON.parse(await fs.readFile(path.join(directory, 'state.json')));
-    assert.equal((await pulse.decide({ ...args, customId: `expert-pulse:reject:${updated.digest}` })).status, 'REJECTED');
-    assert.equal(posts.size, 1);
     assert.equal((await pulse.refresh()).status, 'UNCHANGED');
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
 
+test('each expert requires a separate decision; rejected and changed experts stay off VIP', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'expert-pulse-'));
+  try {
+    const guild = { id: '123', roles: { everyone: { id: 'everyone' } } };
+    const cards = new Map();
+    const posts = new Map();
+    const now = Date.parse('2026-09-21T18:00:00Z');
+    const source = { id: '456', guild, messages: { fetch: async () => new Map() } };
+    function grade(name, id, result = 'W') {
+      return { pick_id: id, source_name: name, status: 'GRADED', result, wager_scope: 'individual',
+        published_at: '2026-09-20T18:00:00Z', result_verified_source: 'https://www.espn.com/game/1',
+        result_verified_at: new Date(now).toISOString(), post_reference: `https://discord.com/channels/123/789/${id}` };
+    }
+    let gradedRows = [grade('Ben Burns', '111'), grade('Kelly In Vegas', '222')];
+    function channel(id, map) {
+      return { id, guild, permissionsFor: () => ({ has: () => false }),
+        messages: { fetch: async (messageId) => typeof messageId === 'object' ? map : map.get(messageId) || null },
+        send: async (payload) => {
+          const message = { id: `${id}-${map.size + 1}`, ...payload,
+            edit: async (next) => { Object.assign(message, next); return message; },
+            delete: async () => { map.delete(message.id); } };
+          map.set(message.id, message);
+          return message;
+        } };
+    }
+    const review = channel('567', cards);
+    const destination = channel('789', posts);
+    const pulse = createExpertPulse({ sourceChannelFor: async () => source,
+      reviewChannelFor: async () => review, destinationChannelFor: async () => destination,
+      rowsFor: async () => gradedRows, paidChannelIds: ['789'],
+      isApprover: ({ userId, ownerId }) => userId === ownerId,
+      stateFile: path.join(directory, 'state.json'), now: () => now });
+    assert.equal((await pulse.refresh()).expertCount, 2);
+    assert.equal(cards.size, 2);
+    assert.equal(posts.size, 0);
+    const ben = [...cards.values()].find((card) => card.content.includes('Ben Burns'));
+    const kelly = [...cards.values()].find((card) => card.content.includes('Kelly In Vegas'));
+    const args = (card, action) => ({ customId: card.components[0].components.find((button) => button.label.startsWith(action)).custom_id,
+      userId: 'kobe', ownerId: 'kobe', guildId: '123', channelId: '567', messageId: card.id });
+    await assert.rejects(pulse.decide({ ...args(ben, 'Approve'), userId: 'someone-else' }), /Only Kobe/);
+    assert.equal((await pulse.decide(args(kelly, 'Reject'))).status, 'REJECTED');
+    assert.equal(posts.size, 0);
+    assert.equal((await pulse.decide(args(ben, 'Approve'))).status, 'PUBLISHED');
+    assert.equal(posts.size, 1);
+    assert.match([...posts.values()][0].embeds[0].description, /Ben Burns/);
+    assert.doesNotMatch([...posts.values()][0].embeds[0].description, /Kelly In Vegas/);
+    await assert.rejects(pulse.decide(args(ben, 'Approve')), /already decided/);
+    const oldBenApproval = args(ben, 'Approve');
+    gradedRows = [...gradedRows, grade('Ben Burns', '333')];
+    assert.equal((await pulse.refresh()).status, 'REVIEW_UPDATED');
+    assert.equal(posts.size, 0);
+    assert.match(ben.content, /Private review/);
+    assert.match(kelly.content, /rejected/);
+    await assert.rejects(pulse.decide(oldBenApproval), /changed/);
+    assert.equal((await pulse.decide(args(ben, 'Approve'))).status, 'PUBLISHED');
+    assert.equal(posts.size, 1);
+    assert.equal((await pulse.refresh()).status, 'UNCHANGED');
+    gradedRows = [...gradedRows, grade('Ben Burns', '444', 'L'), grade('Ben Burns', '555', 'L'), grade('Ben Burns', '666', 'L')];
+    assert.equal((await pulse.refresh()).expertCount, 1);
+    assert.equal(posts.size, 0);
+    assert.match(ben.content, /no longer qualifies/);
+    gradedRows = gradedRows.filter((row) => !['444', '555', '666'].includes(row.pick_id));
+    assert.equal((await pulse.refresh()).expertCount, 2);
+    assert.match(ben.content, /Private review/);
+    assert.equal(posts.size, 0);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
 
 test('hot streaks include separate sports, require yesterday, and exclude incomplete today', () => {
   const at = (date) => Date.parse(`${date}T18:00:00Z`);

@@ -19,6 +19,10 @@ function keyFor(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function expertId(name) {
+  return createHash('sha256').update(keyFor(name)).digest('hex').slice(0, 16);
+}
+
 function verifiedRecords(rows, paidChannelIds) {
   const channels = new Set([...paidChannelIds].map(String));
   const eligible = rows.filter((row) => {
@@ -102,7 +106,7 @@ function summary(messages, now = Date.now()) {
   };
 }
 
-function payloadFor(report, records = []) {
+function payloadFor(report, records = [], { omitEmpty = false } = {}) {
   const firstTracked = records.flatMap((row) => row.results.map((result) => result.at))
     .reduce((earliest, at) => Math.min(earliest, at), Infinity);
   const coverage = Number.isFinite(firstTracked) ? `since ${new Date(firstTracked).toISOString().slice(0, 10)}` : 'no settled history';
@@ -166,7 +170,7 @@ function payloadFor(report, records = []) {
     ['Hottest Experts · 2+ unbeaten days', lines(hot, (item) => `${item.name} (${item.days}-day unbeaten streak, ${item.label})`)],
     ['Best Exclusive records L7 days · above 60%', lines(sevenDays)],
     ['Best exclusive records ALL TIME · above 54%', lines(allTime)]
-  ];
+  ].filter(([, body]) => !omitEmpty || body !== 'No verified expert currently meets this threshold.');
   const descriptions = [];
   let current = '';
   for (const [heading, body] of sections) {
@@ -183,6 +187,7 @@ function payloadFor(report, records = []) {
     throw new Error('Expert list exceeds Discord’s message limit; no names were silently omitted.');
   return {
     allowedMentions: { parse: [] },
+    expertNames: [...new Set([...yesterday, ...hot, ...sevenDays, ...allTime].map((item) => item.name))],
     embeds: descriptions.map((description, index) => ({
       color: 0xFF7900,
       title: index ? 'Expert Play Feedback · continued' : 'Expert Play Feedback',
@@ -241,99 +246,170 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     }
     const rows = await rowsFor();
     const channels = typeof paidChannelIds === 'function' ? paidChannelIds() : paidChannelIds;
-    const payload = payloadFor(summary(messages, now()), verifiedRecords(rows, channels));
-    const digest = createHash('sha256').update(payload.embeds.map((embed) => `${embed.title}\n${embed.description}`).join('\n')).digest('hex').slice(0, 20);
-    return { payload, digest };
+    const report = summary(messages, now());
+    const records = verifiedRecords(rows, channels);
+    const names = payloadFor(report, records).expertNames;
+    const items = new Map();
+    for (const name of names) {
+      const key = expertId(name);
+      const { expertNames, ...payload } = payloadFor(report, records.filter((record) => expertId(record.name) === key), { omitEmpty: true });
+      const digest = createHash('sha256').update(payload.embeds.map((embed) => `${embed.title}\n${embed.description}`).join('\n')).digest('hex').slice(0, 20);
+      items.set(key, { key, name, payload, digest });
+    }
+    return items;
   }
-  function reviewPayload(payload, digest, status) {
+  function reviewPayload(item, status) {
+    const { key, name, digest, payload } = item;
     return {
       allowedMentions: { parse: [] },
-      content: status === 'PENDING' ? 'Private review: verify the figures, then approve this exact snapshot for VIP.'
-        : status === 'REJECTED' ? 'Rejected. Nothing was posted to VIP.' : 'Approved and posted to VIP.',
+      content: status === 'PENDING' ? `Private review for **${name}**: approve or reject this expert’s verified trends.`
+        : status === 'REJECTED' ? `**${name}** rejected. This expert was not posted to VIP.`
+          : status === 'APPROVED' ? `**${name}** approved and posted to VIP.`
+            : `**${name}** no longer qualifies. This review is closed.`,
       embeds: payload.embeds.map((embed, index) => index === 0
-        ? { ...embed, title: 'Review Best Experts & Today’s Trends', footer: { text: `${REVIEW_MARKER} · ${digest}` } }
+        ? { ...embed, title: `Review Expert Trends · ${name}`, footer: { text: `${REVIEW_MARKER} · ${key} · ${digest}` } }
         : embed),
       components: [{ type: 1, components: [
-        { type: 2, style: 3, label: 'Approve for VIP', custom_id: `expert-pulse:approve:${digest}`, disabled: status !== 'PENDING' },
-        { type: 2, style: 4, label: 'Reject', custom_id: `expert-pulse:reject:${digest}`, disabled: status !== 'PENDING' },
-        { type: 2, style: 2, label: 'Refresh', custom_id: `expert-pulse:refresh:${digest}` }
+        { type: 2, style: 3, label: 'Approve for VIP', custom_id: `expert-pulse:approve:${key}:${digest}`, disabled: status !== 'PENDING' },
+        { type: 2, style: 4, label: 'Reject', custom_id: `expert-pulse:reject:${key}:${digest}`, disabled: status !== 'PENDING' },
+        { type: 2, style: 2, label: 'Refresh', custom_id: `expert-pulse:refresh:${key}:${digest}`, disabled: status === 'CLOSED' }
       ] }]
     };
   }
+  async function managedVipMessage(destination, id, key) {
+    if (!id) return null;
+    const message = await destination.messages.fetch(id).catch(() => null);
+    if (message && !message.embeds?.some((embed) => embed.footer?.text?.includes(key ? `${MARKER} · ${key} ·` : MARKER))) {
+      throw new Error('Stored expert pulse VIP message is not managed by this publisher.');
+    }
+    return message;
+  }
   async function refreshUnlocked() {
     const { source, review, destination } = await channels();
-    const { payload, digest } = await candidate(source);
-    const state = await readState();
-    if (state.status === 'PUBLISHING') {
-      const recent = await destination.messages.fetch({ limit: 100 });
-      const matching = [...recent.values()].find((message) => message.embeds?.some((embed) =>
-        embed.description === state.candidate_description && embed.footer?.text?.includes(MARKER)));
-      if (!matching) throw new Error('Expert pulse VIP publication receipt is uncertain; inspect the destination before retrying.');
-      await writeState({ ...state, status: 'PUBLISHED', posted_message_id: matching.id });
-      const card = state.review_message_id ? await review.messages.fetch(state.review_message_id).catch(() => null) : null;
-      if (card && digest === state.digest) await card.edit(reviewPayload(payload, digest, 'PUBLISHED'));
-      return { status: 'PUBLICATION_RECOVERED', messageId: matching.id };
+    const items = await candidate(source);
+    let state = await readState();
+    if (state.version !== 2) {
+      state = { version: 2, experts: {}, legacy_review_message_id: state.review_message_id || null,
+        legacy_posted_message_id: state.posted_message_id || null };
+      await writeState(state);
     }
-    if (state.status === 'REVIEW_SENDING') {
-      const recent = await review.messages.fetch({ limit: 100 });
-      const matching = [...recent.values()].find((message) => message.embeds?.some((embed) =>
-        embed.footer?.text?.includes(`${REVIEW_MARKER} · ${state.digest}`)));
-      if (!matching) throw new Error('Expert pulse review-card receipt is uncertain; inspect the review channel before retrying.');
-      await writeState({ ...state, status: 'PENDING', review_message_id: matching.id });
-      return { status: 'REVIEW_RECOVERED', messageId: matching.id };
+    let changed = false;
+    for (const [key, item] of items) {
+      let entry = state.experts[key] || {};
+      if (entry.status === 'REVIEW_SENDING') {
+        const recent = await review.messages.fetch({ limit: 100 });
+        const found = [...recent.values()].find((message) => message.embeds?.some((embed) =>
+          embed.footer?.text?.includes(`${REVIEW_MARKER} · ${key} · ${entry.digest}`)));
+        if (!found) throw new Error(`Review-card receipt for ${entry.name} is uncertain; inspect Discord before retrying.`);
+        entry = { ...entry, status: 'PENDING', review_message_id: found.id };
+        state.experts[key] = entry;
+        await writeState(state);
+      }
+      if (entry.status === 'PUBLISHING') {
+        const existing = await managedVipMessage(destination, entry.posted_message_id, key);
+        const recent = existing ? null : await destination.messages.fetch({ limit: 100 });
+        const found = existing || [...recent.values()].find((message) => message.embeds?.some((embed) =>
+          embed.footer?.text?.includes(`${MARKER} · ${key} · ${entry.digest}`)));
+        if (!found || !found.embeds?.some((embed) => embed.footer?.text?.includes(`${MARKER} · ${key} · ${entry.digest}`))) {
+          throw new Error(`VIP publication receipt for ${entry.name} is uncertain; inspect Discord before retrying.`);
+        }
+        entry = { ...entry, status: 'APPROVED', posted_message_id: found.id };
+        state.experts[key] = entry;
+        await writeState(state);
+      }
+      if (entry.digest !== item.digest || entry.status === 'CLOSED') {
+        const oldPost = await managedVipMessage(destination, entry.posted_message_id, key);
+        if (oldPost) await oldPost.delete();
+        entry = { name: item.name, digest: item.digest, status: 'PENDING',
+          review_message_id: entry.review_message_id || null, posted_message_id: null };
+        state.experts[key] = entry;
+        await writeState(state);
+        changed = true;
+      }
+      const card = entry.review_message_id ? await review.messages.fetch(entry.review_message_id).catch(() => null) : null;
+      if (card) {
+        const expected = reviewPayload(item, entry.status);
+        if (card.content !== expected.content || card.embeds?.[0]?.footer?.text !== expected.embeds[0].footer.text) {
+          await card.edit(expected);
+          changed = true;
+        }
+      } else {
+        entry.status = 'REVIEW_SENDING';
+        state.experts[key] = entry;
+        await writeState(state);
+        const posted = await review.send(reviewPayload(item, 'PENDING'));
+        entry = { ...entry, status: 'PENDING', review_message_id: posted.id };
+        state.experts[key] = entry;
+        await writeState(state);
+        changed = true;
+      }
     }
-    if (state.digest === digest && ['PENDING', 'REJECTED', 'PUBLISHED'].includes(state.status)) {
-      const current = state.review_message_id ? await review.messages.fetch(state.review_message_id).catch(() => null) : null;
-      if (current) return { status: 'UNCHANGED', messageId: current.id };
+    for (const [key, entry] of Object.entries(state.experts)) {
+      if (items.has(key) || entry.status === 'CLOSED') continue;
+      const oldPost = await managedVipMessage(destination, entry.posted_message_id, key);
+      if (oldPost) await oldPost.delete();
+      if (entry.review_message_id) {
+        const card = await review.messages.fetch(entry.review_message_id).catch(() => null);
+        if (card) await card.edit({ content: `**${entry.name}** no longer qualifies. This review is closed.`, embeds: [], components: [], allowedMentions: { parse: [] } });
+      }
+      state.experts[key] = { ...entry, status: 'CLOSED', posted_message_id: null };
+      await writeState(state);
+      changed = true;
     }
-    const next = { ...state, digest, status: 'PENDING', candidate_description: payload.embeds[0].description };
-    const current = state.review_message_id ? await review.messages.fetch(state.review_message_id).catch(() => null) : null;
-    if (current) {
-      await writeState(next);
-      await current.edit(reviewPayload(payload, digest, 'PENDING'));
-      return { status: 'REVIEW_UPDATED', messageId: current.id };
+    if (state.legacy_review_message_id) {
+      const oldCard = await review.messages.fetch(state.legacy_review_message_id).catch(() => null);
+      if (oldCard) await oldCard.edit({ content: 'This full-list review was replaced by individual expert review cards below.', embeds: [], components: [], allowedMentions: { parse: [] } });
+      state.legacy_review_message_id = null;
+      await writeState(state);
+      changed = true;
     }
-    await writeState({ ...next, status: 'REVIEW_SENDING' });
-    const posted = await review.send(reviewPayload(payload, digest, 'PENDING'));
-    await writeState({ ...next, review_message_id: posted.id });
-    return { status: 'REVIEW_CREATED', messageId: posted.id };
+    if (state.legacy_posted_message_id) {
+      const oldPost = await managedVipMessage(destination, state.legacy_posted_message_id);
+      if (oldPost) await oldPost.delete();
+      state.legacy_posted_message_id = null;
+      await writeState(state);
+      changed = true;
+    }
+    return { status: changed ? 'REVIEW_UPDATED' : 'UNCHANGED', expertCount: items.size };
   }
   async function decideUnlocked({ customId, userId, ownerId, guildId, channelId, messageId }) {
-    const match = String(customId).match(/^expert-pulse:(approve|reject|refresh):([a-f0-9]{20})$/);
-    if (!match) throw new Error('Unknown expert pulse action.');
+    const match = String(customId).match(/^expert-pulse:(approve|reject|refresh):([a-z0-9]{1,60}):([a-f0-9]{20})$/);
+    if (!match) throw new Error('This expert review card is outdated. Use the current individual cards.');
     if (!isApprover({ userId, ownerId })) throw new Error('Only Kobe or a configured pick approver can review this pulse.');
     const { source, review, destination } = await channels();
     if (guildId !== source.guild.id || channelId !== review.id) throw new Error('Expert pulse action must come from the private review channel.');
-    const state = await readState();
-    if (messageId !== state.review_message_id) throw new Error('This is not the current expert pulse review card.');
     if (match[1] === 'refresh') return refreshUnlocked();
-    if (state.digest !== match[2] || state.status !== 'PENDING') throw new Error('This review is stale or already decided.');
-    const fresh = await candidate(source);
-    if (fresh.digest !== state.digest) {
+    const items = await candidate(source);
+    const item = items.get(match[2]);
+    if (!item || item.digest !== match[3]) {
       await refreshUnlocked();
-      throw new Error('Expert data changed. Review the refreshed card before approving.');
+      throw new Error('Expert data changed. Review the refreshed card before deciding.');
+    }
+    const state = await readState();
+    const entry = state.experts?.[match[2]];
+    if (!entry || entry.review_message_id !== messageId || entry.digest !== match[3] || entry.status !== 'PENDING') {
+      throw new Error('This expert review is stale or already decided.');
     }
     if (match[1] === 'reject') {
-      await writeState({ ...state, status: 'REJECTED' });
+      state.experts[match[2]] = { ...entry, status: 'REJECTED' };
+      await writeState(state);
       const card = await review.messages.fetch(messageId);
-      await card.edit(reviewPayload(fresh.payload, state.digest, 'REJECTED'));
-      return { status: 'REJECTED' };
+      await card.edit(reviewPayload(item, 'REJECTED'));
+      return { status: 'REJECTED', expert: item.name };
     }
-    await writeState({ ...state, status: 'PUBLISHING' });
-    let existing = state.posted_message_id ? await destination.messages.fetch(state.posted_message_id).catch(() => null) : null;
-    if (state.posted_message_id && !existing) throw new Error('Previous VIP message is missing or inaccessible; publication held to avoid a duplicate.');
-    if (!existing) {
-      // Recover the managed message even if an old ephemeral state file was
-      // lost. Never create a second VIP pulse while one is still visible.
-      const recent = await destination.messages.fetch({ limit: 100 });
-      existing = [...recent.values()].find((message) => message.embeds?.some((embed) => embed.footer?.text?.includes(MARKER))) || null;
-    }
-    const posted = existing ? await existing.edit(fresh.payload) : await destination.send(fresh.payload);
-    const complete = { ...state, status: 'PUBLISHED', posted_message_id: posted.id };
-    await writeState(complete);
+    state.experts[match[2]] = { ...entry, status: 'PUBLISHING' };
+    await writeState(state);
+    const vipPayload = { ...item.payload, embeds: item.payload.embeds.map((embed, index) => index === 0
+      ? { ...embed, title: `Expert Play Feedback · ${item.name}`, footer: { text: `${MARKER} · ${item.key} · ${item.digest}` } }
+      : embed) };
+    const existing = await managedVipMessage(destination, entry.posted_message_id, item.key);
+    if (entry.posted_message_id && !existing) throw new Error('Previous VIP message is missing; publication held to avoid a duplicate.');
+    const posted = existing ? await existing.edit(vipPayload) : await destination.send(vipPayload);
+    state.experts[match[2]] = { ...entry, status: 'APPROVED', posted_message_id: posted.id };
+    await writeState(state);
     const card = await review.messages.fetch(messageId);
-    await card.edit(reviewPayload(fresh.payload, state.digest, 'PUBLISHED'));
-    return { status: 'PUBLISHED', messageId: posted.id };
+    await card.edit(reviewPayload(item, 'APPROVED'));
+    return { status: 'PUBLISHED', expert: item.name, messageId: posted.id };
   }
   return { refresh: () => locked(refreshUnlocked), decide: (args) => locked(() => decideUnlocked(args)) };
 }
