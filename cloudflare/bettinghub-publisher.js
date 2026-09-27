@@ -557,6 +557,9 @@ async function getCurrentFreePick(request, env) {
   if (!pick) return json({ error: "No current free pick" }, 404, corsHeaders(request));
   let xReceipt = null;
   let instagram = null;
+  let instagramConnectionStatus = 'unavailable';
+  let instagramStory = null;
+  let instagramStoryStatus = 'unavailable';
   if (env.DB && pick.xQueueId) {
     xReceipt = await env.DB.prepare(`SELECT status, published_at AS xPublishedAt, x_post_id AS xPostId, last_error AS xError FROM approved_posts WHERE id = ?`).bind(pick.xQueueId).first();
   } else if (env.DB && pick.updatedAt) {
@@ -565,10 +568,20 @@ async function getCurrentFreePick(request, env) {
     xReceipt = await env.DB.prepare(`SELECT status, published_at AS xPublishedAt, x_post_id AS xPostId, last_error AS xError FROM approved_posts WHERE id LIKE 'free-x-%' AND created_at BETWEEN ? AND ? ORDER BY created_at ASC LIMIT 1`).bind(start, end).first();
   }
   if (env.DB) {
-    instagram = await env.DB.prepare(`SELECT account_id AS accountId, expires_at AS expiresAt, checked_at AS checkedAt FROM instagram_connections WHERE target = 'kobesbettinhub'`).first();
+    try {
+      instagram = await env.DB.prepare(`SELECT account_id AS accountId, expires_at AS expiresAt FROM instagram_connections_v2 WHERE target = 'kobebettinghub'`).first();
+      instagramConnectionStatus = !instagram ? 'not_connected' : instagram.expiresAt <= Date.now() ? 'expired' : 'connected';
+    } catch { /* The Instagram worker has not installed its schema or D1 is unavailable. */ }
+    try {
+      instagramStory = await env.DB.prepare(`SELECT state, published_at AS publishedAt, last_error AS lastError FROM instagram_story_deliveries WHERE pick_id = ?`).bind(pick.pickId).first();
+      instagramStoryStatus = instagramStory?.state || (instagramConnectionStatus === 'connected' ? 'pending' : instagramConnectionStatus);
+    } catch { /* A missing receipt table must never break the Free Pick page. */ }
   }
   const resolved = xReceipt ? { ...pick, xStatus: xReceipt.status, xPublishedAt: xReceipt.xPublishedAt || null, xPostId: xReceipt.xPostId || null, xError: xReceipt.xError || null } : pick;
-  return json({ ...publicFreePick(resolved, new URL(request.url).origin), instagramConnectionStatus: instagram ? 'connected' : 'not_connected', instagramAccountId: instagram?.accountId || null }, 200, corsHeaders(request));
+  return json({ ...publicFreePick(resolved, new URL(request.url).origin), instagramConnectionStatus,
+    instagramAccountId: instagramConnectionStatus === 'connected' ? instagram.accountId : null,
+    instagramStoryStatus, instagramStoryPublishedAt: instagramStory?.publishedAt ? new Date(instagramStory.publishedAt).toISOString() : null,
+    instagramStoryError: instagramStory?.lastError || null }, 200, corsHeaders(request));
 }
 
 function normalizedFreePickResults(input) {

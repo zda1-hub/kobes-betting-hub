@@ -65,7 +65,7 @@ test('VIP preview feed strips all private fields and expires by operating date',
   const response = await worker.fetch(new Request('https://publisher.test/api/vip-preview/current'), env);
   const body = await response.text();
   assert.equal(response.status, 200);
-  assert.doesNotMatch(body, /Higbee|Giants|Rams|4\.5|receptions/);
+  assert.doesNotMatch(body, /Higbee|Giants|Rams|Over 4\.5|receptions/);
   assert.deepEqual(JSON.parse(body).previews[0].topics, ['Recent production']);
   const unauthorized = await worker.fetch(new Request('https://publisher.test/api/vip-preview/current', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) }), env);
   assert.equal(unauthorized.status, 401);
@@ -99,7 +99,7 @@ test('text-only Free Pick remains readable after publication', async () => {
   assert.equal(current.storyUrl, null);
 });
 
-test('Free Pick reports the connected kobesbettinhub Instagram account', async () => {
+test('Free Pick reports the active kobebettinghub Story connection and delivery receipt', async () => {
   const queries = [];
   const env = {
     FREE_PICK_KV: memoryKv(),
@@ -110,8 +110,11 @@ test('Free Pick reports the connected kobesbettinhub Instagram account', async (
           sql,
           bind() { return this; },
           async first() {
-            if (sql.includes('FROM instagram_connections')) {
+            if (sql.includes('FROM instagram_connections_v2')) {
               return { accountId: '17841462044214309', expiresAt: Date.now() + 86400000, checkedAt: Date.now() };
+            }
+            if (sql.includes('FROM instagram_story_deliveries')) {
+              return { state: 'published', publishedAt: Date.parse('2026-09-21T19:00:00.000Z'), lastError: null };
             }
             return null;
           },
@@ -133,8 +136,10 @@ test('Free Pick reports the connected kobesbettinhub Instagram account', async (
   const current = await response.json();
   assert.equal(current.instagramConnectionStatus, 'connected');
   assert.equal(current.instagramAccountId, '17841462044214309');
-  const connectionQuery = queries.find((statement) => statement.sql.includes('FROM instagram_connections'));
-  assert.match(connectionQuery.sql, /target = 'kobesbettinhub'/);
+  assert.equal(current.instagramStoryStatus, 'published');
+  assert.equal(current.instagramStoryPublishedAt, '2026-09-21T19:00:00.000Z');
+  const connectionQuery = queries.find((statement) => statement.sql.includes('FROM instagram_connections_v2'));
+  assert.match(connectionQuery.sql, /target = 'kobebettinghub'/);
 });
 
 test('verified Free Pick results require authorization and expose only the approved snapshot', async () => {

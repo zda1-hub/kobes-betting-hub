@@ -611,7 +611,7 @@ const freePickDelivery = createFreePickDelivery({
   notify: async (row, site) => queueRecapNotification({
     id: `free-pick-social-${row.pick_id}`,
     subject: `Kobe's Betting Hub — Instagram Story ready (${row.operating_date})`,
-    body: `The approved Free Pick social package is ready.\n\nInstagram Story JPEG (1080×1920): ${site.storyUrl}\nApproved Discord post: ${row.post_reference}\n\nReview the visible terms and post manually from the official Instagram account. Do not edit the pick terms.`
+    body: `The approved Free Pick social package is ready.\n\nInstagram Story JPEG (1080×1920): ${site.storyUrl}\nApproved Discord post: ${row.post_reference}\n\nThe Instagram publisher checks approved current-day Free Picks automatically when the official account is connected. Check the delivery status before treating the Story as posted; avoid posting a duplicate manually.`
   })
 });
 

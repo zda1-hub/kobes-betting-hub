@@ -193,8 +193,8 @@ function endpointUrl(endpoint, env, token) {
   return url.toString();
 }
 
-function phoenixDate(now = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+function pacificDate(now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }
 
 function publishingEnabled(env) {
@@ -254,7 +254,7 @@ async function currentFreePick(env, fetchImpl = fetch) {
   const operatingDate = String(data?.publishedDate || '');
   const storyUrl = String(data?.storyUrl || '');
   if (!/^[A-Za-z0-9_-]{4,160}$/.test(pickId) || !/^\d{4}-\d{2}-\d{2}$/.test(operatingDate) || !storyUrl.startsWith(`${origin}/media/free-pick/story/`)) throw new SafeError('FREE_PICK_STORY_INVALID', 409);
-  if (operatingDate !== phoenixDate()) throw new SafeError('FREE_PICK_NOT_TODAY', 409);
+  if (operatingDate !== pacificDate()) throw new SafeError('FREE_PICK_NOT_TODAY', 409);
   return { pickId, operatingDate, storyUrl };
 }
 
@@ -493,4 +493,4 @@ const worker = {
   scheduled: (_controller, env, ctx) => ctx.waitUntil(deliverCurrentStory(env).catch(error => console.error(JSON.stringify({ service: 'instagram-story', error: error instanceof SafeError ? error.message : 'STORY_DELIVERY_FAILED' })))),
 };
 export default worker;
-export const __test = { configured, encrypt, decrypt, identity, hash, readJson, phoenixDate, publishingEnabled, publicationDateAllowed, deliverCurrentStory, SCOPES };
+export const __test = { configured, encrypt, decrypt, identity, hash, readJson, pacificDate, publishingEnabled, publicationDateAllowed, deliverCurrentStory, SCOPES };
