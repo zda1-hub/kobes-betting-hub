@@ -2598,8 +2598,8 @@ client.once(Events.ClientReady, async (readyClient) => {
   }
   try {
     await retireVisibleTrendCards();
-    await refreshPendingResearchApprovals();
     await removeIncompleteWriteupApprovals();
+    await refreshPendingResearchApprovals();
     await refreshPendingDetailEditControls();
   } catch (error) {
     console.error('Unable to refresh pending approval research:', error);
