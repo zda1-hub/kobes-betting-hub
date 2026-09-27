@@ -415,6 +415,8 @@ test('connection form supports browser Origin checks while other replies hide re
   const invite = await (await handle(operatorRequest('invite'), env)).json();
   const form = await handle(new Request(invite.authorizeUrl), env);
   assert.equal(form.headers.get('referrer-policy'), 'same-origin');
+  assert.match(form.headers.get('content-security-policy'), /form-action 'self' https:\/\/www\.instagram\.com;/);
+  assert.doesNotMatch(form.headers.get('content-security-policy'), /unsafe-eval|https:;|\*/);
   assert.equal((await handle(request('/health'), env)).headers.get('referrer-policy'), 'no-referrer');
   const value = new URL(invite.authorizeUrl).searchParams.get('invite');
   for (const origin of ['null', 'https://attacker.test']) {

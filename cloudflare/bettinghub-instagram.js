@@ -41,7 +41,11 @@ function page(message, { invite, status = 200, cookie } = {}) {
     'content-type': 'text/html; charset=utf-8',
     // A form POST under no-referrer sends Origin: null in real browsers.
     // Keep the same-origin check and suppress referrers to external sites.
-    ...(invite ? { 'referrer-policy': 'same-origin' } : {}), ...(cookie ? { 'set-cookie': cookie } : {}),
+    ...(invite ? {
+      'referrer-policy': 'same-origin',
+      // Chromium applies form-action to the redirect after the local POST.
+      'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://www.instagram.com; frame-ancestors 'none'; base-uri 'none'",
+    } : {}), ...(cookie ? { 'set-cookie': cookie } : {}),
   });
 }
 function randomToken() {
