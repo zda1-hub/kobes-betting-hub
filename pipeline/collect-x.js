@@ -562,14 +562,14 @@ async function notifyApprovalChannel(packet) {
     needsDetails = true;
     embeds = [{
       color: 0xf4a62a,
-      title: 'WRITEUP CANDIDATE — DETAILS NEEDED',
+      title: 'WRITEUP REVIEW',
       description: [
         `**Play:** ${terms}`,
         extraction.event ? `**Event:** ${extraction.event}` : null,
         `**Current supporting details:** ${existing.length}/4 required`,
         existing.length ? existing.map((line) => `• ${line}`).join('\n') : 'No usable supporting facts were extracted.',
         '',
-        '**Action:** Add 4–8 factual details or reject this candidate. Posting is disabled until the writeup is complete.'
+        '**Action:** Review the available details and add any missing facts. Posting is disabled until the writeup is complete.'
       ].filter((line) => line !== null).join('\n').slice(0, 4000),
       footer: { text: packet.pick_id }
     }];
