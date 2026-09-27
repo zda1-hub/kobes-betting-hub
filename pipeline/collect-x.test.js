@@ -11,6 +11,7 @@ const {
   isSinglePlayPacket,
   mediaCaptionHasBetSignal,
   nflGamesScheduledToday,
+  notifyApprovalChannel,
   recordModelCallDeferral,
   rotateSources,
   shouldQueueForReview,
@@ -20,6 +21,32 @@ const {
 } = require('./collect-x');
 const { enrichPacket } = require('./enrich-pick');
 const { isSupportedSportPick } = require('../bot/lib/event-timing');
+
+test('holds a zero-fact writeup before any Discord approval request', async () => {
+  const before = { token: process.env.DISCORD_TOKEN, channel: process.env.PICK_APPROVAL_CHANNEL_ID, fetch: global.fetch };
+  process.env.DISCORD_TOKEN = 'test-token';
+  process.env.PICK_APPROVAL_CHANNEL_ID = '123';
+  global.fetch = async () => { throw new Error('Incomplete approval reached Discord'); };
+  try {
+    const packet = {
+      pick_id: '20260927-143-01-X', approval_number: 143, approval: {},
+      source: { publish_mode: 'writeup', reuse_permission: 'CONFIRMED' },
+      analysis: { status: 'SOURCE_EXTRACTED', extraction: {
+        is_pick_candidate: true, selection: 'Denver Broncos +7.5', event: 'Rams @ Broncos', source_claims: []
+      } }
+    };
+    assert.equal(await notifyApprovalChannel(packet), null);
+    assert.equal(packet.status, 'HELD_NOT_READY');
+    assert.equal(packet.approval_ready, false);
+    assert.match(packet.hold_reason, /4–8/);
+  } finally {
+    global.fetch = before.fetch;
+    if (before.token === undefined) delete process.env.DISCORD_TOKEN;
+    else process.env.DISCORD_TOKEN = before.token;
+    if (before.channel === undefined) delete process.env.PICK_APPROVAL_CHANNEL_ID;
+    else process.env.PICK_APPROVAL_CHANNEL_ID = before.channel;
+  }
+});
 
 test('requires exactly one visible play for each approval card', () => {
   const base = { analysis: { extraction: { plays: [{ selection: 'Player A over 5.5 strikeouts', line: '5.5', odds_american: '-115' }] } } };

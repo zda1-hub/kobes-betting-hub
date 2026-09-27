@@ -22,6 +22,10 @@ services:
         sync: false
       - key: VIP_EXPERT_LIST_CHANNEL_ID
         value: "1550273195079114792"
+      - key: VIP_EXPERT_PULSE_APPROVAL_CHANNEL_ID
+        value: "1553813922602287215"
+      - key: VIP_EXPERT_PULSE_CHANNEL_ID
+        value: "1553814051572818010"
       - key: PICK_APPROVAL_CHANNEL_ID
         sync: false
       - key: EXCLUSIVE_PICK_APPROVAL_CHANNEL_ID
