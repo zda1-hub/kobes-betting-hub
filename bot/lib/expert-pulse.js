@@ -129,33 +129,41 @@ function payloadFor(report, records = []) {
   const allTime = ranked(records.map((expert) => ({ name: expert.name, wins: expert.wins, losses: expert.losses,
     rate: expert.wins + expert.losses ? expert.wins / (expert.wins + expert.losses) : 0, references: expert.references }))
     .filter((item) => item.wins + item.losses > 0 && item.rate > 0.54));
-  const hot = records.map((expert) => {
-    const byDate = new Map();
-    for (const result of expert.results.filter((item) => ['W', 'L'].includes(item.grade))) {
-      const date = operatingDate(result.at);
-      const grades = byDate.get(date) || [];
-      grades.push(result.grade);
-      byDate.set(date, grades);
-    }
-    const dates = [...byDate.keys()].sort().reverse();
-    let days = 0;
-    for (const date of dates) {
-      const expected = new Date(Date.parse(`${dates[0]}T12:00:00Z`) - days * 86400000).toISOString().slice(0, 10);
-      if (date !== expected) break;
-      if (byDate.get(date).includes('L') || !byDate.get(date).includes('W')) break;
-      days += 1;
-    }
-    const streakDates = new Set(dates.slice(0, days));
-    const sports = [...new Set(expert.results.filter((item) => item.grade === 'W' && item.sport && streakDates.has(operatingDate(item.at))).map((item) => item.sport))];
-    return { name: expert.name, days, label: sports.length === 1 ? sports[0] : 'all sports' };
-  }).filter((item) => item.days >= 2).sort((a, b) => b.days - a.days || a.name.localeCompare(b.name));
+  // A hot streak must reach yesterday, and must be checked
+  // independently for each sport so a loss elsewhere does not hide it.
+  const hot = records.flatMap((expert) => {
+    const decisions = expert.results.filter((item) => ['W', 'L'].includes(item.grade) && item.at < end);
+    const sports = [...new Set(decisions.map((item) => item.sport).filter(Boolean))];
+    const scopes = [{ label: 'all sports', results: decisions },
+      ...sports.map((sport) => ({ label: sport, results: decisions.filter((item) => item.sport === sport) }))];
+    const streaks = scopes.map(({ label, results }) => {
+      const byDate = new Map();
+      for (const result of results) {
+        const date = operatingDate(result.at);
+        const grades = byDate.get(date) || [];
+        grades.push(result.grade);
+        byDate.set(date, grades);
+      }
+      let days = 0;
+      while (true) {
+        const date = operatingDate(end - (days + 1) * day);
+        const grades = byDate.get(date);
+        if (!grades || grades.includes('L') || !grades.includes('W')) break;
+        days += 1;
+      }
+      return { name: expert.name, days, label };
+    }).filter((item) => item.days >= 2);
+    // One-sport records would otherwise repeat the identical streak twice.
+    return sports.length === 1 && decisions.every((item) => item.sport === sports[0])
+      ? streaks.filter((item) => item.label !== 'all sports') : streaks;
+  }).sort((a, b) => b.days - a.days || a.name.localeCompare(b.name) || a.label.localeCompare(b.label));
   const lines = (items, mapper = format) => {
     if (!items.length) return 'No verified expert currently meets this threshold.';
     return items.map(mapper).join('\n');
   };
   const sections = [
     ['Yesterday’s best · above 61%', lines(yesterday, (item) => `${item.name} (${item.wins}-${item.losses})`)],
-    ['Hottest Experts · 2+ winning days', lines(hot, (item) => `${item.name} (${item.days}-day verified streak, ${item.label})`)],
+    ['Hottest Experts · 2+ unbeaten days', lines(hot, (item) => `${item.name} (${item.days}-day unbeaten streak, ${item.label})`)],
     ['Best Exclusive records L7 days · above 60%', lines(sevenDays)],
     ['Best exclusive records ALL TIME · above 54%', lines(allTime)]
   ];
@@ -179,7 +187,7 @@ function payloadFor(report, records = []) {
       color: 0xFF7900,
       title: index ? 'Expert Play Feedback · continued' : 'Expert Play Feedback',
       description,
-      ...(index === 0 ? { footer: { text: `${MARKER} · Approved #expert-picks posts and verified pick log` } } : {})
+      ...(index === 0 ? { footer: { text: `${MARKER} · Verified paid pick log · ${coverage}` } } : {})
     }))
   };
 }

@@ -99,8 +99,8 @@ function publicPropLine() {
 }
 
 function shortBreakdown(stats, topics) {
-  const topicText = topics.length ? `Full breakdown covers ${topics.map((topic) => topic.toLowerCase()).join(' and ')}.` : '';
-  const statText = stats.length ? `Source-backed notes: ${stats.join('; ')}.` : '';
+  const topicText = topics.length ? `Full breakdown covers ${new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(topics.map((topic) => topic.toLowerCase()))}.` : '';
+  const statText = stats.length ? `Evidence: ${stats.join('; ')}.` : '';
   return [statText, topicText].filter(Boolean).join(' ');
 }
 
@@ -129,9 +129,11 @@ function freeWriteupBoardPayload(rows, date) {
     embeds: [{
       color: 0xFF7900,
       title: `${emoji} ${sport[0].toUpperCase()}${sport.slice(1)} VIP writeup · ${index + 1}`,
-      description: [`**Player or game prop**  |  **Short breakdown; full breakdown in VIP**`, prop,
-        breakdown ? `**Why it made the board:** ${breakdown}` : '**Why it made the board:** The full evidence is in the member writeup.',
-        'Player and team names, exact wager, and full reasoning are inside VIP.'].join('\n\n'),
+      fields: [
+        { name: 'Player or game prop', value: prop, inline: true },
+        { name: 'Short breakdown · full breakdown in VIP',
+          value: breakdown || 'The full evidence is in the member writeup.', inline: true }
+      ],
       footer: { text: `${FREE_BOARD_MARKER} · ${date} · ${index + 1}` }
     }]
   }));

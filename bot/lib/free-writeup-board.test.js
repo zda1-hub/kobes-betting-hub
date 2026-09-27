@@ -5,7 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { createFreeWriteupBoard, freeWriteupBoardPayload, publicPreviews } = require('./free-writeup-board');
 
-test('formats every current writeup as its own full-width redacted preview', () => {
+test('formats every current writeup as a redacted preview with the two requested columns', () => {
   const payload = freeWriteupBoardPayload([
     { pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson', published_line: 'Over 4.5 receptions', published_odds_american: '-150', teaser_source: '- Higbee had 2 catches against the Giants in Week 1.\n- Blake Corum averaged 43.9 rushing yards for the Rams.\n- Over 4.5 receptions at -150 is the pick.' },
     { pick_id: '2', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Kayshon Boutte Over 38.5 yards -115', source_type: 'discord_manual', teaser_source: '- Cowboys and Giants are 6-2 ATS in the last 8 games against the Rams.' },
@@ -16,7 +16,9 @@ test('formats every current writeup as its own full-width redacted preview', () 
   assert.equal(payload.length, 2);
   assert.equal(payload.every((card) => card.embeds.length === 1), true);
   assert.match(text, /Player or game prop · exact play inside VIP/);
-  assert.match(text, /Why it made the board/);
+  assert.equal(payload[0].embeds[0].fields.length, 2);
+  assert.ok(payload[0].embeds[0].fields.every(field => field.inline));
+  assert.match(text, /Short breakdown/);
   assert.doesNotMatch(text, /Over 4\.5 receptions|Over 38\.5 yards/);
   assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '🔒 Player or game prop · exact play inside VIP', breakdown: 'Full breakdown covers recent production.' }]);
   assert.doesNotMatch(text, /Bijan|Boutte|Higbee|Blake|Corum|Giants|Cowboys|Rams|43\.9|6-2|-150|-115|Old exact|Not a writeup/);
@@ -33,7 +35,7 @@ test('hints at the evidence while keeping a split market and paid terms private'
     number: 1, emoji: '⚾', sport: 'baseball',
     topics: ['Recent production', 'Matchup context'],
     prop: '🔒 Player or game prop · exact play inside VIP',
-    breakdown: 'Source-backed notes: 4/4 in recent games; 2/2 in the stated matchup sample. Full breakdown covers recent production and matchup context.'
+    breakdown: 'Evidence: 4/4 in recent games; 2/2 in the stated matchup sample. Full breakdown covers recent production and matchup context.'
   }]);
   assert.doesNotMatch(JSON.stringify(previews), /Payton|Tolle|-125|CLE|27th|OPS|64/);
 
@@ -81,7 +83,7 @@ test('keeps decimals intact and rejects projections, other subjects, dates, and 
     'Corum last played on 9/25/2026.',
     'Corum averaged 43.9 rushing yards per quarter.',
     'Corum missed; Williams had 14 targets in two games.'
-  ]) assert.doesNotMatch(preview(source), /Source-backed notes/, source);
+  ]) assert.doesNotMatch(preview(source), /Evidence:/, source);
 });
 
 test('handles the current approved bullet formats without copying player or team identities', () => {

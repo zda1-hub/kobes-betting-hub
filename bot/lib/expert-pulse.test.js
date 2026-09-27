@@ -178,3 +178,22 @@ test('owner approves an exact private review card once; changes require another 
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test('hot streaks include separate sports, require yesterday, and exclude incomplete today', () => {
+  const at = (date) => Date.parse(`${date}T18:00:00Z`);
+  const expert = (name, results) => ({ name, results, wins: results.filter(r => r.grade === 'W').length,
+    losses: results.filter(r => r.grade === 'L').length, references: [] });
+  const result = (date, sport, grade='W') => ({ at: at(date), sport, grade });
+  const text = payloadFor({ date: '2026-09-26', active: [], repeated: [] }, [
+    expert('Mixed', [result('2026-09-25','baseball'),result('2026-09-24','baseball'),result('2026-09-25','football','L')]),
+    expert('Stale', [result('2026-09-22','baseball'),result('2026-09-21','baseball')]),
+    expert('Gap', [result('2026-09-25','football'),result('2026-09-23','football')]),
+    expert('Single', [result('2026-09-25','baseball'),result('2026-09-24','baseball'),result('2026-09-26','baseball','L')])
+  ]).embeds.map(e => e.description).join('\n');
+  const hot = text.split('**Hottest Experts')[1].split('**Best Exclusive')[0];
+  assert.match(hot, /Mixed \(2-day unbeaten streak, baseball\)/);
+  assert.match(hot, /Single \(2-day unbeaten streak, baseball\)/);
+  assert.doesNotMatch(hot, /Stale|Gap|all sports/);
+  assert.equal((hot.match(/Single/g) || []).length, 1);
+});
