@@ -18,7 +18,7 @@ test('formats every current writeup as its own full-width redacted preview', () 
   assert.match(text, /Player or game prop · exact play inside VIP/);
   assert.match(text, /Why it made the board/);
   assert.doesNotMatch(text, /Over 4\.5 receptions|Over 38\.5 yards/);
-  assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '🔒 Player or game prop · exact play inside VIP', breakdown: 'The full writeup examines recent production.' }]);
+  assert.deepEqual(publicPreviews([{ pick_id: '1', operating_date: '2026-09-20', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football', selection: 'Bijan Robinson Over 4.5 receptions', teaser_source: 'Higbee had 2 catches against the Giants in Week 1.' }], '2026-09-20'), [{ number: 1, emoji: '🏈', sport: 'football', topics: ['Recent production'], prop: '🔒 Player or game prop · exact play inside VIP', breakdown: 'Full breakdown covers recent production.' }]);
   assert.doesNotMatch(text, /Bijan|Boutte|Higbee|Blake|Corum|Giants|Cowboys|Rams|43\.9|6-2|-150|-115|Old exact|Not a writeup/);
 });
 
@@ -33,7 +33,7 @@ test('hints at the evidence while keeping a split market and paid terms private'
     number: 1, emoji: '⚾', sport: 'baseball',
     topics: ['Recent production', 'Matchup context'],
     prop: '🔒 Player or game prop · exact play inside VIP',
-    breakdown: 'Verified samples: 4/4 in recent games; 2/2 in the stated matchup sample. The full writeup examines recent production and matchup context.'
+    breakdown: 'Source-backed notes: 4/4 in recent games; 2/2 in the stated matchup sample. Full breakdown covers recent production and matchup context.'
   }]);
   assert.doesNotMatch(JSON.stringify(previews), /Payton|Tolle|-125|CLE|27th|OPS|64/);
 
@@ -51,6 +51,37 @@ test('hints at the evidence while keeping a split market and paid terms private'
     published_odds_american: '-125', teaser_source: 'Over in L10.'
   }], '2026-09-22');
   assert.equal(alreadyCombined[0].prop, '🔒 Player or game prop · exact play inside VIP');
+});
+
+test('shows concrete source-backed notes without revealing the selected play', () => {
+  const preview = publicPreviews([{
+    pick_id: 'x', operating_date: '2026-09-26', status: 'PUBLISHED', destination: '#football-writeups',
+    sport: 'football', selection: 'Tetairoa McMillan', published_line: 'Over 60 yards',
+    teaser_source: 'McMillan recorded 75 & 101 yards in Weeks 1 & 2. McMillan has 14 targets through two games. Carolina plays Arizona.'
+  }], '2026-09-26')[0];
+  assert.match(preview.breakdown, /Recent yardage outputs: 75 and 101/);
+  assert.match(preview.breakdown, /14 targets/);
+  assert.doesNotMatch(JSON.stringify(preview), /Tetairoa|McMillan|Carolina|Arizona|Over 60/);
+});
+
+test('keeps decimals intact and rejects projections, other subjects, dates, and catch ratios', () => {
+  const preview = (source) => publicPreviews([{
+    pick_id: 'safe', operating_date: '2026-09-26', status: 'PUBLISHED',
+    destination: '#football-writeups', sport: 'football', selection: 'Blake Corum',
+    teaser_source: source
+  }], '2026-09-26')[0].breakdown;
+  assert.match(preview('Corum averaged 43.9 rushing yards per game this season.'), /43\.9 rushing yards per game/);
+  assert.match(preview('Blake Corum hit in 4 of 5 recent games.'), /4\/5 in recent games/);
+  for (const source of [
+    'Compared with Corum, Williams had 14 targets in two games.',
+    'Corum and Williams recorded 75 and 101 yards in two games.',
+    'Corum is projected to average 43.9 rushing yards per game.',
+    'Corum has not had 14 targets in two games.',
+    'Corum caught 5 of 8 targets in his last game.',
+    'Corum last played on 9/25/2026.',
+    'Corum averaged 43.9 rushing yards per quarter.',
+    'Corum missed; Williams had 14 targets in two games.'
+  ]) assert.doesNotMatch(preview(source), /Source-backed notes/, source);
 });
 
 test('stays empty until a writeup is published', () => {

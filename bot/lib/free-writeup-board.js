@@ -37,40 +37,51 @@ function safeEvidenceTopics(row) {
 }
 
 function safeEvidenceStats(row) {
-  // Only publish normalized hit-rate facts. We deliberately rebuild the text
-  // instead of copying source sentences so names, teams, averages, rankings,
-  // odds, and other clues from the paid writeup cannot leak into the preview.
+  // Rebuild numeric evidence from sentences about the selected subject.
+  // Never copy a source sentence, name, team, line, odds, or bet direction.
   const source = String(row.teaser_source || '');
   const subject = String(row.selection || '').trim().split(/\s+/).slice(0, 2);
   const surname = subject.length === 2 && !/^(over|under|vs\.?|at)$/i.test(subject[1])
     ? subject[1].replace(/[^a-z]/gi, '') : '';
   const stats = [];
   const seen = new Set();
-  const ratio = /\b(\d{1,2})\s*\/\s*(\d{1,2})\b/g;
-  for (const match of source.matchAll(ratio)) {
-    const hits = Number(match[1]);
-    const sample = Number(match[2]);
-    if (!sample || hits > sample || sample > 25) continue;
-    const priorBoundary = Math.max(source.lastIndexOf('.', match.index), source.lastIndexOf('\n', match.index), source.lastIndexOf(';', match.index));
-    const following = source.slice(match.index + match[0].length).search(/[.\n;]/);
-    const end = following < 0 ? source.length : match.index + match[0].length + following;
-    const context = source.slice(priorBoundary + 1, end).toLowerCase();
-    // A long approved writeup can discuss other players. Do not turn one of
-    // their records into a public claim about the selected wager.
-    if (!surname || !new RegExp(`\\b${surname.toLowerCase()}\\b`).test(context)) continue;
-    let label = 'recent games';
-    if (/\b(?:against|versus|vs\.?)\b/.test(context)) label = 'the stated matchup sample';
-    else if (/\b(?:when|without|inactive|doesn['’]?t play|lineup)\b/.test(context)) label = 'the stated lineup condition';
-    else if (/\b(?:at home|home games?)\b/.test(context)) label = 'recent home games';
-    else if (/\b(?:on the road|away games?)\b/.test(context)) label = 'recent away games';
-    const fact = `${hits}/${sample} in ${label}`;
-    if (!seen.has(fact)) {
-      seen.add(fact);
-      stats.push(fact);
+  if (!surname) return stats;
+  const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const subjectMention = new RegExp(`^(?:${escape(subject.join(' '))}|${escape(surname)})\\s+`, 'i');
+  const add = (fact) => { if (!seen.has(fact)) { seen.add(fact); stats.push(fact); } };
+  // Preserve decimal points. Only accept a fact whose grammatical subject is
+  // the selected player; merely mentioning that player in a comparison is unsafe.
+  for (const sentence of source.split(/(?<!\d)\.|\.(?!\d)|[\n;!?]+/).map((item) => item.replace(/^\s*[-•*]\s*/, '').trim()).filter(Boolean)) {
+    const mention = sentence.match(subjectMention);
+    if (!mention) continue;
+    const context = sentence.slice(mention[0].length).toLowerCase();
+    // Forecasts and negated statements are not historical results.
+    if (/\b(?:not|never|projected|expected|could|would|should|will|might|may)\b/.test(context)) continue;
+    const ratio = context.match(/^(?:has\s+)?(?:went over|went under|hit|cleared|covered)(?:\s+in)?\s+(\d{1,2})\s*(?:\/|of)\s*(\d{1,2})(?![\d./])\b/);
+    if (ratio) {
+      const hits = Number(ratio[1]);
+      const sample = Number(ratio[2]);
+      if (sample && hits <= sample && sample <= 25) {
+        let label = 'the cited sample';
+        if (/\b(?:against|versus|vs\.?)\b/.test(context)) label = 'the stated matchup sample';
+        else if (/\b(?:when|without|inactive|doesn['’]?t play|lineup)\b/.test(context)) label = 'the stated lineup condition';
+        else if (/\b(?:at home|home games?)\b/.test(context)) label = 'recent home games';
+        else if (/\b(?:on the road|away games?)\b/.test(context)) label = 'recent away games';
+        else if (/\b(?:recent games?|last \d+ games?)\b/.test(context)) label = 'recent games';
+        add(hits + '/' + sample + ' in ' + label);
+      }
     }
-    if (stats.length === 2) break;
+    const outputs = context.match(/^(?:recorded|posted|finished with)\s+(\d{1,3})\s*(?:&|and|,)\s*(\d{1,3})\s+(?:receiving\s+|rushing\s+|passing\s+)?yards\b/);
+    if (outputs && /\b(?:weeks?|games?|recent|first two)\b/.test(context))
+      add('Recent yardage outputs: ' + outputs[1] + ' and ' + outputs[2]);
+    const usage = context.match(/^(?:has|had|saw|received|recorded|logged)\s+(\d{1,2})\s+(targets|carries|receptions|attempts)\b/);
+    if (usage && Number(usage[1]) <= 60)
+      add(usage[1] + ' ' + usage[2] + ' in the cited sample');
+    const average = context.match(/^(?:is\s+)?averag(?:ing|ed)\s+(\d{1,3}(?:\.\d+)?)\s+(receiving|rushing|passing)\s+yards\s+(?:per game|a game)\b/);
+    if (average) add(average[1] + ' ' + average[2] + ' yards per game in the cited sample');
+    if (stats.length >= 3) break;
   }
-  return stats;
+  return stats.slice(0, 3);
 }
 
 function publicPropLine() {
@@ -80,8 +91,8 @@ function publicPropLine() {
 }
 
 function shortBreakdown(stats, topics) {
-  const topicText = topics.length ? `The full writeup examines ${topics.map((topic) => topic.toLowerCase()).join(' and ')}.` : '';
-  const statText = stats.length ? `Verified samples: ${stats.join('; ')}.` : '';
+  const topicText = topics.length ? `Full breakdown covers ${topics.map((topic) => topic.toLowerCase()).join(' and ')}.` : '';
+  const statText = stats.length ? `Source-backed notes: ${stats.join('; ')}.` : '';
   return [statText, topicText].filter(Boolean).join(' ');
 }
 
