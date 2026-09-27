@@ -408,3 +408,19 @@ test('provider diagnostics expose only bounded numeric codes, never messages or 
     assert.equal(JSON.stringify(env.DB.sql.prepare('SELECT * FROM instagram_connection_audit').all()).includes(longToken), false);
   }
 });
+
+
+test('connection form supports browser Origin checks while other replies hide referrers', async () => {
+  const env = environment();
+  const invite = await (await handle(operatorRequest('invite'), env)).json();
+  const form = await handle(new Request(invite.authorizeUrl), env);
+  assert.equal(form.headers.get('referrer-policy'), 'same-origin');
+  assert.equal((await handle(request('/health'), env)).headers.get('referrer-policy'), 'no-referrer');
+  const value = new URL(invite.authorizeUrl).searchParams.get('invite');
+  for (const origin of ['null', 'https://attacker.test']) {
+    const rejected = await handle(request('/auth/instagram/start', { method: 'POST', origin, body: { invite: value } }), env);
+    assert.equal(rejected.status, 403);
+  }
+  const started = await handle(request('/auth/instagram/start', { method: 'POST', origin: ORIGIN, body: { invite: value } }), env);
+  assert.equal(started.status, 302);
+});

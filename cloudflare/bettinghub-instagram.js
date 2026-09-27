@@ -38,7 +38,10 @@ function json(value, status = 200) {
 function page(message, { invite, status = 200, cookie } = {}) {
   const form = invite ? `<form method="post" action="/auth/instagram/start"><input type="hidden" name="invite" value="${invite}"><button>Authorize @${TARGET}</button></form>` : '';
   return response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Instagram connection · Kobe's Betting Hub</title><style>body{margin:0;background:#090909;color:#f4f0e8;font:18px/1.6 system-ui}main{max-width:620px;margin:10vh auto;padding:32px}h1{line-height:1.1}span{color:#ff6a00}button{background:#ff6a00;color:#090909;border:0;padding:18px 24px;font:700 18px system-ui;cursor:pointer}p{overflow-wrap:anywhere}</style><main><h1>Kobe's <span>Betting Hub</span></h1><h2>Instagram account connection</h2><p>${message}</p>${form}<p>This connection is limited to @${TARGET}. Story publishing is controlled separately; connecting does not publish a Story or send messages.</p></main></html>`, status, {
-    'content-type': 'text/html; charset=utf-8', ...(cookie ? { 'set-cookie': cookie } : {}),
+    'content-type': 'text/html; charset=utf-8',
+    // A form POST under no-referrer sends Origin: null in real browsers.
+    // Keep the same-origin check and suppress referrers to external sites.
+    ...(invite ? { 'referrer-policy': 'same-origin' } : {}), ...(cookie ? { 'set-cookie': cookie } : {}),
   });
 }
 function randomToken() {
@@ -395,7 +398,7 @@ export async function handle(request, env, fetchImpl = fetch) {
       if (!/^[a-f0-9]{64}$/.test(invite)) throw new SafeError('INVALID_OR_EXPIRED_INSTAGRAM_INVITE', 403);
       const row = await env.DB.prepare('SELECT digest FROM instagram_connect_invites WHERE digest = ? AND consumed_at IS NULL AND expires_at > ?').bind(await hash(invite), Date.now()).first();
       if (!row) throw new SafeError('INVALID_OR_EXPIRED_INSTAGRAM_INVITE', 403);
-      return page(`Kobe: authorize only your @${TARGET} Business account. Instagram will ask for profile access and content-publishing permission. No password is shared with Zakai, and publishing remains off.`, { invite });
+      return page(`Kobe: authorize only your @${TARGET} Business account. Instagram will ask for profile access and content-publishing permission. No password is shared with Zakai. Reconnecting restores the existing publishing connection.`, { invite });
     }
     if (url.pathname === '/auth/instagram/start') {
       if (request.headers.get('origin') !== origin(env)) throw new SafeError('INVALID_INSTAGRAM_START_ORIGIN', 403);
