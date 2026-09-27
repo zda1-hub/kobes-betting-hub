@@ -121,6 +121,12 @@ async function readJson(body) {
     throw new SafeError('PROVIDER_INVALID_RESPONSE', 502);
   } finally { reader.releaseLock(); }
 }
+async function rejectProviderRedirect(response) {
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel().catch(() => {});
+    throw new SafeError('INSTAGRAM_PROVIDER_REDIRECT_REJECTED', 502);
+  }
+}
 async function provider(env, operation, endpoint, init = {}, fetchImpl = fetch) {
   // Only controlled endpoint labels and value-free JSON shapes enter the ledger.
   const method = init.method || 'GET';
@@ -129,8 +135,9 @@ async function provider(env, operation, endpoint, init = {}, fetchImpl = fetch) 
   let result, data;
   try {
     result = await fetchImpl(endpointUrl(endpoint, env, init.token), {
-      ...init, token: undefined, redirect: 'error', signal: AbortSignal.timeout(10000),
+      ...init, token: undefined, redirect: 'manual', signal: AbortSignal.timeout(10000),
     });
+    await rejectProviderRedirect(result);
     data = await readJson(result.body);
   } catch (error) {
     await audit(env, operation, 'PROVIDER_CALL', 'FAILED', { endpoint, method, status: result?.status, latency: Date.now() - started });
@@ -184,6 +191,7 @@ async function providerPost(env, operation, endpoint, fields, fetchImpl = fetch)
   const started = Date.now();
   await audit(env, operation, 'PROVIDER_CALL', 'ATTEMPTED', { endpoint, method: 'POST' });
   let result;
+  let recorded = false;
   try {
     const url = endpoint === 'story_create'
       ? `https://graph.instagram.com/${env.INSTAGRAM_API_VERSION}/${fields.accountId}/media`
@@ -191,17 +199,19 @@ async function providerPost(env, operation, endpoint, fields, fetchImpl = fetch)
     const body = new URLSearchParams(endpoint === 'story_create'
       ? { image_url: fields.storyUrl, media_type: 'STORIES', access_token: fields.token }
       : { creation_id: fields.containerId, access_token: fields.token });
-    result = await fetchImpl(url, { method: 'POST', body, redirect: 'error', signal: AbortSignal.timeout(15000) });
+    result = await fetchImpl(url, { method: 'POST', body, redirect: 'manual', signal: AbortSignal.timeout(15000) });
+    await rejectProviderRedirect(result);
     const data = await readJson(result.body);
     const succeeded = result.ok && /^\d+$/.test(String(data?.id || '')) && !data.error;
     await audit(env, operation, 'PROVIDER_CALL', succeeded ? 'SUCCEEDED' : 'HTTP_ERROR', {
       endpoint, method: 'POST', status: result.status, latency: Date.now() - started,
       requestId: result.headers.get('x-fb-trace-id'), shapeHash: await hash(JSON.stringify(shape(data))),
     });
+    recorded = true;
     if (!succeeded) throw new SafeError('INSTAGRAM_PROVIDER_REJECTED', 502);
     return String(data.id);
   } catch (error) {
-    if (!result) await audit(env, operation, 'PROVIDER_CALL', 'FAILED', { endpoint, method: 'POST', latency: Date.now() - started });
+    if (!recorded) await audit(env, operation, 'PROVIDER_CALL', 'FAILED', { endpoint, method: 'POST', status: result?.status, latency: Date.now() - started });
     throw error instanceof SafeError ? error : new SafeError('INSTAGRAM_PROVIDER_UNAVAILABLE', 502);
   }
 }
@@ -214,7 +224,7 @@ async function currentFreePick(env, fetchImpl = fetch) {
     try { response = await env.PUBLISHER_SERVICE.fetch(currentUrl, { headers: { accept: 'application/json' } }); }
     catch { throw new SafeError('FREE_PICK_BINDING_FAILED', 502); }
   } else {
-    try { response = await fetchImpl(currentUrl, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10000) }); }
+    try { response = await fetchImpl(currentUrl, { headers: { accept: 'application/json' }, redirect: 'manual', signal: AbortSignal.timeout(10000) }); }
     catch { throw new SafeError('FREE_PICK_LOOKUP_FAILED', 502); }
   }
   if (!response.ok) throw new SafeError('FREE_PICK_NOT_READY', 409);
@@ -415,7 +425,7 @@ export async function handle(request, env, fetchImpl = fetch) {
       const verified = await env.DB.prepare('UPDATE instagram_connections SET checked_at = ? WHERE target = ? AND encrypted_token = ? RETURNING target').bind(Date.now(), TARGET, row.encrypted_token).first();
       if (!verified) throw new SafeError('INSTAGRAM_CONNECTION_CHANGED_RECHECK', 409);
       await audit(env, operation, 'READ_ONLY_ACCOUNT_CHECK', 'SUCCEEDED');
-      return json({ verified: true, target: TARGET, businessAccount: true, publishingEnabled: false, operationId: operation });
+      return json({ verified: true, target: TARGET, businessAccount: true, publishingEnabled: publishingEnabled(env), operationId: operation });
     }
     const refreshed = tokenResult(await provider(env, operation, 'refresh', { token }, fetchImpl));
     const now = Date.now();

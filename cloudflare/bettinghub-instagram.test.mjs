@@ -54,6 +54,8 @@ function providerMock({ username = 'kobesbettinhub', type = 'Business', granted 
   return {
     calls,
     async fetch(url, init) {
+      // Match workerd's request validation; Node fetch alone accepts this mode.
+      if (init.redirect === 'error') throw new TypeError('Invalid redirect value in workerd');
       const parsed = new URL(url);
       calls.push({ url: parsed, method: init.method || 'GET', body: init.body });
       let result;
@@ -358,4 +360,36 @@ nodeTest('Instagram launch cannot backfill a pick from before September 21', () 
   assert.equal(__test.publicationDateAllowed(env, '2026-09-20'), false);
   assert.equal(__test.publicationDateAllowed(env, '2026-09-21'), true);
   assert.equal(__test.publicationDateAllowed(env, '2026-09-22'), true);
+});
+
+
+test('profile redirects are refused without following the location or leaking it', async () => {
+  const env = environment(); await connected(env);
+  let calls = 0;
+  const response = await handle(operatorRequest('check'), env, async (_url, init) => {
+    calls += 1;
+    assert.equal(init.redirect, 'manual');
+    return new Response('private provider body', { status: 302, headers: { location: 'https://untrusted.invalid/private-token' } });
+  });
+  assert.equal(response.status, 502);
+  const text = await response.text();
+  assert.match(text, /INSTAGRAM_PROVIDER_REDIRECT_REJECTED/);
+  assert.doesNotMatch(text, /private|untrusted/);
+  assert.equal(calls, 1);
+});
+
+test('Story creation refuses provider redirects and retains its uncertain-delivery hold', async () => {
+  const env = environment(); await connected(env);
+  env.INSTAGRAM_PUBLISHING_ENABLED = 'true'; env.INSTAGRAM_NOT_BEFORE_DATE = '2026-09-21';
+  const date = __test.phoenixDate();
+  env.PUBLISHER_SERVICE = { fetch: async () => Response.json({ pickId: 'today-redirect', publishedDate: date,
+    storyUrl: `https://bettinghub-publisher.kobedirwin.workers.dev/media/free-pick/story/${date}` }) };
+  let calls = 0;
+  await assert.rejects(__test.deliverCurrentStory(env, async (_url, init) => {
+    calls += 1; assert.equal(init.redirect, 'manual');
+    return new Response(null, { status: 307, headers: { location: 'https://untrusted.invalid/' } });
+  }), /INSTAGRAM_PROVIDER_REDIRECT_REJECTED/);
+  assert.equal(calls, 1);
+  assert.equal(env.DB.sql.prepare('SELECT state FROM instagram_story_deliveries').get().state, 'held');
+  assert.equal(env.DB.sql.prepare("SELECT count(*) AS n FROM instagram_connection_audit WHERE endpoint_class='story_create' AND outcome='FAILED' AND http_status=307").get().n, 1);
 });
