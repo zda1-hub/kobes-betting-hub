@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { createExpertPulse, payloadFor, selections, summary, verifiedRecords } = require('./expert-pulse');
 
 test('counts structured picks from all qualifying posts today, not last week', () => {
@@ -116,13 +117,13 @@ test('can reuse a private expert source as the VIP destination while keeping rev
     const pulse = createExpertPulse({ sourceChannelFor: async () => source,
       reviewChannelFor: async () => review, destinationChannelFor: async () => source,
       stateFile: path.join(directory, 'state.json') });
-    assert.equal((await pulse.refresh()).status, 'UNCHANGED');
+    assert.equal((await pulse.refresh()).status, 'REVIEW_UPDATED');
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
 
-test('each expert requires a separate decision; rejected and changed experts stay off VIP', async () => {
+test('one review and one VIP message preserve separate expert decisions', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'expert-pulse-'));
   try {
     const guild = { id: '123', roles: { everyone: { id: 'everyone' } } };
@@ -135,7 +136,7 @@ test('each expert requires a separate decision; rejected and changed experts sta
         published_at: '2026-09-20T18:00:00Z', result_verified_source: 'https://www.espn.com/game/1',
         result_verified_at: new Date(now).toISOString(), post_reference: `https://discord.com/channels/123/789/${id}` };
     }
-    let gradedRows = [grade('Ben Burns', '111'), grade('Kelly In Vegas', '222')];
+    let gradedRows = [grade('Ben Burns', '111'), grade('Kelly In Vegas', '222'), grade('The Prez', '333')];
     function channel(id, map) {
       return { id, guild, permissionsFor: () => ({ has: () => false }),
         messages: { fetch: async (messageId) => typeof messageId === 'object' ? map : map.get(messageId) || null },
@@ -154,39 +155,146 @@ test('each expert requires a separate decision; rejected and changed experts sta
       rowsFor: async () => gradedRows, paidChannelIds: ['789'],
       isApprover: ({ userId, ownerId }) => userId === ownerId,
       stateFile: path.join(directory, 'state.json'), now: () => now });
-    assert.equal((await pulse.refresh()).expertCount, 2);
-    assert.equal(cards.size, 2);
+    assert.equal((await pulse.refresh()).expertCount, 3);
+    assert.equal(cards.size, 1);
     assert.equal(posts.size, 0);
-    const ben = [...cards.values()].find((card) => card.content.includes('Ben Burns'));
-    const kelly = [...cards.values()].find((card) => card.content.includes('Kelly In Vegas'));
-    const args = (card, action) => ({ customId: card.components[0].components.find((button) => button.label.startsWith(action)).custom_id,
-      userId: 'kobe', ownerId: 'kobe', guildId: '123', channelId: '567', messageId: card.id });
-    await assert.rejects(pulse.decide({ ...args(ben, 'Approve'), userId: 'someone-else' }), /Only Kobe/);
-    assert.equal((await pulse.decide(args(kelly, 'Reject'))).status, 'REJECTED');
+    const card = [...cards.values()][0];
+    const selection = (action, name) => {
+      const menu = card.components.flatMap((row) => row.components).find((part) => part.placeholder?.startsWith(action));
+      return { customId: menu.custom_id, values: [menu.options.find((option) => option.label === name).value],
+        userId: 'kobe', ownerId: 'kobe', guildId: '123', channelId: '567', messageId: card.id };
+    };
+    await assert.rejects(pulse.decide({ ...selection('Approve', 'Ben Burns'), userId: 'someone-else' }), /Only Kobe/);
+    const oldBenApproval = selection('Approve', 'Ben Burns');
+    assert.equal((await pulse.decide(selection('Reject', 'Kelly In Vegas'))).status, 'REJECTED');
     assert.equal(posts.size, 0);
-    assert.equal((await pulse.decide(args(ben, 'Approve'))).status, 'PUBLISHED');
+    assert.equal((await pulse.decide(selection('Approve', 'Ben Burns'))).status, 'PUBLISHED');
     assert.equal(posts.size, 1);
+    assert.equal((await pulse.decide(selection('Approve', 'The Prez'))).status, 'PUBLISHED');
+    assert.equal(posts.size, 1);
+    let vipText = [...posts.values()][0].embeds.map((embed) => embed.description).join('\n');
+    assert.match(vipText, /Ben Burns/);
+    assert.match(vipText, /The Prez/);
+    assert.doesNotMatch(vipText, /Kelly In Vegas/);
+    assert.match(card.content, /2 approved · 1 rejected · 0 pending/);
+    gradedRows = [...gradedRows, grade('Ben Burns', '444')];
+    assert.equal((await pulse.refresh()).status, 'REVIEW_UPDATED');
+    assert.equal(cards.size, 1);
+    vipText = [...posts.values()][0].embeds.map((embed) => embed.description).join('\n');
+    assert.doesNotMatch(vipText, /Ben Burns/);
+    assert.match(vipText, /The Prez/);
+    await assert.rejects(pulse.decide(oldBenApproval), /stale/);
+    assert.equal((await pulse.decide(selection('Approve', 'Ben Burns'))).status, 'PUBLISHED');
+    assert.equal(posts.size, 1);
+    gradedRows = [...gradedRows, grade('Ben Burns', '555', 'L'), grade('Ben Burns', '666', 'L'), grade('Ben Burns', '777', 'L')];
+    assert.equal((await pulse.refresh()).expertCount, 2);
+    assert.equal(posts.size, 1);
+    assert.doesNotMatch([...posts.values()][0].embeds[0].description, /Ben Burns/);
+    gradedRows = gradedRows.filter((row) => !['555', '666', '777'].includes(row.pick_id));
+    assert.equal((await pulse.refresh()).expertCount, 3);
+    assert.match(card.content, /1 pending/);
+    assert.equal(cards.size, 1);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('dropdown pages cover more than 25 experts while VIP remains one message', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'expert-pulse-pages-'));
+  try {
+    const guild = { id: '123', roles: { everyone: { id: 'everyone' } } };
+    const cards = new Map();
+    const posts = new Map();
+    const now = Date.parse('2026-09-21T18:00:00Z');
+    const rows = Array.from({ length: 27 }, (_, index) => ({
+      pick_id: String(1000 + index), source_name: `Expert ${String(index + 1).padStart(2, '0')}`,
+      status: 'GRADED', result: 'W', wager_scope: 'individual', published_at: '2026-09-20T18:00:00Z',
+      result_verified_source: 'https://www.espn.com/game/1', result_verified_at: new Date(now).toISOString(),
+      post_reference: `https://discord.com/channels/123/789/${1000 + index}`
+    }));
+    function channel(id, map) {
+      return { id, guild, permissionsFor: () => ({ has: () => false }),
+        messages: { fetch: async (target) => typeof target === 'object' ? map : map.get(target) || null },
+        send: async (payload) => {
+          const message = { id: `${id}-${map.size + 1}`, ...payload,
+            edit: async (next) => { Object.assign(message, next); return message; },
+            delete: async () => { map.delete(message.id); } };
+          map.set(message.id, message);
+          return message;
+        } };
+    }
+    const pulse = createExpertPulse({ sourceChannelFor: async () => ({ id: '456', guild, messages: { fetch: async () => new Map() } }),
+      reviewChannelFor: async () => channel('567', cards), destinationChannelFor: async () => channel('789', posts),
+      rowsFor: async () => rows, paidChannelIds: ['789'], isApprover: ({ userId }) => userId === 'kobe',
+      stateFile: path.join(directory, 'state.json'), now: () => now });
+    assert.equal((await pulse.refresh()).expertCount, 27);
+    const card = [...cards.values()][0];
+    const controls = () => card.components.flatMap((row) => row.components);
+    assert.equal(controls().find((control) => control.placeholder?.startsWith('Approve')).options.length, 25);
+    const base = { userId: 'kobe', ownerId: 'kobe', guildId: '123', channelId: '567', messageId: card.id };
+    assert.equal((await pulse.decide({ ...base, customId: controls().find((control) => control.label === 'Next').custom_id })).page, 2);
+    const secondPage = controls().find((control) => control.placeholder?.startsWith('Approve'));
+    assert.equal(secondPage.options.length, 2);
+    assert.equal((await pulse.decide({ ...base, customId: secondPage.custom_id, values: [secondPage.options[1].value] })).status, 'PUBLISHED');
+    assert.equal((await pulse.decide({ ...base, customId: controls().find((control) => control.label === 'Previous').custom_id })).page, 1);
+    const firstPage = controls().find((control) => control.placeholder?.startsWith('Approve'));
+    assert.equal((await pulse.decide({ ...base, customId: firstPage.custom_id, values: [firstPage.options[0].value] })).status, 'PUBLISHED');
+    assert.equal(cards.size, 1);
+    assert.equal(posts.size, 1);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('existing individual cards consolidate without losing approved decisions', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'expert-pulse-migration-'));
+  try {
+    const guild = { id: '123', roles: { everyone: { id: 'everyone' } } };
+    const cards = new Map();
+    const posts = new Map();
+    const now = Date.parse('2026-09-21T18:00:00Z');
+    const names = ['Ben Burns', 'Kelly In Vegas'];
+    const rows = names.map((name, index) => ({ pick_id: String(100 + index), source_name: name,
+      status: 'GRADED', result: 'W', wager_scope: 'individual', published_at: '2026-09-20T18:00:00Z',
+      result_verified_source: 'https://www.espn.com/game/1', result_verified_at: new Date(now).toISOString(),
+      post_reference: `https://discord.com/channels/123/789/${100 + index}` }));
+    function channel(id, map) {
+      return { id, guild, permissionsFor: () => ({ has: () => false }),
+        messages: { fetch: async (target) => typeof target === 'object' ? map : map.get(target) || null },
+        send: async (payload) => {
+          const message = { id: `${id}-${map.size + 1}`, ...payload,
+            edit: async (next) => { Object.assign(message, next); return message; },
+            delete: async () => { map.delete(message.id); } };
+          map.set(message.id, message);
+          return message;
+        } };
+    }
+    const review = channel('567', cards);
+    const destination = channel('789', posts);
+    const state = { version: 2, experts: {} };
+    for (const [index, name] of names.entries()) {
+      const key = createHash('sha256').update(name.toLowerCase().replace(/[^a-z0-9]/g, '')).digest('hex').slice(0, 16);
+      const { expertNames, ...payload } = payloadFor(summary([], now), verifiedRecords([rows[index]], ['789']), { omitEmpty: true });
+      const digest = createHash('sha256').update(payload.embeds.map((embed) => `${embed.title}\n${embed.description}`).join('\n')).digest('hex').slice(0, 20);
+      const card = await review.send({ content: `Old card ${name}`, embeds: [{ title: name, description: name,
+        footer: { text: `KBH expert-pulse-review-v1 · ${key} · ${digest}` } }], components: [] });
+      const post = index === 0 ? await destination.send({ embeds: [{ title: name, description: name,
+        footer: { text: `KBH expert-pulse-v1 · ${key} · ${digest}` } }] }) : null;
+      state.experts[key] = { name, digest, status: index === 0 ? 'APPROVED' : 'REJECTED',
+        review_message_id: card.id, posted_message_id: post?.id || null };
+    }
+    const stateFile = path.join(directory, 'state.json');
+    await fs.writeFile(stateFile, JSON.stringify(state));
+    const pulse = createExpertPulse({ sourceChannelFor: async () => ({ id: '456', guild, messages: { fetch: async () => new Map() } }),
+      reviewChannelFor: async () => review, destinationChannelFor: async () => destination,
+      rowsFor: async () => rows, paidChannelIds: ['789'], stateFile, now: () => now });
+    await pulse.refresh();
+    assert.equal(cards.size, 1);
+    assert.equal(posts.size, 1);
+    assert.match([...cards.values()][0].content, /1 approved · 1 rejected/);
     assert.match([...posts.values()][0].embeds[0].description, /Ben Burns/);
     assert.doesNotMatch([...posts.values()][0].embeds[0].description, /Kelly In Vegas/);
-    await assert.rejects(pulse.decide(args(ben, 'Approve')), /already decided/);
-    const oldBenApproval = args(ben, 'Approve');
-    gradedRows = [...gradedRows, grade('Ben Burns', '333')];
-    assert.equal((await pulse.refresh()).status, 'REVIEW_UPDATED');
-    assert.equal(posts.size, 0);
-    assert.match(ben.content, /Private review/);
-    assert.match(kelly.content, /rejected/);
-    await assert.rejects(pulse.decide(oldBenApproval), /changed/);
-    assert.equal((await pulse.decide(args(ben, 'Approve'))).status, 'PUBLISHED');
-    assert.equal(posts.size, 1);
-    assert.equal((await pulse.refresh()).status, 'UNCHANGED');
-    gradedRows = [...gradedRows, grade('Ben Burns', '444', 'L'), grade('Ben Burns', '555', 'L'), grade('Ben Burns', '666', 'L')];
-    assert.equal((await pulse.refresh()).expertCount, 1);
-    assert.equal(posts.size, 0);
-    assert.match(ben.content, /no longer qualifies/);
-    gradedRows = gradedRows.filter((row) => !['444', '555', '666'].includes(row.pick_id));
-    assert.equal((await pulse.refresh()).expertCount, 2);
-    assert.match(ben.content, /Private review/);
-    assert.equal(posts.size, 0);
+    assert.equal(JSON.parse(await fs.readFile(stateFile)).version, 3);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
