@@ -84,6 +84,21 @@ test('keeps decimals intact and rejects projections, other subjects, dates, and 
   ]) assert.doesNotMatch(preview(source), /Source-backed notes/, source);
 });
 
+test('handles the current approved bullet formats without copying player or team identities', () => {
+  const row = (selection, teaser_source) => ({ pick_id: selection, selection, teaser_source,
+    operating_date: '2026-09-26', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football' });
+  const previews = publicPreviews([
+    row('Harold Fannin Jr.', '- **Fannin** coming of a solid Week 2 where he hauled in 5 grabs on 6 targets against the Buccaneers'),
+    row('Carnell Tate', '- Tate has not had his breakout week yet.\n- 11 targets in Weeks 1-2'),
+    row('Under 48.5', '- no Alonza Barnett for UCF, starting a back up QB\n- they might go run heavy @ home')
+  ], '2026-09-26');
+  assert.match(previews[0].breakdown, /6 targets in the cited game/);
+  assert.match(previews[1].breakdown, /11 targets across the cited weeks/);
+  assert.match(previews[2].breakdown, /Backup quarterback noted in the matchup/);
+  assert.match(previews[2].breakdown, /considers a run-heavy game plan/);
+  assert.doesNotMatch(JSON.stringify(previews), /Fannin|Buccaneers|Tate|Barnett|UCF|48\.5/);
+});
+
 test('stays empty until a writeup is published', () => {
   assert.equal(freeWriteupBoardPayload([], '2026-09-20'), null);
 });

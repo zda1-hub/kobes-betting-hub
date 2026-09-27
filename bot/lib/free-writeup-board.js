@@ -39,12 +39,14 @@ function safeEvidenceTopics(row) {
 function safeEvidenceStats(row) {
   // Rebuild numeric evidence from sentences about the selected subject.
   // Never copy a source sentence, name, team, line, odds, or bet direction.
-  const source = String(row.teaser_source || '');
+  const source = String(row.teaser_source || '').replace(/\*\*|__/g, '');
   const subject = String(row.selection || '').trim().split(/\s+/).slice(0, 2);
   const surname = subject.length === 2 && !/^(over|under|vs\.?|at)$/i.test(subject[1])
     ? subject[1].replace(/[^a-z]/gi, '') : '';
   const stats = [];
   const seen = new Set();
+  if (/\bstarting (?:a )?back ?up (?:qb|quarterback)\b/i.test(source)) stats.push('Backup quarterback noted in the matchup');
+  if (/\b(?:might|may|could) go run[ -]heavy\b/i.test(source)) stats.push('Writeup considers a run-heavy game plan');
   if (!surname) return stats;
   const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const subjectMention = new RegExp(`^(?:${escape(subject.join(' '))}|${escape(surname)})\\s+`, 'i');
@@ -52,6 +54,9 @@ function safeEvidenceStats(row) {
   // Preserve decimal points. Only accept a fact whose grammatical subject is
   // the selected player; merely mentioning that player in a comparison is unsafe.
   for (const sentence of source.split(/(?<!\d)\.|\.(?!\d)|[\n;!?]+/).map((item) => item.replace(/^\s*[-•*]\s*/, '').trim()).filter(Boolean)) {
+    // A self-contained usage bullet has no competing named subject or wager.
+    const usageBullet = sentence.match(/^(\d{1,2}) (targets|carries|receptions|attempts) in Weeks? \d{1,2}\s*[-–&]\s*\d{1,2}$/i);
+    if (usageBullet && Number(usageBullet[1]) <= 60) add(usageBullet[1] + ' ' + usageBullet[2].toLowerCase() + ' across the cited weeks');
     const mention = sentence.match(subjectMention);
     if (!mention) continue;
     const context = sentence.slice(mention[0].length).toLowerCase();
@@ -71,6 +76,9 @@ function safeEvidenceStats(row) {
         add(hits + '/' + sample + ' in ' + label);
       }
     }
+    const catches = context.match(/^coming off? (?:a )?(?:solid |strong )?week \d{1,2} where he hauled in (\d{1,2}) (?:grabs|catches|receptions) on (\d{1,2}) targets\b/);
+    if (catches && Number(catches[1]) <= Number(catches[2]) && Number(catches[2]) <= 30)
+      add(catches[2] + ' targets in the cited game');
     const outputs = context.match(/^(?:recorded|posted|finished with)\s+(\d{1,3})\s*(?:&|and|,)\s*(\d{1,3})\s+(?:receiving\s+|rushing\s+|passing\s+)?yards\b/);
     if (outputs && /\b(?:weeks?|games?|recent|first two)\b/.test(context))
       add('Recent yardage outputs: ' + outputs[1] + ' and ' + outputs[2]);
