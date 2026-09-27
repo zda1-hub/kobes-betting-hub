@@ -45,6 +45,7 @@ const publicFiles = [
   'responsible-gambling.html',
   '404.html',
   'styles.css',
+  'social-links.css',
   'brand.css',
   'home.css',
   'home.js',
