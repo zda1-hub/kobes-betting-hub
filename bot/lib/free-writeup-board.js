@@ -1,5 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const sharp = require('sharp');
+const { createHash } = require('node:crypto');
 
 const FREE_BOARD_MARKER = 'KBH free-writeups-v1';
 
@@ -92,16 +94,21 @@ function safeEvidenceStats(row) {
   return stats.slice(0, 3);
 }
 
-function publicPropLine() {
-  // Even the direction and threshold can make a rare prop identifiable. The
-  // free board promises the exact wager without exposing any of its terms.
-  return '🔒 Player or game prop · exact play inside VIP';
+function publicPropLine(row) {
+  // The owner requested visible direction, line and market, with identities hidden.
+  // Only reconstruct whitelisted terms; never copy trailing names, teams or odds.
+  const terms = `${row.selection || ''} ${row.published_line || ''}`;
+  const match = terms.match(/\b(over|under|o|u)\s*(\d{1,3}(?:\.\d+)?)\b/i);
+  if (!match) return /\b(?:moneyline|ml)\b/i.test(terms) ? 'Moneyline' : 'Prop details in VIP';
+  const after = terms.slice(match.index + match[0].length).trim();
+  const market = after.match(/^(?:(?:rushing|rush|receiving|rec|passing|pass|total|rush(?:ing)?[ +&]+rec(?:eiving)?)\s+)?(?:yards?|yds?|receptions?|catches|completions?|attempts?|touchdowns?|tds?|strikeouts?|outs?(?:\s+recorded)?|hits?|runs?|points?|rebounds?|assists?|threes?|saves?|goals?|bases?|games?)\b/i);
+  return `${/^o/i.test(match[1]) ? 'Over' : 'Under'} ${match[2]}${market ? ` ${market[0].toLowerCase()}` : ''}`;
 }
 
 function shortBreakdown(stats, topics) {
-  const topicText = topics.length ? `Full breakdown covers ${new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(topics.map((topic) => topic.toLowerCase()))}.` : '';
-  const statText = stats.length ? `Evidence: ${stats.join('; ')}.` : '';
-  return [statText, topicText].filter(Boolean).join(' ');
+  if (stats.length) return `${stats.join('; ')}.`;
+  if (topics.length) return `${new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(topics.map((topic) => topic.toLowerCase()))}. Full writeup in VIP.`;
+  return 'Full writeup in VIP; source preview unavailable.';
 }
 
 function publicPreviews(rows, date) {
@@ -117,26 +124,66 @@ function publicPreviews(rows, date) {
     const [emoji, sport] = sportLabel(row);
     const topics = safeEvidenceTopics(row);
     const stats = safeEvidenceStats(row);
-    return { number: index + 1, emoji, sport, topics, prop: publicPropLine(), breakdown: shortBreakdown(stats, topics) };
+    return { number: index + 1, emoji, sport, topics, prop: publicPropLine(row), breakdown: shortBreakdown(stats, topics) };
   });
 }
 
-function freeWriteupBoardPayload(rows, date) {
+function escapeXml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]);
+}
+function wrap(value, width) {
+  const lines = []; let line = '';
+  for (const word of String(value).split(/\s+/)) {
+    if (line && `${line} ${word}`.length > width) { lines.push(line); line = word; }
+    else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+function freeWriteupTableSvg(previews) {
+  const width = 2000, split = 710, header = 76;
+  const rows = previews.map((item) => {
+    const prop = wrap(item.prop, 28), breakdown = wrap(item.breakdown, 70);
+    return { prop, breakdown, height: Math.max(80, Math.max(prop.length, breakdown.length) * 43 + 30) };
+  });
+  const height = header + rows.reduce((sum, row) => sum + row.height, 0);
+  let y = header;
+  const content = rows.map((row) => {
+    const top = y; y += row.height;
+    return `<rect x="24" y="${top + 24}" width="135" height="32" rx="12" fill="#d1d1d1"/>
+      ${row.prop.map((line, i) => `<text x="180" y="${top + 49 + i * 43}">${escapeXml(line)}</text>`).join('')}
+      ${row.breakdown.map((line, i) => `<text x="734" y="${top + 49 + i * 43}">${escapeXml(line)}</text>`).join('')}
+      <line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="#cecece" stroke-width="2"/>`;
+  }).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <style>text{font-family:Arial,Helvetica,sans-serif;font-size:32px;fill:#151515}</style>
+    <rect width="100%" height="100%" fill="white"/>
+    <text x="355" y="49" text-anchor="middle">Player or Game prop</text>
+    <text x="1355" y="49" text-anchor="middle">Short breakdown, full breakdown in channel</text>
+    <line x1="0" y1="1" x2="${width}" y2="1" stroke="#aaa" stroke-width="2"/>
+    <line x1="0" y1="${header}" x2="${width}" y2="${header}" stroke="#444" stroke-width="2"/>
+    <line x1="${split}" y1="0" x2="${split}" y2="${height}" stroke="#b5b5b5" stroke-width="2"/>
+    ${content}</svg>`;
+}
+
+async function freeWriteupBoardPayload(rows, date) {
   const previews = publicPreviews(rows, date);
   if (!previews.length) return null;
-  return previews.map(({ emoji, sport, prop, breakdown }, index) => ({
-    allowedMentions: { parse: [] },
-    embeds: [{
-      color: 0xFF7900,
-      title: `${emoji} ${sport[0].toUpperCase()}${sport.slice(1)} VIP writeup · ${index + 1}`,
-      fields: [
-        { name: 'Player or game prop', value: prop, inline: true },
-        { name: 'Short breakdown · full breakdown in VIP',
-          value: breakdown || 'The full evidence is in the member writeup.', inline: true }
-      ],
-      footer: { text: `${FREE_BOARD_MARKER} · ${date} · ${index + 1}` }
-    }]
-  }));
+  const payloads = [];
+  for (let offset = 0; offset < previews.length; offset += 12) {
+    const page = Math.floor(offset / 12) + 1;
+    const name = `writeups-${date}-${page}.png`;
+    const attachment = await sharp(Buffer.from(freeWriteupTableSvg(previews.slice(offset, offset + 12)))).png().toBuffer();
+    payloads.push({ allowedMentions: { parse: [] }, attachments: [],
+      files: [{ attachment, name, description: 'Two-column writeup table. Player and team identities are hidden; prop lines and short source-backed breakdowns are visible.' }],
+      embeds: [{ color: 0xFF7900, title: `Today's writeups · ${date}`,
+        description: 'Player and team names hidden. Full breakdowns in VIP.',
+        image: { url: `attachment://${name}` },
+        footer: { text: `${FREE_BOARD_MARKER} · ${date} · ${page}` }
+      }]
+    });
+  }
+  return payloads;
 }
 
 async function readState(file) {
@@ -154,7 +201,7 @@ function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate,
     const channel = await channelFor();
     const date = operatingDate();
     const rows = await rowsFor();
-    const payload = freeWriteupBoardPayload(rows, date);
+    const payload = await freeWriteupBoardPayload(rows, date);
     const previews = publicPreviews(rows, date);
     const state = await readState(stateFile);
     const recent = await channel.messages.fetch({ limit: 100 });
@@ -176,7 +223,7 @@ function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate,
     let changed = false;
     for (const item of payload) {
       const marker = item.embeds[0].footer.text;
-      const signature = JSON.stringify(item.embeds);
+      const signature = createHash('sha256').update(JSON.stringify(item.embeds)).update(item.files[0].attachment).digest('hex');
       const current = retained.get(marker);
       const index = desired.get(marker).index;
       const needsEdit = Boolean(current) && state.signatures?.[index] !== signature;
@@ -194,4 +241,4 @@ function createFreeWriteupBoard({ channelFor, rowsFor, stateFile, operatingDate,
   return { refresh };
 }
 
-module.exports = { FREE_BOARD_MARKER, createFreeWriteupBoard, freeWriteupBoardPayload, publicPreviews };
+module.exports = { FREE_BOARD_MARKER, createFreeWriteupBoard, freeWriteupBoardPayload, freeWriteupTableSvg, publicPreviews };
