@@ -190,6 +190,21 @@ test('stores and serves a dated Instagram Story without publishing it to X', asy
   assert.deepEqual(new Uint8Array(await storyResponse.arrayBuffer()), new Uint8Array(storyBytes));
 });
 
+test('multipart Free Pick keeps a 280-character approved caption after line-ending normalization', async () => {
+  const caption = `${'A'.repeat(270)}\n${'B'.repeat(9)}`;
+  assert.equal(caption.length, 280);
+  const form = new FormData();
+  form.set('date', '2026-09-27');
+  form.set('caption', caption);
+  form.set('selection', 'Jalen McMillan over 14.5 receiving yards');
+  const env = { FREE_PICK_KV: memoryKv(), FREE_PICK_SITE_PUBLISH_SECRET: 'test-publisher-secret' };
+  const response = await worker.fetch(new Request('https://publisher.test/api/free-pick/publish', {
+    method: 'POST', headers: { authorization: 'Bearer test-publisher-secret' }, body: form,
+  }), env);
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).caption, caption);
+});
+
 test('recap delivery can start at activation without releasing the old backlog', async () => {
   const statements = [];
   const env = {
