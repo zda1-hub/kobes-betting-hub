@@ -695,3 +695,22 @@ test('holds a thin writeup instead of padding or publishing it', () => {
   });
   assert.throws(() => assertCompleteWriteup(thin), /4–8 verified/);
 });
+
+test('does not count hype or forecasts toward four factual details', () => {
+  const thin = independentWriteupPacket({
+    ...packet,
+    analysis: { ...packet.analysis, extraction: {
+      ...packet.analysis.extraction,
+      plays: [{ selection: 'D\'Andre Swift Over 1.5 Receptions', player_name: 'D\'Andre Swift', line: '1.5 receptions' }],
+      source_claims: [
+        'Sneaky', 'Hammer', 'Feed the Beast',
+        'I expect him to see at least 15 touches tonight',
+        'Swift cleared 1.5 receptions in 10 of 16 games',
+        'Swift averaged 2.1 receptions per game last season',
+        'Swift had 54 receiving yards last week'
+      ]
+    } }
+  });
+  assert.equal(sourceEvidence(thin).length, 3);
+  assert.throws(() => assertCompleteWriteup(thin), /4–8 verified/);
+});
