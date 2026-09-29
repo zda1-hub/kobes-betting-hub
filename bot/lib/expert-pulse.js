@@ -110,12 +110,6 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
   const firstTracked = records.flatMap((row) => row.results.map((result) => result.at))
     .reduce((earliest, at) => Math.min(earliest, at), Infinity);
   const coverage = Number.isFinite(firstTracked) ? `since ${new Date(firstTracked).toISOString().slice(0, 10)}` : 'no settled history';
-  const active = report.active.length
-    ? report.active.map((row) => `${row.name}: ${row.count} posted selection${row.count === 1 ? '' : 's'}`).join('\n')
-    : 'No qualifying expert posts today.';
-  const repeated = report.repeated.length
-    ? report.repeated.map((row) => `${row.count} posts - ${row.play}`).join('\n')
-    : 'No identical selections repeated today.';
   const end = Date.parse(`${report.date}T07:00:00Z`);
   const day = 86400000;
   const recordWithin = (expert, start, finish) => {
@@ -124,7 +118,8 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
     const losses = decisions.length - wins;
     return { wins, losses, decisions: decisions.length, rate: decisions.length ? wins / decisions.length : 0 };
   };
-  const format = ({ name, wins, losses, rate }) => `${name} (${wins}-${losses}, ${Math.round(rate * 100)}%)`;
+  const percentage = (rate) => `${Number((rate * 100).toFixed(1))}%`;
+  const format = ({ name, wins, losses, rate }) => `${name} (${wins}-${losses}, ${percentage(rate)})`;
   const ranked = (rows) => rows.sort((a, b) => b.rate - a.rate || b.wins - a.wins || a.name.localeCompare(b.name));
   const yesterday = ranked(records.map((expert) => ({ name: expert.name, references: expert.references, ...recordWithin(expert, end - day, end) }))
     .filter((item) => item.decisions && item.rate > 0.61));
@@ -166,10 +161,10 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
     return items.map(mapper).join('\n');
   };
   const sections = [
-    ['Yesterday’s best · above 61%', lines(yesterday, (item) => `${item.name} (${item.wins}-${item.losses})`)],
-    ['Hottest Experts · 2+ unbeaten days', lines(hot, (item) => `${item.name} (${item.days}-day unbeaten streak, ${item.label})`)],
-    ['Best Exclusive records L7 days · above 60%', lines(sevenDays)],
-    ['Best exclusive records ALL TIME · above 54%', lines(allTime)]
+    ['Yesterday’s best', lines(yesterday, (item) => `${item.name} (${item.wins}-${item.losses})`)],
+    ['Hottest Experts', lines(hot, (item) => `${item.name} (${item.days}-day ${item.label} hot streak)`)],
+    ['Best Exclusive records L7 days', lines(sevenDays)],
+    ['Best exclusive records ALL TIME', lines(allTime)]
   ].filter(([, body]) => !omitEmpty || body !== 'No verified expert currently meets this threshold.');
   const descriptions = [];
   let current = '';
@@ -190,7 +185,7 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
     expertNames: [...new Set([...yesterday, ...hot, ...sevenDays, ...allTime].map((item) => item.name))],
     embeds: descriptions.map((description, index) => ({
       color: 0xFF7900,
-      title: index ? 'Expert Play Feedback · continued' : 'Expert Play Feedback',
+      title: index ? 'Expert Trends · continued' : 'Expert Trends',
       description,
       ...(index === 0 ? { footer: { text: `${MARKER} · Verified paid pick log · ${coverage}` } } : {})
     }))
