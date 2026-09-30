@@ -64,6 +64,23 @@ test('stale source quotes do not create arbitrage approval cards', async () => {
   assert.equal(sends.length, 0);
 });
 
+test('successful routine scans log their time, window, counts and feed quota', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
+  const logs = [];
+  const monitor = createArbitragePaperMonitor({ apiKey: 'test',
+    reviewChannel: { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' }, send: async () => {} },
+    stateFile: path.join(root, 'state.json'),
+    fetchImpl: async () => new Response('[]', { status: 200, headers: { 'x-requests-remaining': '99', 'x-requests-used': '1' } }),
+    now: () => new Date('2026-09-23T18:00:00Z'), windows: ['08:00-15:00'], log: message => logs.push(message) });
+  await monitor.start();
+  await monitor.stop();
+  assert.equal(logs.length, 1);
+  assert.deepEqual(JSON.parse(logs[0].replace(/^Arbitrage scan: /, '')), {
+    scannedAt: '2026-09-23T18:00:00.000Z', window: '08:00-15:00', eventCount: 0,
+    opportunityCount: 0, remaining: '99', used: '1'
+  });
+});
+
 test('Kobe can approve a current card in dry-run mode without member publication', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
   const edits = [], sends = [], memberPosts = [];
