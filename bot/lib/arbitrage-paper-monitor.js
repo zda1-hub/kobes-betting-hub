@@ -131,7 +131,7 @@ function activeWindow(now = new Date(), windows = DEFAULT_WINDOWS, durationMinut
 
 function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel, stateFile, fetchImpl = fetch, now = () => new Date(),
   bookmakers = DEFAULT_BOOKS, windows = DEFAULT_WINDOWS, intervalMinutes = 5, minimumEdgePercent = 2, bankroll = 1000,
-  memberPostingEnabled = false, isApprover = () => false }) {
+  memberPostingEnabled = false, isApprover = () => false, log = console.log }) {
   let timer = null, scanning = false, quotaExhausted = false, state = { scans: [], opportunities: {} };
   const save = async () => {
     await fs.mkdir(path.dirname(stateFile), { recursive: true, mode: 0o700 });
@@ -198,7 +198,9 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
       if (exhausted) quotaExhausted = true;
       const opportunities = findArbitrage(events, { minimumEdgePercent, bankroll })
         .filter(item => freshOpportunity(item, now()));
-      state.scans.push({ scannedAt: now().toISOString(), window, eventCount: events.length, opportunityCount: opportunities.length, remaining, used });
+      const scanRecord = { scannedAt: now().toISOString(), window, eventCount: events.length,
+        opportunityCount: opportunities.length, remaining, used };
+      state.scans.push(scanRecord);
       state.scans = state.scans.slice(-500);
       for (const opportunity of opportunities) {
         const prior = state.opportunities[opportunity.id];
@@ -215,6 +217,7 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
         setTimeout(() => void recheck(opportunity, message, 60), 60000).unref();
       }
       await save();
+      log(`Arbitrage scan: ${JSON.stringify(scanRecord)}`);
       return { status: 'SCANNED', eventCount: events.length, opportunityCount: opportunities.length, remaining, used };
     } catch (error) {
       if (error.quotaExhausted) quotaExhausted = true;
