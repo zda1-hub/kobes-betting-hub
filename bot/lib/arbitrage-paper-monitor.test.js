@@ -166,6 +166,26 @@ test('restart restores controls on existing expired approval cards', async () =>
   assert.doesNotMatch(edits[0].embeds[0].description, /paper test/i);
 });
 
+test('restart removes a deleted approval card from persistent state', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
+  const stateFile = path.join(root, 'state.json');
+  const opportunity = findArbitrage([event], { minimumEdgePercent: 2, bankroll: 1000 })[0];
+  await fs.writeFile(stateFile, JSON.stringify({ scans: [], opportunities: {
+    [opportunity.id]: { ...opportunity, status: 'EXPIRED_AT_APPROVAL', messageId: 'deleted-card', rechecks: [] }
+  } }));
+  const logs = [];
+  const reviewChannel = { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' },
+    messages: { fetch: async () => { throw Object.assign(new Error('Unknown Message'), { code: 10008 }); } } };
+  const monitor = createArbitragePaperMonitor({ apiKey: 'test', reviewChannel, stateFile,
+    fetchImpl: async () => new Response('[]', { status: 200 }),
+    now: () => new Date('2026-09-23T23:00:00Z'), windows: ['08:00-15:00'], log: message => logs.push(message) });
+  await monitor.start();
+  assert.deepEqual(monitor.snapshot().opportunities, {});
+  assert.deepEqual(JSON.parse(await fs.readFile(stateFile, 'utf8')).opportunities, {});
+  assert.match(logs[0], /Removed missing arbitrage approval card deleted-card/);
+  await monitor.stop();
+});
+
 test('unauthorized arbitrage review is blocked', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
   const message = { id: 'review-message', edit: async () => {} };
