@@ -231,6 +231,7 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
       // cards disabled after a temporary odds move. Restore their controls so
       // Kobe can request a fresh live recheck from the original card.
       if (reviewChannel.messages?.fetch) {
+        let removedMissingCards = false;
         for (const [id, record] of Object.entries(state.opportunities)) {
           if (!record?.messageId || ['PUBLISHED', 'DRY_RUN_APPROVED', 'REJECTED'].includes(record.status)) continue;
           try {
@@ -240,9 +241,18 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
               components: reviewComponents(id)
             });
           } catch (error) {
-            console.warn(`Could not restore arbitrage approval card ${record.messageId}:`, error.message);
+            if (Number(error.code ?? error.rawError?.code) === 10008) {
+              // Discord no longer has this message. Drop its saved reference so
+              // restarts do not retry it and a new live quote can get a card.
+              delete state.opportunities[id];
+              removedMissingCards = true;
+              log(`Removed missing arbitrage approval card ${record.messageId} from saved state.`);
+            } else {
+              console.warn(`Could not restore arbitrage approval card ${record.messageId}:`, error.message);
+            }
           }
         }
+        if (removedMissingCards) await save();
       }
       const first = await scan();
       timer = setInterval(() => {
