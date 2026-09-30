@@ -5,13 +5,13 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../analytics.js', import.meta.url), 'utf8');
 
-function visit({ url, referrer = '', storage = new Map() }) {
+function visit({ url, referrer = '', storage = new Map(), now = Date.now() }) {
   const parsed = new URL(url);
   const calls = [];
   const localStorage = { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) };
   const context = {
-    URL, URLSearchParams, Intl, Date, console, localStorage,
-    crypto: { randomUUID: () => '12345678-1234-4123-8123-123456789012' },
+    URL, URLSearchParams, Intl, Date: class extends Date { static now() { return now; } }, console, localStorage,
+    crypto: { randomUUID: () => { const count = Number(storage.get('test.uuid.count') || 0) + 1; storage.set('test.uuid.count', String(count)); return `${String(count).padStart(8, '0')}-1234-4123-8123-123456789012`; } },
     location: { hostname: parsed.hostname, pathname: parsed.pathname, search: parsed.search },
     document: { referrer },
     fetch: async (requestUrl, options) => { calls.push({ requestUrl, body: JSON.parse(options.body) }); return { ok: true }; },
@@ -76,4 +76,23 @@ test('TikTok referral host and Kobe X tagged link remain distinct sources', () =
 test('YouTube and Facebook remain distinct promotional sources', () => {
   assert.equal(visit({ url: 'https://kobesbettinghub.com/join?utm_source=youtube' }).attribution.first_source, 'youtube');
   assert.equal(visit({ url: 'https://kobesbettinghub.com/join?utm_source=facebook' }).attribution.first_source, 'facebook');
+});
+
+test('Instagram short UTM and referral hosts are grouped as Instagram', () => {
+  assert.equal(visit({ url: 'https://kobesbettinghub.com/?utm_source=ig' }).attribution.first_source, 'instagram');
+  assert.equal(visit({ url: 'https://kobesbettinghub.com/', referrer: 'https://l.instagram.com/' }).attribution.first_source, 'instagram');
+});
+
+test('short social tags are grouped under their platform names', () => {
+  for (const [tag, source] of [['tt', 'tiktok'], ['yt', 'youtube'], ['fb', 'facebook']]) {
+    assert.equal(visit({ url: `https://kobesbettinghub.com/?utm_source=${tag}` }).attribution.first_source, source);
+  }
+});
+
+test('a returning browser starts a new visit after 30 minutes', () => {
+  const storage = new Map();
+  const first = visit({ url: 'https://kobesbettinghub.com/', storage, now: 100000000 });
+  const second = visit({ url: 'https://kobesbettinghub.com/join?utm_source=ig', storage, now: 101800001 });
+  assert.notEqual(second.event.session_id, first.event.session_id);
+  assert.equal(second.attribution.first_source, 'instagram');
 });

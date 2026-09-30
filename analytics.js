@@ -9,10 +9,10 @@
     if (allowedSources.has(raw)) return raw;
     if (/discord/.test(raw)) return 'discord';
     if (/^(x|twitter)$/.test(raw) || /(^|\.)x\.com$|twitter\.com|t\.co/.test(raw)) return 'x';
-    if (/instagram|(^|\.)ig\.me$/.test(raw)) return 'instagram';
-    if (/tiktok|(^|\.)vm\.tiktok\.com$/.test(raw)) return 'tiktok';
-    if (/youtube|youtu\.be/.test(raw)) return 'youtube';
-    if (/facebook|fb\.com|fb\.me/.test(raw)) return 'facebook';
+    if (raw === 'ig' || /instagram|(^|\.)ig\.me$/.test(raw)) return 'instagram';
+    if (raw === 'tt' || /tiktok|(^|\.)vm\.tiktok\.com$/.test(raw)) return 'tiktok';
+    if (raw === 'yt' || /youtube|youtu\.be/.test(raw)) return 'youtube';
+    if (raw === 'fb' || /facebook|fb\.com|fb\.me/.test(raw)) return 'facebook';
     if (/google/.test(raw)) return 'google';
     if (/mail|newsletter/.test(raw)) return 'email';
     if (/referr/.test(raw)) return 'referral';
@@ -32,14 +32,18 @@
   const incomingSource = referralIdentifier ? 'referral' : taggedSource || referrerSource;
   const inferredMedium = !incomingSource ? '' : ['x', 'kobe_x', 'instagram', 'tiktok', 'youtube', 'facebook'].includes(incomingSource) ? 'organic_social' : incomingSource === 'discord' ? 'community' : incomingSource;
   let sessionId;
+  let newSession = false;
   try {
     sessionId = localStorage.getItem('kbh.analytics.session');
-    if (!uuid.test(sessionId || '')) {
+    const lastSeen = Number(localStorage.getItem('kbh.analytics.last_seen'));
+    if (!uuid.test(sessionId || '') || !lastSeen || Date.now() - lastSeen > 1800000 || lastSeen > Date.now()) {
       sessionId = crypto.randomUUID();
       localStorage.setItem('kbh.analytics.session', sessionId);
+      newSession = true;
     }
-  } catch { sessionId = crypto.randomUUID(); }
-  const stored = (() => { try { return JSON.parse(localStorage.getItem('kbh.analytics.attribution') || '{}'); } catch { return {}; } })();
+    localStorage.setItem('kbh.analytics.last_seen', String(Date.now()));
+  } catch { sessionId = crypto.randomUUID(); newSession = true; }
+  const stored = (() => { if (newSession) return {}; try { return JSON.parse(localStorage.getItem('kbh.analytics.attribution') || '{}'); } catch { return {}; } })();
   const firstSource = normalizeSource(stored.first_source) || incomingSource || 'direct';
   const current = {
     first_source: firstSource,

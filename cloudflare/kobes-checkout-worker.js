@@ -619,8 +619,10 @@ function cleanAttribution(value = {}) {
     if (['discord','x','kobe_x','instagram','tiktok','youtube','facebook','google','email','referral','affiliate','direct','other'].includes(raw)) return raw;
     if (/discord/.test(raw)) return 'discord';
     if (/^(x|twitter)$/.test(raw) || /(^|\.)x\.com$|twitter\.com|t\.co/.test(raw)) return 'x';
-    if (/instagram|(^|\.)ig\.me$/.test(raw)) return 'instagram';
-    if (/tiktok|(^|\.)vm\.tiktok\.com$/.test(raw)) return 'tiktok';
+    if (raw === 'ig' || /instagram|(^|\.)ig\.me$/.test(raw)) return 'instagram';
+    if (raw === 'tt' || /tiktok|(^|\.)vm\.tiktok\.com$/.test(raw)) return 'tiktok';
+    if (raw === 'yt' || /youtube|youtu\.be/.test(raw)) return 'youtube';
+    if (raw === 'fb' || /facebook|fb\.com|fb\.me/.test(raw)) return 'facebook';
     if (/google/.test(raw)) return 'google';
     if (/mail|newsletter/.test(raw)) return 'email';
     if (/referr/.test(raw)) return 'referral';

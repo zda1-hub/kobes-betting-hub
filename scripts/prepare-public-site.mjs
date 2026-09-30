@@ -153,7 +153,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
     const outputPath = path.join(outputRoot, file);
     const source = await readFile(outputPath, 'utf8');
     if (source.includes('src="analytics.js')) return;
-    await writeFile(outputPath, source.replace('</body>', '  <script src="/analytics.js?v=20260920-attribution"></script>\n  </body>'));
+    await writeFile(outputPath, source.replace('</body>', '  <script src="/analytics.js?v=20260929-visit-attribution"></script>\n  </body>'));
   }));
 
   // Meta campaign measurement belongs only on public marketing and checkout
