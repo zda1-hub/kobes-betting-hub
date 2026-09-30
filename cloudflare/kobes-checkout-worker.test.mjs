@@ -528,6 +528,37 @@ test('creator first-month offer earns ten dollars after a $19.99 paid invoice an
   assert.equal(Date.parse(patches[0].eligible_at) - Date.parse(patches[0].first_paid_at), 7 * 24 * 60 * 60 * 1000);
 });
 
+test('creator first-month charge passes payout review only for its matching creator offer', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async (input) => {
+    const path = new URL(input).pathname;
+    if (path.endsWith('/subscriptions/sub_creator')) return Response.json({
+      metadata: { offer: 'first_month_back', creator_profile_id: 'creator_1', referral_code: 'KBC-CREATOR' },
+      items: { data: [{ price: { id: 'price_monthly' } }] },
+    });
+    if (path.endsWith('/invoices/in_creator')) return Response.json({
+      id: 'in_creator', status: 'paid', currency: 'usd', amount_paid: 1999,
+      customer: 'cus_referred', subscription: 'sub_creator', charge: 'ch_creator',
+    });
+    if (path.endsWith('/charges/ch_creator')) return Response.json({
+      paid: true, captured: true, status: 'succeeded', currency: 'usd', amount_captured: 1999,
+      customer: 'cus_referred', refunded: false, amount_refunded: 0,
+      payment_method_details: { card: { fingerprint: 'fingerprint_1' } },
+    });
+    if (path.endsWith('/refunds')) return Response.json({ data: [], has_more: false });
+    throw new Error(`Unexpected request: ${path}`);
+  };
+  const env = { STRIPE_SECRET_KEY: 'sk_test', STRIPE_MONTHLY_PRICE_ID: 'price_monthly' };
+  const reward = { creator_profile_id: 'creator_1', referral_code: 'KBC-CREATOR',
+    referred_subscription_id: 'sub_creator', first_paid_invoice_id: 'in_creator', referred_stripe_customer_id: 'cus_referred' };
+  assert.equal((await workerTest.qualifyingReferralCharge(env, reward)).chargeId, 'ch_creator');
+  await assert.rejects(workerTest.qualifyingReferralCharge(env, { ...reward, creator_profile_id: null }),
+    { message: 'PAYMENT_NO_LONGER_QUALIFIES' });
+  await assert.rejects(workerTest.qualifyingReferralCharge(env, { ...reward, creator_profile_id: 'another_creator' }),
+    { message: 'PAYMENT_NO_LONGER_QUALIFIES' });
+});
+
 test('checkout offer composition matches the published intro pricing without charging in the test', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
