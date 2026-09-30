@@ -1983,8 +1983,16 @@ function referralSafetyFailure(reason, status = 'REVIEW_REQUIRED') {
 }
 
 async function qualifyingReferralCharge(env, reward) {
+  let minimumPaid = 3299;
+  if (reward.creator_profile_id) {
+    const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(reward.referred_subscription_id)}`);
+    if (subscription.metadata?.offer === 'first_month_back'
+        && subscription.metadata?.creator_profile_id === reward.creator_profile_id
+        && subscription.metadata?.referral_code === reward.referral_code
+        && stripeId(subscription.items?.data?.[0]?.price) === env.STRIPE_MONTHLY_PRICE_ID) minimumPaid = 1999;
+  }
   const invoice = await stripeGet(env, `/invoices/${encodeURIComponent(reward.first_paid_invoice_id)}`);
-  if (invoice.status !== 'paid' || invoice.currency !== 'usd' || Number(invoice.amount_paid) < 3299
+  if (invoice.status !== 'paid' || invoice.currency !== 'usd' || Number(invoice.amount_paid) < minimumPaid
       || stripeId(invoice.customer) !== reward.referred_stripe_customer_id
       || invoiceSubscriptionId(invoice) !== reward.referred_subscription_id) {
     throw referralSafetyFailure('PAYMENT_NO_LONGER_QUALIFIES', 'VOID');
@@ -1995,7 +2003,7 @@ async function qualifyingReferralCharge(env, reward) {
     const payments = await stripeGet(env, `/invoice_payments?invoice=${encodeURIComponent(invoice.id)}&status=paid&limit=100`);
     if (payments.has_more || payments.data?.length !== 1) throw referralSafetyFailure('PAYMENT_REQUIRES_REVIEW');
     const payment = payments.data[0];
-    if (payment.invoice !== invoice.id || payment.status !== 'paid' || payment.currency !== 'usd' || Number(payment.amount_paid) < 3299) throw referralSafetyFailure('PAYMENT_REQUIRES_REVIEW');
+    if (payment.invoice !== invoice.id || payment.status !== 'paid' || payment.currency !== 'usd' || Number(payment.amount_paid) < minimumPaid) throw referralSafetyFailure('PAYMENT_REQUIRES_REVIEW');
     intentId = stripeId(payment.payment?.payment_intent);
     chargeId = stripeId(payment.payment?.charge);
   }
@@ -2007,7 +2015,7 @@ async function qualifyingReferralCharge(env, reward) {
   if (!chargeId) throw referralSafetyFailure('CHARGE_NOT_VERIFIED');
   const charge = await stripeGet(env, `/charges/${encodeURIComponent(chargeId)}`);
   if (!charge.paid || !charge.captured || charge.status !== 'succeeded' || charge.currency !== 'usd'
-      || Number(charge.amount_captured) < 3299 || stripeId(charge.customer) !== reward.referred_stripe_customer_id) throw referralSafetyFailure('CHARGE_NOT_VERIFIED');
+      || Number(charge.amount_captured) < minimumPaid || stripeId(charge.customer) !== reward.referred_stripe_customer_id) throw referralSafetyFailure('CHARGE_NOT_VERIFIED');
   if (charge.refunded || Number(charge.amount_refunded) > 0 || charge.disputed) throw referralSafetyFailure('PAYMENT_REFUNDED_OR_DISPUTED', 'VOID');
   const refunds = await stripeGet(env, `/refunds?charge=${encodeURIComponent(chargeId)}&limit=100`);
   if (refunds.has_more || (refunds.data || []).some((refund) => !['failed', 'canceled'].includes(refund.status))) throw referralSafetyFailure('REFUND_PENDING_OR_COMPLETED');
