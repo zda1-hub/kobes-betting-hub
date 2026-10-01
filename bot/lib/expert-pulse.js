@@ -298,7 +298,14 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
   }
   async function managedVipMessage(destination, id, aggregate = false) {
     if (!id) return null;
-    const message = await destination.messages.fetch(id).catch(() => null);
+    let message;
+    try { message = await destination.messages.fetch(id); }
+    catch (error) {
+      // Discord 10008 means this exact message was deleted. Permission and
+      // network errors must still stop publication rather than look deleted.
+      if (error.code === 10008 || error.rawError?.code === 10008) return null;
+      throw error;
+    }
     const marker = aggregate ? `${MARKER} · aggregate ·` : MARKER;
     if (message && !message.embeds?.some((embed) => embed.footer?.text?.includes(marker))) {
       throw new Error('Stored expert pulse VIP message is not managed by this publisher.');
@@ -338,7 +345,14 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     });
     let existing = await managedVipMessage(destination, state.vip_message_id, true);
     if (state.vip_message_id && !existing) {
-      throw new Error('Combined VIP message is missing or inaccessible; publication held to avoid a duplicate.');
+      // Fetching the stored ID returned Discord's Unknown Message error.
+      // Reuse any managed aggregate still visible before clearing the stale ID.
+      const recent = await destination.messages.fetch({ limit: 100 });
+      existing = [...recent.values()].find((message) => message.embeds?.some((embed) =>
+        embed.footer?.text?.includes(`${MARKER} · aggregate ·`))) || null;
+      state.vip_message_id = existing?.id || null;
+      state.vip_status = 'IDLE';
+      await writeState(state);
     }
     if (!existing && !state.vip_message_id) {
       const recent = await destination.messages.fetch({ limit: 100 });
