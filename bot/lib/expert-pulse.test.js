@@ -32,7 +32,7 @@ test('reads production-style bot embeds but never merges odds or team-alias vari
   ], now);
   assert.equal(report.playCount, 3);
   assert.deepEqual(report.repeated, []);
-  assert.match(payloadFor(report).embeds[0].description, /Best Exclusive records L7 days/);
+  assert.match(payloadFor(report).embeds[0].description, /Best records last 5 days/);
 });
 
 test('shows all-time linked, individually graded paid expert results, including losses and pushes', () => {
@@ -61,7 +61,7 @@ test('shows all-time linked, individually graded paid expert results, including 
   assert.equal(records[0].losses, 1);
   assert.equal(records[0].pushes, 1);
   assert.equal(records[0].streak, 0);
-  assert.match(payloadFor({ date: '2026-09-21', active: [], repeated: [], playCount: 0, sourceCount: 0 }, records).embeds[0].description, /Best exclusive records/);
+  assert.match(payloadFor({ date: '2026-09-21', active: [], repeated: [], playCount: 0, sourceCount: 0 }, records).embeds[0].description, /Best records ever/);
 });
 
 test('expert feedback applies Kobe thresholds and ranks by verified win rate', () => {
@@ -71,11 +71,12 @@ test('expert feedback applies Kobe thresholds and ranks by verified win rate', (
     { name: 'Too Few', wins: 4, losses: 0, pushes: 0, voids: 0, streak: 4, references: ['https://discord.com/3'], results: [] }
   ];
   const text = payloadFor({ date: '2026-09-21', active: [], repeated: [], playCount: 0, sourceCount: 0 }, rows).embeds[0].description;
-  assert.ok(text.indexOf('Better Rate (4-1') < text.indexOf('More Wins (6-4'));
+  assert.match(text, /Better Rate \(4-1/);
+  assert.doesNotMatch(text, /More Wins \(6-4/);
   assert.match(text, /Too Few \(4-0/);
 });
 
-test('expert trends uses Kobe’s four sections, strict cutoffs, and every qualifying streak', () => {
+test('expert cheat sheet uses Kobe’s five sections and strict cutoffs', () => {
   const day = (date, grade, sport = 'football') => ({
     at: Date.parse(`${date}T18:00:00Z`), grade, sport
   });
@@ -93,17 +94,13 @@ test('expert trends uses Kobe’s four sections, strict cutoffs, and every quali
   ];
   const report = { date: '2026-09-21', active: [], repeated: [], playCount: 0, sourceCount: 0 };
   const text = payloadFor(report, records).embeds.map((embed) => embed.description).join('\n');
-  assert.match(text, /\*\*Yesterday’s best\*\*\nHot Expert \(2-0\)/);
-  assert.match(text, /\*\*Hottest Experts\*\*\n(?:.*\n)*?Hot Expert \(2-day all sports hot streak\)/);
-  assert.match(text, /Hot Expert \(2-day football hot streak\)/);
-  assert.match(text, /Hot Expert \(2-day basketball hot streak\)/);
-  assert.match(text, /\*\*Best Exclusive records L7 days\*\*/);
-  assert.match(text, /\*\*Best exclusive records ALL TIME\*\*/);
-  assert.match(text, /Above Fifty Four \(5-4, 55\.6%\)/);
-  const lastSeven = text.split('**Best Exclusive records L7 days**')[1].split('**Best exclusive records ALL TIME**')[0];
-  assert.doesNotMatch(lastSeven, /Exactly Sixty/);
-  assert.match(text, /Exactly Sixty \(3-2, 60%\)/);
-  assert.doesNotMatch(text, /above 61%|above 60%|above 54%|source activity|Exact-text repeats/);
+  assert.match(text, /\*\*Yesterday’s best plays · over 61%\*\*\nHot Expert \(2-0, 100%\)/);
+  assert.match(text, /\*\*Best records last 5 days · over 61%\*\*\nHot Expert \(4-1, 80%\)/);
+  assert.match(text, /\*\*Best football records · over 60% all time\*\*\nHot Expert \(2-0, 100%\)/);
+  assert.match(text, /\*\*Best baseball records · over 60% all time\*\*/);
+  assert.match(text, /\*\*Best records ever · over 61%\*\*\nHot Expert \(4-1, 80%\)/);
+  const allTime = text.split('**Best records ever · over 61%**')[1];
+  assert.doesNotMatch(allTime, /Exactly Sixty|Above Fifty Four/);
 });
 
 test('large expert histories stay within the Discord embed description limit', () => {
@@ -116,7 +113,7 @@ test('large expert histories stay within the Discord embed description limit', (
   const description = embeds.map((embed) => embed.description).join('\n');
   assert.ok(embeds.every((embed) => embed.description.length <= 4096));
   assert.doesNotMatch(description, /more qualifying experts/);
-  assert.match(description, /Best exclusive records ALL TIME/);
+  assert.match(description, /Best records ever/);
   assert.match(description, /Verified Expert 120/);
 });
 
@@ -203,6 +200,12 @@ test('one review and one VIP message preserve separate expert decisions', async 
     assert.equal(posts.size, 1);
     assert.equal((await pulse.decide(selection('Approve', 'The Prez'))).status, 'PUBLISHED');
     assert.equal(posts.size, 1);
+    const editControl = card.components.flatMap((row) => row.components).find((part) => part.label === 'Edit Kobe note');
+    const digest = editControl.custom_id.split(':')[2];
+    await assert.rejects(pulse.editNote({ digest, note: 'Verified picks only', userId: 'not-kobe', ownerId: 'kobe', guildId: '123', channelId: '567' }), /Only Kobe/);
+    await pulse.editNote({ digest, note: 'Verified picks only', userId: 'kobe', ownerId: 'kobe', guildId: '123', channelId: '567' });
+    assert.match(card.content, /Kobe’s note:.*Verified picks only/);
+    assert.match([...posts.values()][0].content, /Kobe’s note:.*Verified picks only/);
     let vipText = [...posts.values()][0].embeds.map((embed) => embed.description).join('\n');
     assert.match(vipText, /Ben Burns/);
     assert.match(vipText, /The Prez/);
@@ -331,20 +334,24 @@ test('existing individual cards consolidate without losing approved decisions', 
   }
 });
 
-test('hot streaks include separate sports, require yesterday, and exclude incomplete today', () => {
+test('sport records stay separate and five-day window excludes older results', () => {
   const at = (date) => Date.parse(`${date}T18:00:00Z`);
   const expert = (name, results) => ({ name, results, wins: results.filter(r => r.grade === 'W').length,
     losses: results.filter(r => r.grade === 'L').length, references: [] });
   const result = (date, sport, grade='W') => ({ at: at(date), sport, grade });
   const text = payloadFor({ date: '2026-09-26', active: [], repeated: [] }, [
     expert('Mixed', [result('2026-09-25','baseball'),result('2026-09-24','baseball'),result('2026-09-25','football','L')]),
-    expert('Stale', [result('2026-09-22','baseball'),result('2026-09-21','baseball')]),
+    expert('Stale', [result('2026-09-20','baseball'),result('2026-09-19','baseball')]),
     expert('Gap', [result('2026-09-25','football'),result('2026-09-23','football')]),
     expert('Single', [result('2026-09-25','baseball'),result('2026-09-24','baseball'),result('2026-09-26','baseball','L')])
   ]).embeds.map(e => e.description).join('\n');
-  const hot = text.split('**Hottest Experts')[1].split('**Best Exclusive')[0];
-  assert.match(hot, /Mixed \(2-day baseball hot streak\)/);
-  assert.match(hot, /Single \(2-day baseball hot streak\)/);
-  assert.doesNotMatch(hot, /Stale|Gap|all sports/);
-  assert.equal((hot.match(/Single/g) || []).length, 1);
+  const baseball = text.split('**Best baseball records · over 60% all time**')[1].split('**Best records ever')[0];
+  assert.match(baseball, /Mixed \(2-0, 100%\)/);
+  assert.match(baseball, /Single \(2-1, 66\.7%\)/);
+  assert.doesNotMatch(baseball, /Gap/);
+  const football = text.split('**Best football records · over 60% all time**')[1].split('**Best baseball')[0];
+  assert.match(football, /Gap \(2-0, 100%\)/);
+  assert.doesNotMatch(football, /Mixed/);
+  const recent = text.split('**Best records last 5 days · over 61%**')[1].split('**Best football')[0];
+  assert.doesNotMatch(recent, /Stale/);
 });

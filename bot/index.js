@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes } = require('discord.js');
+const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const commands = require('./commands');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
@@ -65,7 +65,7 @@ const { isTrendOnlySource } = require('./lib/trend-only-source');
 const retiredTrendCardIds = new Set(['20260926-167-X']);
 const { datedTimeOverride, nextArizonaDailyStartMs } = require('./lib/daily-window');
 const { createDiscordJoinAttribution, parseCampaigns } = require('./lib/discord-join-attribution');
-const { arbitrageBookmakers, createArbitragePaperMonitor } = require('./lib/arbitrage-paper-monitor');
+const { arbitrageBookmakers, arbitrageSports, createArbitragePaperMonitor } = require('./lib/arbitrage-paper-monitor');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { exclusiveSourceIsCurrent } = require('../pipeline/exclusive-text');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -107,8 +107,12 @@ const freeRecapStatePath = path.join(path.dirname(pickLogPath()), 'free-recap-st
 const dailyWriteupsChannelId = process.env.DAILY_WRITEUPS_CHANNEL_ID;
 const configuredFreeWriteupsChannelId = process.env.FREE_WRITEUPS_CHANNEL_ID;
 const vipExpertListChannelId = process.env.VIP_EXPERT_LIST_CHANNEL_ID;
-const vipExpertPulseChannelId = process.env.VIP_EXPERT_PULSE_CHANNEL_ID;
-const vipExpertPulseApprovalChannelId = process.env.VIP_EXPERT_PULSE_APPROVAL_CHANNEL_ID;
+const useExpertCheatChannels = Boolean(process.env.EXPERT_CHEAT_CHANNEL_ID && process.env.EXPERT_CHEAT_APPROVAL_CHANNEL_ID);
+if (Boolean(process.env.EXPERT_CHEAT_CHANNEL_ID) !== Boolean(process.env.EXPERT_CHEAT_APPROVAL_CHANNEL_ID)) {
+  console.warn('Expert cheat sheet needs both new channel IDs; continuing in the existing private channels.');
+}
+const vipExpertPulseChannelId = useExpertCheatChannels ? process.env.EXPERT_CHEAT_CHANNEL_ID : process.env.VIP_EXPERT_PULSE_CHANNEL_ID;
+const vipExpertPulseApprovalChannelId = useExpertCheatChannels ? process.env.EXPERT_CHEAT_APPROVAL_CHANNEL_ID : process.env.VIP_EXPERT_PULSE_APPROVAL_CHANNEL_ID;
 if (vipExpertListChannelId) allowedChannelIds.add(vipExpertListChannelId);
 if (vipExpertPulseChannelId) allowedChannelIds.add(vipExpertPulseChannelId);
 if (vipExpertPulseApprovalChannelId) allowedChannelIds.add(vipExpertPulseApprovalChannelId);
@@ -212,7 +216,8 @@ const expertPulse = vipExpertPulseChannelId && vipExpertPulseApprovalChannelId ?
   },
   paidChannelIds: () => [expertPicksChannelId, ...sportChannelMap.values(), process.env.EXCLUSIVES_CHANNEL_ID].filter(Boolean),
   isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId),
-  stateFile: path.join(path.dirname(pickLogPath()), 'expert-pulse.json')
+  stateFile: path.join(path.dirname(pickLogPath()), useExpertCheatChannels
+    ? `expert-cheat-${vipExpertPulseChannelId}.json` : 'expert-pulse.json')
 }) : null;
 const refreshExpertPulse = expertPulse ? () => expertPulse.refresh() : null;
 if ((vipExpertPulseChannelId || vipExpertPulseApprovalChannelId) && !expertPulse) {
@@ -348,6 +353,7 @@ async function startArbitragePaperTest() {
     bankroll: Number(process.env.ARBITRAGE_EXAMPLE_BANKROLL || 1000),
     minimumEdgePercent: Number(process.env.ARBITRAGE_MIN_EDGE_PERCENT || 2),
     bookmakers: arbitrageBookmakers(process.env.ARBITRAGE_BOOKMAKERS),
+    sports: arbitrageSports(process.env.ARBITRAGE_SPORTS),
     windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '08:00-15:00').split(',').map(value => value.trim()).filter(Boolean),
     memberPostingEnabled: process.env.ARBITRAGE_MEMBER_POSTING_ENABLED === 'true',
     isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId)
@@ -2686,6 +2692,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
   if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('expert-pulse:')) {
     try {
+      if (interaction.isButton() && /^expert-pulse:edit:[a-f0-9]{20}:\d+$/.test(interaction.customId)) {
+        const digest = interaction.customId.split(':')[2];
+        const modal = new ModalBuilder().setCustomId(`expert-pulse-edit:${digest}`).setTitle('Edit Kobe’s cheat-sheet note');
+        const note = new TextInputBuilder().setCustomId('note').setLabel('Note shown on review and VIP message')
+          .setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(500);
+        modal.addComponents(new ActionRowBuilder().addComponents(note));
+        await interaction.showModal(modal);
+        return;
+      }
       await interaction.deferReply({ ephemeral: true });
       if (!expertPulse) throw new Error('Expert pulse review and VIP channels are not configured.');
       const result = await expertPulse.decide({ customId: interaction.customId,
@@ -2698,6 +2713,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
           : 'Combined expert trends refreshed. Each expert still requires a separate decision.');
     } catch (error) {
       await respondToInteractionFailure(interaction, error.message || 'Expert pulse review needs attention.', 'Expert pulse interaction');
+    }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('expert-pulse-edit:')) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      if (!expertPulse) throw new Error('Expert cheat sheet is not configured.');
+      const digest = interaction.customId.match(/^expert-pulse-edit:([a-f0-9]{20})$/)?.[1];
+      if (!digest) throw new Error('This cheat-sheet edit is invalid.');
+      await expertPulse.editNote({ digest, note: interaction.fields.getTextInputValue('note'),
+        userId: interaction.user.id, ownerId: interaction.guild?.ownerId,
+        guildId: interaction.guildId, channelId: interaction.channelId });
+      await interaction.editReply('Kobe’s note updated on the review and approved VIP cheat sheet. Verified records stay locked.');
+    } catch (error) {
+      await respondToInteractionFailure(interaction, error.message || 'Could not update the cheat-sheet note.', 'Expert cheat-sheet edit');
     }
     return;
   }
