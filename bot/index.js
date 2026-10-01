@@ -22,7 +22,8 @@ const writeupRecapWorkflow = {
 };
 const recapWorkflowConfigs = [exclusiveRecapWorkflow, writeupRecapWorkflow].filter((config) => config.enabled);
 const { freePickRecapRows } = require('./lib/free-recap');
-const { buildFreePickResults } = require('./lib/free-pick-results');
+const { buildFreePickResults, freeRows } = require('./lib/free-pick-results');
+const { syncFreePickResultReplies, resultReplyConfig } = require('./lib/free-pick-result-replies');
 const { buildPublicResults } = require('./lib/public-results');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
@@ -281,6 +282,7 @@ let trendsInboxInProgress = false;
 let freeRecapTimer = null;
 let freeRecapInProgress = false;
 let freePickDeliveryTimer = null;
+let freePickResultReplyTimer = null;
 let injuryTimer = null;
 let injuryDelivery = null;
 let telegramTimer = null;
@@ -626,6 +628,28 @@ function startFreePickDelivery() {
   console.log('Free Pick delivery recovery active: current-day approved canonical posts only; 60-second interval.');
 }
 
+function startFreePickResultReplies() {
+  if (!freePickChannelId || freePickResultReplyTimer) return;
+  try { if (!resultReplyConfig()) return; } catch (error) { console.error('Free Pick result replies are not configured:', error.message); return; }
+  let running = false;
+  const run = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const now = new Date();
+      for (let daysAgo = 0; daysAgo <= 2; daysAgo += 1) {
+        await autoGradePendingOfficialPicks(dailyPickOperatingDate(new Date(now.getTime() - daysAgo * 86400000)), fetch, true);
+      }
+      const receipts = await syncFreePickResultReplies(await readPickLog(), freePickChannelId);
+      for (const receipt of receipts.filter((item) => item.status !== 'already_requested')) console.log('Free Pick result reply:', JSON.stringify(receipt));
+    } catch (error) { console.error('Free Pick result reply scan needs attention:', error.message); }
+    finally { running = false; }
+  };
+  void run();
+  freePickResultReplyTimer = setInterval(run, 30 * 60 * 1000);
+  freePickResultReplyTimer.unref();
+}
+
 function startFreePickResultsSync() {
   const secret = process.env.FREE_PICK_SITE_PUBLISH_SECRET;
   if (!freePickChannelId || !secret) {
@@ -807,13 +831,15 @@ async function queueRecapNotification({ id, subject, body }) {
   return 'QUEUED';
 }
 
-async function autoGradePendingOfficialPicks(date, fetchImpl = fetch) {
+async function autoGradePendingOfficialPicks(date, fetchImpl = fetch, freeOnly = false) {
   const attempts = new Map();
   if (process.env.AUTO_GRADE_FREE_PICKS === 'false') return attempts;
   const rows = await readPickLog();
+  const freePickIds = freeOnly ? new Set(freeRows(rows, freePickChannelId).map((row) => row.pick_id)) : null;
   const pending = rows.filter((row) => (
     row.operating_date === date
     && isPublishedRow(row)
+    && (!freeOnly || freePickIds.has(row.pick_id))
     && resultFor(row) === 'PENDING'
   ));
   for (const row of pending) {
@@ -2511,6 +2537,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   startTrendInbox();
   startFreeRecapSchedule();
   startFreePickDelivery();
+  startFreePickResultReplies();
   startFreePickResultsSync();
   startPublicResultsSync();
   void startArbitragePaperTest().catch(error => console.error('Arbitrage paper test needs attention:', error.message));
@@ -3048,7 +3075,7 @@ async function shutdown() {
   shuttingDown = true;
   console.log('Cloud worker stopping; durable delivery receipts are retained.');
   for (const timer of [xMonitorIntervalTimer, xMonitorStopTimer, xMonitorDailyTimer,
-    trendsTimer, trendsInboxTimer, freeRecapTimer, freePickDeliveryTimer, injuryTimer,
+    trendsTimer, trendsInboxTimer, freeRecapTimer, freePickDeliveryTimer, freePickResultReplyTimer, injuryTimer,
     telegramTimer, telegramStopTimer, telegramDailyTimer]) {
     if (timer) clearTimeout(timer);
   }

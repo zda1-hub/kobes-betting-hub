@@ -90,6 +90,10 @@ services:
         value: gpt-5.6-luna-2026-09-12-list
       - key: FREE_PICK_X_SYNC_ENABLED
         value: "false"
+      - key: FREE_PICK_X_RESULT_REPLIES_ENABLED
+        value: "false"
+      - key: FREE_PICK_X_RESULT_REPLY_START_AT
+        sync: false
       - key: FREE_PICK_X_PUBLISH_URL
         sync: false
       - key: FREE_PICK_X_QUEUE_SECRET
