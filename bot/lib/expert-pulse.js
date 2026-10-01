@@ -202,7 +202,7 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
 }
 
 function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChannelFor,
-  rowsFor = async () => [], paidChannelIds = [], isApprover = () => false, stateFile, now = () => Date.now() }) {
+  rowsFor = async () => [], paidChannelIds = [], isApprover = () => false, stateFile, legacyStateFile, now = () => Date.now() }) {
   if (!reviewChannelFor || !destinationChannelFor || !stateFile) throw new Error('Private expert pulse review, VIP destination, and state file are required.');
   let queue = Promise.resolve();
   function locked(action) {
@@ -395,6 +395,26 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     const snapshot = await candidate(source);
     let state = await migrateState(await readState(), destination);
     let changed = false;
+    // A new private cheat-sheet channel uses a new state file. Carry Kobe's
+    // decisions forward only when the exact expert content still matches.
+    if (legacyStateFile) {
+      let legacy;
+      try { legacy = JSON.parse(await fs.readFile(legacyStateFile, 'utf8')); }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+      for (const [key, item] of snapshot.items) {
+        const prior = legacy?.experts?.[key];
+        const current = state.experts?.[key];
+        if (prior?.digest === item.digest && ['APPROVED', 'REJECTED'].includes(prior.status)
+          && (!current || current.status === 'PENDING')) {
+          state.experts[key] = { name: item.name, digest: item.digest, status: prior.status };
+          changed = true;
+        }
+      }
+      if (!state.editor_note && legacy?.editor_note) {
+        state.editor_note = legacy.editor_note;
+        changed = true;
+      }
+    }
     for (const item of snapshot.items.values()) {
       const old = state.experts[item.key];
       if (!old || old.digest !== item.digest || !['PENDING', 'APPROVED', 'REJECTED'].includes(old.status)) {

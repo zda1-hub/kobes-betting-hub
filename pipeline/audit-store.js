@@ -8,6 +8,7 @@ let pool;
 let initialized = false;
 let initializationPromise;
 let warnedMissing = false;
+const recentPendingGrades = new Map();
 
 function databaseUrl() {
   return (process.env.DATABASE_URL || '').trim();
@@ -326,10 +327,19 @@ async function recordPublicationResult(packet, { pickId, channelId = null, messa
 }
 
 async function recordGradeAttempt({ pickId, result, status, provider, sourceReference, snapshot = {}, actorType = 'system', actorId = null, errorDetail = null }) {
+  // A scan can revisit the same unresolved wager every few minutes. Preserve
+  // final grades and one hourly pending receipt without filling the audit DB.
+  if (status === 'STARTED') return;
+  if (status !== 'GRADED') {
+    const key = `${pickId}:${status}:${errorDetail || ''}`;
+    const last = recentPendingGrades.get(key) || 0;
+    if (Date.now() - last < 60 * 60 * 1000) return;
+  }
   const published = await query('SELECT id FROM published_picks WHERE pick_id=$1', [pickId]);
   const publishedPickId = published?.rows?.[0]?.id;
   if (!publishedPickId) return;
   await query(`INSERT INTO grades (id, published_pick_id, result, status, provider, source_reference, source_snapshot, actor_type, actor_id, error_detail, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11)`, [crypto.randomUUID(), publishedPickId, result || null, status, provider || null, sourceReference || null, JSON.stringify(snapshot), actorType, actorId, errorDetail, nowIso()]);
+  if (status !== 'GRADED') recentPendingGrades.set(`${pickId}:${status}:${errorDetail || ''}`, Date.now());
 }
 
 async function recordRecapRun({ operatingDate, recapType = 'official_email', includedPickIds = [], status, recipient = null, providerMessageId = null, content = '', errorDetail = null, details = {} }) {
@@ -357,6 +367,9 @@ async function recordApiCall({
   latencyMs = null
 }) {
   if (!service || !endpointClass || !outcome) return;
+  // Successful ESPN reads dominate the free-plan database (millions of rows).
+  // The grade receipt records the outcome; retain ESPN failures for diagnosis.
+  if (service === 'espn' && method === 'GET' && outcome === 'SUCCEEDED') return;
   await query(`INSERT INTO api_call_events (
     id, environment, operation_id, workflow_id, pick_id, member_id,
     service, endpoint_class, method, caller_component, trigger_type,
