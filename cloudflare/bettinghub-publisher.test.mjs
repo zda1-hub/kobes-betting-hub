@@ -99,6 +99,30 @@ test('text-only Free Pick remains readable after publication', async () => {
   assert.equal(current.storyUrl, null);
 });
 
+test('result reply parent lookup requires a confirmed original X receipt', async () => {
+  const env = {
+    FREE_PICK_X_QUEUE_SECRET: 'test-key', FREE_PICK_KV: memoryKv(),
+    DB: { prepare() { return { bind() { return this; }, async first() { return null; } }; } },
+  };
+  const url = 'https://publisher.test/api/queue/x/parent?queueId=free-x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&date=2026-09-30';
+  assert.equal((await worker.fetch(new Request(url), env)).status, 401);
+  const authorized = { headers: { authorization: 'Bearer test-key' } };
+  assert.equal((await worker.fetch(new Request(url, authorized), env)).status, 404);
+  await env.FREE_PICK_KV.put('free-picks/by-date/2026-09-30.json', JSON.stringify({
+    xQueueId: 'free-x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', xPostId: '123456789',
+  }));
+  const result = await worker.fetch(new Request(url, authorized), env);
+  assert.equal(result.status, 200);
+  assert.deepEqual(await result.json(), { xPostId: '123456789' });
+});
+
+test('result replies use the X reply field while ordinary posts stay top-level', () => {
+  assert.deepEqual(workerTest.xPostPayload({ id: 'result-x-123456789-aaaaaaaaaaaaaaaaaaaa', body: 'LOSS' }), {
+    text: 'LOSS', reply: { in_reply_to_tweet_id: '123456789' },
+  });
+  assert.deepEqual(workerTest.xPostPayload({ id: 'free-x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', body: 'PICK' }), { text: 'PICK' });
+});
+
 test('Free Pick reports the active kobebettinghub Story connection and delivery receipt', async () => {
   const queries = [];
   const env = {

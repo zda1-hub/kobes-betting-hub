@@ -149,6 +149,7 @@ async function handleRequest(request, env) {
   if (url.pathname === CALLBACK_PATH) return completeXAuthorization(url, env);
   if (url.pathname === "/api/queue/x" && request.method === "POST") return enqueueXPost(request, env);
   if (url.pathname === "/api/queue/x" && request.method === "GET") return listRecentPosts(request, env);
+  if (url.pathname === "/api/queue/x/parent" && request.method === "GET") return getFreePickXParent(request, env);
   if (url.pathname === "/api/queue/daily-picks" && request.method === "POST") return enqueueDailyPick(request, env);
   if (url.pathname === "/api/queue/daily-picks" && request.method === "GET") return listDailyPicks(request, env);
   if (url.pathname === "/api/queue/daily-picks/deliver" && request.method === "POST") return markDailyPickDelivered(request, env);
@@ -437,12 +438,16 @@ async function enqueueXPost(request, env) {
   if (!Number.isFinite(scheduleTime)) return json({ error: "scheduledAt must be an ISO-8601 date" }, 400);
 
   const id = typeof input.id === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(input.id) ? input.id : crypto.randomUUID();
+  if (id.startsWith('result-x-') && !/^result-x-\d{1,25}-[a-f0-9]{20}$/.test(id)) return json({ error: 'Invalid result reply id' }, 400);
   const result = await env.DB.prepare(
     `INSERT INTO approved_posts (id, channel, body, scheduled_at, status, created_at)
      VALUES (?, 'x', ?, ?, 'approved', ?)
      ON CONFLICT(id) DO NOTHING`,
   ).bind(id, body, new Date(scheduleTime).toISOString(), new Date().toISOString()).run();
-  if (result.meta.changes === 0) return json({ error: "A post with this id already exists" }, 409);
+  if (result.meta.changes === 0) {
+    const existing = await env.DB.prepare('SELECT status, x_post_id AS xPostId, last_error AS lastError FROM approved_posts WHERE id = ?').bind(id).first();
+    return json({ error: 'A post with this id already exists', status: existing?.status, xPostId: existing?.xPostId, lastError: existing?.lastError }, 409);
+  }
   if (publishNow) {
     const claim = await env.DB.prepare(
       `UPDATE approved_posts SET status = 'publishing', last_error = NULL
@@ -456,6 +461,21 @@ async function enqueueXPost(request, env) {
     return json({ id, status: current?.status, xPostId: current?.xPostId, lastError: current?.lastError }, current?.status === "published" ? 201 : 202);
   }
   return json({ id, status: "approved", scheduledAt: new Date(scheduleTime).toISOString() }, 201);
+}
+
+async function getFreePickXParent(request, env) {
+  if (!(await hasBearer(request, env.FREE_PICK_X_QUEUE_SECRET) || await hasBearer(request, env.QUEUE_INGEST_SECRET))) return json({ error: 'Unauthorized' }, 401);
+  const url = new URL(request.url);
+  const queueId = url.searchParams.get('queueId');
+  const date = url.searchParams.get('date');
+  if (!/^free-x-[a-f0-9]{40}$/.test(queueId || '') || !validDate(date)) return json({ error: 'A valid queueId and date are required' }, 400);
+  const queued = await env.DB.prepare('SELECT x_post_id AS xPostId FROM approved_posts WHERE id = ? AND status = ?').bind(queueId, 'published').first();
+  if (/^\d+$/.test(String(queued?.xPostId || ''))) return json({ xPostId: queued.xPostId });
+  const stored = await getFreePickText(env, `${FREE_PICK_BY_DATE_PREFIX}${date}.json`);
+  let pick;
+  try { pick = stored ? JSON.parse(stored) : null; } catch { pick = null; }
+  if (pick?.xQueueId === queueId && /^\d+$/.test(String(pick.xPostId || ''))) return json({ xPostId: pick.xPostId });
+  return json({ error: 'Original X post has no confirmed receipt' }, 404);
 }
 
 async function listRecentPosts(request, env) {
@@ -543,6 +563,7 @@ async function publishFreePick(request, env) {
     pick.xPostId = xPostId;
     pick.xPublishedAt = new Date().toISOString();
     await writeFreePick(pick, env);
+    await putFreePickObject(env, `${FREE_PICK_BY_DATE_PREFIX}${publishedDate}.json`, JSON.stringify(pick), 'application/json; charset=UTF-8', 'no-store');
     return json({ ...publicFreePick(pick, new URL(request.url).origin), xPosted: true }, 201);
   } catch (error) {
     pick.xStatus = "needs_attention";
@@ -861,17 +882,23 @@ async function recoverStuckPosts(now, env) {
   const cutoff = new Date(Date.parse(now) - 15 * 60 * 1000).toISOString();
   await env.DB.prepare(
     `UPDATE approved_posts SET status = 'approved', last_error = 'Recovered after interrupted publish attempt'
-     WHERE status = 'publishing' AND scheduled_at < ?`,
+     WHERE status = 'publishing' AND id NOT LIKE 'result-x-%' AND scheduled_at < ?`,
+  ).bind(cutoff).run();
+  await env.DB.prepare(
+    `UPDATE approved_posts SET status = 'failed', last_error = 'Interrupted result reply; check X before retrying'
+     WHERE status = 'publishing' AND id LIKE 'result-x-%' AND scheduled_at < ?`,
   ).bind(cutoff).run();
 }
 
 async function publishXPost(post, env, triggerType) {
   try {
+    const replyMatch = /^result-x-(\d{1,25})-[a-f0-9]{20}$/.exec(post.id);
+    const xBody = xPostPayload(post);
     const token = await getUsableXToken(env, triggerType);
     const response = await auditedXFetch(env, CREATE_POST_ENDPOINT, {
       method: "POST",
       headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" },
-      body: JSON.stringify({ text: post.body }),
+      body: JSON.stringify(xBody),
     }, {
       triggerType,
       requestShape: { mediaCount: 0, textPresent: true },
@@ -887,11 +914,16 @@ async function publishXPost(post, env, triggerType) {
       ]);
       return;
     }
-    await recordDeliveryFailure(post.id, response.status, xErrorDetail(payload, response.status), response.status === 429 || response.status >= 500, env);
+    await recordDeliveryFailure(post.id, response.status, xErrorDetail(payload, response.status), !replyMatch && (response.status === 429 || response.status >= 500), env);
   } catch (error) {
-    await recordDeliveryFailure(post.id, null, "Network or token error while publishing", true, env);
+    await recordDeliveryFailure(post.id, null, "Network or token error while publishing", !post.id.startsWith('result-x-'), env);
     console.error("X publish failed", { postId: post.id, message: String(error) });
   }
+}
+
+function xPostPayload(post) {
+  const replyMatch = /^result-x-(\d{1,25})-[a-f0-9]{20}$/.exec(post.id);
+  return replyMatch ? { text: post.body, reply: { in_reply_to_tweet_id: replyMatch[1] } } : { text: post.body };
 }
 
 async function recordDeliveryFailure(postId, httpStatus, detail, retryable, env) {
@@ -1092,4 +1124,5 @@ function html(message, status = 200) {
 export const __test = {
   auditedXFetch,
   redactedResponseShape,
+  xPostPayload,
 };
