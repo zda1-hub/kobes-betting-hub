@@ -29,7 +29,7 @@ const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
 const { gradeWagerRows, sourcePacketPath } = require('./lib/wager-ledger');
 const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
-const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm } = require('./lib/welcome');
+const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm, buildVipWelcome, vipRoleIds } = require('./lib/welcome');
 const {
   assertApprovalCopyMatches,
   assertCompleteWriteup,
@@ -217,7 +217,8 @@ const expertPulse = vipExpertPulseChannelId && vipExpertPulseApprovalChannelId ?
   paidChannelIds: () => [expertPicksChannelId, ...sportChannelMap.values(), process.env.EXCLUSIVES_CHANNEL_ID].filter(Boolean),
   isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId),
   stateFile: path.join(path.dirname(pickLogPath()), useExpertCheatChannels
-    ? `expert-cheat-${vipExpertPulseChannelId}.json` : 'expert-pulse.json')
+    ? `expert-cheat-${vipExpertPulseChannelId}.json` : 'expert-pulse.json'),
+  legacyStateFile: useExpertCheatChannels ? path.join(path.dirname(pickLogPath()), 'expert-pulse.json') : null
 }) : null;
 const refreshExpertPulse = expertPulse ? () => expertPulse.refresh() : null;
 if ((vipExpertPulseChannelId || vipExpertPulseApprovalChannelId) && !expertPulse) {
@@ -250,7 +251,7 @@ const discordJoinAttributionEnabled = process.env.DISCORD_JOIN_ATTRIBUTION_ENABL
 const client = new Client({ intents: [
   GatewayIntentBits.Guilds,
   GatewayIntentBits.MessageContent,
-  ...(discordJoinAttributionEnabled ? [GatewayIntentBits.GuildMembers] : [])
+  GatewayIntentBits.GuildMembers
 ] });
 const discordJoinAttribution = discordJoinAttributionEnabled ? createDiscordJoinAttribution({
   campaigns: parseCampaigns(process.env.DISCORD_INVITE_CAMPAIGNS_JSON),
@@ -2636,17 +2637,35 @@ client.once(Events.ClientReady, async (readyClient) => {
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {
-  if (!discordJoinAttribution || member.guild.id !== process.env.DISCORD_GUILD_ID) return;
-  try {
-    const event = await discordJoinAttribution.joined(member);
-    console.log('Discord join recorded:', JSON.stringify({
-      status: event.properties.attribution_status,
-      source: event.properties.source,
-      campaign: event.properties.campaign
-    }));
-  } catch (error) {
-    console.error('Discord join attribution write needs attention:', error.message);
+  if (member.guild.id !== process.env.DISCORD_GUILD_ID) return;
+  if (discordJoinAttribution) {
+    try {
+      const event = await discordJoinAttribution.joined(member);
+      console.log('Discord join recorded:', JSON.stringify({
+        status: event.properties.attribution_status,
+        source: event.properties.source,
+        campaign: event.properties.campaign
+      }));
+    } catch (error) {
+      console.error('Discord join attribution write needs attention:', error.message);
+    }
   }
+  if (member.user.bot) return;
+  try {
+    const paid = [...vipRoleIds()].some(id => member.roles.cache.has(id));
+    await member.send(paid ? buildVipWelcome() : { embeds: [buildWelcomeDm()] });
+  } catch (error) {
+    console.warn(`Welcome DM blocked for ${member.id}: ${error.message}`);
+  }
+});
+
+client.on(Events.GuildMemberUpdate, async (before, after) => {
+  if (after.guild.id !== process.env.DISCORD_GUILD_ID || after.user.bot) return;
+  const roles = vipRoleIds();
+  const gainedVip = [...roles].some(id => after.roles.cache.has(id)) && ![...roles].some(id => before.roles.cache.has(id));
+  if (!gainedVip) return;
+  try { await after.send(buildVipWelcome()); }
+  catch (error) { console.warn(`VIP welcome DM blocked for ${after.id}: ${error.message}`); }
 });
 
 async function registerCommandsOnStart() {
@@ -2849,7 +2868,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
       try {
-        await interaction.user.send({ embeds: [buildWelcomeDm()] });
+        const guild = await client.guilds.fetch(process.env.DISCORD_GUILD_ID);
+        const member = await guild.members.fetch(interaction.user.id);
+        const paid = [...vipRoleIds()].some(id => member.roles.cache.has(id));
+        await interaction.user.send(paid ? buildVipWelcome() : { embeds: [buildWelcomeDm()] });
         welcomedMemberIds.add(interaction.user.id);
         await interaction.editReply('Welcome sent—check your DMs.');
       } catch (dmError) {
