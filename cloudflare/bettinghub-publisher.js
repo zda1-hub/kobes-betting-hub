@@ -183,7 +183,9 @@ const VIP_STAT_PATTERNS = [
   /^\d{1,2} targets in the cited game$/,
   /^Recent yardage outputs: \d{1,3} and \d{1,3}$/,
   /^\d{1,2} (?:targets|carries|receptions|attempts) in the cited sample$/,
-  /^\d{1,3}(?:\.\d+)? (?:receiving|rushing|passing) yards per game in the cited sample$/
+  /^\d{1,3}(?:\.\d+)? (?:receiving|rushing|passing) yards per game in the cited sample$/,
+  /^\d{1,2} targets and \d{1,2} catches across two cited games$/,
+  /^\d{1,3} receiving yards and \d{1,2} targets in the cited game$/
 ];
 
 async function putVipPreview(request, env) {
