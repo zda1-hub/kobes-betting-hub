@@ -19,6 +19,14 @@ function arbitrageBookmakers(value) {
   }
   return books;
 }
+function arbitrageSports(value) {
+  if (!value) return ['americanfootball_nfl', 'americanfootball_ncaaf', 'baseball_mlb'];
+  const sports = [...new Set(String(value).split(',').map(sport => sport.trim().toLowerCase()).filter(Boolean))];
+  if (!sports.length || sports.length > 8 || sports.some(sport => !/^[a-z0-9_]+$/.test(sport))) {
+    throw new Error('ARBITRAGE_SPORTS must contain 1-8 comma-separated Odds API sport keys.');
+  }
+  return sports;
+}
 const DEFAULT_WINDOWS = ['09:30', '12:30', '16:00'];
 const MAX_QUOTE_AGE_MS = 5 * 60 * 1000;
 
@@ -57,7 +65,7 @@ function findArbitrage(events, { minimumEdgePercent = 2, bankroll = 1000 } = {})
     const commonReturn = bankroll / implied;
     const legs = sides.map(side => ({ ...side, stake: commonReturn / side.price, stakePercent: (1 / side.price) / implied * 100 }));
     opportunities.push({
-      id: `${event.id}:h2h`, eventId: event.id, sport: event.sport_title || event.sport_key,
+      id: `${event.id}:h2h`, eventId: event.id, sport: event.sport_title || event.sport_key, sportKey: event.sport_key,
       event: `${event.away_team} @ ${event.home_team}`, commenceTime: event.commence_time,
       detectedAt: new Date().toISOString(), implied, edgePercent, bankroll, projectedReturn: commonReturn,
       projectedProfit: commonReturn - bankroll, legs
@@ -130,7 +138,7 @@ function activeWindow(now = new Date(), windows = DEFAULT_WINDOWS, durationMinut
 }
 
 function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel, stateFile, fetchImpl = fetch, now = () => new Date(),
-  bookmakers = DEFAULT_BOOKS, windows = DEFAULT_WINDOWS, intervalMinutes = 5, minimumEdgePercent = 2, bankroll = 1000,
+  bookmakers = DEFAULT_BOOKS, sports = ['upcoming'], windows = DEFAULT_WINDOWS, intervalMinutes = 5, minimumEdgePercent = 2, bankroll = 1000,
   memberPostingEnabled = false, isApprover = () => false, log = console.log }) {
   let timer = null, scanning = false, quotaExhausted = false, state = { scans: [], opportunities: {} };
   const save = async () => {
@@ -139,21 +147,28 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
     await fs.rename(`${stateFile}.tmp`, stateFile);
   };
   const load = async () => { try { state = JSON.parse(await fs.readFile(stateFile, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; } };
-  const fetchOdds = async () => {
-    const url = new URL('https://api.the-odds-api.com/v4/sports/upcoming/odds');
-    url.searchParams.set('apiKey', apiKey); url.searchParams.set('regions', 'us'); url.searchParams.set('markets', 'h2h');
-    url.searchParams.set('bookmakers', bookmakers.join(',')); url.searchParams.set('oddsFormat', 'decimal'); url.searchParams.set('dateFormat', 'iso');
-    const response = await fetchImpl(url, { signal: AbortSignal.timeout(15000) });
-    if (!response.ok) {
-      const error = new Error(`Odds feed returned ${response.status}.`);
-      error.quotaExhausted = response.status === 401 || response.status === 429;
-      throw error;
+  const fetchOdds = async (sportKeys = sports) => {
+    const events = new Map();
+    let remaining = null, used = null, quotaExhausted = false;
+    for (const sport of sportKeys) {
+      const url = new URL(`https://api.the-odds-api.com/v4/sports/${sport}/odds`);
+      url.searchParams.set('apiKey', apiKey); url.searchParams.set('regions', 'us'); url.searchParams.set('markets', 'h2h');
+      url.searchParams.set('bookmakers', bookmakers.join(',')); url.searchParams.set('oddsFormat', 'decimal'); url.searchParams.set('dateFormat', 'iso');
+      const response = await fetchImpl(url, { signal: AbortSignal.timeout(15000) });
+      if (!response.ok) {
+        const error = new Error(`Odds feed returned ${response.status} for ${sport}.`);
+        error.quotaExhausted = response.status === 401 || response.status === 429;
+        throw error;
+      }
+      remaining = response.headers.get('x-requests-remaining');
+      used = response.headers.get('x-requests-used');
+      for (const event of await response.json()) events.set(event.id, event);
+      if (remaining !== null && Number(remaining) <= 0) { quotaExhausted = true; break; }
     }
-    const remaining = response.headers.get('x-requests-remaining');
-    return { events: await response.json(), remaining, used: response.headers.get('x-requests-used'), quotaExhausted: remaining !== null && Number(remaining) <= 0 };
+    return { events: [...events.values()], remaining, used, quotaExhausted };
   };
   const currentOpportunity = async (original) => {
-    const { events, quotaExhausted: exhausted } = await fetchOdds();
+    const { events, quotaExhausted: exhausted } = await fetchOdds([original.sportKey || 'upcoming']);
     if (exhausted) quotaExhausted = true;
     // The configured threshold controls which opportunities are noisy enough
     // to create a new approval card. Once Kobe is reviewing a card, accept any
@@ -199,9 +214,10 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
       const positive = findArbitrage(events, { minimumEdgePercent: 0, bankroll });
       const aboveThreshold = positive.filter(item => item.edgePercent >= minimumEdgePercent);
       const opportunities = aboveThreshold.filter(item => freshOpportunity(item, now()));
-      const scanRecord = { scannedAt: now().toISOString(), window, eventCount: events.length,
+      const scanRecord = { scannedAt: now().toISOString(), window, sports, eventCount: events.length,
         positiveCount: positive.length, aboveThresholdCount: aboveThreshold.length,
         opportunityCount: opportunities.length, minimumEdgePercent, bookmakerCount: bookmakers.length,
+        coveredBookmakers: [...new Set(events.flatMap(event => (event.bookmakers || []).map(book => book.key)))].sort(),
         remaining, used };
       state.scans.push(scanRecord);
       state.scans = state.scans.slice(-500);
@@ -310,4 +326,4 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
   };
 }
 
-module.exports = { activeWindow, alertDescription, arbitrageBookmakers, createArbitragePaperMonitor, findArbitrage, reviewComponents };
+module.exports = { activeWindow, alertDescription, arbitrageBookmakers, arbitrageSports, createArbitragePaperMonitor, findArbitrage, reviewComponents };

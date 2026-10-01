@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { activeWindow, alertDescription, arbitrageBookmakers, createArbitragePaperMonitor, findArbitrage } = require('./arbitrage-paper-monitor');
+const { activeWindow, alertDescription, arbitrageBookmakers, arbitrageSports, createArbitragePaperMonitor, findArbitrage } = require('./arbitrage-paper-monitor');
 
 test('uses all nine Arizona books covered by the feed within one quota group and allows a narrower member list', () => {
   const books = arbitrageBookmakers();
@@ -12,6 +12,11 @@ test('uses all nine Arizona books covered by the feed within one quota group and
   assert.ok(books.includes('espnbet'));
   assert.deepEqual(arbitrageBookmakers('fanduel, betrivers, fanduel'), ['fanduel', 'betrivers']);
   assert.throws(() => arbitrageBookmakers('bad-key'), /ARBITRAGE_BOOKMAKERS/);
+});
+
+test('scans football and baseball sport feeds by default', () => {
+  assert.deepEqual(arbitrageSports(), ['americanfootball_nfl', 'americanfootball_ncaaf', 'baseball_mlb']);
+  assert.deepEqual(arbitrageSports('baseball_mlb, baseball_mlb'), ['baseball_mlb']);
 });
 
 const event = { id: 'game-1', sport_title: 'NBA', away_team: 'Away', home_team: 'Home', commence_time: '2026-09-24T01:00:00Z', bookmakers: [
@@ -76,10 +81,33 @@ test('successful routine scans log their time, window, counts and feed quota', a
   await monitor.stop();
   assert.equal(logs.length, 1);
   assert.deepEqual(JSON.parse(logs[0].replace(/^Arbitrage scan: /, '')), {
-    scannedAt: '2026-09-23T18:00:00.000Z', window: '08:00-15:00', eventCount: 0,
+    scannedAt: '2026-09-23T18:00:00.000Z', window: '08:00-15:00', sports: ['upcoming'], eventCount: 0,
     positiveCount: 0, aboveThresholdCount: 0, opportunityCount: 0,
-    minimumEdgePercent: 2, bookmakerCount: 9, remaining: '99', used: '1'
+    minimumEdgePercent: 2, bookmakerCount: 9, coveredBookmakers: [], remaining: '99', used: '1'
   });
+});
+
+test('checks each configured sport and records which books actually returned prices', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
+  const requested = [], logs = [];
+  const monitor = createArbitragePaperMonitor({ apiKey: 'test',
+    reviewChannel: { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' }, send: async () => {} },
+    stateFile: path.join(root, 'state.json'), sports: ['americanfootball_nfl', 'baseball_mlb'],
+    fetchImpl: async url => {
+      requested.push(url.pathname);
+      const current = structuredClone(event);
+      current.id = String(requested.length);
+      current.sport_key = requested.length === 1 ? 'americanfootball_nfl' : 'baseball_mlb';
+      current.bookmakers[0].markets[0].outcomes[0].price = 1.8;
+      current.bookmakers[1].markets[0].outcomes[1].price = 1.8;
+      return new Response(JSON.stringify([current]), { status: 200, headers: { 'x-requests-remaining': '98' } });
+    }, now: () => new Date('2026-09-23T18:00:00Z'), windows: ['08:00-15:00'], log: message => logs.push(message) });
+  await monitor.start();
+  await monitor.stop();
+  assert.deepEqual(requested, ['/v4/sports/americanfootball_nfl/odds', '/v4/sports/baseball_mlb/odds']);
+  const receipt = JSON.parse(logs[0].replace(/^Arbitrage scan: /, ''));
+  assert.equal(receipt.eventCount, 2);
+  assert.deepEqual(receipt.coveredBookmakers, ['draftkings', 'fanduel']);
 });
 
 test('scan receipt separates a positive edge from threshold and quote-age filters', async () => {

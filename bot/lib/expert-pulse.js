@@ -123,48 +123,30 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
   const ranked = (rows) => rows.sort((a, b) => b.rate - a.rate || b.wins - a.wins || a.name.localeCompare(b.name));
   const yesterday = ranked(records.map((expert) => ({ name: expert.name, references: expert.references, ...recordWithin(expert, end - day, end) }))
     .filter((item) => item.decisions && item.rate > 0.61));
-  const sevenDays = ranked(records.map((expert) => ({ name: expert.name, references: expert.references, ...recordWithin(expert, end - 7 * day, end) }))
-    .filter((item) => item.decisions && item.rate > 0.60));
+  const fiveDays = ranked(records.map((expert) => ({ name: expert.name, references: expert.references, ...recordWithin(expert, end - 5 * day, end) }))
+    .filter((item) => item.decisions && item.rate > 0.61));
+  const sportRecords = (pattern) => ranked(records.map((expert) => {
+    const decisions = expert.results.filter((item) => ['W', 'L'].includes(item.grade) && pattern.test(item.sport));
+    const wins = decisions.filter((item) => item.grade === 'W').length;
+    const losses = decisions.length - wins;
+    return { name: expert.name, wins, losses, decisions: decisions.length,
+      rate: decisions.length ? wins / decisions.length : 0 };
+  }).filter((item) => item.decisions && item.rate > 0.60));
+  const football = sportRecords(/^(?:football|nfl|ncaaf|americanfootball)/);
+  const baseball = sportRecords(/^(?:baseball|mlb)/);
   const allTime = ranked(records.map((expert) => ({ name: expert.name, wins: expert.wins, losses: expert.losses,
     rate: expert.wins + expert.losses ? expert.wins / (expert.wins + expert.losses) : 0, references: expert.references }))
-    .filter((item) => item.wins + item.losses > 0 && item.rate > 0.54));
-  // A hot streak must reach yesterday, and must be checked
-  // independently for each sport so a loss elsewhere does not hide it.
-  const hot = records.flatMap((expert) => {
-    const decisions = expert.results.filter((item) => ['W', 'L'].includes(item.grade) && item.at < end);
-    const sports = [...new Set(decisions.map((item) => item.sport).filter(Boolean))];
-    const scopes = [{ label: 'all sports', results: decisions },
-      ...sports.map((sport) => ({ label: sport, results: decisions.filter((item) => item.sport === sport) }))];
-    const streaks = scopes.map(({ label, results }) => {
-      const byDate = new Map();
-      for (const result of results) {
-        const date = operatingDate(result.at);
-        const grades = byDate.get(date) || [];
-        grades.push(result.grade);
-        byDate.set(date, grades);
-      }
-      let days = 0;
-      while (true) {
-        const date = operatingDate(end - (days + 1) * day);
-        const grades = byDate.get(date);
-        if (!grades || grades.includes('L') || !grades.includes('W')) break;
-        days += 1;
-      }
-      return { name: expert.name, days, label };
-    }).filter((item) => item.days >= 2);
-    // One-sport records would otherwise repeat the identical streak twice.
-    return sports.length === 1 && decisions.every((item) => item.sport === sports[0])
-      ? streaks.filter((item) => item.label !== 'all sports') : streaks;
-  }).sort((a, b) => b.days - a.days || a.name.localeCompare(b.name) || a.label.localeCompare(b.label));
+    .filter((item) => item.wins + item.losses > 0 && item.rate > 0.61));
   const lines = (items, mapper = format) => {
     if (!items.length) return 'No verified expert currently meets this threshold.';
     return items.map(mapper).join('\n');
   };
   const sections = [
-    ['Yesterday’s best', lines(yesterday, (item) => `${item.name} (${item.wins}-${item.losses})`)],
-    ['Hottest Experts', lines(hot, (item) => `${item.name} (${item.days}-day ${item.label} hot streak)`)],
-    ['Best Exclusive records L7 days', lines(sevenDays)],
-    ['Best exclusive records ALL TIME', lines(allTime)]
+    ['Yesterday’s best plays · over 61%', lines(yesterday)],
+    ['Best records last 5 days · over 61%', lines(fiveDays)],
+    ['Best football records · over 60% all time', lines(football)],
+    ['Best baseball records · over 60% all time', lines(baseball)],
+    ['Best records ever · over 61%', lines(allTime)]
   ].filter(([, body]) => !omitEmpty || body !== 'No verified expert currently meets this threshold.');
   const descriptions = [];
   let current = '';
@@ -182,10 +164,10 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
     throw new Error('Expert list exceeds Discord’s message limit; no names were silently omitted.');
   return {
     allowedMentions: { parse: [] },
-    expertNames: [...new Set([...yesterday, ...hot, ...sevenDays, ...allTime].map((item) => item.name))],
+    expertNames: [...new Set([...yesterday, ...fiveDays, ...football, ...baseball, ...allTime].map((item) => item.name))],
     embeds: descriptions.map((description, index) => ({
       color: 0xFF7900,
-      title: index ? 'Expert Trends · continued' : 'Expert Trends',
+      title: index ? 'Expert Cheat Sheet · continued' : 'Expert Cheat Sheet',
       description,
       ...(index === 0 ? { footer: { text: `${MARKER} · Verified paid pick log · ${coverage}` } } : {})
     }))
@@ -274,13 +256,14 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     components.push({ type: 1, components: [
       { type: 2, style: 2, label: 'Previous', custom_id: `expert-pulse:page:${digest}:${page - 1}`, disabled: page === 0 },
       { type: 2, style: 2, label: 'Next', custom_id: `expert-pulse:page:${digest}:${page + 1}`, disabled: page >= pageCount - 1 },
-      { type: 2, style: 2, label: 'Refresh', custom_id: `expert-pulse:refresh:${digest}:${page}` }
+      { type: 2, style: 2, label: 'Refresh', custom_id: `expert-pulse:refresh:${digest}:${page}` },
+      { type: 2, style: 1, label: 'Edit Kobe note', custom_id: `expert-pulse:edit:${digest}:${page}` }
     ] });
     return {
       allowedMentions: { parse: [] },
-      content: `Expert trends review · ${approved} approved · ${rejected} rejected · ${items.size - approved - rejected} pending · page ${page + 1}/${pageCount}. Choose a name under Approve or Reject. Only approved experts appear in VIP.`,
+      content: `Expert cheat sheet review · ${approved} approved · ${rejected} rejected · ${items.size - approved - rejected} pending · page ${page + 1}/${pageCount}. Choose a name under Approve or Reject. Only approved experts appear in VIP.${state.editor_note ? `\n\n**Kobe’s note:** ${state.editor_note}` : ''}`,
       embeds: payload.embeds.map((embed, index) => index === 0
-        ? { ...embed, title: 'Review Best Experts & Today’s Trends', footer: { text: `${REVIEW_MARKER} · aggregate · ${digest}` } }
+        ? { ...embed, title: 'Review Expert Cheat Sheet', footer: { text: `${REVIEW_MARKER} · aggregate · ${digest}` } }
         : embed),
       components
     };
@@ -313,6 +296,7 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     }
     state = { version: 3, digest: null, page: 0, review_message_id: reviewId,
       review_status: 'IDLE', vip_message_id: null, vip_status: 'IDLE', experts,
+      editor_note: state.editor_note || '',
       legacy_review_message_ids: [...new Set(oldCards.filter((id) => id !== reviewId))],
       legacy_vip_message_ids: [...new Set(oldPosts)] };
     await writeState(state);
@@ -349,9 +333,10 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
       return null;
     }
     const { expertNames, ...payload } = payloadFor(snapshot.report, approved);
+    payload.content = state.editor_note ? `**Kobe’s note:** ${state.editor_note}` : '';
     const digest = createHash('sha256').update(payload.embeds.map((embed) => embed.description).join('\n')).digest('hex').slice(0, 20);
     payload.embeds[0] = { ...payload.embeds[0], footer: { text: `${MARKER} · aggregate · ${digest}` } };
-    if (existing && existing.embeds?.[0]?.footer?.text === payload.embeds[0].footer.text
+    if (existing && existing.content === payload.content && existing.embeds?.[0]?.footer?.text === payload.embeds[0].footer.text
       && existing.embeds?.map((embed) => embed.description).join('\n') === payload.embeds.map((embed) => embed.description).join('\n')) return existing.id;
     if (!existing) {
       state.vip_status = 'SENDING';
@@ -473,7 +458,20 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     await card.edit(reviewPayload(snapshot, state));
     return { status: entry.status === 'APPROVED' ? 'PUBLISHED' : 'REJECTED', expert: item.name };
   }
-  return { refresh: () => locked(refreshUnlocked), decide: (args) => locked(() => decideUnlocked(args)) };
+  async function editNoteUnlocked({ digest, note, userId, ownerId, guildId, channelId }) {
+    if (!isApprover({ userId, ownerId })) throw new Error('Only Kobe or a configured pick approver can edit this note.');
+    const { source, review } = await channels();
+    if (guildId !== source.guild.id || channelId !== review.id) throw new Error('Edit the cheat sheet from its private review channel.');
+    const state = await readState();
+    if (state.version !== 3 || state.digest !== digest) throw new Error('This expert cheat sheet changed. Refresh it before editing.');
+    const cleaned = String(note || '').trim();
+    if (cleaned.length > 500) throw new Error('Keep Kobe’s note under 500 characters.');
+    state.editor_note = cleaned;
+    await writeState(state);
+    return refreshUnlocked();
+  }
+  return { refresh: () => locked(refreshUnlocked), decide: (args) => locked(() => decideUnlocked(args)),
+    editNote: (args) => locked(() => editNoteUnlocked(args)) };
 }
 
 module.exports = { MARKER, createExpertPulse, payloadFor, selections, summary, verifiedRecords };
