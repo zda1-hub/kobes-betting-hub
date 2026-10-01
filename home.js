@@ -112,6 +112,15 @@ document.querySelectorAll('.media-card').forEach((card) => {
 document.querySelectorAll('[data-rail]').forEach((rail) => {
   const track = rail.querySelector('.rail-track');
   const originals = [...track.children];
+  // Keep review screenshots still and fully readable on phones. The moving,
+  // cropped carousel makes long member messages difficult to read.
+  if (window.matchMedia('(max-width: 800px)').matches && rail.closest('#real-reviews-row, #more-reviews-row')) {
+    rail.addEventListener('click', (event) => {
+      const card = event.target.closest('.media-card');
+      if (card) openImage(card);
+    });
+    return;
+  }
   let loopWidth = 0;
   let autoScrollLeft = rail.scrollLeft;
   let writingAutoScroll = false;
