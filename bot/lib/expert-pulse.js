@@ -5,6 +5,7 @@ const { expertName } = require('./vip-expert-list');
 
 const MARKER = 'KBH expert-pulse-v1';
 const REVIEW_MARKER = 'KBH expert-pulse-review-v1';
+const MANUAL_MARKER = 'KBH manual-expert-v1';
 const OPERATING_TIME_ZONE = 'America/Phoenix';
 
 function operatingDate(instant) {
@@ -21,6 +22,32 @@ function keyFor(value) {
 
 function expertId(name) {
   return createHash('sha256').update(keyFor(name)).digest('hex').slice(0, 16);
+}
+
+function manualSubmission(name, message) {
+  const cleanName = String(name || '').replace(/\s+/g, ' ').trim();
+  const cleanMessage = String(message || '').replace(/\r\n?/g, '\n').trim();
+  if (cleanName.length < 3 || cleanName.length > 80 || !/[a-z]{2}/i.test(cleanName)
+    || /@everyone|@here|<@|https?:\/\//i.test(cleanName)) throw new Error('Enter a capper name of 3–80 characters.');
+  if (cleanMessage.length > 1500) throw new Error('Keep the capper message under 1,500 characters.');
+  if (/@everyone|@here|<@/i.test(cleanMessage)) throw new Error('Remove mentions from the capper message.');
+  return { name: cleanName, message: cleanMessage };
+}
+
+function manualPayload(entry, status = 'PENDING') {
+  const description = entry.message || 'Name submitted without additional notes.';
+  return {
+    allowedMentions: { parse: [] },
+    content: status === 'PENDING' ? 'Manual capper submission · awaiting Kobe’s decision. No win rate has been verified.'
+      : status === 'REJECTED' ? 'Manual capper submission rejected. Nothing was posted to VIP.'
+        : 'Kobe-approved manual capper submission. No win rate has been verified.',
+    embeds: [{ color: 0xFF7900, title: entry.name, description,
+      footer: { text: `${MANUAL_MARKER} · ${entry.id} · ${status.toLowerCase()}` } }],
+    components: status === 'PENDING' ? [{ type: 1, components: [
+      { type: 2, style: 3, label: 'Approve for VIP', custom_id: `expert-manual:approve:${entry.id}` },
+      { type: 2, style: 4, label: 'Reject', custom_id: `expert-manual:reject:${entry.id}` }
+    ] }] : []
+  };
 }
 
 function verifiedRecords(rows, paidChannelIds) {
@@ -257,7 +284,8 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
       { type: 2, style: 2, label: 'Previous', custom_id: `expert-pulse:page:${digest}:${page - 1}`, disabled: page === 0 },
       { type: 2, style: 2, label: 'Next', custom_id: `expert-pulse:page:${digest}:${page + 1}`, disabled: page >= pageCount - 1 },
       { type: 2, style: 2, label: 'Refresh', custom_id: `expert-pulse:refresh:${digest}:${page}` },
-      { type: 2, style: 1, label: 'Edit Kobe note', custom_id: `expert-pulse:edit:${digest}:${page}` }
+      { type: 2, style: 1, label: 'Edit Kobe note', custom_id: `expert-pulse:edit:${digest}:${page}` },
+      { type: 2, style: 2, label: 'Submit capper', custom_id: `expert-pulse:submit:${digest}:${page}` }
     ] });
     return {
       allowedMentions: { parse: [] },
@@ -470,8 +498,84 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     await writeState(state);
     return refreshUnlocked();
   }
+  async function submitManualUnlocked({ digest, name, message, userId, ownerId, guildId, channelId }) {
+    if (!isApprover({ userId, ownerId })) throw new Error('Only Kobe or a configured pick approver can submit a capper.');
+    const { source, review } = await channels();
+    if (guildId !== source.guild.id || channelId !== review.id) throw new Error('Submit cappers from the private expert review channel.');
+    const submitted = manualSubmission(name, message);
+    const state = await readState();
+    if (state.version !== 3 || !state.review_message_id || state.digest !== digest)
+      throw new Error('Refresh the expert cheat sheet before submitting a capper.');
+    state.manual ||= {};
+    const duplicate = Object.values(state.manual).find((entry) => keyFor(entry.name) === keyFor(submitted.name)
+      && entry.message === submitted.message && entry.status !== 'REJECTED');
+    if (duplicate) {
+      if (duplicate.status === 'REVIEW_SENDING') {
+        const recent = await review.messages.fetch({ limit: 100 });
+        const card = [...recent.values()].find((item) => item.embeds?.some((embed) =>
+          embed.footer?.text === `${MANUAL_MARKER} · ${duplicate.id} · pending`));
+        if (!card) throw new Error('Review card delivery is uncertain. Check the private channel before retrying.');
+        duplicate.review_message_id = card.id;
+        duplicate.status = 'PENDING';
+        await writeState(state);
+      }
+      return { status: 'DUPLICATE', name: duplicate.name };
+    }
+    const id = createHash('sha256').update(`${userId}\n${now()}\n${submitted.name}\n${submitted.message}`)
+      .digest('hex').slice(0, 16);
+    const entry = { id, ...submitted, status: 'REVIEW_SENDING', submitted_by: userId };
+    state.manual[id] = entry;
+    await writeState(state);
+    const card = await review.send(manualPayload(entry));
+    entry.review_message_id = card.id;
+    entry.status = 'PENDING';
+    await writeState(state);
+    return { status: 'PENDING', name: entry.name, messageId: card.id };
+  }
+  async function decideManualUnlocked({ customId, userId, ownerId, guildId, channelId, messageId }) {
+    const match = String(customId).match(/^expert-manual:(approve|reject):([a-f0-9]{16})$/);
+    if (!match) throw new Error('This manual capper action is invalid.');
+    if (!isApprover({ userId, ownerId })) throw new Error('Only Kobe or a configured pick approver can decide on a capper.');
+    const { source, review, destination } = await channels();
+    if (guildId !== source.guild.id || channelId !== review.id) throw new Error('Decide from the private expert review channel.');
+    const state = await readState();
+    const entry = state.manual?.[match[2]];
+    if (!entry || entry.review_message_id !== messageId) throw new Error('This capper review card is stale.');
+    if (entry.status === 'APPROVED' || entry.status === 'REJECTED') return { status: entry.status, name: entry.name };
+    const card = await review.messages.fetch(messageId).catch(() => null);
+    if (!card?.embeds?.some((embed) => embed.footer?.text === `${MANUAL_MARKER} · ${entry.id} · pending`))
+      throw new Error('The manual capper review card changed. Nothing was posted.');
+    if (match[1] === 'reject') {
+      if (entry.status !== 'PENDING') throw new Error('This capper submission needs attention before rejection.');
+      entry.status = 'REJECTED';
+      await writeState(state);
+      await card.edit(manualPayload(entry, 'REJECTED'));
+      return { status: 'REJECTED', name: entry.name };
+    }
+    if (!['PENDING', 'PUBLISHING'].includes(entry.status)) throw new Error('This capper submission needs attention before approval.');
+    let posted = entry.vip_message_id ? await destination.messages.fetch(entry.vip_message_id).catch(() => null) : null;
+    if (!posted) {
+      const recent = await destination.messages.fetch({ limit: 100 });
+      posted = [...recent.values()].find((item) => item.embeds?.some((embed) =>
+        embed.footer?.text === `${MANUAL_MARKER} · ${entry.id} · approved`)) || null;
+    }
+    if (!posted && entry.status === 'PUBLISHING') throw new Error('VIP delivery is uncertain. Check the VIP channel before retrying.');
+    if (!posted) {
+      entry.status = 'PUBLISHING';
+      await writeState(state);
+      posted = await destination.send(manualPayload(entry, 'APPROVED'));
+    }
+    entry.vip_message_id = posted.id;
+    entry.status = 'APPROVED';
+    await writeState(state);
+    await card.edit(manualPayload(entry, 'APPROVED'));
+    return { status: 'APPROVED', name: entry.name };
+  }
   return { refresh: () => locked(refreshUnlocked), decide: (args) => locked(() => decideUnlocked(args)),
-    editNote: (args) => locked(() => editNoteUnlocked(args)) };
+    editNote: (args) => locked(() => editNoteUnlocked(args)),
+    submitManual: (args) => locked(() => submitManualUnlocked(args)),
+    decideManual: (args) => locked(() => decideManualUnlocked(args)) };
 }
 
-module.exports = { MARKER, createExpertPulse, payloadFor, selections, summary, verifiedRecords };
+module.exports = { MARKER, MANUAL_MARKER, createExpertPulse, manualPayload, manualSubmission,
+  payloadFor, selections, summary, verifiedRecords };
