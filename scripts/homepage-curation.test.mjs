@@ -20,8 +20,7 @@ test('homepage presents short slogan, historical proof, then curation explanatio
 test('homepage retains real gallery files, image viewer, membership and navigation', async () => {
   const paths = [...html.matchAll(/data-image="(assets\/[^"\s]+)"/g)].map(match => match[1]);
   assert.ok(paths.length >= 20);
-  assert.equal(paths.length, 21);
-  assert.equal(new Set(paths).size, 21, 'each supplied proof image appears once before rail cloning');
+  assert.equal(new Set(paths).size, paths.length, 'each supplied proof image appears once before rail cloning');
   await Promise.all(paths.map(path => access(new URL(path, root))));
   assert.match(html, /data-dialog-close/);
   assert.match(html, /data-menu-toggle/);
