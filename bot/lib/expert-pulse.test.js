@@ -217,11 +217,12 @@ test('one review and one VIP message preserve separate expert decisions', async 
         result_verified_at: new Date(now).toISOString(), post_reference: `https://discord.com/channels/123/789/${id}` };
     }
     let gradedRows = [grade('Ben Burns', '111'), grade('Kelly In Vegas', '222'), grade('The Prez', '333')];
+    let nextMessageId = 0;
     function channel(id, map) {
       return { id, guild, permissionsFor: () => ({ has: () => false }),
         messages: { fetch: async (messageId) => typeof messageId === 'object' ? map : map.get(messageId) || null },
         send: async (payload) => {
-          const message = { id: `${id}-${map.size + 1}`, ...payload,
+          const message = { id: `${id}-${++nextMessageId}`, ...payload,
             edit: async (next) => { Object.assign(message, next); return message; },
             delete: async () => { map.delete(message.id); } };
           map.set(message.id, message);
@@ -280,6 +281,23 @@ test('one review and one VIP message preserve separate expert decisions', async 
     assert.equal((await pulse.refresh()).expertCount, 3);
     assert.match(card.content, /1 pending/);
     assert.equal(cards.size, 1);
+    const staleVipId = [...posts.keys()][0];
+    posts.delete(staleVipId);
+    const originalFetch = destination.messages.fetch;
+    destination.messages.fetch = async (target) => {
+      if (target === staleVipId) throw { code: 10008 };
+      return originalFetch(target);
+    };
+    assert.equal((await pulse.refresh()).status, 'UNCHANGED');
+    assert.equal(posts.size, 1);
+    assert.notEqual([...posts.keys()][0], staleVipId);
+    const replacementId = [...posts.keys()][0];
+    destination.messages.fetch = async (target) => {
+      if (target === replacementId) throw { code: 50013 };
+      return originalFetch(target);
+    };
+    await assert.rejects(pulse.refresh(), (error) => error.code === 50013);
+    assert.equal(posts.size, 1);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
