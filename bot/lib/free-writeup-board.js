@@ -56,14 +56,30 @@ function safeEvidenceStats(row) {
   // Preserve decimal points. Only accept a fact whose grammatical subject is
   // the selected player; merely mentioning that player in a comparison is unsafe.
   for (const sentence of source.split(/(?<!\d)\.|\.(?!\d)|[\n;!?]+/).map((item) => item.replace(/^\s*[-•*]\s*/, '').trim()).filter(Boolean)) {
+    const plain = sentence.replace(/[’]/g, "'");
     // A self-contained usage bullet has no competing named subject or wager.
     const usageBullet = sentence.match(/^(\d{1,2}) (targets|carries|receptions|attempts) in Weeks? \d{1,2}\s*[-–&]\s*\d{1,2}$/i);
     if (usageBullet && Number(usageBullet[1]) <= 60) add(usageBullet[1] + ' ' + usageBullet[2].toLowerCase() + ' across the cited weeks');
+    const season = plain.match(/^over in all (\d{1,2}) games this season, averaging (\d{1,3}(?:\.\d+)?) (receiving|rushing|passing) yards per game\b/i);
+    if (season && Number(season[1]) <= 25) {
+      add(`${season[1]}/${season[1]} in recent games`);
+      add(`${season[2]} ${season[3].toLowerCase()} yards per game in the cited sample`);
+    }
+    const covered = plain.match(/^he's covered this line in (\d{1,2})\s*\/\s*(\d{1,2}) games\b/i);
+    if (covered && Number(covered[2]) <= 25 && Number(covered[1]) <= Number(covered[2]))
+      add(`${covered[1]}/${covered[2]} in recent games`);
+    const recentGame = plain.match(/^he's coming off a (\d{1,3})-yard game with (\d{1,2}) receptions on (\d{1,2}) targets\b/i);
+    if (recentGame && Number(recentGame[2]) <= Number(recentGame[3]) && Number(recentGame[3]) <= 30 &&
+        /receiv/i.test(`${row.published_line || ''} ${row.selection || ''}`))
+      add(`${recentGame[1]} receiving yards and ${recentGame[3]} targets in the cited game`);
     const mention = sentence.match(subjectMention);
     if (!mention) continue;
     const context = sentence.slice(mention[0].length).toLowerCase();
     // Forecasts and negated statements are not historical results.
     if (/\b(?:not|never|projected|expected|could|would|should|will|might|may)\b/.test(context)) continue;
+    const targetCatches = context.match(/^has turned (\d{1,2}) targets into (\d{1,2}) catches\b.*\bover his last two games\b/);
+    if (targetCatches && Number(targetCatches[2]) <= Number(targetCatches[1]) && Number(targetCatches[1]) <= 40)
+      add(`${targetCatches[1]} targets and ${targetCatches[2]} catches across two cited games`);
     const ratio = context.match(/^(?:has\s+)?(?:went over|went under|hit|cleared|covered)(?:\s+in)?\s+(\d{1,2})\s*(?:\/|of)\s*(\d{1,2})(?![\d./])\b/);
     if (ratio) {
       const hits = Number(ratio[1]);

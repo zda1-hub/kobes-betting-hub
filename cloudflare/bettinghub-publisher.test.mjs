@@ -60,7 +60,7 @@ test('VIP preview feed strips all private fields and expires by operating date',
   const env = { FREE_PICK_KV: memoryKv(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret' };
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const input = { date, previews: [{ sport: 'football', topics: ['Recent production', 'Giants allow 8 catches'],
-    stats: ['4/5 in recent games', 'Higbee had 8 targets', 'Recent yardage outputs: 75 and 101'],
+    stats: ['4/5 in recent games', 'Higbee had 8 targets', 'Recent yardage outputs: 75 and 101', '15 targets and 12 catches across two cited games', '67 receiving yards and 4 targets in the cited game'],
     selection: 'Higbee Over 4.5', team: 'Rams', market: 'receptions' }] };
   const put = await worker.fetch(new Request('https://publisher.test/api/vip-preview/current', { method: 'PUT', headers: { authorization: 'Bearer fixture-secret', 'content-type': 'application/json' }, body: JSON.stringify(input) }), env);
   assert.equal(put.status, 200);
@@ -69,7 +69,7 @@ test('VIP preview feed strips all private fields and expires by operating date',
   assert.equal(response.status, 200);
   assert.doesNotMatch(body, /Higbee|Giants|Rams|Over 4\.5|receptions/);
   assert.deepEqual(JSON.parse(body).previews[0].topics, ['Recent production']);
-  assert.deepEqual(JSON.parse(body).previews[0].stats, ['4/5 in recent games', 'Recent yardage outputs: 75 and 101']);
+  assert.deepEqual(JSON.parse(body).previews[0].stats, ['4/5 in recent games', 'Recent yardage outputs: 75 and 101', '15 targets and 12 catches across two cited games']);
   const unauthorized = await worker.fetch(new Request('https://publisher.test/api/vip-preview/current', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) }), env);
   assert.equal(unauthorized.status, 401);
 });

@@ -106,6 +106,22 @@ test('handles the current approved bullet formats without copying player or team
   assert.doesNotMatch(JSON.stringify(previews), /Fannin|Buccaneers|Tate|Barnett|UCF/);
 });
 
+test('turns the current football writeup formats into anonymous source-backed stats', () => {
+  const row = (selection, published_line, teaser_source) => ({ pick_id: selection, selection, published_line, teaser_source,
+    operating_date: '2026-10-01', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football' });
+  const previews = publicPreviews([
+    row('Denzel Boston', 'Over 37.5 receiving yards', '- Over in all 3 games this season, averaging 65 receiving yards per game\n- Facing a depleted Steelers secondary'),
+    row('Darnell Washington', 'Over 14.5 receiving yards', '- He’s covered this line in 2/3 games to start the year\n- He’s coming off a 67-yard game with 3 receptions on 4 targets'),
+    row('Harold Fannin Jr.', 'Over 4.5 receptions', '- Fannin has turned 15 targets into 12 catches, 125 yards and 2 touchdowns over his last two games')
+  ], '2026-10-01');
+  assert.deepEqual(previews.map(item => item.stats), [
+    ['3/3 in recent games', '65 receiving yards per game in the cited sample'],
+    ['2/3 in recent games', '67 receiving yards and 4 targets in the cited game'],
+    ['15 targets and 12 catches across two cited games']
+  ]);
+  assert.doesNotMatch(JSON.stringify(previews), /Boston|Washington|Fannin|Steelers|Browns/);
+});
+
 test('stays empty until a writeup is published', async () => {
   assert.equal(await freeWriteupBoardPayload([], '2026-09-20'), null);
 });
