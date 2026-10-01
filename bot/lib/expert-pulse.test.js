@@ -4,7 +4,59 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const { createExpertPulse, payloadFor, selections, summary, verifiedRecords } = require('./expert-pulse');
+const { createExpertPulse, manualSubmission, payloadFor, selections, summary, verifiedRecords } = require('./expert-pulse');
+
+test('manual capper gets a private approval card and only publishes after approval', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'manual-expert-'));
+  try {
+    const guild = { id: '123', roles: { everyone: { id: 'everyone' } } };
+    const cards = new Map();
+    const posts = new Map();
+    const channel = (id, map) => ({ id, guild, permissionsFor: () => ({ has: () => false }),
+      messages: { fetch: async (target) => typeof target === 'object' ? map : map.get(target) || null },
+      send: async (payload) => {
+        const item = { id: `${id}-${map.size + 1}`, ...payload,
+          edit: async (next) => { Object.assign(item, next); return item; } };
+        map.set(item.id, item);
+        return item;
+      } });
+    const source = { id: '456', guild, messages: { fetch: async () => new Map() } };
+    const review = channel('567', cards);
+    const destination = channel('789', posts);
+    const pulse = createExpertPulse({ sourceChannelFor: async () => source,
+      reviewChannelFor: async () => review, destinationChannelFor: async () => destination,
+      isApprover: ({ userId }) => userId === 'kobe',
+      stateFile: path.join(directory, 'state.json') });
+    await pulse.refresh();
+    const aggregate = [...cards.values()][0];
+    const submit = aggregate.components.flatMap((row) => row.components).find((button) => button.label === 'Submit capper');
+    const digest = submit.custom_id.split(':')[2];
+    const input = { digest, name: 'New Capper', message: 'A note from Kobe, without any claimed record.',
+      userId: 'kobe', ownerId: 'kobe', guildId: '123', channelId: '567' };
+    await assert.rejects(pulse.submitManual({ ...input, userId: 'other' }), /Only Kobe/);
+    const result = await pulse.submitManual(input);
+    assert.equal(result.status, 'PENDING');
+    assert.equal(cards.size, 2);
+    assert.equal(posts.size, 0);
+    const card = cards.get(result.messageId);
+    assert.match(card.embeds[0].description, /A note from Kobe/);
+    assert.match(card.content, /No win rate has been verified/);
+    assert.equal((await pulse.submitManual(input)).status, 'DUPLICATE');
+    const approve = card.components[0].components[0].custom_id;
+    await assert.rejects(pulse.decideManual({ customId: approve, userId: 'other', ownerId: 'kobe',
+      guildId: '123', channelId: '567', messageId: card.id }), /Only Kobe/);
+    assert.equal((await pulse.decideManual({ customId: approve, userId: 'kobe', ownerId: 'kobe',
+      guildId: '123', channelId: '567', messageId: card.id })).status, 'APPROVED');
+    assert.equal(posts.size, 1);
+    assert.match([...posts.values()][0].content, /No win rate has been verified/);
+    assert.equal((await pulse.decideManual({ customId: approve, userId: 'kobe', ownerId: 'kobe',
+      guildId: '123', channelId: '567', messageId: card.id })).status, 'APPROVED');
+    assert.equal(posts.size, 1);
+    await pulse.refresh();
+    assert.equal(posts.size, 1);
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
+  assert.throws(() => manualSubmission('Ben Burns', '@everyone do this'), /Remove mentions/);
+});
 
 test('counts structured picks from all qualifying posts today, not last week', () => {
   const now = Date.parse('2026-09-21T18:00:00Z');

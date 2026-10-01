@@ -2692,6 +2692,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
   if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('expert-pulse:')) {
     try {
+      if (interaction.isButton() && /^expert-pulse:submit:[a-f0-9]{20}:\d+$/.test(interaction.customId)) {
+        const digest = interaction.customId.split(':')[2];
+        const modal = new ModalBuilder().setCustomId(`expert-pulse-submit:${digest}`).setTitle('Submit a capper for review');
+        const name = new TextInputBuilder().setCustomId('name').setLabel('Capper name')
+          .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80);
+        const message = new TextInputBuilder().setCustomId('message').setLabel('Message or notes (optional)')
+          .setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(1500);
+        modal.addComponents(new ActionRowBuilder().addComponents(name), new ActionRowBuilder().addComponents(message));
+        await interaction.showModal(modal);
+        return;
+      }
       if (interaction.isButton() && /^expert-pulse:edit:[a-f0-9]{20}:\d+$/.test(interaction.customId)) {
         const digest = interaction.customId.split(':')[2];
         const modal = new ModalBuilder().setCustomId(`expert-pulse-edit:${digest}`).setTitle('Edit Kobe’s cheat-sheet note');
@@ -2713,6 +2724,40 @@ client.on(Events.InteractionCreate, async (interaction) => {
           : 'Combined expert trends refreshed. Each expert still requires a separate decision.');
     } catch (error) {
       await respondToInteractionFailure(interaction, error.message || 'Expert pulse review needs attention.', 'Expert pulse interaction');
+    }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('expert-pulse-submit:')) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      if (!expertPulse) throw new Error('Expert cheat sheet is not configured.');
+      const digest = interaction.customId.match(/^expert-pulse-submit:([a-f0-9]{20})$/)?.[1];
+      if (!digest) throw new Error('This capper form is invalid.');
+      const result = await expertPulse.submitManual({ digest,
+        name: interaction.fields.getTextInputValue('name'),
+        message: interaction.fields.getField('message', false)?.value || '',
+        userId: interaction.user.id, ownerId: interaction.guild?.ownerId,
+        guildId: interaction.guildId, channelId: interaction.channelId });
+      await interaction.editReply(result.status === 'DUPLICATE'
+        ? `${result.name} already has a pending or approved card in this channel.`
+        : `${result.name} is formatted in the private review channel. Approve or reject the card there.`);
+    } catch (error) {
+      await respondToInteractionFailure(interaction, error.message || 'Could not format this capper.', 'Manual expert submission');
+    }
+    return;
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('expert-manual:')) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      if (!expertPulse) throw new Error('Expert cheat sheet is not configured.');
+      const result = await expertPulse.decideManual({ customId: interaction.customId,
+        userId: interaction.user.id, ownerId: interaction.guild?.ownerId,
+        guildId: interaction.guildId, channelId: interaction.channelId, messageId: interaction.message.id });
+      await interaction.editReply(result.status === 'APPROVED'
+        ? `${result.name} is approved and posted to the private VIP channel as a manual submission.`
+        : `${result.name} was rejected; nothing was posted to VIP.`);
+    } catch (error) {
+      await respondToInteractionFailure(interaction, error.message || 'Could not decide this capper.', 'Manual expert decision');
     }
     return;
   }
