@@ -38,6 +38,7 @@ test('keeps split-market lines visible while hiding identities and odds', () => 
   assert.deepEqual(previews, [{
     number: 1, emoji: '⚾', sport: 'baseball',
     topics: ['Recent production', 'Matchup context'],
+    stats: ['4/4 in recent games', '2/2 in the stated matchup sample'],
     prop: 'Over 14.5 outs',
     breakdown: '4/4 in recent games; 2/2 in the stated matchup sample.'
   }]);

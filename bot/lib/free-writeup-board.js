@@ -124,7 +124,7 @@ function publicPreviews(rows, date) {
     const [emoji, sport] = sportLabel(row);
     const topics = safeEvidenceTopics(row);
     const stats = safeEvidenceStats(row);
-    return { number: index + 1, emoji, sport, topics, prop: publicPropLine(row), breakdown: shortBreakdown(stats, topics) };
+    return { number: index + 1, emoji, sport, topics, stats, prop: publicPropLine(row), breakdown: shortBreakdown(stats, topics) };
   });
 }
 
