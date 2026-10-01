@@ -241,6 +241,10 @@ function looksLikeEngagementBait(note) {
 function isUsefulSupport(note, pickTerms, packet) {
   const normalized = normalizedText(note);
   if (!normalized) return false;
+  // Short exhortations and forecasts are not factual support, even when four
+  // other lines make the card pass the numeric evidence gate.
+  if (/^(?:sneaky|hammer|feed the beast|love this|must play|strong play|easy money|take it|run it|fire it|🔒)$/i.test(String(note || '').trim())) return false;
+  if (/\b(?:i expect|i think|i believe|i feel|i'll gladly|should give us|will give (?:him|her|them|us)|forced to play)\b/i.test(note)) return false;
   if (/^#[\w]+\s+(?:vs\.?\s+)?#[\w]+$/i.test(String(note || '').trim())) return false;
   if (looksLikeEngagementBait(note)) return false;
   if (/\b(?:pick of the day|play of the day|best bet|easy winner|cash|sweep|lock|banger|bang bang|two leg|2 leg|parlays?|lets catch|let s catch|lets go|let s go|winner|profit|payout|refund|power play|ladder|make \d+\s*x|\d+\s*\$?\s*to\s+(?:win|one person)|you(?:'|’)ll love|you gonna love|like the demons|link on post|slide for|nfl is back|football is back|baseball is back|nba is back|nhl is back)\b/.test(normalized)) return false;
