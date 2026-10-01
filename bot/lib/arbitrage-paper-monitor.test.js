@@ -77,8 +77,29 @@ test('successful routine scans log their time, window, counts and feed quota', a
   assert.equal(logs.length, 1);
   assert.deepEqual(JSON.parse(logs[0].replace(/^Arbitrage scan: /, '')), {
     scannedAt: '2026-09-23T18:00:00.000Z', window: '08:00-15:00', eventCount: 0,
-    opportunityCount: 0, remaining: '99', used: '1'
+    positiveCount: 0, aboveThresholdCount: 0, opportunityCount: 0,
+    minimumEdgePercent: 2, bookmakerCount: 9, remaining: '99', used: '1'
   });
+});
+
+test('scan receipt separates a positive edge from threshold and quote-age filters', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
+  const nearZero = structuredClone(event);
+  nearZero.bookmakers[0].markets[0].outcomes[0].price = 2.01;
+  nearZero.bookmakers[1].markets[0].outcomes[1].price = 2.01;
+  const logs = [];
+  const monitor = createArbitragePaperMonitor({ apiKey: 'test',
+    reviewChannel: { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' }, send: async () => {} },
+    stateFile: path.join(root, 'state.json'),
+    fetchImpl: async () => new Response(JSON.stringify([nearZero]), { status: 200 }),
+    now: () => new Date('2026-09-23T18:00:00Z'), windows: ['08:00-15:00'],
+    log: message => logs.push(message) });
+  await monitor.start();
+  await monitor.stop();
+  const receipt = JSON.parse(logs[0].replace(/^Arbitrage scan: /, ''));
+  assert.equal(receipt.positiveCount, 1);
+  assert.equal(receipt.aboveThresholdCount, 0);
+  assert.equal(receipt.opportunityCount, 0);
 });
 
 test('Kobe can approve a current card in dry-run mode without member publication', async () => {

@@ -175,6 +175,16 @@ async function handleRequest(request, env) {
 const VIP_PREVIEW_KEY = 'vip-preview/current.json';
 const VIP_TOPICS = new Set(['Usage and opportunity', 'Recent production', 'Matchup context', 'Availability context']);
 const VIP_SPORTS = new Map([['football', '🏈'], ['baseball', '⚾'], ['basketball', '🏀'], ['hockey', '🏒'], ['soccer', '⚽'], ['sports', '🎯']]);
+const VIP_STAT_PATTERNS = [
+  /^Backup quarterback noted in the matchup$/,
+  /^Writeup considers a run-heavy game plan$/,
+  /^\d{1,2} (?:targets|carries|receptions|attempts) across the cited weeks$/,
+  /^\d{1,2}\/\d{1,2} in (?:the cited sample|the stated matchup sample|the stated lineup condition|recent home games|recent away games|recent games)$/,
+  /^\d{1,2} targets in the cited game$/,
+  /^Recent yardage outputs: \d{1,3} and \d{1,3}$/,
+  /^\d{1,2} (?:targets|carries|receptions|attempts) in the cited sample$/,
+  /^\d{1,3}(?:\.\d+)? (?:receiving|rushing|passing) yards per game in the cited sample$/
+];
 
 async function putVipPreview(request, env) {
   if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({ error: 'Unauthorized' }, 401);
@@ -184,12 +194,14 @@ async function putVipPreview(request, env) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input?.date || '') || !Array.isArray(input?.previews) || input.previews.length > 40) {
     return json({ error: 'Invalid preview date or list' }, 400);
   }
-  // Rebuild from a tiny allowlist. Never store the incoming source writeups,
-  // player/team names, markets, lines, or odds in the public website feed.
+  // Rebuild from a tiny allowlist. Numeric evidence must match a bot-generated
+  // sentence template; never store source writeups, names, markets, lines, or odds.
   const previews = input.previews.map((item, index) => {
     const sport = VIP_SPORTS.has(item?.sport) ? item.sport : 'sports';
     const topics = Array.isArray(item?.topics) ? [...new Set(item.topics.filter(topic => VIP_TOPICS.has(topic)))].slice(0, 3) : [];
-    return { number: index + 1, sport, emoji: VIP_SPORTS.get(sport), topics };
+    const stats = Array.isArray(item?.stats) ? [...new Set(item.stats.filter(stat =>
+      typeof stat === 'string' && VIP_STAT_PATTERNS.some(pattern => pattern.test(stat))))].slice(0, 3) : [];
+    return { number: index + 1, sport, emoji: VIP_SPORTS.get(sport), topics, stats };
   });
   const board = { date: input.date, previews, updatedAt: new Date().toISOString() };
   await env.FREE_PICK_KV.put(VIP_PREVIEW_KEY, JSON.stringify(board));

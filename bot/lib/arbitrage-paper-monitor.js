@@ -196,10 +196,13 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
     try {
       const { events, remaining, used, quotaExhausted: exhausted } = await fetchOdds();
       if (exhausted) quotaExhausted = true;
-      const opportunities = findArbitrage(events, { minimumEdgePercent, bankroll })
-        .filter(item => freshOpportunity(item, now()));
+      const positive = findArbitrage(events, { minimumEdgePercent: 0, bankroll });
+      const aboveThreshold = positive.filter(item => item.edgePercent >= minimumEdgePercent);
+      const opportunities = aboveThreshold.filter(item => freshOpportunity(item, now()));
       const scanRecord = { scannedAt: now().toISOString(), window, eventCount: events.length,
-        opportunityCount: opportunities.length, remaining, used };
+        positiveCount: positive.length, aboveThresholdCount: aboveThreshold.length,
+        opportunityCount: opportunities.length, minimumEdgePercent, bookmakerCount: bookmakers.length,
+        remaining, used };
       state.scans.push(scanRecord);
       state.scans = state.scans.slice(-500);
       for (const opportunity of opportunities) {
