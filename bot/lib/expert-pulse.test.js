@@ -169,20 +169,31 @@ test('large expert histories stay within the Discord embed description limit', (
   assert.match(description, /Verified Expert 120/);
 });
 
-test('refuses to draft or publish when review or VIP destination privacy is public or unverified', async () => {
+test('keeps review private and prepares a dated review even when VIP privacy is unverified', async () => {
   const guild = { id: '123', roles: { everyone: { id: 'everyone' } } };
-  const source = { id: '456', guild };
+  const source = { id: '456', guild, messages: { fetch: async () => new Map() } };
   for (const visible of [true, undefined]) {
     const destination = { id: '789', guild, permissionsFor: () => ({ has: () => visible }) };
-    const review = { id: '567', guild, permissionsFor: () => ({ has: () => false }) };
+    const review = { id: '567', guild, permissionsFor: () => ({ has: () => false }),
+      messages: { fetch: async () => new Map() }, send: async payload => ({ id: 'review-1', ...payload }) };
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'expert-pulse-privacy-'));
     const pulse = createExpertPulse({
       sourceChannelFor: async () => source,
       reviewChannelFor: async () => review,
       destinationChannelFor: async () => destination,
-      stateFile: '/tmp/unused-expert-pulse-state.json'
+      stateFile: path.join(directory, 'state.json'), now: () => Date.parse('2026-10-02T14:00:00Z')
     });
-    await assert.rejects(pulse.refresh(), /privacy could not be verified/);
+    try {
+      const result = await pulse.refresh();
+      assert.equal(result.status, 'VIP_HELD');
+      assert.match(result.reason, /VIP destination privacy could not be verified/);
+    } finally { await fs.rm(directory, { recursive: true, force: true }); }
   }
+  const publicReview = { id: '567', guild, permissionsFor: () => ({ has: () => true }) };
+  const pulse = createExpertPulse({ sourceChannelFor: async () => source,
+    reviewChannelFor: async () => publicReview, destinationChannelFor: async () => ({ id: '789', guild }),
+    stateFile: '/tmp/unused-expert-pulse-state.json' });
+  await assert.rejects(pulse.refresh(), /review privacy could not be verified/);
 });
 
 test('can reuse a private expert source as the VIP destination while keeping review separate', async () => {

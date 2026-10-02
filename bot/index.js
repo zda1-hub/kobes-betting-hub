@@ -2610,10 +2610,15 @@ client.once(Events.ClientReady, async (readyClient) => {
   }
   if (refreshExpertPulse) {
     void refreshExpertPulse()
-      .then((receipt) => console.log('VIP expert pulse receipt:', JSON.stringify(receipt)))
+      .then((receipt) => receipt.status === 'VIP_HELD'
+        ? console.error('VIP expert pulse needs attention:', receipt.reason)
+        : console.log('VIP expert pulse receipt:', JSON.stringify(receipt)))
       .catch((error) => console.error('VIP expert pulse needs attention:', error.message));
     setInterval(() => void refreshExpertPulse()
-      .then((receipt) => { if (receipt.status !== 'UNCHANGED') console.log('VIP expert pulse receipt:', JSON.stringify(receipt)); })
+      .then((receipt) => {
+        if (receipt.status === 'VIP_HELD') console.error('VIP expert pulse needs attention:', receipt.reason);
+        else if (receipt.status !== 'UNCHANGED') console.log('VIP expert pulse receipt:', JSON.stringify(receipt));
+      })
       .catch((error) => console.error('VIP expert pulse needs attention:', error.message)), 300000);
   }
   try {
