@@ -21,8 +21,8 @@ const writeupRecapWorkflow = {
   ...(recapWorkflow.writeup || {})
 };
 const recapWorkflowConfigs = [exclusiveRecapWorkflow, writeupRecapWorkflow].filter((config) => config.enabled);
-const { freePickRecapRows } = require('./lib/free-recap');
-const { buildFreePickResults, freeRows } = require('./lib/free-pick-results');
+const { buildFreePickRecapEmbed, freePickRecapRows } = require('./lib/free-recap');
+const { buildFreePickResults, freeRows, verified } = require('./lib/free-pick-results');
 const { syncFreePickResultReplies, resultReplyConfig } = require('./lib/free-pick-result-replies');
 const { buildPublicResults } = require('./lib/public-results');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
@@ -102,7 +102,7 @@ const recapChannelId = process.env.RECAP_CHANNEL_ID || defaultChannelId;
 const welcomeChannelId = process.env.WELCOME_CHANNEL_ID;
 const welcomeRoleId = process.env.WELCOME_ROLE_ID;
 const freePickChannelId = process.env.FREE_PICK_CHANNEL_ID;
-const freeRecapChannelId = process.env.FREE_RECAP_CHANNEL_ID || recapChannelId;
+const freeRecapChannelId = process.env.FREE_RECAP_CHANNEL_ID;
 const freeRecapStatePath = path.join(path.dirname(pickLogPath()), 'free-recap-state.json');
 const dailyWriteupsChannelId = process.env.DAILY_WRITEUPS_CHANNEL_ID;
 const configuredFreeWriteupsChannelId = process.env.FREE_WRITEUPS_CHANNEL_ID;
@@ -769,7 +769,7 @@ function pacificClock(date = new Date()) {
 }
 
 function freeRecapEnabled() {
-  // This is an administrative email generated entirely from the canonical log.
+  // Both the administrative recap and the public free-pick results use the canonical log.
   return process.env.FREE_RECAP_ENABLED !== 'false';
 }
 
@@ -943,6 +943,33 @@ async function queueMorningRecapReview({ date, rows, attempts, state }) {
   console.log(`Private ${window.label} recap review for ${date} queued in ${review.parts.length} part(s); unresolved results remain explicitly pending.`);
 }
 
+async function publishDueFreeResults(date) {
+  if (!freeRecapChannelId || !freePickChannelId) return;
+  const morningAt = process.env.RECAP_MORNING_REVIEW_AT || '07:00';
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(morningAt)) throw new Error('Invalid morning recap time.');
+  if (date > previousPacificOperatingDate() || arizonaTimeNow() < morningAt) return;
+  const rows = await readPickLog();
+  const picks = freePickRecapRows(rows, date, freePickChannelId);
+  if (!picks.length) return;
+  const embed = buildFreePickRecapEmbed({ date, rows, freeChannelId: freePickChannelId });
+  const channel = await client.channels.fetch(freeRecapChannelId);
+  if (!channel?.isTextBased()) throw new Error('FREE_RECAP_CHANNEL_ID must be a text channel.');
+  const state = await readFreeRecapState();
+  const prior = state.dates?.[date] || {};
+  let message = prior.public_results_message_id
+    ? await channel.messages.fetch(prior.public_results_message_id).catch(() => null)
+    : null;
+  if (!message) {
+    const recent = await channel.messages.fetch({ limit: 100 });
+    message = recent.find((item) => item.author.id === client.user.id && item.embeds.some((itemEmbed) => itemEmbed.title === embed.title));
+  }
+  if (message?.embeds[0]?.description === embed.description && prior.public_results_message_id === message.id) return;
+  if (message) await message.edit({ embeds: [embed] });
+  else message = await channel.send({ embeds: [embed] });
+  state.dates = { ...(state.dates || {}), [date]: { ...prior, public_results_message_id: message.id, public_results_pending: picks.filter((row) => !verified(row)).length, public_results_updated_at: new Date().toISOString() } };
+  await saveFreeRecapState(state);
+}
+
 async function publishDueFreeRecap(date) {
   if (freeRecapInProgress || (!recapEmailConfigured() && !recapWorkflow.enabled)) return;
   if (!reviewWindow({ date, today: pacificOperatingDate(), yesterday: previousPacificOperatingDate(), time: arizonaTimeNow(), morningAt: process.env.RECAP_MORNING_REVIEW_AT || '07:00' })) return;
@@ -1090,20 +1117,29 @@ function startFreeRecapSchedule() {
     console.log('Automatic daily recaps are disabled. Set FREE_RECAP_ENABLED=true to resume them.');
     return;
   }
-  if (!recapEmailConfigured() && !recapWorkflow.enabled) {
+  if (!recapEmailConfigured() && !recapWorkflow.enabled && !freeRecapChannelId) {
     console.warn('Automatic daily recap emails are unavailable: configure the recap notification queue and Kobe recipient.');
     return;
   }
   if (!freeRecapCloseAt()) return;
   const run = () => void (async () => {
     // Send only the previous operating day's verified recap in the morning.
-    await publishDueFreeRecap(previousPacificOperatingDate());
+    const date = previousPacificOperatingDate();
+    try {
+      const state = await readFreeRecapState();
+      const lateDates = Object.entries(state.dates || {})
+        .filter(([oldDate, value]) => oldDate < date && value.public_results_message_id && value.public_results_pending > 0)
+        .map(([oldDate]) => oldDate);
+      for (const publicDate of [...lateDates, date]) await publishDueFreeResults(publicDate);
+    }
+    catch (error) { console.error(`Public free-pick results failed: ${error instanceof Error ? error.message : error}`); }
+    await publishDueFreeRecap(date);
   })();
   const interval = freeRecapIntervalMs();
   freeRecapTimer = setInterval(run, interval);
   run();
     console.log(`Automatic official-pick recaps check every ${Math.round(interval / 60000)} minute(s) after ${process.env.RECAP_MORNING_REVIEW_AT || '07:00'} Arizona for the previous operating day; final delivery still waits for verified results.`);
-    console.log('Private recap review and Discord approvals become eligible in the morning; no invented results or automatic public recap posts.');
+    console.log('Private recap approvals and verified public free-pick results become eligible in the morning; unresolved results remain pending.');
     if (recapApprovalWorkflows.length) console.log('Writeup and exclusive recaps queue to separate private approval channels. Only Kobe’s exact-card approval can send to either member recap destination; pending results stay blocked.');
 }
 
