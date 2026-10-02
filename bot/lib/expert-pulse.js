@@ -194,7 +194,7 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
     expertNames: [...new Set([...yesterday, ...fiveDays, ...football, ...baseball, ...allTime].map((item) => item.name))],
     embeds: descriptions.map((description, index) => ({
       color: 0xFF7900,
-      title: index ? 'Expert Cheat Sheet · continued' : 'Expert Cheat Sheet',
+      title: index ? `Expert Cheat Sheet · ${report.date} · continued` : `Expert Cheat Sheet · ${report.date}`,
       description,
       ...(index === 0 ? { footer: { text: `${MARKER} · Verified paid pick log · ${coverage}` } } : {})
     }))
@@ -232,10 +232,8 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
       || review.id === source.id || review.id === destination.id) {
       throw new Error('Expert pulse review must be separate from the source and VIP destination in the same server.');
     }
-    for (const [name, channel] of [['review', review], ['VIP destination', destination]]) {
-      if (channel.permissionsFor(channel.guild.roles.everyone)?.has('ViewChannel') !== false) {
-        throw new Error(`Expert pulse ${name} privacy could not be verified; refusing to publish VIP selections.`);
-      }
+    if (review.permissionsFor(review.guild.roles.everyone)?.has('ViewChannel') !== false) {
+      throw new Error('Expert pulse review privacy could not be verified; refusing to prepare the private sheet.');
     }
     return { source, review, destination };
   }
@@ -341,6 +339,9 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     return state;
   }
   async function syncVip(snapshot, state, destination) {
+    if (destination.permissionsFor(destination.guild.roles.everyone)?.has('ViewChannel') !== false) {
+      throw new Error('Expert pulse VIP destination privacy could not be verified; refusing to publish VIP selections.');
+    }
     const approved = snapshot.records.filter((record) => {
       const key = expertId(record.name);
       return state.experts[key]?.status === 'APPROVED'
@@ -465,7 +466,13 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
       await writeState(state);
       changed = true;
     }
-    await syncVip(snapshot, state, destination);
+    try {
+      await syncVip(snapshot, state, destination);
+    } catch (error) {
+      if (!/VIP destination privacy could not be verified/.test(error.message || '')) throw error;
+      return { status: 'VIP_HELD', expertCount: snapshot.items.size, messageId: card.id,
+        reason: error.message };
+    }
     for (const id of state.legacy_vip_message_ids || []) {
       const oldPost = await managedVipMessage(destination, id);
       if (oldPost) await oldPost.delete();
