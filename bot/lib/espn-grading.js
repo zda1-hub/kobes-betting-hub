@@ -9,6 +9,7 @@ const LEAGUES = {
   mlb: { path: 'baseball/mlb', url: 'https://www.espn.com/mlb/game/_/gameId/' },
   nfl: { path: 'football/nfl', url: 'https://www.espn.com/nfl/game/_/gameId/' },
   ncaaf: { path: 'football/college-football', url: 'https://www.espn.com/college-football/game/_/gameId/' },
+  nhl: { path: 'hockey/nhl', url: 'https://www.espn.com/nhl/game/_/gameId/' },
   nba: { path: 'basketball/nba', url: 'https://www.espn.com/nba/game/_/gameId/' },
   wnba: { path: 'basketball/wnba', url: 'https://www.espn.com/wnba/game/_/gameId/' },
   ncaab: { path: 'basketball/mens-college-basketball', url: 'https://www.espn.com/mens-college-basketball/game/_/gameId/' },
@@ -30,6 +31,7 @@ function leagueFor(row) {
   if (row.league_from_group) return null;
   const value = `${row.league || ''} ${row.sport || ''}`.toLowerCase();
   if (/\bmlb\b|baseball/.test(value)) return LEAGUES.mlb;
+  if (/\bnhl\b|hockey/.test(value)) return LEAGUES.nhl;
   if (/\bncaaf\b|\bcfb\b|college football/.test(value)) return LEAGUES.ncaaf;
   if (/\bnfl\b|football/.test(value)) return LEAGUES.nfl;
   if (/\bwnba\b/.test(value)) return LEAGUES.wnba;
