@@ -82,6 +82,26 @@ test('grades a final moneyline and keeps unsupported props pending', async () =>
   assert.equal(unsupported.status, 'PENDING');
 });
 
+test('grades a final NHL moneyline from the matching game', async () => {
+  const nhlEvent = {
+    id: '401891817', status: { type: { completed: true } },
+    competitions: [{ competitors: [
+      { team: { displayName: 'Philadelphia Flyers', shortDisplayName: 'Flyers', abbreviation: 'PHI' } },
+      { team: { displayName: 'New Jersey Devils', shortDisplayName: 'Devils', abbreviation: 'NJ' } }
+    ] }]
+  };
+  const nhlSummary = { header: { competitions: [{ id: '401891817', status: { type: { completed: true } }, competitors: [
+    { team: { displayName: 'Philadelphia Flyers', shortDisplayName: 'Flyers', abbreviation: 'PHI' }, winner: false, score: '2' },
+    { team: { displayName: 'New Jersey Devils', shortDisplayName: 'Devils', abbreviation: 'NJ' }, winner: true, score: '3' }
+  ] }] } };
+  const grade = await gradePickFromEspn({ operating_date: '2026-10-01', league: 'NHL',
+    event: 'Philadelphia Flyers at New Jersey Devils', selection: 'Devils ML', result: 'PENDING' },
+  { fetchImpl: async url => new Response(JSON.stringify(url.includes('/summary?') ? nhlSummary : { events: [nhlEvent] })) });
+  assert.equal(grade.status, 'GRADED');
+  assert.equal(grade.result, 'W');
+  assert.equal(grade.source, 'https://www.espn.com/nhl/game/_/gameId/401891817');
+});
+
 test('resolves an exact straight-team wager from a unique same-day schedule without an opponent', async () => {
   const grade = await gradePickFromEspn({ operating_date: '2026-09-07', league: 'MLB',
     selection: 'Brewers ML -110 (1U)', result: 'PENDING' }, { fetchImpl: espnFetch });
