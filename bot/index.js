@@ -2711,14 +2711,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
   if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('expert-pulse:')) {
     try {
-      if (interaction.isButton() && /^expert-pulse:approve-button:[a-f0-9]{20}:\d+$/.test(interaction.customId)) {
+      if (interaction.isButton() && /^expert-pulse:approve-all:[a-f0-9]{20}:\d+$/.test(interaction.customId)) {
         const [, , digest, page] = interaction.customId.split(':');
         const modal = new ModalBuilder()
-          .setCustomId(`expert-pulse-approve:${digest}:${page}:${interaction.message.id}`)
-          .setTitle('Approve one expert for VIP');
-        const name = new TextInputBuilder().setCustomId('name').setLabel('Expert name shown on this page')
-          .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100);
-        modal.addComponents(new ActionRowBuilder().addComponents(name));
+          .setCustomId(`expert-pulse-approve-all:${digest}:${page}:${interaction.message.id}`)
+          .setTitle('Approve all pending experts');
+        const confirmation = new TextInputBuilder().setCustomId('confirmation')
+          .setLabel('Type APPROVE ALL to post pending experts')
+          .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(20);
+        modal.addComponents(new ActionRowBuilder().addComponents(confirmation));
         await interaction.showModal(modal);
         return;
       }
@@ -2757,19 +2758,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
     return;
   }
-  if (interaction.isModalSubmit() && interaction.customId.startsWith('expert-pulse-approve:')) {
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('expert-pulse-approve-all:')) {
     try {
       await interaction.deferReply({ ephemeral: true });
       if (!expertPulse) throw new Error('Expert cheat sheet is not configured.');
-      const match = interaction.customId.match(/^expert-pulse-approve:([a-f0-9]{20}):(\d+):(\d+)$/);
-      if (!match) throw new Error('This expert approval form is invalid.');
-      const result = await expertPulse.approveByName({ digest: match[1], page: Number(match[2]),
-        messageId: match[3], name: interaction.fields.getTextInputValue('name'),
+      const match = interaction.customId.match(/^expert-pulse-approve-all:([a-f0-9]{20}):(\d+):(\d+)$/);
+      if (!match) throw new Error('This full-sheet approval form is invalid.');
+      const result = await expertPulse.approveAll({ digest: match[1], page: Number(match[2]), messageId: match[3],
+        confirmation: interaction.fields.getTextInputValue('confirmation'),
         userId: interaction.user.id, ownerId: interaction.guild?.ownerId,
         guildId: interaction.guildId, channelId: interaction.channelId });
-      await interaction.editReply(`${result.expert} approved and posted to the private VIP channel.`);
+      await interaction.editReply(`Approved ${result.count} pending experts and posted the approved sheet in the private VIP channel.`);
     } catch (error) {
-      await respondToInteractionFailure(interaction, error.message || 'Could not approve this expert.', 'Expert approval button');
+      await respondToInteractionFailure(interaction, error.message || 'Could not approve the full sheet.', 'Full expert sheet approval');
     }
     return;
   }
