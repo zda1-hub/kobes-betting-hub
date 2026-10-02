@@ -8,3 +8,15 @@ test('reviewed primary-source outcomes are bound to exact published identity, da
     assert.equal(reviewedAdjudication({ ...row, ...change }), null);
   }
 });
+
+test('October 1 reviewed wagers settle only their exact published terms', () => {
+  const evidence = require('../data/verified-2026-10-01.json');
+  assert.equal(evidence.length, 25);
+  for (const item of evidence) {
+    const row = { pick_id: item.pickId, operating_date: item.date, selection: item.selection, market: item.market };
+    assert.equal(reviewedAdjudication(row)?.result, item.result);
+    assert.equal(reviewedAdjudication({ ...row, selection: `${item.selection} changed` }), null);
+    assert.equal(reviewedAdjudication({ ...row, operating_date: '2026-10-02' }), null);
+    assert.equal(reviewedAdjudication({ ...row, market: 'Different market' }), null);
+  }
+});
