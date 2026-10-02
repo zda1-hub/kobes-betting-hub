@@ -279,6 +279,9 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
         placeholder: 'Approve one expert for VIP', min_values: 1, max_values: 1, options }] });
       components.push({ type: 1, components: [{ type: 3, custom_id: `expert-pulse:reject:${digest}:${page}`,
         placeholder: 'Reject one expert', min_values: 1, max_values: 1, options }] });
+      components.push({ type: 1, components: [
+        { type: 2, style: 3, label: 'Approve All', custom_id: `expert-pulse:approve-all:${digest}:${page}` }
+      ] });
     }
     components.push({ type: 1, components: [
       { type: 2, style: 2, label: 'Previous', custom_id: `expert-pulse:page:${digest}:${page - 1}`, disabled: page === 0 },
@@ -289,7 +292,7 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     ] });
     return {
       allowedMentions: { parse: [] },
-      content: `Expert cheat sheet review · ${approved} approved · ${rejected} rejected · ${items.size - approved - rejected} pending · page ${page + 1}/${pageCount}. Choose a name under Approve or Reject. Only approved experts appear in VIP.${state.editor_note ? `\n\n**Kobe’s note:** ${state.editor_note}` : ''}`,
+      content: `Expert cheat sheet review · ${approved} approved · ${rejected} rejected · ${items.size - approved - rejected} pending · page ${page + 1}/${pageCount}. Use Approve All to approve every pending expert on this sheet, or choose a single expert under Approve or Reject. Rejected experts stay excluded. Only approved experts appear in VIP.${state.editor_note ? `\n\n**Kobe’s note:** ${state.editor_note}` : ''}`,
       embeds: payload.embeds.map((embed, index) => index === 0
         ? { ...embed, title: 'Review Expert Cheat Sheet', footer: { text: `${REVIEW_MARKER} · aggregate · ${digest}` } }
         : embed),
@@ -443,7 +446,8 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
       throw new Error('Combined expert review message is missing or inaccessible; inspect Discord before retrying.');
     }
     if (card) {
-      if (card.content !== expected.content || card.embeds?.[0]?.footer?.text !== expected.embeds[0].footer.text) {
+      if (card.content !== expected.content || card.embeds?.[0]?.footer?.text !== expected.embeds[0].footer.text
+        || JSON.stringify(card.components?.map((row) => typeof row.toJSON === 'function' ? row.toJSON() : row)) !== JSON.stringify(expected.components)) {
         await card.edit(expected);
         changed = true;
       }
@@ -519,6 +523,36 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     const card = await review.messages.fetch(messageId);
     await card.edit(reviewPayload(snapshot, state));
     return { status: entry.status === 'APPROVED' ? 'PUBLISHED' : 'REJECTED', expert: item.name };
+  }
+  async function approveAllUnlocked({ digest, page, confirmation, userId, ownerId, guildId, channelId, messageId }) {
+    if (String(confirmation || '').trim().toUpperCase() !== 'APPROVE ALL')
+      throw new Error('Type APPROVE ALL to confirm the full cheat sheet.');
+    if (!isApprover({ userId, ownerId })) throw new Error('Only Kobe or a configured pick approver can approve this sheet.');
+    const { source, review, destination } = await channels();
+    if (guildId !== source.guild.id || channelId !== review.id)
+      throw new Error('Approve the sheet from the private review channel.');
+    const state = await readState();
+    if (state.version !== 3 || state.digest !== digest || state.page !== page || state.review_message_id !== messageId)
+      throw new Error('This expert review changed. Refresh it before approving.');
+    const snapshot = await candidate(source);
+    if (snapshot.digest !== digest) {
+      await refreshUnlocked();
+      throw new Error('Expert data changed. Review the refreshed sheet before approving.');
+    }
+    let count = 0;
+    for (const item of snapshot.items.values()) {
+      const entry = state.experts[item.key];
+      if (entry?.status === 'PENDING' && entry.digest === item.digest) {
+        entry.status = 'APPROVED';
+        count += 1;
+      }
+    }
+    if (!count) throw new Error('There are no pending experts left to approve.');
+    await writeState(state);
+    await syncVip(snapshot, state, destination);
+    const card = await review.messages.fetch(messageId);
+    await card.edit(reviewPayload(snapshot, state));
+    return { status: 'PUBLISHED', count };
   }
   async function editNoteUnlocked({ digest, note, userId, ownerId, guildId, channelId }) {
     if (!isApprover({ userId, ownerId })) throw new Error('Only Kobe or a configured pick approver can edit this note.');
@@ -606,6 +640,7 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     return { status: 'APPROVED', name: entry.name };
   }
   return { refresh: () => locked(refreshUnlocked), decide: (args) => locked(() => decideUnlocked(args)),
+    approveAll: (args) => locked(() => approveAllUnlocked(args)),
     editNote: (args) => locked(() => editNoteUnlocked(args)),
     submitManual: (args) => locked(() => submitManualUnlocked(args)),
     decideManual: (args) => locked(() => decideManualUnlocked(args)) };

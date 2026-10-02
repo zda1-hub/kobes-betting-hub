@@ -251,7 +251,12 @@ test('one review and one VIP message preserve separate expert decisions', async 
     assert.equal(posts.size, 0);
     assert.equal((await pulse.decide(selection('Approve', 'Ben Burns'))).status, 'PUBLISHED');
     assert.equal(posts.size, 1);
-    assert.equal((await pulse.decide(selection('Approve', 'The Prez'))).status, 'PUBLISHED');
+    const fullButton = card.components.flatMap((row) => row.components).find((part) => part.label === 'Approve All');
+    const fullParts = fullButton.custom_id.split(':');
+    const fullApproval = { digest: fullParts[2], page: Number(fullParts[3]), confirmation: 'APPROVE ALL',
+      userId: 'kobe', ownerId: 'kobe', guildId: '123', channelId: '567', messageId: card.id };
+    await assert.rejects(pulse.approveAll({ ...fullApproval, confirmation: 'yes' }), /APPROVE ALL/);
+    assert.equal((await pulse.approveAll(fullApproval)).count, 1);
     assert.equal(posts.size, 1);
     const editControl = card.components.flatMap((row) => row.components).find((part) => part.label === 'Edit Kobe note');
     const digest = editControl.custom_id.split(':')[2];

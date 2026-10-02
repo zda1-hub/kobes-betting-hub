@@ -2711,6 +2711,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
   if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('expert-pulse:')) {
     try {
+      if (interaction.isButton() && /^expert-pulse:approve-all:[a-f0-9]{20}:\d+$/.test(interaction.customId)) {
+        const [, , digest, page] = interaction.customId.split(':');
+        const modal = new ModalBuilder()
+          .setCustomId(`expert-pulse-approve-all:${digest}:${page}:${interaction.message.id}`)
+          .setTitle('Approve all pending experts');
+        const confirmation = new TextInputBuilder().setCustomId('confirmation')
+          .setLabel('Type APPROVE ALL to post pending experts')
+          .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(20);
+        modal.addComponents(new ActionRowBuilder().addComponents(confirmation));
+        await interaction.showModal(modal);
+        return;
+      }
       if (interaction.isButton() && /^expert-pulse:submit:[a-f0-9]{20}:\d+$/.test(interaction.customId)) {
         const digest = interaction.customId.split(':')[2];
         const modal = new ModalBuilder().setCustomId(`expert-pulse-submit:${digest}`).setTitle('Submit a capper for review');
@@ -2743,6 +2755,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
           : 'Combined expert trends refreshed. Each expert still requires a separate decision.');
     } catch (error) {
       await respondToInteractionFailure(interaction, error.message || 'Expert pulse review needs attention.', 'Expert pulse interaction');
+    }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('expert-pulse-approve-all:')) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      if (!expertPulse) throw new Error('Expert cheat sheet is not configured.');
+      const match = interaction.customId.match(/^expert-pulse-approve-all:([a-f0-9]{20}):(\d+):(\d+)$/);
+      if (!match) throw new Error('This full-sheet approval form is invalid.');
+      const result = await expertPulse.approveAll({ digest: match[1], page: Number(match[2]), messageId: match[3],
+        confirmation: interaction.fields.getTextInputValue('confirmation'),
+        userId: interaction.user.id, ownerId: interaction.guild?.ownerId,
+        guildId: interaction.guildId, channelId: interaction.channelId });
+      await interaction.editReply(`Approved ${result.count} pending experts and posted the approved sheet in the private VIP channel.`);
+    } catch (error) {
+      await respondToInteractionFailure(interaction, error.message || 'Could not approve the full sheet.', 'Full expert sheet approval');
     }
     return;
   }
