@@ -246,10 +246,17 @@ test('one review and one VIP message preserve separate expert decisions', async 
         userId: 'kobe', ownerId: 'kobe', guildId: '123', channelId: '567', messageId: card.id };
     };
     await assert.rejects(pulse.decide({ ...selection('Approve', 'Ben Burns'), userId: 'someone-else' }), /Only Kobe/);
+    const approveButton = card.components.flatMap((row) => row.components).find((part) => part.label === 'Approve expert');
+    assert.ok(approveButton);
+    const buttonParts = approveButton.custom_id.split(':');
+    const byName = { digest: buttonParts[2], page: Number(buttonParts[3]), name: 'Ben Burns',
+      userId: 'kobe', ownerId: 'kobe', guildId: '123', channelId: '567', messageId: card.id };
+    await assert.rejects(pulse.approveByName({ ...byName, userId: 'someone-else' }), /Only Kobe/);
+    await assert.rejects(pulse.approveByName({ ...byName, name: 'Unknown' }), /exact name/);
     const oldBenApproval = selection('Approve', 'Ben Burns');
     assert.equal((await pulse.decide(selection('Reject', 'Kelly In Vegas'))).status, 'REJECTED');
     assert.equal(posts.size, 0);
-    assert.equal((await pulse.decide(selection('Approve', 'Ben Burns'))).status, 'PUBLISHED');
+    assert.equal((await pulse.approveByName(byName)).status, 'PUBLISHED');
     assert.equal(posts.size, 1);
     assert.equal((await pulse.decide(selection('Approve', 'The Prez'))).status, 'PUBLISHED');
     assert.equal(posts.size, 1);
