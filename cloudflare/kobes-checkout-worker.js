@@ -696,6 +696,38 @@ async function recordBillingEvent(env, event, values) {
   }
 }
 
+function summarizeFailedPayments(rangedBilling, allBilling) {
+  const attempts = rangedBilling.filter((item) => item.event_type === 'invoice_failed');
+  const latestByInvoice = new Map();
+  for (const item of allBilling) {
+    if (!['invoice_failed', 'invoice_paid'].includes(item.event_type)) continue;
+    const key = item.stripe_invoice_id || item.invoice_id;
+    if (!key) continue;
+    const prior = latestByInvoice.get(key);
+    if (!prior || Date.parse(item.occurred_at) > Date.parse(prior.occurred_at)) latestByInvoice.set(key, item);
+  }
+  const invoices = new Map();
+  for (const item of attempts) {
+    const key = item.stripe_invoice_id || item.invoice_id || item.stripe_event_id || item.id;
+    const entry = invoices.get(key) || { ...item, attemptCount: 0 };
+    entry.attemptCount += 1;
+    if (Date.parse(item.occurred_at) > Date.parse(entry.occurred_at)) Object.assign(entry, item);
+    invoices.set(key, entry);
+  }
+  const details = [...invoices.entries()].map(([key, item]) => ({
+    ...item,
+    recovered: latestByInvoice.get(key)?.event_type === 'invoice_paid',
+  })).sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at));
+  return {
+    attemptCount: attempts.length,
+    invoiceCount: details.length,
+    affectedCustomers: new Set(details.map((item) => item.stripe_customer_id).filter(Boolean)).size,
+    openInvoices: details.filter((item) => !item.recovered).length,
+    recoveredInvoices: details.filter((item) => item.recovered).length,
+    details,
+  };
+}
+
 async function checkoutAssociationByToken(env, token) {
   if (!/^[A-Za-z0-9_-]{32,100}$/.test(token || '')) return null;
   const rows = await supabase(env, `membership_checkout_associations?public_token_hash=eq.${encodeURIComponent(await sha256Text(token))}&select=*&limit=1`);
@@ -2970,10 +3002,10 @@ async function adminAnalytics(request, env, origin) {
   const members = baseMembers.map(member => ({ ...member, duplicate: duplicateSubscriptionIds.has(member.subscriptionId), duplicateReasons: duplicateGroups.filter(group => group.subscriptionIds.includes(member.subscriptionId)).map(group => group.reason) }));
   const webhookFailures = (webhooks || []).filter(item => range.includes(item.received_at));
   const awaitingDiscord = (associations || []).filter(item => ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_FAILED'].includes(item.status) && !item.discord_user_id);
-  const failedPayments = rangedBilling.filter(item => item.event_type === 'invoice_failed');
-  const failedPaymentDetails = failedPayments.map(item => {
+  const failedPaymentSummary = summarizeFailedPayments(rangedBilling, billing || []);
+  const failedPaymentDetails = failedPaymentSummary.details.map(item => {
     const member = members.find(member => member.subscriptionId === item.stripe_subscription_id || member.stripeCustomerId === item.stripe_customer_id);
-    return { invoiceId: item.stripe_invoice_id || item.invoice_id || '', customerId: item.stripe_customer_id || '', subscriptionId: item.stripe_subscription_id || '', name: member?.name || '', email: member?.email || '', membershipStatus: member?.status || 'unknown', amountCents: Number(item.amount_cents || 0), occurredAt: item.occurred_at, eventId: item.stripe_event_id || item.id || '' };
+    return { invoiceId: item.stripe_invoice_id || item.invoice_id || '', customerId: item.stripe_customer_id || '', subscriptionId: item.stripe_subscription_id || '', name: member?.name || '', email: member?.email || '', membershipStatus: member?.status || 'unknown', amountCents: Number(item.amount_cents || 0), occurredAt: item.occurred_at, eventId: item.stripe_event_id || item.id || '', attemptCount: item.attemptCount, recovered: item.recovered };
   });
   const referralLinks = [
     ...(profiles || []).map(profile => ({ type: 'member', name: members.find(member => member.discordUserId === profile.discord_user_id)?.name || profile.discord_user_id, code: profile.referral_code, status: profile.payout_status || 'NOT_CONNECTED', discordUserId: profile.discord_user_id })),
@@ -2995,7 +3027,7 @@ async function adminAnalytics(request, env, origin) {
     scoreboard: { todayPhoenix, activePaid: eligible.length, mrrCents: Math.round(mrr), newPaidToday, cancelledToday: cancellationTodayComplete ? cancelledToday : null, netAddsToday: cancellationTodayComplete ? newPaidToday - cancelledToday : null, newPaidLast7, netAddsLast7: cancellationLast7Complete ? newPaidLast7 - cancelledLast7 : null },
     traffic: { uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
     conversion: { funnel, offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), purchaseConversionRate: rangedSessions.length ? countEvents('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: countEvents('payment_completed') ? countEvents('vip_activated') / countEvents('payment_completed') : 0 },
-    revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPayments.length, introRevenueCents: invoiceWithinRange.filter(item => [1000, 1999].includes(item.amountPaid)).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
+    revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPaymentSummary.attemptCount, failedInvoices: failedPaymentSummary.invoiceCount, affectedCustomers: failedPaymentSummary.affectedCustomers, openFailedInvoices: failedPaymentSummary.openInvoices, recoveredFailedInvoices: failedPaymentSummary.recoveredInvoices, introRevenueCents: invoiceWithinRange.filter(item => [1000, 1999].includes(item.amountPaid)).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
     membership: { active: eligible.length, intro: eligible.filter(item => item.offer === 'starter').length, monthly: eligible.filter(item => ['trial_2_day','referral_trial','first_month_back'].includes(item.offer)).length, sixMonth: eligible.filter(item => item.offer === 'six_month').length, annual: eligible.filter(item => item.offer === 'annual').length, newMembers: countEvents('payment_completed'), renewals: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason === 'subscription_cycle').length, scheduledCancellations: eligible.filter(item => item.cancel_at_period_end || item.cancel_at).length, actualCancellations: canceled.filter(item => range.includes(item.updated_at)).length, duplicateGroups, duplicateCount: duplicateGroups.length, highRiskDuplicateCount: duplicateGroups.filter(item => item.risk === 'high').length, members },
     discord: { paidWithoutVip: paidWithoutVipDetails.length, roleCheckUnavailable: roleCheckUnavailableDetails.length, vipActive: activeIds.size, pending: (associations || []).filter(item => item.status === 'VIP_PENDING').length, failed: (associations || []).filter(item => item.status === 'VIP_FAILED').length, recovered: (associations || []).filter(item => item.status === 'VIP_ACTIVE' && Number(item.activation_attempts || 0) > 1).length, paidDiscordMissing: paidWithoutVipDetails.filter(item => !item.discordConnected).length, vipWithoutEntitlement, details: [...paidWithoutVipDetails, ...roleCheckUnavailableDetails] },
     referrals: { visits: countEvents('referral_visit') + rangedSessions.filter(item => item.first_touch?.first_source === 'referral' || item.first_touch?.referral_identifier).length, referredPurchases: rangedReferrals.length, pending: referralStatus('PENDING_PAYMENT') + referralStatus('HOLDING'), qualified: rangedReferrals.filter(item => ['READY','PAYOUT_SENT'].includes(item.status)).length, paidCashCents: rangedReferrals.filter(item => item.status === 'PAYOUT_SENT').reduce((sum, item) => sum + Number(item.reward_amount_cents || 0), 0), links: referralLinks, leaderboard: [...leaderboardMap.values()].map(item => ({ ...item, conversionRate: item.successfulReferrals + item.pendingReferrals ? item.successfulReferrals / (item.successfulReferrals + item.pendingReferrals) : 0 })).sort((a,b)=>b.successfulReferrals-a.successfulReferrals) },
@@ -3013,7 +3045,7 @@ async function adminAnalytics(request, env, origin) {
     },
     history: [...historyMap.values()],
     operations: { freePick },
-    alerts: { total: awaitingDiscord.length + paidWithoutVipDetails.length + roleCheckUnavailableDetails.length + webhookFailures.length + failedPayments.length + referralReview.length + duplicateGroups.length, awaitingDiscord, paidWithoutVip: paidWithoutVipDetails, vipCheckUnavailable: roleCheckUnavailableDetails, webhookFailures, failedPayments: failedPaymentDetails, referralReview, duplicates: duplicateGroups },
+    alerts: { total: awaitingDiscord.length + paidWithoutVipDetails.length + roleCheckUnavailableDetails.length + webhookFailures.length + failedPaymentSummary.openInvoices + referralReview.length + duplicateGroups.length, awaitingDiscord, paidWithoutVip: paidWithoutVipDetails, vipCheckUnavailable: roleCheckUnavailableDetails, webhookFailures, failedPayments: failedPaymentDetails, referralReview, duplicates: duplicateGroups },
   }, 200, origin);
 }
 
@@ -3226,6 +3258,7 @@ export default {
 
 export const __test = {
   dashboardReportingData,
+  summarizeFailedPayments,
   firstMonthBackActive,
   analyticsRange,
   partitionVipRoleChecks,

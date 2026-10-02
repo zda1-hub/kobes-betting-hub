@@ -65,6 +65,22 @@ test('dashboard excludes only configured test customers and their linked reporti
   assert.throws(() => workerTest.dashboardReportingData(raw, 'cus_*'), /Invalid dashboard/);
 });
 
+test('failed payment reporting separates retry attempts, invoices, customers, and recovered invoices', () => {
+  const events = [
+    { stripe_event_id: 'evt_1', stripe_invoice_id: 'in_1', stripe_customer_id: 'cus_1', event_type: 'invoice_failed', occurred_at: '2026-10-01T01:00:00Z' },
+    { stripe_event_id: 'evt_2', stripe_invoice_id: 'in_1', stripe_customer_id: 'cus_1', event_type: 'invoice_failed', occurred_at: '2026-10-01T02:00:00Z' },
+    { stripe_event_id: 'evt_3', stripe_invoice_id: 'in_2', stripe_customer_id: 'cus_2', event_type: 'invoice_failed', occurred_at: '2026-10-01T03:00:00Z' },
+    { stripe_event_id: 'evt_4', stripe_invoice_id: 'in_2', stripe_customer_id: 'cus_2', event_type: 'invoice_paid', occurred_at: '2026-10-02T03:00:00Z' },
+  ];
+  const summary = workerTest.summarizeFailedPayments(events.slice(0, 3), events);
+  assert.equal(summary.attemptCount, 3);
+  assert.equal(summary.invoiceCount, 2);
+  assert.equal(summary.affectedCustomers, 2);
+  assert.equal(summary.openInvoices, 1);
+  assert.equal(summary.recoveredInvoices, 1);
+  assert.equal(summary.details.find((item) => item.stripe_invoice_id === 'in_1').attemptCount, 2);
+});
+
 test('checkout association retains distinct owned-X and TikTok attribution', () => {
   for (const source of ['x', 'kobe_x', 'discord', 'instagram', 'tiktok', 'youtube', 'facebook', 'google', 'email', 'affiliate']) {
     const attribution = workerTest.cleanAttribution({ first_source: source, last_source: source, first_campaign: 'sprint', first_content: 'creative_a', utm_source: source });

@@ -168,12 +168,20 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
     if (!items.length) return 'No verified expert currently meets this threshold.';
     return items.map(mapper).join('\n');
   };
+  const allTimeBody = allTime.length
+    ? [
+      allTime.some((item) => item.wins + item.losses >= 5)
+        ? `**5+ settled picks**\n${lines(allTime.filter((item) => item.wins + item.losses >= 5))}` : '',
+      allTime.some((item) => item.wins + item.losses < 5)
+        ? `**Small sample: 1–4 settled picks**\n${lines(allTime.filter((item) => item.wins + item.losses < 5))}` : ''
+    ].filter(Boolean).join('\n')
+    : 'No verified expert currently meets this threshold.';
   const sections = [
     ['Yesterday’s best plays · over 61%', lines(yesterday)],
     ['Best records last 5 days · over 61%', lines(fiveDays)],
     ['Best football records · over 60% all time', lines(football)],
     ['Best baseball records · over 60% all time', lines(baseball)],
-    ['Best records ever · over 61%', lines(allTime)]
+    ['Best records ever · over 61%', allTimeBody]
   ].filter(([, body]) => !omitEmpty || body !== 'No verified expert currently meets this threshold.');
   const descriptions = [];
   let current = '';

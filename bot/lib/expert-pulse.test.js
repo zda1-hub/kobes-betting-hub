@@ -150,9 +150,21 @@ test('expert cheat sheet uses Kobe’s five sections and strict cutoffs', () => 
   assert.match(text, /\*\*Best records last 5 days · over 61%\*\*\nHot Expert \(4-1, 80%\)/);
   assert.match(text, /\*\*Best football records · over 60% all time\*\*\nHot Expert \(2-0, 100%\)/);
   assert.match(text, /\*\*Best baseball records · over 60% all time\*\*/);
-  assert.match(text, /\*\*Best records ever · over 61%\*\*\nHot Expert \(4-1, 80%\)/);
+  assert.match(text, /\*\*Best records ever · over 61%\*\*\n\*\*5\+ settled picks\*\*\nHot Expert \(4-1, 80%\)/);
   const allTime = text.split('**Best records ever · over 61%**')[1];
   assert.doesNotMatch(allTime, /Exactly Sixty|Above Fifty Four/);
+});
+
+test('all-time cheat sheet separates tiny winning records from established records', () => {
+  const report = { date: '2026-10-02', active: [], repeated: [], playCount: 0, sourceCount: 0 };
+  const records = [
+    { name: 'One Pick', wins: 1, losses: 0, results: [{ at: Date.parse('2026-10-01T18:00:00Z'), grade: 'W', sport: 'football' }] },
+    { name: 'Six Picks', wins: 5, losses: 1, results: Array.from({ length: 6 }, (_, i) => ({ at: Date.parse('2026-09-28T18:00:00Z') + i * 3600000, grade: i ? 'W' : 'L', sport: 'football' })) },
+  ];
+  const text = payloadFor(report, records).embeds.map((embed) => embed.description).join('\n');
+  const allTime = text.split('**Best records ever · over 61%**')[1];
+  assert.match(allTime, /\*\*5\+ settled picks\*\*\nSix Picks \(5-1, 83\.3%\)/);
+  assert.match(allTime, /\*\*Small sample: 1–4 settled picks\*\*\nOne Pick \(1-0, 100%\)/);
 });
 
 test('large expert histories stay within the Discord embed description limit', () => {
