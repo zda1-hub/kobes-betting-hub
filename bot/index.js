@@ -58,6 +58,7 @@ const { createFreeWriteupBoard } = require('./lib/free-writeup-board');
 const { archivedWriteupSource } = require('./lib/writeup-archive-source');
 const { createVipExpertList } = require('./lib/vip-expert-list');
 const { createExpertPulse } = require('./lib/expert-pulse');
+const { createExpertTrendReminder } = require('./lib/expert-trend-reminder');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
@@ -221,6 +222,9 @@ const expertPulse = vipExpertPulseChannelId && vipExpertPulseApprovalChannelId ?
   legacyStateFile: useExpertCheatChannels ? path.join(path.dirname(pickLogPath()), 'expert-pulse.json') : null
 }) : null;
 const refreshExpertPulse = expertPulse ? () => expertPulse.refresh() : null;
+const remindExpertTrendReview = expertPulse ? createExpertTrendReminder({
+  channelFor: () => approvedTextChannel(vipExpertPulseApprovalChannelId)
+}) : null;
 if ((vipExpertPulseChannelId || vipExpertPulseApprovalChannelId) && !expertPulse) {
   console.error('VIP expert pulse is held: both private review and private destination channel IDs are required.');
 }
@@ -2646,14 +2650,19 @@ client.once(Events.ClientReady, async (readyClient) => {
   }
   if (refreshExpertPulse) {
     void refreshExpertPulse()
-      .then((receipt) => receipt.status === 'VIP_HELD'
-        ? console.error('VIP expert pulse needs attention:', receipt.reason)
-        : console.log('VIP expert pulse receipt:', JSON.stringify(receipt)))
+      .then(async (receipt) => {
+        if (receipt.status === 'VIP_HELD') console.error('VIP expert pulse needs attention:', receipt.reason);
+        else console.log('VIP expert pulse receipt:', JSON.stringify(receipt));
+        const reminder = await remindExpertTrendReview(receipt);
+        if (reminder.status === 'NOTIFIED') console.log('Expert trend morning reminder:', JSON.stringify(reminder));
+      })
       .catch((error) => console.error('VIP expert pulse needs attention:', error.message));
     setInterval(() => void refreshExpertPulse()
-      .then((receipt) => {
+      .then(async (receipt) => {
         if (receipt.status === 'VIP_HELD') console.error('VIP expert pulse needs attention:', receipt.reason);
         else if (receipt.status !== 'UNCHANGED') console.log('VIP expert pulse receipt:', JSON.stringify(receipt));
+        const reminder = await remindExpertTrendReview(receipt);
+        if (reminder.status === 'NOTIFIED') console.log('Expert trend morning reminder:', JSON.stringify(reminder));
       })
       .catch((error) => console.error('VIP expert pulse needs attention:', error.message)), 300000);
   }
