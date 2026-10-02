@@ -45,6 +45,11 @@
 .manage-copy h1 { max-width:700px; margin:0 0 30px; font-size:clamp(56px,7vw,104px); font-weight:700; letter-spacing:-.075em; line-height:.88; }
 .manage-intro { max-width:650px; margin:0; color:var(--muted); font-size:clamp(17px,1.5vw,22px); font-weight:500; letter-spacing:-.035em; line-height:1.55; }
 .manage-panel { width:min(100%,480px); justify-self:end; padding:31px; background:var(--ink); color:var(--paper); box-shadow:13px 13px 0 var(--orange); }
+.vip-start-guide { margin-top:24px; padding-top:20px; border-top:1px solid #555; }
+.vip-start-guide h2 { margin:0 0 12px; color:#fff; font-size:24px; }
+.vip-start-guide p { color:#ddd; font-size:14px; line-height:1.5; }
+.vip-start-guide ul { margin:12px 0; padding-left:20px; line-height:1.9; }
+.vip-start-guide a { color:#fff; text-decoration:underline; text-underline-offset:3px; }
 .manage-panel .card-kicker { padding-bottom:22px; border-bottom:1px solid #303030; }
 .manage-panel h2 { margin:0 0 22px; color:#fff; font-size:clamp(36px,4vw,54px); font-weight:700; letter-spacing:-.065em; line-height:.94; }
 .manage-panel .manage-step > p:not(.card-kicker) { margin:0 0 29px; color:#c9c9c9; font-size:14px; line-height:1.65; }

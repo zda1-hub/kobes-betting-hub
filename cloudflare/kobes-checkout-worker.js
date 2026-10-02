@@ -1124,6 +1124,31 @@ async function grantMemberRole(memberId, env) {
   );
 }
 
+function vipOnboardingMessage() {
+  return [
+    "Welcome to Kobe's Betting Hub VIP 🏆 Your access is active.",
+    '',
+    'Start here: <#1555363949606604971>',
+    'Expert picks: <#1539055850075852911>',
+    'Full write-ups: <#1551023719114080366>',
+    'Arbitrage: <#1552408437999009983>',
+    'VIP updates: <#1550229310877601913>',
+    '',
+    'These channels are included with your membership. If one does not appear, reopen Discord or contact support@kobesbettinghub.com.',
+  ].join('\n');
+}
+
+async function sendVipOnboardingDm(memberId, env) {
+  if (!memberId || !env.DISCORD_BOT_TOKEN) return;
+  const headers = { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' };
+  const channel = await discordRequest('/users/@me/channels', {
+    method: 'POST', headers, body: JSON.stringify({ recipient_id: memberId }),
+  }, env, { memberId, triggerType: 'vip_onboarding' });
+  await discordRequest(`/channels/${channel.id}/messages`, {
+    method: 'POST', headers, body: JSON.stringify({ content: vipOnboardingMessage(), allowed_mentions: { parse: [] } }),
+  }, env, { memberId, triggerType: 'vip_onboarding' });
+}
+
 async function syncMemberRole(subscription, env) {
   const memberId = await discordUserForSubscription(env, subscription);
   if (!memberId) return 'NO_DISCORD_LINK';
@@ -2444,6 +2469,9 @@ async function activateCheckoutAssociation(env, association, eventId = null) {
       customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
       dedupeKey: `vip_activated:${subscription.id}`,
     });
+    // Discord users can block DMs. Their paid access must remain active either way.
+    try { await sendVipOnboardingDm(association.discord_user_id, env); }
+    catch (error) { console.warn('VIP onboarding DM unavailable', String(error)); }
     return 'VIP_ACTIVE';
   } catch (error) {
     const code = safeActivationError(error);

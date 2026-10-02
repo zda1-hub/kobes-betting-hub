@@ -7,6 +7,7 @@ const payment = document.querySelector('[data-payment]');
 const discord = document.querySelector('[data-discord]');
 const vip = document.querySelector('[data-vip]');
 const openDiscord = document.querySelector('[data-open-discord]');
+const vipStartGuide = document.querySelector('[data-vip-start-guide]');
 const retry = document.querySelector('[data-retry]');
 const support = document.querySelector('[data-support]');
 let checks = 0;
@@ -20,7 +21,7 @@ async function check() {
     vip.textContent = `VIP: ${data.vipActive ? 'Active ✅' : data.state === 'failed' ? 'Needs attention' : 'Activating…'}`;
     if (data.state === 'active') {
       title.textContent = "You're in ✅"; message.textContent = 'Payment confirmed, Discord connected, and VIP access is active.';
-      openDiscord.hidden = false; retry.hidden = true; support.hidden = true; return;
+      openDiscord.hidden = false; vipStartGuide.hidden = false; retry.hidden = true; support.hidden = true; return;
     }
     if (data.state === 'failed') {
       title.textContent = 'Your payment is confirmed.'; message.textContent = 'We had a problem activating Discord, but you do not need to purchase again.';
