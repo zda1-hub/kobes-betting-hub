@@ -292,6 +292,14 @@ test('one review and one VIP message preserve separate expert decisions', async 
     assert.match(vipText, /The Prez/);
     assert.doesNotMatch(vipText, /Kelly In Vegas/);
     assert.match(card.content, /2 approved · 1 rejected · 0 pending/);
+    const statePath = path.join(directory, 'state.json');
+    const beforeFormatChange = JSON.parse(await fs.readFile(statePath, 'utf8'));
+    const benKey = createHash('sha256').update('benburns').digest('hex').slice(0, 16);
+    beforeFormatChange.experts[benKey].digest = 'display-format-changed';
+    await fs.writeFile(statePath, JSON.stringify(beforeFormatChange));
+    await pulse.refresh();
+    assert.match(card.content, /2 approved · 1 rejected · 0 pending/);
+    assert.match([...posts.values()][0].embeds.map((embed) => embed.description).join('\n'), /Ben Burns/);
     gradedRows = [...gradedRows, grade('Ben Burns', '444')];
     assert.equal((await pulse.refresh()).status, 'REVIEW_UPDATED');
     assert.equal(cards.size, 1);

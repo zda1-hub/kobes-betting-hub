@@ -24,6 +24,12 @@ function expertId(name) {
   return createHash('sha256').update(keyFor(name)).digest('hex').slice(0, 16);
 }
 
+function evidenceDigest(record, date) {
+  return createHash('sha256').update(JSON.stringify([date, keyFor(record.name),
+    record.results.map(({ grade, at, reference, sport }) => [grade, at, reference, sport])]))
+    .digest('hex').slice(0, 20);
+}
+
 function manualSubmission(name, message) {
   const cleanName = String(name || '').replace(/\s+/g, ' ').trim();
   const cleanMessage = String(message || '').replace(/\r\n?/g, '\n').trim();
@@ -263,9 +269,10 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     const items = new Map();
     for (const name of names) {
       const key = expertId(name);
+      const record = records.find((entry) => expertId(entry.name) === key);
       const { expertNames, ...payload } = payloadFor(report, records.filter((record) => expertId(record.name) === key), { omitEmpty: true });
       const digest = createHash('sha256').update(payload.embeds.map((embed) => `${embed.title}\n${embed.description}`).join('\n')).digest('hex').slice(0, 20);
-      items.set(key, { key, name, payload, digest });
+      items.set(key, { key, name, payload, digest, evidence_digest: evidenceDigest(record, report.date) });
     }
     return { items, report, records, payload, digest };
   }
@@ -429,8 +436,15 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     }
     for (const item of snapshot.items.values()) {
       const old = state.experts[item.key];
-      if (!old || old.digest !== item.digest || !['PENDING', 'APPROVED', 'REJECTED'].includes(old.status)) {
-        state.experts[item.key] = { name: item.name, digest: item.digest, status: 'PENDING' };
+      const evidenceUnchanged = old?.evidence_digest && old.evidence_digest === item.evidence_digest;
+      if (!old || (old.digest !== item.digest && !evidenceUnchanged)
+        || !['PENDING', 'APPROVED', 'REJECTED'].includes(old.status)) {
+        state.experts[item.key] = { name: item.name, digest: item.digest,
+          evidence_digest: item.evidence_digest, status: 'PENDING' };
+        changed = true;
+      } else if (old.digest !== item.digest || old.evidence_digest !== item.evidence_digest) {
+        state.experts[item.key] = { ...old, name: item.name, digest: item.digest,
+          evidence_digest: item.evidence_digest };
         changed = true;
       }
     }
