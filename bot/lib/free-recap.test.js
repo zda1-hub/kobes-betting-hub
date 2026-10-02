@@ -15,7 +15,8 @@ test('creates a compact free-pick-only recap and cumulative record', () => {
   assert.match(embed.description, /❌ Robert Gasser Over 4.5 Strikeouts \(-140\)/);
   assert.match(embed.description, /\*\*Verified today:\*\* 1-1-0 · \+0\.00u/);
   assert.match(embed.description, /\*\*Awaiting verification:\*\* 0/);
-  assert.match(embed.description, /\*\*Verified overall free-pick record:\*\* 2-1-0/);
+  assert.match(embed.description, /\*\*Verified logged free-pick record:\*\* 2-1-0/);
+  assert.match(embed.description, /Older channel posts may be missing/);
   assert.doesNotMatch(embed.description, /nfl-writeups|Discord post|Source:|Confidence/i);
 });
 

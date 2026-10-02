@@ -64,7 +64,8 @@ function buildFreePickRecapEmbed({ date, rows, freeChannelId = '' }) {
       '',
       `**Verified today:** ${recordText(today)} · ${unitText}`,
       `**Awaiting verification:** ${pending}`,
-      `**Verified overall free-pick record:** ${recordText(overall)}`
+      `**Verified logged free-pick record:** ${recordText(overall)}`,
+      'Older channel posts may be missing from this log until reconciled.'
     ].join('\n'),
     footer: { text: '21+ | Results use the exact published terms.' },
     timestamp: new Date().toISOString()
