@@ -56,6 +56,28 @@ test('uses the market quote timestamp when the bookmaker timestamp is stale', as
   assert.match(cards[0].embeds[0].description, /Quote 1 updated:/);
 });
 
+test('uses a fresh second-best price when the top bookmaker quote is stale', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
+  const current = structuredClone(event);
+  current.bookmakers[0].markets[0].last_update = '2026-09-23T17:40:00Z';
+  current.bookmakers[1].markets[0].last_update = '2026-09-23T17:59:00Z';
+  current.bookmakers.push({ key: 'betmgm', title: 'BetMGM', markets: [{ key: 'h2h',
+    last_update: '2026-09-23T17:59:00Z', outcomes: [{ name: 'Away', price: 2.15 }, { name: 'Home', price: 1.7 }] }] });
+  const cards = [];
+  const reviewChannel = { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' },
+    send: async payload => { cards.push(payload); return { id: 'card', edit: async () => {} }; } };
+  const monitor = createArbitragePaperMonitor({ apiKey: 'test', reviewChannel,
+    stateFile: path.join(root, 'state.json'),
+    fetchImpl: async () => new Response(JSON.stringify([current]), { status: 200 }),
+    now: () => new Date('2026-09-23T18:00:00Z'), windows: ['08:00-15:00'] });
+  const result = await monitor.start();
+  await monitor.stop();
+  assert.equal(result.opportunityCount, 1);
+  assert.equal(cards.length, 1);
+  assert.match(cards[0].embeds[0].description, /BetMGM/);
+  assert.doesNotMatch(cards[0].embeds[0].description, /FanDuel/);
+});
+
 test('rejects non-arbitrage, same-book, draw markets and sub-threshold edges', () => {
   assert.equal(findArbitrage([{ ...event, bookmakers: [event.bookmakers[0]] }]).length, 0);
   const draw = structuredClone(event); draw.bookmakers[0].markets[0].outcomes.push({ name: 'Draw', price: 3 });
@@ -103,7 +125,7 @@ test('successful routine scans log their time, window, counts and feed quota', a
   assert.equal(logs.length, 1);
   assert.deepEqual(JSON.parse(logs[0].replace(/^Arbitrage scan: /, '')), {
     scannedAt: '2026-09-23T18:00:00.000Z', window: '08:00-15:00', sports: ['upcoming'], eventCount: 0,
-    positiveCount: 0, aboveThresholdCount: 0, opportunityCount: 0,
+    positiveCount: 0, aboveThresholdCount: 0, freshPositiveCount: 0, opportunityCount: 0,
     minimumEdgePercent: 2, bookmakerCount: 9, coveredBookmakers: [], remaining: '99', used: '1'
   });
 });
