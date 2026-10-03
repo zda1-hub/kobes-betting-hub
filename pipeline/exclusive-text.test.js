@@ -21,6 +21,17 @@ test('exclusive text terms retain exact wagers, odds and stakes without research
   }
 });
 
+test('Five Star X moneyline with a run header reaches private approval without inventing odds', () => {
+  const text = 'Five Star Sports 🔥\n\n24-3 Football Run 🏈\n\nRegular Whale\n\nPenn State ML';
+  const extraction = exclusiveTextExtraction({ ...source, handle: 'cappersforfree' }, text);
+  assert.ok(extraction);
+  assert.equal(extraction.source_capper_name, 'Five Star Sports');
+  assert.deepEqual(extraction.plays.map(play => play.selection), ['Penn State ML']);
+  assert.equal(buildSourcePickApprovalEmbed({ source, analysis: { status: 'SOURCE_EXTRACTED', extraction } }, 'APPROVED PICK').description,
+    'Five Star Sports\n• Penn State ML');
+  assert.equal(shouldQueueForReview({ ...source, handle: 'cappersforfree' }, { text }, []), true);
+});
+
 test('exclusive fast path refuses commentary, unclear terms, capper-feed substitution and regular sources', () => {
   for (const text of ['EZMSports\nLions +4 -110', 'Daily picks of the week\nLions +4', 'Teddy Covers\nUnder 4.5', 'Teddy Covers\nLions +4\nSubscribe to the package', 'Teddy Covers\nNo play on Lions +4', 'Teddy Covers\nGreat matchup tonight']) {
     const e = exclusiveTextExtraction(source, text);
