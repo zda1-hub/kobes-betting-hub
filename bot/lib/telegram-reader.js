@@ -9,6 +9,7 @@ const { reviewQueuePath } = require('./review-queue-path');
 const { enrichPacket } = require('../../pipeline/enrich-pick');
 const { recordSourcePost, upsertPickCandidate, recordApprovalCard, recordWorkflowEvent } = require('../../pipeline/audit-store');
 const hash=value=>createHash('sha256').update(value).digest('hex');
+const TERMS_PARSE_VERSION=2;
 async function save(file,value){await fs.mkdir(path.dirname(file),{recursive:true,mode:0o700});await fs.writeFile(`${file}.tmp`,JSON.stringify(value),{mode:0o600});await fs.rename(`${file}.tmp`,file);}
 
 function telegramPacket(message, channelId, now=new Date()) {
@@ -76,7 +77,10 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       messages=[...new Map(messages.map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
     } else {
       messages=await telegram.getMessages(entity,{minId:state.cursor,reverse:true,limit:30});
-      const recoverIds=Object.entries(state.records).filter(([,record])=>record.status==='HELD_EXTRACTION_FAILED'&&record.media_download_version!==2).map(([id])=>Number(id)).filter(Number.isSafeInteger).slice(0,10);
+      const recoverIds=Object.entries(state.records).filter(([,record])=>
+        (record.status==='HELD_EXTRACTION_FAILED'&&record.media_download_version!==2)
+        || (record.status==='HELD_UNCLEAR_TERMS'&&record.terms_parse_version!==TERMS_PARSE_VERSION))
+        .map(([id])=>Number(id)).filter(Number.isSafeInteger).sort((a,b)=>b-a).slice(0,50);
       if(recoverIds.length){
         const held=await telegram.getMessages(entity,{ids:recoverIds});
         messages=[...new Map([...held,...messages].filter(Boolean).map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
@@ -86,7 +90,11 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
     for(const message of messages){
       if(stopping)break;
       const packet=telegramPacket(message,config.channelId,now());
-      if(!packet){state.cursor=Math.max(state.cursor,message.id);await save(file,state);continue;}
+      if(!packet){
+        if(state.records[String(message.id)]?.status==='HELD_UNCLEAR_TERMS')
+          state.records[String(message.id)].terms_parse_version=TERMS_PARSE_VERSION;
+        state.cursor=Math.max(state.cursor,message.id);await save(file,state);continue;
+      }
       const date=pacificOperatingDate(now()),packetFile=path.join(queueRoot,date,`${packet.pick_id}.json`);
       let previous=state.records[String(message.id)];
       if(previous?.status==='HELD_EXTRACTION_FAILED' && previous.media_download_version!==2 && (message.photo||message.media?.photo)){
@@ -95,6 +103,15 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         delete state.records[String(message.id)];
         if(state.extractionRetries)delete state.extractionRetries[String(message.id)];
         previous=undefined;await save(file,state);
+      }
+      if(previous?.status==='HELD_UNCLEAR_TERMS' && previous.terms_parse_version!==TERMS_PARSE_VERSION){
+        // Reconsider only newly parseable, current-day terms. Held cards have
+        // never been delivered, so this cannot duplicate a member post.
+        if(exclusiveTextExtraction(packet.source,packet.source.text)){
+          delete state.records[String(message.id)];previous=undefined;await save(file,state);
+        }else{
+          previous.terms_parse_version=TERMS_PARSE_VERSION;await save(file,state);
+        }
       }
       if(previous?.status==='RESERVED'){
         const recent=await channel.messages.fetch({limit:100});
@@ -163,7 +180,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         previous={status:'RESERVED',fingerprint,payload};
       }catch{
         packet.status='HELD_UNCLEAR_TERMS';await save(packetFile,packet);
-        state.records[String(message.id)]={status:'HELD_UNCLEAR_TERMS'};state.cursor=Math.max(state.cursor,message.id);await save(file,state);
+        state.records[String(message.id)]={status:'HELD_UNCLEAR_TERMS',terms_parse_version:TERMS_PARSE_VERSION};state.cursor=Math.max(state.cursor,message.id);await save(file,state);
         results.push({status:'HELD_UNCLEAR_TERMS',messageId:message.id});continue;
       }
       await audit.upsertPickCandidate(packet,{status:'READY_FOR_APPROVAL'});

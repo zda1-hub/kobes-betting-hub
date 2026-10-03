@@ -125,6 +125,18 @@ test('recovers a never-delivered legacy photo hold behind the cursor without rep
   assert.equal(result[0].status,'PRIVATE_APPROVAL_DELIVERED');assert.equal(h.sent.length,1);
   await createTelegramReader(h.options).run();assert.equal(h.sent.length,1);
 });
+test('recovers a current-day Five Star moneyline previously held as unclear terms',async t=>{
+  const h=await harness(t);
+  h.messages[0]=message(1,'Five Star Sports 🔥\n\n24-3 Football Run 🏈\n\nRegular Whale\n\nPenn State ML');
+  h.telegram.getMessages=async(_,params)=>h.messages.filter(m=>params.ids?params.ids.includes(m.id):m.id>(params.minId||0));
+  await fs.writeFile(path.join(h.root,'reader-state.json'),JSON.stringify({channelId,cursor:1,
+    records:{'1':{status:'HELD_UNCLEAR_TERMS'}}}));
+  const result=await createTelegramReader(h.options).run();
+  assert.equal(result[0].status,'PRIVATE_APPROVAL_DELIVERED');
+  assert.equal(h.sent.length,1);
+  assert.equal(h.sent[0].embeds[0].description,'Five Star Sports\n• Penn State ML');
+  await createTelegramReader(h.options).run();assert.equal(h.sent.length,1);
+});
 test('initial catch-up pages past 100 messages without losing older current-day picks',async t=>{
   const h=await harness(t);const offsets=[];
   h.telegram.getMessages=async(_,params)=>{
