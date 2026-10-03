@@ -53,7 +53,10 @@ function findArbitrage(events, { minimumEdgePercent = 2, bankroll = 1000 } = {})
         const price = decimal(outcome.price);
         if (!price) continue;
         const prior = prices.get(outcome.name);
-        if (!prior || price > prior.price) prices.set(outcome.name, { name: outcome.name, price, book: book.key, bookName: book.title, updatedAt: book.last_update || market.last_update || null });
+        // The bookmaker timestamp is deprecated by The Odds API. Use the
+        // market quote's timestamp so an older bookmaker value does not hide
+        // an otherwise current head-to-head price.
+        if (!prior || price > prior.price) prices.set(outcome.name, { name: outcome.name, price, book: book.key, bookName: book.title, updatedAt: market.last_update || book.last_update || null });
       }
     }
     const sides = [...prices.values()];
