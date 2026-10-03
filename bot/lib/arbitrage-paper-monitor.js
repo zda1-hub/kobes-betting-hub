@@ -43,7 +43,13 @@ function decimal(value) {
   return Number.isFinite(number) && number > 1 ? number : null;
 }
 
-function findArbitrage(events, { minimumEdgePercent = 2, bankroll = 1000 } = {}) {
+function freshQuote(updatedAt, now) {
+  const updated = Date.parse(updatedAt);
+  const current = now.getTime();
+  return Number.isFinite(updated) && updated <= current + 60_000 && current - updated <= MAX_QUOTE_AGE_MS;
+}
+
+function findArbitrage(events, { minimumEdgePercent = 2, bankroll = 1000, freshOnly = false, now = new Date() } = {}) {
   const opportunities = [];
   for (const event of events || []) {
     const prices = new Map();
@@ -56,7 +62,9 @@ function findArbitrage(events, { minimumEdgePercent = 2, bankroll = 1000 } = {})
         // The bookmaker timestamp is deprecated by The Odds API. Use the
         // market quote's timestamp so an older bookmaker value does not hide
         // an otherwise current head-to-head price.
-        if (!prior || price > prior.price) prices.set(outcome.name, { name: outcome.name, price, book: book.key, bookName: book.title, updatedAt: market.last_update || book.last_update || null });
+        const updatedAt = market.last_update || book.last_update || null;
+        if (freshOnly && !freshQuote(updatedAt, now)) continue;
+        if (!prior || price > prior.price) prices.set(outcome.name, { name: outcome.name, price, book: book.key, bookName: book.title, updatedAt });
       }
     }
     const sides = [...prices.values()];
@@ -80,13 +88,9 @@ function findArbitrage(events, { minimumEdgePercent = 2, bankroll = 1000 } = {})
 function money(value) { return `$${Number(value).toFixed(2)}`; }
 
 function freshOpportunity(opportunity, now = new Date()) {
-  const current = now.getTime();
   const start = Date.parse(opportunity.commenceTime);
-  if (!Number.isFinite(start) || start <= current) return false;
-  return opportunity.legs.every(leg => {
-    const updated = Date.parse(leg.updatedAt);
-    return Number.isFinite(updated) && updated <= current + 60_000 && current - updated <= MAX_QUOTE_AGE_MS;
-  });
+  if (!Number.isFinite(start) || start <= now.getTime()) return false;
+  return opportunity.legs.every(leg => freshQuote(leg.updatedAt, now));
 }
 
 function alertDescription(opportunity, status = 'LIVE OPPORTUNITY — AWAITING KOBE APPROVAL') {
@@ -179,7 +183,7 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
     // Reusing the discovery threshold here caused valid cards to expire when
     // a 2.01% edge merely moved to 1.99%, even though both sides still locked
     // a positive return.
-    return findArbitrage(events, { minimumEdgePercent: 0, bankroll })
+    return findArbitrage(events, { minimumEdgePercent: 0, bankroll, freshOnly: true, now: now() })
       .find(item => item.id === original.id && freshOpportunity(item, now())) || null;
   };
   const recheck = async (original, message, seconds) => {
@@ -216,9 +220,13 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
       if (exhausted) quotaExhausted = true;
       const positive = findArbitrage(events, { minimumEdgePercent: 0, bankroll });
       const aboveThreshold = positive.filter(item => item.edgePercent >= minimumEdgePercent);
-      const opportunities = aboveThreshold.filter(item => freshOpportunity(item, now()));
+      // Select the best *fresh* price on each side independently. A stale top
+      // price should not hide a real opportunity between two other books.
+      const freshPositive = findArbitrage(events, { minimumEdgePercent: 0, bankroll, freshOnly: true, now: now() });
+      const opportunities = freshPositive.filter(item => item.edgePercent >= minimumEdgePercent && freshOpportunity(item, now()));
       const scanRecord = { scannedAt: now().toISOString(), window, sports, eventCount: events.length,
         positiveCount: positive.length, aboveThresholdCount: aboveThreshold.length,
+        freshPositiveCount: freshPositive.length,
         opportunityCount: opportunities.length, minimumEdgePercent, bookmakerCount: bookmakers.length,
         coveredBookmakers: [...new Set(events.flatMap(event => (event.bookmakers || []).map(book => book.key)))].sort(),
         remaining, used };
