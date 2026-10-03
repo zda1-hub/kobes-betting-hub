@@ -3,13 +3,17 @@
 function exclusiveTextExtraction(source, text) {
   if (source?.publish_mode !== 'terms_only') return null;
   const lines = String(text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-  const capper = lines.shift();
+  // Aggregators sometimes decorate the capper heading and put a run record
+  // or wager-size label ahead of the actual selection. Those labels are not
+  // bets; retain only the exact selection lines in the approval card.
+  const capper = (lines.shift() || '').replace(/[\s\p{Extended_Pictographic}\uFE0F]+$/gu, '').trim();
   if (!capper || !/^[\p{L}\p{N} .’'&_-]{2,60}$/u.test(capper)
     || /\b(?:picks? of|report|recap|results?|package|sale|subscribe|week|tonight|tomorrow|public betting)\b/i.test(capper)
     || [source.handle, source.display_name].some(n => String(n || '').toLowerCase() === capper.toLowerCase())) return null;
   const labels = /^(?:NFL|MLB|NBA|WNBA|NHL|NCAAF|NCAAB|CFB|MLS|NFL Props?|MLB Props?|College Football|Soccer)$/i;
   const league = lines.find(s => labels.test(s)) || '';
-  const bets = lines.filter(s => !labels.test(s));
+  const sourceLabels = /^(?:\d+-\d+\s+(?:(?:Football|Baseball|Basketball|Hockey|Soccer|NFL|MLB|NBA|NHL)\s+)?(?:Golden\s+)?(?:Whale\s+)?Run|(?:Regular|Golden|Bonus|Max)\s+(?:Whale(?:s)?|Bet(?:s)?|Play(?:s)?|Parlay(?:s)?))\s*[\p{Extended_Pictographic}\uFE0F\s]*$/iu;
+  const bets = lines.filter(s => !labels.test(s) && !sourceLabels.test(s));
   const namedMarket = /[\p{L}].*?(?:\b(?:ML|moneyline|over|under|BTTS|NRFI|YRFI)\b|\b[ou]\s*\d|[\s(][+-]\s*\d)/iu;
   if (!bets.length || bets.length > 30 || bets.some(s => s.length > 240 || !namedMarket.test(s)
     || /https?:|\b(?:subscribe|sale|package|record|win rate|last week|yesterday|already won|cashed|no play|pass on)\b/i.test(s))) return null;
