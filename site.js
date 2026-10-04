@@ -1,6 +1,14 @@
 (() => {
   const localPreview = ['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) || location.protocol === 'file:';
   document.querySelectorAll('[data-year], #year').forEach(node => node.textContent = new Date().getFullYear());
+  const tickerToggle = document.querySelector('[data-ticker-toggle]');
+  tickerToggle?.addEventListener('click', () => {
+    const ticker = tickerToggle.closest('.site-ticker');
+    const paused = ticker.toggleAttribute('data-paused');
+    tickerToggle.setAttribute('aria-pressed', String(paused));
+    tickerToggle.setAttribute('aria-label', paused ? 'Play banner' : 'Pause banner');
+    tickerToggle.querySelector('span').textContent = paused ? '▶' : 'Ⅱ';
+  });
   const toggle = document.querySelector('[data-menu-toggle]');
   const menu = document.querySelector('[data-menu]');
   const closeMenu = () => { menu?.classList.remove('is-open'); toggle?.setAttribute('aria-expanded', 'false'); };
