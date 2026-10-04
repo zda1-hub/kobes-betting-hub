@@ -18,3 +18,7 @@ Browser preview at 390px: clicked Pause then Play; rail progressed from 3823.5 t
 
 ## Status and limits
 Prepared on codex/fix-wins-playback from current GitHub main bb92f8e. Production publication is authorized in this session. Cloudflare receipt and live checks follow. Tests simulate high-refresh rounding; no physical phone is connected for reproduction. No record counts, billing, email or backend services changed.
+
+## Published receipt
+GitHub PR #139 merged: https://github.com/zda1-hub/kobes-betting-hub/pull/139 (change e3148cc). Cloudflare static version 371271b4-ed21-4f3f-b9a2-76d789a455c4 published, two changed assets. Live script matches the built release byte-for-byte.
+Live 390px mobile check: Play label switched to Pause motion; tracked rail advanced 3816.5→4267.5; Next moved to 4503 and paused (Play slideshow). Explicit Play resumed afterward. Saved screenshot outputs/wins-playback-fix-2026-10-04/live-mobile.png in the primary workspace. Browser viewport reset.
