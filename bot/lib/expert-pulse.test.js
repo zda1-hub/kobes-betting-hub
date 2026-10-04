@@ -471,3 +471,16 @@ test('sport records stay separate and five-day window excludes older results', (
   const recent = text.split('**Best records last 5 days · over 61%**')[1].split('**Best football')[0];
   assert.doesNotMatch(recent, /Stale/);
 });
+
+test('Five Star Sports and Empire carry Kobe’s visual markers without changing other experts', () => {
+  const at = Date.parse('2026-10-03T18:00:00Z');
+  const records = ['Five Star Sports', 'Empire', 'Empire Elite'].map((name) => ({
+    name, wins: 1, losses: 0, results: [{ grade: 'W', at, sport: 'football' }], references: []
+  }));
+  const { expertNames, embeds } = payloadFor({ date: '2026-10-04' }, records);
+  const text = embeds.map((embed) => embed.description).join('\n');
+  assert.match(text, /Five Star Sports ⭐🏈 \(1-0, 100%\)/);
+  assert.match(text, /Empire ⭐🏈 \(1-0, 100%\)/);
+  assert.match(text, /Empire Elite \(1-0, 100%\)/);
+  assert.deepEqual(expertNames.sort(), ['Empire', 'Empire Elite', 'Five Star Sports']);
+});

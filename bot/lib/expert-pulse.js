@@ -24,6 +24,10 @@ function expertId(name) {
   return createHash('sha256').update(keyFor(name)).digest('hex').slice(0, 16);
 }
 
+function displayExpertName(name) {
+  return ['fivestarsports', 'empire'].includes(keyFor(name)) ? `${name} ⭐🏈` : name;
+}
+
 function evidenceDigest(record, date = null) {
   // The date changes every morning even when the verified results do not.
   // Keep an expert's decision tied to evidence, not today's sheet heading.
@@ -154,7 +158,7 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
     return { wins, losses, decisions: decisions.length, rate: decisions.length ? wins / decisions.length : 0 };
   };
   const percentage = (rate) => `${Number((rate * 100).toFixed(1))}%`;
-  const format = ({ name, wins, losses, rate }) => `${name} (${wins}-${losses}, ${percentage(rate)})`;
+  const format = ({ name, wins, losses, rate }) => `${displayExpertName(name)} (${wins}-${losses}, ${percentage(rate)})`;
   const ranked = (rows) => rows.sort((a, b) => b.rate - a.rate || b.wins - a.wins || a.name.localeCompare(b.name));
   const yesterday = ranked(records.map((expert) => ({ name: expert.name, references: expert.references, ...recordWithin(expert, end - day, end) }))
     .filter((item) => item.decisions && item.rate > 0.61));
