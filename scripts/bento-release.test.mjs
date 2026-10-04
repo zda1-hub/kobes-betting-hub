@@ -57,6 +57,10 @@ test('production email form supplies age, consent and honeypot to the existing h
   const html = await read('index.html');
   assert.match(html, /<form[^>]*data-email-signup/);
   for (const name of ['email','legalAge','consent','website']) assert.match(html, new RegExp(`name="${name}"`));
+  assert.doesNotMatch(html, /type="checkbox"/);
+  for (const name of ['legalAge','consent']) assert.match(html, new RegExp(`<input type="hidden" name="${name}" value="on">`));
+  assert.match(html, /By selecting Send, I confirm I am 21\+/);
+  assert.match(html, /aria-describedby="email-consent-note"/);
   assert.match(html, /data-email-signup-status/);
   assert.match(html, /src="email-signup\.js/);
   assert.match(html, /href="https:\/\/discord\.gg\/sB9vzGz2xj"/);
