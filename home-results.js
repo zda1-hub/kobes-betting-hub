@@ -47,8 +47,9 @@ if (verifiedResultsTrack) {
         const selection = document.createElement('strong');
         selection.textContent = item.selection;
         const terms = document.createElement('small');
-        terms.textContent = [item.line, item.odds].filter(Boolean).join(' · ') || 'Published bet terms';
-        card.append(meta, badge, selection, terms);
+        terms.textContent = [item.line, item.odds].filter(Boolean).join(' · ');
+        card.append(meta, badge, selection);
+        if (terms.textContent) card.append(terms);
         return card;
       }));
     })
