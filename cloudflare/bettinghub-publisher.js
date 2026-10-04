@@ -132,16 +132,22 @@ export default {
   },
 
   scheduled(controller, env, ctx) {
-    ctx.waitUntil(dispatchDuePosts(controller.scheduledTime, env));
+    ctx.waitUntil(Promise.all([dispatchDuePosts(controller.scheduledTime, env), deliverPendingLeadEmails(env)]));
   },
 };
 
 async function handleRequest(request, env) {
   const url = new URL(request.url);
+  if (url.pathname === "/api/email/subscribe" && request.method === "OPTIONS") {
+    const headers = leadCors(request);
+    return new Response(null, { status: headers ? 204 : 403, headers: headers || undefined });
+  }
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request) });
   if (url.pathname === "/health") {
     return json({ service: "bettinghub-publisher", status: "ready", xConnected: await hasXConnection(env), freePickReady: hasFreePickStore(env) });
   }
+  if (url.pathname === "/api/email/subscribe" && request.method === "POST") return subscribeEmail(request, env);
+  if (url.pathname === "/api/email/unsubscribe" && request.method === "GET") return unsubscribeEmail(url, env);
   if (url.pathname === START_PATH) {
     if (!await hasBearer(request, env.QUEUE_INGEST_SECRET)) return json({ error: "Unauthorized" }, 401);
     return beginXAuthorization(url, env);
@@ -170,6 +176,98 @@ async function handleRequest(request, env) {
   if (url.pathname.startsWith("/media/free-pick/story/") && request.method === "GET") return getFreePickStory(request, env);
   if (url.pathname === "/api/free-pick/publish" && request.method === "POST") return publishFreePick(request, env);
   return new Response("Not found", { status: 404 });
+}
+
+const LEAD_ORIGIN = "https://kobesbettinghub.com";
+
+async function ensureEmailSubscribers(env) {
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS email_subscribers (
+      email TEXT PRIMARY KEY,
+      unsubscribe_token TEXT NOT NULL UNIQUE,
+      subscribed INTEGER NOT NULL DEFAULT 1,
+      consent_at TEXT NOT NULL,
+      welcome_status TEXT NOT NULL DEFAULT 'pending',
+      welcome_sent_at TEXT
+    )`),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_email_subscribers_pending ON email_subscribers (welcome_status, subscribed, consent_at)")
+  ]);
+}
+
+function leadCors(request) {
+  const origin = request.headers.get("origin");
+  if (origin !== LEAD_ORIGIN && origin !== "https://www.kobesbettinghub.com") return null;
+  return { "access-control-allow-origin": origin, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "Content-Type", vary: "Origin" };
+}
+
+async function subscribeEmail(request, env) {
+  const headers = leadCors(request);
+  if (!headers) return json({ error: "This form is only available on the Hub website." }, 403);
+  if (Number(request.headers.get("content-length") || 0) > 4096) return json({ error: "Request is too large." }, 413, headers);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: "Invalid form data." }, 400, headers); }
+  if (data.website) return json({ ok: true }, 200, headers);
+  const email = String(data.email || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || data.consent !== true || data.legalAge !== true) {
+    return json({ error: "Enter a valid email and confirm the two checkboxes." }, 400, headers);
+  }
+  const actor = request.headers.get("cf-connecting-ip") || "unknown";
+  const rateKey = `email-signup:${await sha256Hex(actor)}`;
+  if (env.FREE_PICK_KV && await env.FREE_PICK_KV.get(rateKey)) return json({ error: "Please wait before trying again." }, 429, headers);
+  if (env.FREE_PICK_KV) await env.FREE_PICK_KV.put(rateKey, "1", { expirationTtl: 60 });
+  await ensureEmailSubscribers(env);
+  const existing = await env.DB.prepare("SELECT subscribed, welcome_status FROM email_subscribers WHERE email = ?").bind(email).first();
+  const now = new Date().toISOString();
+  if (!existing) {
+    await env.DB.prepare("INSERT INTO email_subscribers (email, unsubscribe_token, consent_at) VALUES (?, ?, ?)")
+      .bind(email, randomBase64Url(32), now).run();
+  } else if (!existing.subscribed) {
+    await env.DB.prepare("UPDATE email_subscribers SET subscribed = 1, consent_at = ?, welcome_status = 'pending' WHERE email = ?")
+      .bind(now, email).run();
+  }
+  try { await deliverPendingLeadEmails(env, email); } catch { /* The scheduled retry keeps the welcome queued. */ }
+  return json({ ok: true, message: "You're on the list. Check your inbox for a welcome email." }, 200, headers);
+}
+
+async function sendLeadWelcome(env, row) {
+  if (!env.RESEND_API_KEY) throw new Error("Email sender is not configured");
+  const unsubscribeUrl = `https://bettinghub-publisher.kobedirwin.workers.dev/api/email/unsubscribe?token=${encodeURIComponent(row.unsubscribe_token)}`;
+  const body = {
+    from: "Kobe's Betting Hub <support@kobesbettinghub.com>",
+    to: [row.email],
+    reply_to: "support@kobesbettinghub.com",
+    subject: "You're on the Kobe's Betting Hub list",
+    text: `Thanks for joining the Kobe's Betting Hub email list. See today's free pick at https://kobesbettinghub.com/free-pick and explore the membership at https://kobesbettinghub.com/join. Picks and results vary; no outcome is guaranteed. For people of legal betting age where permitted. Reply to this email if you need help.\n\nUnsubscribe: ${unsubscribeUrl}`
+  };
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `kbh-lead-welcome-${await sha256Hex(row.email + row.consent_at)}` },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10000)
+  });
+  if (!response.ok) throw new Error(`Email provider returned ${response.status}`);
+  await env.DB.prepare("UPDATE email_subscribers SET welcome_status = 'sent', welcome_sent_at = ? WHERE email = ? AND subscribed = 1")
+    .bind(new Date().toISOString(), row.email).run();
+}
+
+async function deliverPendingLeadEmails(env, onlyEmail = null) {
+  if (!env.RESEND_API_KEY) return;
+  await ensureEmailSubscribers(env);
+  const query = onlyEmail
+    ? env.DB.prepare("SELECT email, unsubscribe_token, consent_at FROM email_subscribers WHERE email = ? AND subscribed = 1 AND welcome_status = 'pending' LIMIT 1").bind(onlyEmail)
+    : env.DB.prepare("SELECT email, unsubscribe_token, consent_at FROM email_subscribers WHERE subscribed = 1 AND welcome_status = 'pending' ORDER BY consent_at LIMIT 10");
+  const { results } = await query.all();
+  for (const row of results) {
+    try { await sendLeadWelcome(env, row); } catch (error) { console.error("Lead welcome delivery deferred", error?.message); }
+  }
+}
+
+async function unsubscribeEmail(url, env) {
+  const token = url.searchParams.get("token") || "";
+  if (!/^[A-Za-z0-9_-]{40,50}$/.test(token)) return html("Invalid unsubscribe link.", 400);
+  await ensureEmailSubscribers(env);
+  await env.DB.prepare("UPDATE email_subscribers SET subscribed = 0 WHERE unsubscribe_token = ?").bind(token).run();
+  return html("You are unsubscribed from Kobe's Betting Hub emails.");
 }
 
 const VIP_PREVIEW_KEY = 'vip-preview/current.json';

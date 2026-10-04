@@ -2418,6 +2418,9 @@ async function handleMemberWelcomeQueue(request, env) {
   const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
   try {
     if (request.method === 'GET' && path === '/ops/member-welcomes') {
+      // Once the domain sender is configured, scheduled Worker delivery owns
+      // this queue. The legacy Gmail poller receives an empty list.
+      if (env.RESEND_API_KEY) return reply({ notifications: [] });
       // List identities only. Content is returned once, after an atomic claim.
       const [welcome, lifecycle] = await Promise.all([
         supabase(env, 'member_welcome_outbox?status=eq.QUEUED&select=id,created_at&order=created_at.asc&limit=10'),
@@ -2453,6 +2456,47 @@ async function handleMemberWelcomeQueue(request, env) {
     console.error(JSON.stringify({ message: 'Member welcome queue operation failed', path }));
     return reply({ error: 'Notification operation failed safely.' }, 503);
   }
+}
+
+async function deliverMemberEmailsFromDomain(env) {
+  if (!env.RESEND_API_KEY || !supabaseReady(env)) return { skipped: 'not_configured' };
+  const [welcome, lifecycle] = await Promise.all([
+    supabase(env, 'member_welcome_outbox?status=eq.QUEUED&select=id,created_at&order=created_at.asc&limit=5'),
+    supabase(env, 'member_lifecycle_outbox?status=eq.QUEUED&select=id,created_at&order=created_at.asc&limit=5'),
+  ]);
+  const queued = [...(welcome || []).map(row => ({ ...row, table: 'member_welcome_outbox' })),
+    ...(lifecycle || []).map(row => ({ ...row, table: 'member_lifecycle_outbox' }))]
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))).slice(0, 10);
+  let sent = 0;
+  for (const item of queued) {
+    const claimToken = crypto.randomUUID();
+    const rows = await supabase(env, `${item.table}?id=eq.${item.id}&status=eq.QUEUED`, {
+      method: 'PATCH', prefer: 'return=representation',
+      body: { status: 'SEND_STARTED', claim_token: claimToken, send_started_at: new Date().toISOString() },
+    });
+    const message = rows?.[0];
+    if (!message) continue;
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `kbh-member-${message.id}` },
+        body: JSON.stringify({ from: "Kobe's Betting Hub <support@kobesbettinghub.com>", to: [message.recipient], reply_to: 'support@kobesbettinghub.com', subject: message.subject, text: message.body }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error(`Sender returned ${response.status}`);
+      await supabase(env, `${item.table}?id=eq.${message.id}&claim_token=eq.${claimToken}&status=eq.SEND_STARTED`, {
+        method: 'PATCH', prefer: 'return=minimal', body: { status: 'DELIVERED', delivered_at: new Date().toISOString() },
+      });
+      sent += 1;
+    } catch (error) {
+      // An unknown send outcome is held for human review, never replayed.
+      await supabase(env, `${item.table}?id=eq.${message.id}&claim_token=eq.${claimToken}&status=eq.SEND_STARTED`, {
+        method: 'PATCH', prefer: 'return=minimal', body: { status: 'REVIEW_REQUIRED' },
+      });
+      console.error('Member domain email needs review', { id: message.id, status: error?.message });
+    }
+  }
+  return { sent };
 }
 
 async function activateCheckoutAssociation(env, association, eventId = null) {
@@ -3249,7 +3293,7 @@ export default {
     return json({ error: 'Not found.' }, 404, origin);
   },
   scheduled(controller, env, ctx) {
-    const frequent = Promise.all([retryPendingActivations(env), expireCreatorTrials(env), activateReadyCreators(env)]);
+    const frequent = Promise.all([retryPendingActivations(env), expireCreatorTrials(env), activateReadyCreators(env), deliverMemberEmailsFromDomain(env)]);
     const daily = controller.cron === '15 16 * * *'
       ? Promise.all([reconcileMemberships(env), processReferralPayouts(env), queueLifecycleReminders(env)]) : Promise.resolve();
     ctx.waitUntil(Promise.all([frequent, daily]));
