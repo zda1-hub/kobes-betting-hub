@@ -3,7 +3,7 @@ const login=document.querySelector('[data-login]'),status=document.querySelector
 
 const reportingTimeZone='America/Phoenix';
 function reportingDate(value){return new Intl.DateTimeFormat('en-CA',{timeZone:reportingTimeZone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value))}
-function rangeLabel(range){const names={today:'Today',yesterday:'Yesterday','7d':'Last 7 days','30d':'Last 30 days',all:'All time',custom:'Custom'};const end=reportingDate(new Date(Date.parse(range.end)-1));return `${names[range.preset]||'Selected dates'} · ${range.start?`${reportingDate(range.start)} to ${end}`:`through ${end}`} · Phoenix time`}
+function rangeLabel(range){const names={today:'Today',yesterday:'Yesterday','7d':'Last 7 days','30d':'Last 30 days',all:'All time',custom:'Custom'};const end=reportingDate(new Date(Date.parse(range.end)-1));return `${names[range.preset]||'Selected dates'} · ${range.start?`${reportingDate(range.start)} to ${end}`:`through ${end}`} · MST`}
 function customRangeParams(start,end){
   const valid=value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value;
   if(!start||!end)throw new Error('Choose both custom dates.');
@@ -25,7 +25,7 @@ function renderRange(d){
     document.querySelector('[data-end]').value=reportingDate(new Date(Date.parse(d.range.end)-1));
   }
 }
-function selectRange(range){currentRange=range;document.querySelectorAll('[data-range]').forEach(b=>{b.classList.toggle('active',b.dataset.range===range);b.setAttribute('aria-pressed',String(b.dataset.range===range))});return load()}
+function selectRange(range){currentRange=range;const dates=document.querySelector('[data-custom-dates]');if(dates)dates.hidden=range!=='custom';document.querySelectorAll('[data-range]').forEach(b=>{b.classList.toggle('active',b.dataset.range===range);b.setAttribute('aria-pressed',String(b.dataset.range===range))});return load()}
 
 function rows(target,values){target.innerHTML=values.length?values.map(([a,b])=>`<div class="row"><span>${esc(a)}</span><strong>${esc(b)}</strong></div>`).join(''):'<p class="muted">No data in this range.</p>'}
 function metrics(target,values){target.innerHTML=values.map(([a,b])=>`<article class="metric"><span>${esc(a)}</span><strong>${esc(b)}</strong></article>`).join('')}
@@ -56,7 +56,60 @@ const duplicates=d.membership.duplicateGroups||[];document.querySelector('[data-
 document.querySelector('[data-funnel]').innerHTML=d.conversion.funnel.map(x=>`<article><strong>${esc(x.name.replaceAll('_',' '))}</strong><b>${x.count}</b><span>${pct(x.previousConversionRate)} from prior · ${pct(x.overallConversionRate)} overall</span><small>${x.dropoff} drop-off (${pct(x.dropoffRate)})</small></article>`).join('');const max=Math.max(1,...d.history.map(x=>x.revenueCents));document.querySelector('[data-history]').innerHTML=d.history.map(x=>`<div title="${x.date}: ${money(x.revenueCents)}, ${x.newMembers} new"><i style="height:${Math.max(2,x.revenueCents/max*100)}%"></i></div>`).join('');
 metrics(document.querySelector('[data-revenue]'),[['Today',money(d.revenue.todayCents)],['This week',money(d.revenue.weekCents)],['This month',money(d.revenue.monthCents)],['All time',money(d.revenue.allTimeCents)],['Intro offer revenue',money(d.revenue.introRevenueCents)],['Subscription revenue',money(d.revenue.subscriptionRevenueCents)],['Referral credits issued',money(d.referrals.paidCashCents)],['Refunds',money(d.revenue.refundsCents)],['Lost MRR',money(d.revenue.lostMrrCents)]]);
 const access=document.querySelector('[data-access]');access.innerHTML=`<div class="row"><span>Paid + VIP Active</span><strong>${d.discord.vipActive}</strong></div><div class="row"><span>Paid + VIP Pending</span><strong>${d.discord.pending}</strong></div><div class="row"><span>Paid + VIP Failed</span><strong>${d.discord.failed}</strong></div><div class="row"><span>Successful recovery/retry</span><strong>${d.discord.recovered}</strong></div><div class="row"><span>Discord not connected</span><strong>${d.discord.paidDiscordMissing}</strong></div><div class="row"><span>VIP check unavailable</span><strong>${d.discord.roleCheckUnavailable||0}</strong></div><div class="row"><span>VIP Role + No Valid Entitlement</span><strong>${d.discord.vipWithoutEntitlement===null?'Unavailable':d.discord.vipWithoutEntitlement}</strong></div>`+d.discord.details.map(x=>`<div class="row danger"><span>${esc(x.plan)} · ${esc(x.roleCheck||x.vipStatus)} · attempts ${x.activationAttempts} · ${esc(x.failureReason||'no recorded failure')}</span>${x.roleCheck==='MISSING'&&x.discordConnected?`<button class="retry" data-association="${esc(x.associationId||'')}" data-subscription="${esc(x.subscriptionId)}">Retry VIP Sync</button>`:''}</div>`).join('');access.querySelectorAll('[data-subscription]').forEach(b=>b.onclick=()=>retry(b.dataset.association?{associationId:b.dataset.association}:{subscriptionId:b.dataset.subscription},b));
-const issueDetails=[...d.alerts.awaitingDiscord.map(x=>`Awaiting Discord · ${x.id||x.stripe_subscription_id||'member'}`),...d.alerts.paidWithoutVip.map(x=>`${x.discordConnected?'VIP role missing':'Discord connection needed'} · ${x.subscriptionId} · ${x.failureReason||x.vipStatus}`),...d.alerts.webhookFailures.map(x=>`Webhook · ${x.event_type} · ${x.error_detail||'failed'}`),...d.alerts.failedPayments.map(x=>`Failed payment · ${x.stripe_subscription_id||x.stripe_customer_id||'member'}`),...d.alerts.referralReview.map(x=>`Referral review · ${x.referrer_discord_user_id||'unknown'}`)];document.querySelector('[data-alerts]').innerHTML=`<div class="row"><span>Total issues</span><strong>${d.alerts.total}</strong></div>`+(issueDetails.length?issueDetails.map(x=>`<div class="row danger"><span>${esc(x)}</span></div>`).join(''):'<p class="muted">No issues in this range.</p>');document.querySelector('[data-sources]').innerHTML=d.traffic.sources.map(x=>`<tr><td>${esc(x.source)}</td><td>${x.visitors}</td><td>${x.joinViews}</td><td>${x.checkoutStarts}</td><td>${x.purchases}</td><td>${pct(x.conversionRate)}</td><td>${money(x.revenueCents)}</td><td>${money(x.mrrCents)}</td></tr>`).join('');rows(document.querySelector('[data-countries]'),Object.entries(d.traffic.countries));rows(document.querySelector('[data-devices]'),Object.entries(d.traffic.devices));rows(document.querySelector('[data-browsers]'),Object.entries(d.traffic.browsers));document.querySelector('[data-campaigns]').innerHTML=d.traffic.campaigns.length?d.traffic.campaigns.map(x=>`<div class="campaign-row"><strong>${esc(x.source)} · ${esc(x.campaign)}</strong><span>${x.visitors} visits · ${x.checkoutStarts} checkout${x.checkoutStarts===1?'':'s'} · ${x.purchases} paid · ${pct(x.conversionRate)} · ${money(x.revenueCents)} revenue · ${money(x.mrrCents)} MRR</span></div>`).join(''):'<p class="muted">No campaign data in this range.</p>';metrics(document.querySelector('[data-retention]'),[['Renewal rate',pct(d.retention.renewalRate)],['Churn rate',pct(d.retention.churnRate)],['Average duration',`${d.retention.averageDurationDays.toFixed(1)} days`],['Intro → monthly',pct(d.retention.starterToMonthlyRate)],['Active 30+ days',d.retention.active30Days],['Active 60+ days',d.retention.active60Days],['Active 90+ days',d.retention.active90Days],['First-week cancels',d.retention.firstWeekCancellations],['First-month cancels',d.retention.firstMonthCancellations],['Retention offers shown',d.retention.offersShown],['Retention offers accepted',d.retention.offersAccepted]]);rows(document.querySelector('[data-reasons]'),Object.entries(d.retention.cancellationReasons));document.querySelector('[data-referrals]').innerHTML=d.referrals.leaderboard.map(x=>`<tr><td>${esc(x.referralCode)}</td><td>${esc(x.referrerName||x.discordUserId)}</td><td>${x.successfulReferrals}</td><td>${x.pendingReferrals}</td><td>${pct(x.conversionRate)}</td><td>${money(x.totalEarnedCents)}</td></tr>`).join('')||'<tr><td colspan="6">No referral activity.</td></tr>';renderMembers();status.textContent=`Updated ${new Date(d.generatedAt).toLocaleString()}`}
+const issueDetails=[...d.alerts.awaitingDiscord.map(x=>`Awaiting Discord · ${x.id||x.stripe_subscription_id||'member'}`),...d.alerts.paidWithoutVip.map(x=>`${x.discordConnected?'VIP role missing':'Discord connection needed'} · ${x.subscriptionId} · ${x.failureReason||x.vipStatus}`),...d.alerts.webhookFailures.map(x=>`Webhook · ${x.event_type} · ${x.error_detail||'failed'}`),...d.alerts.failedPayments.map(x=>`Failed payment · ${x.stripe_subscription_id||x.stripe_customer_id||'member'}`),...d.alerts.referralReview.map(x=>`Referral review · ${x.referrer_discord_user_id||'unknown'}`)];document.querySelector('[data-alerts]').innerHTML=`<div class="row"><span>Total issues</span><strong>${d.alerts.total}</strong></div>`+(issueDetails.length?issueDetails.map(x=>`<div class="row danger"><span>${esc(x)}</span></div>`).join(''):'<p class="muted">No issues in this range.</p>');document.querySelector('[data-sources]').innerHTML=d.traffic.sources.map(x=>`<tr><td>${esc(x.source)}</td><td>${x.visitors}</td><td>${x.joinViews}</td><td>${x.checkoutStarts}</td><td>${x.purchases}</td><td>${pct(x.conversionRate)}</td><td>${money(x.revenueCents)}</td><td>${money(x.mrrCents)}</td></tr>`).join('');rows(document.querySelector('[data-countries]'),Object.entries(d.traffic.countries));rows(document.querySelector('[data-devices]'),Object.entries(d.traffic.devices));rows(document.querySelector('[data-browsers]'),Object.entries(d.traffic.browsers));document.querySelector('[data-campaigns]').innerHTML=d.traffic.campaigns.length?d.traffic.campaigns.map(x=>`<div class="campaign-row"><strong>${esc(x.source)} · ${esc(x.campaign)}</strong><span>${x.visitors} visits · ${x.checkoutStarts} checkout${x.checkoutStarts===1?'':'s'} · ${x.purchases} paid · ${pct(x.conversionRate)} · ${money(x.revenueCents)} revenue · ${money(x.mrrCents)} MRR</span></div>`).join(''):'<p class="muted">No campaign data in this range.</p>';metrics(document.querySelector('[data-retention]'),[['Renewal rate',pct(d.retention.renewalRate)],['Churn rate',pct(d.retention.churnRate)],['Average duration',`${d.retention.averageDurationDays.toFixed(1)} days`],['Intro → monthly',pct(d.retention.starterToMonthlyRate)],['Active 30+ days',d.retention.active30Days],['Active 60+ days',d.retention.active60Days],['Active 90+ days',d.retention.active90Days],['First-week cancels',d.retention.firstWeekCancellations],['First-month cancels',d.retention.firstMonthCancellations],['Retention offers shown',d.retention.offersShown],['Retention offers accepted',d.retention.offersAccepted]]);rows(document.querySelector('[data-reasons]'),Object.entries(d.retention.cancellationReasons));document.querySelector('[data-referrals]').innerHTML=d.referrals.leaderboard.map(x=>`<tr><td>${esc(x.referralCode)}</td><td>${esc(x.referrerName||x.discordUserId)}</td><td>${x.successfulReferrals}</td><td>${x.pendingReferrals}</td><td>${pct(x.conversionRate)}</td><td>${money(x.totalEarnedCents)}</td></tr>`).join('')||'<tr><td colspan="6">No referral activity.</td></tr>';renderMembers();status.textContent=`Updated ${new Date(d.generatedAt).toLocaleString('en-US',{timeZone:reportingTimeZone})} MST`}
+function renderOverview(d){
+  const target=document.querySelector('[data-summary]'),attention=document.querySelector('[data-priority-alerts]');
+  if(!target||!attention||!d.scoreboard||!d.revenue||!d.conversion||!d.traffic)return;
+  const count=value=>Number.isFinite(value)?String(value):'Unavailable';
+  const cash=value=>Number.isFinite(value)?money(value):'Unavailable';
+  const ratio=value=>Number.isFinite(value)?pct(value):'Unavailable';
+  const items=[
+    ['Active subscriptions',count(d.scoreboard.activePaid),'Right now','blue'],
+    ['Estimated MRR',cash(d.scoreboard.mrrCents),'Monthly recurring · now','ink'],
+    ['Collected revenue',cash(d.revenue.collectedCents),'Selected dates',''],
+    ['Successful payments',count(d.conversion.successfulPayments),'Selected dates',''],
+    ['Website visits',count(d.traffic.uniqueVisitors),'30-minute browsing sessions',''],
+    ['Checkout → paid',ratio(d.conversion.checkoutPurchaseConversionRate),`${count(d.conversion.successfulPayments)} payments / ${count(d.conversion.checkoutStarts)} checkout starts`,'']
+  ];
+  target.innerHTML=items.map(([label,value,note,tone])=>`<article class="metric hero-metric ${tone}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(note)}</small></article>`).join('');
+  const signal=document.querySelector('[data-conversion-signal]');
+  const steps=(d.conversion.funnel||[]).slice(1).filter(step=>Number.isFinite(step.dropoffRate)&&step.dropoff>0);
+  const biggest=steps.sort((a,b)=>b.dropoffRate-a.dropoffRate)[0];
+  if(signal){signal.hidden=!biggest;if(biggest)signal.textContent=`Largest funnel drop-off: ${String(biggest.name).replaceAll('_',' ')} · ${pct(biggest.dropoffRate)} from the previous step.`;}
+  const pick=d.operations?.freePick;
+  const stale=pick&&pick.publishedDate!==pacificDate();
+  const actions=[
+    ['Open failed invoices',d.revenue.openFailedInvoices,'Selected dates · review Stripe invoices','membership-report','payment-issues',''],
+    ['Paid without VIP setup',d.discord?.paidWithoutVip,'Current access checks','membership-report','access-health',''],
+    ['VIP checks unavailable',d.discord?.roleCheckUnavailable,'Verify access before taking action','membership-report','access-health',''],
+    ['Today’s free pick',pick?(stale?'Not published':'Published'):'Unavailable',pick?`Latest: ${pick.publishedDate}`:'Delivery status could not load','publishing-report','publishing-status','']
+  ];
+  attention.innerHTML=actions.map(([label,value,note,section,id])=>`<a class="attention-item ${typeof value==='number'&&value>0||value==='Not published'?'urgent':''}" href="#${id}" data-open-section="${section}"><span><strong>${esc(label)}</strong><small>${esc(note)}</small></span><b>${esc(typeof value==='number'?count(value):value??'Unavailable')}</b><span aria-hidden="true">↗</span></a>`).join('');
+  const refresh=document.querySelector('[data-refresh]');if(refresh)refresh.hidden=false;
+}
+function labelMobileTables(){
+  document.querySelectorAll('.table-wrap table').forEach(table=>{
+    const labels=[...table.querySelectorAll('thead th')].map(th=>th.textContent);
+    table.querySelectorAll('tbody tr').forEach(row=>[...row.children].forEach((cell,i)=>{
+      if(cell.colSpan>1)cell.setAttribute('data-label','');
+      else cell.setAttribute('data-label',labels[i]||'');
+    }));
+  });
+}
+function setupDashboardNavigation(){
+  document.querySelector('[data-refresh]')?.addEventListener('click',()=>load());
+  dashboard.addEventListener('click',event=>{
+    const link=event.target.closest?.('a[href^="#"]');if(!link)return;
+    const id=link.getAttribute('href').slice(1),target=document.getElementById(id);if(!target)return;
+    const details=target.tagName==='DETAILS'?target:target.closest('details.dashboard-details');
+    event.preventDefault();
+    if(details)details.open=true;
+    if(link.dataset.openSection){const group=document.getElementById(link.dataset.openSection);if(group)group.open=true;}
+    history.replaceState(null,'',`#${id}`);
+    target.scrollIntoView({block:'start',behavior:'instant'});
+  });
+}
+
 function renderExecutive(d){
   const s=d.scoreboard;
   if(!s)return;
@@ -92,15 +145,18 @@ async function load(){
     }
     const data=await response.json();
     if(sequence!==loadSequence)return;
-    render(data);renderExecutive(data);renderTarget(data);renderPaymentAndReferralDetails(data);
-    if(data.reportingExclusions?.customers)status.textContent+=` · ${data.reportingExclusions.customers} internal test customers excluded from membership and revenue reports.`;
-    if(data.dataCompletenessWarnings?.length)status.textContent+=` · DATA MAY BE INCOMPLETE: ${data.dataCompletenessWarnings.join(' ')}`;
+    render(data);renderExecutive(data);renderTarget(data);renderPaymentAndReferralDetails(data);renderOverview(data);labelMobileTables();
+    const notices=[...(data.dataCompletenessWarnings||[])];
+    if(data.reportingExclusions?.customers)notices.push(`${data.reportingExclusions.customers} internal test customers excluded from membership and revenue reports.`);
+    const notice=document.querySelector('[data-data-notice]'),warning=document.querySelector('[data-data-warning]');
+    if(notice&&warning){notice.hidden=!notices.length;warning.textContent=notices.join(' ');const label=document.querySelector('[data-data-notice-label]');if(label)label.textContent=data.dataCompletenessWarnings?.length?'Some history is incomplete':'Reporting notes';}
   }catch(error){if(sequence===loadSequence)status.textContent=`${error.message}${lastData&&token?' Previous results remain displayed for the dates shown below.':''}`}
   finally{if(sequence===loadSequence)dashboard.setAttribute('aria-busy','false')}
 }
 document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>selectRange(b.dataset.range));
 document.querySelectorAll('[data-start],[data-end]').forEach(x=>x.onchange=()=>selectRange('custom'));
-document.querySelector('[data-member-search]').oninput=renderMembers;
-document.querySelector('[data-member-filter]').onchange=renderMembers;
-document.querySelector('[data-member-scope]').onchange=renderMembers;
+document.querySelector('[data-member-search]').oninput=()=>{renderMembers();labelMobileTables()};
+document.querySelector('[data-member-filter]').onchange=()=>{renderMembers();labelMobileTables()};
+document.querySelector('[data-member-scope]').onchange=()=>{renderMembers();labelMobileTables()};
+setupDashboardNavigation();
 setupCampaignLinks();setupCreatorInvite();load();
