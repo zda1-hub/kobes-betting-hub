@@ -84,12 +84,35 @@ const requestedReferralCode = (new URLSearchParams(window.location.search).get('
 const referralCode = /^(KBH|KBC)-[A-Z0-9]{10}$/.test(requestedReferralCode) ? requestedReferralCode : '';
 
 if (referralCode && !checkoutState) {
+  const referralGrid = document.querySelector('.offer-card-grid');
+  const creatorPromotionActive = referralCode.startsWith('KBC-') && Date.now() >= Date.parse('2026-09-22T07:00:00Z') && Date.now() < Date.parse('2026-10-23T07:00:00Z');
+  if (referralGrid) {
+    referralGrid.querySelectorAll('.offer-choice:not(.offer-choice-referral)').forEach(card => { card.hidden = true; });
+    const referralCard = referralGrid.querySelector('[data-referral-card]');
+    if (referralCard) referralCard.hidden = false;
+    const referralFields = {
+      label: creatorPromotionActive ? 'CREATOR OFFER' : 'REFERRAL OFFER',
+      title: creatorPromotionActive ? 'First month' : 'Two-day trial',
+      price: creatorPromotionActive ? '$19.99 <span>today</span>' : '$0 <span>today</span>',
+      renewal: creatorPromotionActive ? 'One full month, then $32.99/month until canceled.' : '2 days free, then $32.99/month until canceled.'
+    };
+    for (const [key, value] of Object.entries(referralFields)) {
+      const field = referralCard?.querySelector(`[data-referral-${key}]`);
+      if (field) field.innerHTML = value;
+    }
+    const referralButton = referralCard?.querySelector('[data-referral-button]');
+    if (referralButton) {
+      referralButton.dataset.checkout = creatorPromotionActive ? 'first_month_back' : 'referral_trial';
+      referralButton.innerHTML = creatorPromotionActive ? 'Join for $19.99 <span aria-hidden="true">→</span>' : 'Start free trial <span aria-hidden="true">→</span>';
+    }
+    document.querySelectorAll('[data-term-note]').forEach(element => { element.hidden = true; });
+    setCheckoutMessage(creatorPromotionActive ? 'Creator offer: $19.99 for the first month, then $32.99/month until canceled.' : 'Referral offer: 2 days free, then $32.99/month until canceled.');
+  } else {
   const starterButton = document.querySelector('[data-checkout="starter"]');
   const trialButton = document.querySelector('[data-checkout="trial_2_day"]');
   const offerBadge = document.querySelector('.offer-badge');
   const priceDescription = document.querySelector('.membership-price span');
   const priceAmount = document.querySelector('.membership-price strong');
-  const creatorPromotionActive = referralCode.startsWith('KBC-') && Date.now() >= Date.parse('2026-09-22T07:00:00Z') && Date.now() < Date.parse('2026-10-23T07:00:00Z');
   if (starterButton) starterButton.hidden = true;
   document.querySelectorAll('[data-term-plans], [data-term-note]').forEach(element => { element.hidden = true; });
   if (trialButton) {
@@ -100,6 +123,7 @@ if (referralCode && !checkoutState) {
   if (priceAmount && creatorPromotionActive) priceAmount.textContent = '$19.99';
   if (priceDescription) priceDescription.textContent = creatorPromotionActive ? 'for your first month, then $32.99/month' : 'per month after your 2-day free trial';
   setCheckoutMessage(creatorPromotionActive ? 'Creator offer: $19.99 for the first month, then $32.99/month until canceled.' : 'Referral offer: 2 days free, then $32.99/month until canceled. The $10 starter option is not available with referrals.');
+  }
 }
 
 if (checkoutState === 'success') {

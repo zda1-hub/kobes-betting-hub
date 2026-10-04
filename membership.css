@@ -81,3 +81,35 @@
   .manage-actions .button { letter-spacing:0; }
 }
 [data-promo-only][hidden], [data-promo-default][hidden] { display:none !important; }
+
+/* Join page offer grid. The checkout buttons retain their existing offer IDs. */
+.membership-hero-vip { grid-template-columns:minmax(0,1fr); gap:34px; max-width:1440px; margin:0 auto; padding-top:clamp(48px,6vw,88px); }
+.membership-hero-vip > div { max-width:950px; }
+.membership-hero-vip h1 { max-width:950px; font-size:clamp(48px,6.5vw,88px); }
+.offer-card-grid { width:100%; max-width:none; justify-self:stretch; padding:clamp(20px,3vw,38px); box-shadow:11px 11px 0 var(--orange); }
+.offer-grid-heading { margin-bottom:22px; }
+.offer-grid-heading .card-kicker { margin-bottom:12px; }
+.offer-grid-heading h2 { margin:0 0 8px; font-size:clamp(32px,4vw,48px); line-height:1; letter-spacing:-.055em; }
+.offer-grid-heading > p:last-child { max-width:680px; margin:0; color:#c9d0dd; font-size:14px; line-height:1.5; }
+.offer-grid { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:14px; }
+.offer-choice { min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:0; padding:clamp(18px,2.5vw,28px); border-radius:18px; background:#222733; color:#fff; }
+.offer-choice-primary,.offer-choice-annual { grid-column:span 7; }
+.offer-choice-starter,.offer-choice-six { grid-column:span 5; }
+.offer-choice[hidden],.offer-choice-referral[hidden] { display:none !important; }
+.offer-choice-primary { background:#146df5; }
+.offer-choice-starter { background:#333a68; }
+.offer-choice-six { background:#30384f; }
+.offer-choice-annual { background:#594ad6; }
+.offer-choice-referral { grid-column:1/-1; background:#146df5; }
+.offer-choice-label { margin:0 0 13px; color:#d8e3ff; font:500 11px 'DM Mono',monospace; letter-spacing:.08em; }
+.offer-choice h3 { margin:0 0 12px; font-size:clamp(23px,2.4vw,35px); letter-spacing:-.055em; line-height:1.05; }
+.offer-choice-price { margin:0 0 11px; font-size:clamp(39px,4.7vw,68px); font-weight:800; letter-spacing:-.08em; line-height:1; }
+.offer-choice-price span { font-size:15px; font-weight:600; letter-spacing:0; }
+.offer-choice-renewal { margin:0 0 18px; color:#f2f5ff; font-size:clamp(14px,1.35vw,17px); line-height:1.45; }
+.offer-choice .offer-button { width:auto; margin-top:auto; padding:14px 18px; border-radius:10px; background:#fff; color:#121a2d; font-size:12px; }
+.offer-choice .offer-button:hover { background:#d9e6ff; }
+.offer-choice-note { margin:13px 0 0; color:#d4ddf3; font-size:11px; line-height:1.5; }
+.offer-card-grid .term-footnote { margin-top:19px; }
+.offer-card-grid .offer-terms { max-width:900px; }
+.offer-card-grid .member-referral { max-width:700px; }
+@media(max-width:700px) { .membership-hero-vip { padding:36px 20px 72px; }.offer-card-grid { width:100%; padding:16px; box-shadow:7px 7px 0 var(--orange); }.offer-grid { grid-template-columns:1fr; gap:10px; }.offer-choice { grid-column:1/-1; padding:20px; border-radius:14px; }.offer-choice h3 { font-size:27px; }.offer-choice-price { font-size:50px; }.offer-choice .offer-button { width:100%; }.offer-grid-heading h2 { font-size:36px; } }
