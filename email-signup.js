@@ -1,3 +1,5 @@
+(() => {
+if (['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) || location.protocol === 'file:') return;
 const signupForm = document.querySelector('[data-email-signup]');
 if (signupForm) signupForm.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -21,3 +23,5 @@ if (signupForm) signupForm.addEventListener('submit', async (event) => {
     status.textContent = error.message || 'We couldn’t add you right now. Please try again.';
   } finally { button.disabled = false; }
 });
+
+})();

@@ -27,41 +27,38 @@ function dataAttributeText(html, attribute) {
   return visibleText(match[2]);
 }
 
-test('join and membership routes use one complete recurring-billing disclosure', async () => {
-  const [join, membership] = await Promise.all([
-    readRepositoryFile('join.html'),
-    readRepositoryFile('membership.html'),
-  ]);
-  const joinDisclosure = dataAttributeText(join, 'data-checkout-message');
-  const membershipDisclosure = dataAttributeText(membership, 'data-checkout-message');
-
-  assert.equal(membershipDisclosure, joinDisclosure, 'checkout disclosures must not drift between routes');
-  assert.match(joinDisclosure, /\$10 today for 7 days/i);
-  assert.match(joinDisclosure, /2 days free/i);
-  assert.match(joinDisclosure, /automatically renews at \$32\.99\/month/i);
-  assert.match(joinDisclosure, /until canceled/i);
-  assert.match(joinDisclosure, /cancel before the next renewal/i);
-  assert.match(joinDisclosure, /access continues through the paid-through date/i);
-  assert.match(joinDisclosure, /non-refundable except where required by law, card-network rules, or a written Hub exception/i);
-
-  const checkoutOffers = (html) => [...html.matchAll(/data-checkout=["']([^"']+)["']/gi)]
-    .map((match) => match[1])
-    .sort();
-  assert.deepEqual(checkoutOffers(join), ['annual', 'first_month_back', 'referral_trial', 'six_month', 'starter', 'trial_2_day']);
-  assert.deepEqual(checkoutOffers(membership), checkoutOffers(join).filter(offer => offer !== 'referral_trial'));
-  for (const html of [join, membership]) {
+test('join and membership clearly disclose four current offers and keep referral choices private', async () => {
+  const pages = await Promise.all(['join.html', 'membership.html'].map(readRepositoryFile));
+  assert.equal(dataAttributeText(pages[0], 'data-checkout-message'), dataAttributeText(pages[1], 'data-checkout-message'));
+  for (const html of pages) {
+    const articles = [...html.matchAll(/<article\b([^>]*)>([\s\S]*?)<\/article>/gi)];
+    const visibleOffers = articles.filter(([, attributes, content]) => !/\bhidden\b/.test(attributes) && /data-checkout=/.test(content));
+    assert.equal(visibleOffers.length, 4);
+    const offers = new Map(visibleOffers.map(([, , content]) => [content.match(/data-checkout="([^"]+)"/)[1], visibleText(content)]));
+    assert.deepEqual([...offers.keys()].sort(), ['annual', 'first_month_back', 'six_month', 'starter']);
+    assert.match(offers.get('first_month_back'), /\$19\.99 today/);
+    assert.match(offers.get('first_month_back'), /One full month, then \$32\.99\/month until canceled/);
+    assert.match(offers.get('first_month_back'), /10\/22\/2026 \(MST\)/);
+    assert.match(offers.get('first_month_back'), /No free trial/i);
+    assert.match(offers.get('starter'), /\$10 today/);
+    assert.match(offers.get('starter'), /First 7 days, then \$32\.99\/month until canceled/);
+    assert.match(offers.get('starter'), /No free trial/i);
+    assert.match(offers.get('six_month'), /\$134\.99 today/);
+    assert.match(offers.get('six_month'), /Then \$134\.99 \/ 6 months until canceled/);
+    assert.match(offers.get('annual'), /\$194\.99 today/);
+    assert.match(offers.get('annual'), /Then \$194\.99\/year until canceled/);
+    assert.match(offers.get('six_month'), /Save \$62\.95 vs\. six \$32\.99 monthly payments/);
+    assert.match(offers.get('annual'), /Save \$200\.89 vs\. twelve \$32\.99 monthly payments/);
+    for (const offer of ['six_month', 'annual']) assert.match(offers.get(offer), /No trial/);
+    const referral = articles.find(([, attributes]) => /data-referral-card/.test(attributes));
+    assert.ok(referral); assert.match(referral[1], /\bhidden\b/);
+    assert.match(referral[2], /data-referral-button/);
+    assert.doesNotMatch(visibleOffers.map(([, , content]) => visibleText(content)).join(' '), /2 days free|two.day trial/i);
     const text = visibleText(html);
-    assert.match(text, /\$134\.99/);
-    assert.match(text, /\$194\.99/);
-    assert.match(text, /every 6 months until canceled/);
-    assert.match(text, /(?:every|each) year until canceled/);
-    assert.match(text, /No trial/);
-    assert.match(text, /excluding introductory offers/);
-    assert.match(html, /class="member-referral"/);
-    assert.match(html, /href="refer\.html">Member referral program/);
-    assert.match(html, /href="\/managemembership">Already a member\? Manage membership/);
-    assert.ok(text.includes(`Save $${(3299 * 6 / 100 - 134.99).toFixed(2)}`));
-    assert.ok(text.includes(`Save $${(3299 * 12 / 100 - 194.99).toFixed(2)}`));
+    assert.match(text, /Cancel before the next renewal/);
+    assert.match(text, /access continues through the paid-through date/);
+    assert.match(text, /non-refundable except where required by law, card-network rules, or a written Hub exception/);
+    assert.match(html, /href="cancel\.html"/);
   }
 });
 

@@ -1,0 +1,398 @@
+[
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/index.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/join.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/membership.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/proof.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/free-pick.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/faq.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/support.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/cancel.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/privacy.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/terms.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/responsible-gambling.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/recaps.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/404.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/approach.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/exclusives.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/refer.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/results.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/guides/index.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/guides/how-to-choose-a-sports-betting-discord.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/guides/how-to-read-betting-odds-and-line-movement.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/guides/what-a-sports-betting-writeup-should-include.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 24,
+    "headerGutter": 24,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/guides/bankroll-management-for-sports-betting.html",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/index.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/join.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/membership.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/proof.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/free-pick.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/faq.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/support.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/cancel.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/privacy.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/terms.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/responsible-gambling.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/recaps.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/404.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/approach.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/exclusives.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/refer.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/results.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/guides/index.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/guides/how-to-choose-a-sports-betting-discord.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/guides/how-to-read-betting-odds-and-line-movement.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/guides/what-a-sports-betting-writeup-should-include.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "gutter": 140,
+    "headerGutter": 140,
+    "joinHeight": 24,
+    "joinWidth": 85,
+    "path": "/guides/bankroll-management-for-sports-betting.html",
+    "scrollWidth": 1440,
+    "width": 1440
+  }
+]

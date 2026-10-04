@@ -1,0 +1,125 @@
+[
+  {
+    "bannerHeight": 52,
+    "font": null,
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/index.html",
+    "rows": 0,
+    "shareCenterOffset": null,
+    "sideBySide": null,
+    "width": 360
+  },
+  {
+    "font": "Arial, sans-serif",
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/exclusives.html",
+    "rows": 120,
+    "shareCenterOffset": null,
+    "sideBySide": true,
+    "width": 360
+  },
+  {
+    "font": null,
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/join.html",
+    "rows": 0,
+    "shareCenterOffset": 0,
+    "sideBySide": null,
+    "width": 360
+  },
+  {
+    "font": null,
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/membership.html",
+    "rows": 0,
+    "shareCenterOffset": 0,
+    "sideBySide": null,
+    "width": 360
+  },
+  {
+    "bannerHeight": 52,
+    "font": null,
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/index.html",
+    "rows": 0,
+    "shareCenterOffset": null,
+    "sideBySide": null,
+    "width": 390
+  },
+  {
+    "font": "Arial, sans-serif",
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/exclusives.html",
+    "rows": 120,
+    "shareCenterOffset": null,
+    "sideBySide": true,
+    "width": 390
+  },
+  {
+    "font": null,
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/join.html",
+    "rows": 0,
+    "shareCenterOffset": 0,
+    "sideBySide": null,
+    "width": 390
+  },
+  {
+    "font": null,
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/membership.html",
+    "rows": 0,
+    "shareCenterOffset": 0,
+    "sideBySide": null,
+    "width": 390
+  },
+  {
+    "bannerHeight": 52,
+    "font": null,
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/index.html",
+    "rows": 0,
+    "shareCenterOffset": null,
+    "sideBySide": null,
+    "width": 1440
+  },
+  {
+    "font": "Arial, sans-serif",
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/exclusives.html",
+    "rows": 120,
+    "shareCenterOffset": null,
+    "sideBySide": true,
+    "width": 1440
+  },
+  {
+    "font": null,
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/join.html",
+    "rows": 0,
+    "shareCenterOffset": 0,
+    "sideBySide": null,
+    "width": 1440
+  },
+  {
+    "font": null,
+    "gutterDifference": 0,
+    "overflow": false,
+    "path": "/membership.html",
+    "rows": 0,
+    "shareCenterOffset": 0,
+    "sideBySide": null,
+    "width": 1440
+  }
+]

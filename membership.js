@@ -1,3 +1,4 @@
+(() => {
 const year = document.getElementById('year');
 // Wait until the shared header, styles and fonts are loaded before aligning
 // a direct pricing link. Browser scroll restoration can otherwise cover it.
@@ -8,25 +9,10 @@ const alignOfferAnchor = () => {
 window.addEventListener('load', alignOfferAnchor);
 window.addEventListener('hashchange', alignOfferAnchor);
 if (year) year.textContent = new Date().getFullYear();
-const menuToggle = document.querySelector('[data-menu-toggle]');
-const menu = document.querySelector('[data-menu]');
-menuToggle.addEventListener('click', () => {
-  const open = menu.classList.toggle('is-open');
-  menuToggle.setAttribute('aria-expanded', String(open));
-});
-menu.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => {
-  menu.classList.remove('is-open');
-  menuToggle.setAttribute('aria-expanded', 'false');
-}));
-document.addEventListener('click', (event) => {
-  if (!event.target.closest('[data-header]')) {
-    menu.classList.remove('is-open');
-    menuToggle.setAttribute('aria-expanded', 'false');
-  }
-});
-
+// Navigation is handled once by site.js.
 const productionMembershipWorkerOrigin = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
 const membershipConfig = (() => {
+  if (['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname) || window.location.protocol === 'file:') return null;
   const config = window.__KBH_MEMBERSHIP_CONFIG__;
   if (!config || !['production', 'staging'].includes(config.environment)) return null;
   try {
@@ -150,7 +136,7 @@ if (checkoutState === 'cancel') setCheckoutMessage('Checkout was canceled. Your 
 document.querySelectorAll('[data-checkout]').forEach((button) => button.addEventListener('click', async () => {
   if (['success', 'connected'].includes(checkoutState)) return;
   if (!checkoutEnabled) {
-    setCheckoutMessage('Checkout is unavailable because this site is not configured for a valid membership environment.');
+    setCheckoutMessage(['localhost','127.0.0.1','[::1]'].includes(window.location.hostname) || window.location.protocol === 'file:' ? 'This is a local design preview. No checkout opened and no charge was made.' : 'This page is not configured for a valid membership environment. Please contact support.');
     return;
   }
   const buttons = [...document.querySelectorAll('[data-checkout]')];
@@ -184,3 +170,5 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
     setCheckoutMessage(error.message || 'Unable to open checkout right now. Please try again.');
   }
 }));
+
+})();

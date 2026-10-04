@@ -1,23 +1,8 @@
+(() => {
 const year = document.getElementById('year');
 if (year) year.textContent = new Date().getFullYear();
 
-const menuToggle = document.querySelector('[data-menu-toggle]');
-const menu = document.querySelector('[data-menu]');
-menuToggle?.addEventListener('click', () => {
-  const open = menu.classList.toggle('is-open');
-  menuToggle.setAttribute('aria-expanded', String(open));
-});
-menu?.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => {
-  menu.classList.remove('is-open');
-  menuToggle.setAttribute('aria-expanded', 'false');
-}));
-document.addEventListener('click', (event) => {
-  if (!event.target.closest('[data-header]')) {
-    menu?.classList.remove('is-open');
-    menuToggle?.setAttribute('aria-expanded', 'false');
-  }
-});
-
+// Navigation is handled once by site.js.
 const params = new URLSearchParams(window.location.search);
 const message = document.querySelector('[data-message]');
 const portalLogin = document.querySelector('[data-portal-login]');
@@ -28,6 +13,7 @@ const feedbackLogin = document.querySelector('[data-feedback-login]');
 const feedbackForm = document.querySelector('[data-feedback-form]');
 const productionMembershipWorkerOrigin = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
 const membershipConfig = (() => {
+  if (['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname) || window.location.protocol === 'file:') return null;
   const config = window.__KBH_MEMBERSHIP_CONFIG__;
   if (!config || !['production', 'staging'].includes(config.environment)) return null;
   try {
@@ -65,6 +51,7 @@ if (membershipConfig && params.get('portal') === 'feedback' && feedbackToken) {
 }
 feedbackForm?.addEventListener('submit', async event => {
   event.preventDefault();
+  if (!membershipConfig) { if (message) message.textContent = "Preview only — no feedback has been submitted."; return; }
   const data = new FormData(feedbackForm);
   const response = await fetch(`${membershipConfig.workerOrigin}/cancel/feedback`, { method: 'POST', headers: { Authorization: `Bearer ${feedbackToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: data.get('reason'), details: data.get('details'), retentionOfferShown: true }) });
   const result = await response.json();
@@ -79,3 +66,5 @@ if (membershipConfig && params.get('portal') === 'retained75' && message) {
 if (membershipConfig && params.get('portal') === 'connection_required' && message) {
   message.textContent = 'This Discord account is not linked to a membership yet. Already paid? Do not purchase again. Open the private connection link in your welcome email or original checkout confirmation, tap Connect Discord, and authorize the account you use in Kobe’s server. If you cannot find that link, contact support with your checkout email.';
 }
+
+})();

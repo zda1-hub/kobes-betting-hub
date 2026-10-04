@@ -1,0 +1,122 @@
+[
+  {
+    "path": "proof.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "cancel.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "join.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "responsible-gambling.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "index.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "recaps.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "support.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "terms.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "404.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "free-pick.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "exclusives.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "managemembership.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "results.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "approach.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "refer.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "membership.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "faq.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "privacy.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "guides/index.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "guides/bankroll-management-for-sports-betting.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "guides/how-to-read-betting-odds-and-line-movement.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "guides/sports-betting-arbitrage-explained.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "guides/how-to-choose-a-sports-betting-discord.html",
+    "ok": true,
+    "design_present": true
+  },
+  {
+    "path": "guides/what-a-sports-betting-writeup-should-include.html",
+    "ok": true,
+    "design_present": true
+  }
+]
