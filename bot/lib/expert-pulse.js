@@ -24,8 +24,10 @@ function expertId(name) {
   return createHash('sha256').update(keyFor(name)).digest('hex').slice(0, 16);
 }
 
-function evidenceDigest(record, date) {
-  return createHash('sha256').update(JSON.stringify([date, keyFor(record.name),
+function evidenceDigest(record, date = null) {
+  // The date changes every morning even when the verified results do not.
+  // Keep an expert's decision tied to evidence, not today's sheet heading.
+  return createHash('sha256').update(JSON.stringify([...(date ? [date] : []), keyFor(record.name),
     record.results.map(({ grade, at, reference, sport }) => [grade, at, reference, sport])]))
     .digest('hex').slice(0, 20);
 }
@@ -272,7 +274,7 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
       const record = records.find((entry) => expertId(entry.name) === key);
       const { expertNames, ...payload } = payloadFor(report, records.filter((record) => expertId(record.name) === key), { omitEmpty: true });
       const digest = createHash('sha256').update(payload.embeds.map((embed) => `${embed.title}\n${embed.description}`).join('\n')).digest('hex').slice(0, 20);
-      items.set(key, { key, name, payload, digest, evidence_digest: evidenceDigest(record, report.date) });
+      items.set(key, { key, name, payload, digest, record, evidence_digest: evidenceDigest(record) });
     }
     return { items, report, records, payload, digest };
   }
@@ -436,7 +438,13 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     }
     for (const item of snapshot.items.values()) {
       const old = state.experts[item.key];
-      const evidenceUnchanged = old?.evidence_digest && old.evidence_digest === item.evidence_digest;
+      // Older state used a date-prefixed evidence digest. Accept that format
+      // only when the exact underlying results still match, then migrate it.
+      const legacyEvidenceUnchanged = old?.evidence_digest && Array.from({ length: 120 }, (_, days) => {
+        const date = operatingDate(now() - days * 86400000);
+        return evidenceDigest(item.record, date);
+      }).includes(old.evidence_digest);
+      const evidenceUnchanged = old?.evidence_digest && (old.evidence_digest === item.evidence_digest || legacyEvidenceUnchanged);
       if (!old || (old.digest !== item.digest && !evidenceUnchanged)
         || !['PENDING', 'APPROVED', 'REJECTED'].includes(old.status)) {
         state.experts[item.key] = { name: item.name, digest: item.digest,
