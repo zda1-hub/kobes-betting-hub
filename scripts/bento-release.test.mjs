@@ -134,3 +134,42 @@ test('legal and portal artifacts retain current approved operator and secure acc
   assert.match(portal, /Do not purchase again/);
   assert.equal(portal, await read('managemembership.html'));
 });
+
+test('wins motion survives integer scroll rounding and explicit Play works with reduced motion', async () => {
+  const source = await read('home-results.js');
+  for (const reduce of [false, true]) {
+    const frames = [], listeners = {}, buttons = {};
+    for (const name of ['motion','previous','next']) buttons[name] = { addEventListener(type, fn) { this[type] = fn; } };
+    let scroll = 0;
+    const rail = {
+      get scrollLeft() { return scroll; }, set scrollLeft(value) { scroll = Math.floor(value); },
+      closest() { return { querySelector(selector) { return buttons[selector.match(/wins-(\w+)/)[1]]; } }; },
+      addEventListener(type, fn) { listeners[type] = fn; },
+      getBoundingClientRect() { return { top:20, bottom:200 }; },
+    };
+    const track = { parentElement:rail, children:[], hasAttribute(){return true;},
+      replaceChildren(...cards){this.children=cards;this.layout();},
+      prepend(...cards){this.children.unshift(...cards);this.layout();},
+      append(...cards){this.children.push(...cards);this.layout();},
+      layout(){this.children.forEach((card,i)=>card.offsetLeft=i*262);},
+    };
+    const create = () => ({ children:[], append(...nodes){this.children.push(...nodes);}, setAttribute(){}, cloneNode(){return create();},getBoundingClientRect(){return {width:250};} });
+    const document = {hidden:false,querySelector(selector){return selector==='[data-verified-results-track]'?track:null;},createElement:create};
+    vm.runInNewContext(source, {document, location:{hostname:'kobesbettinghub.com'},
+      fetch:async()=>({ok:true,json:async()=>({recent:[{result:'W',selection:'A'},{result:'W',selection:'B'}]})}),
+      matchMedia:()=>({matches:reduce,addEventListener(){}}),ResizeObserver:class{observe(){}},
+      requestAnimationFrame:fn=>frames.push(fn),innerHeight:844,
+    });
+    await new Promise(resolve=>setImmediate(resolve));
+    const tick = start => {for(let time=start;time<start+800;time+=8)frames.shift()(time);};
+    const initial=scroll; tick(8);
+    if(reduce){assert.equal(scroll,initial);assert.equal(buttons.motion.textContent,'Play slideshow');buttons.motion.click();tick(808);}
+    assert.ok(scroll>initial+40, `motion advances at 125Hz with integer scroll rounding (reduced=${reduce})`);
+    listeners.wheel({deltaX:0,deltaY:25,preventDefault(){}});
+    const stopped=scroll; tick(1608); assert.equal(scroll,stopped);
+    assert.equal(buttons.motion.textContent,'Play slideshow');
+    buttons.motion.click();tick(2408);assert.ok(scroll>stopped+40);
+    listeners.touchstart();const touched=scroll;tick(3208);assert.equal(scroll,touched);
+    assert.equal(buttons.motion.textContent,'Play slideshow');
+  }
+});

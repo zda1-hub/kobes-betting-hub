@@ -12,12 +12,13 @@ const setupWins = track => {
   let manual = reduced.matches, hovered = false, last = 0, loop = 0, position = 0, pointer, startX, startScroll;
   const pause = () => { manual = true; motion.textContent = 'Play slideshow'; };
   const measure = () => { loop = track.children[originals.length * 2].offsetLeft - track.children[originals.length].offsetLeft; position = loop; rail.scrollLeft = position; };
-  const normalize = () => { if (!loop) return; let value = rail.scrollLeft; if(value < loop) value += loop; if(value >= loop*2) value -= loop; rail.scrollLeft = value; position = value; };
+  // Preserve fractional animation progress even when the browser rounds scrollLeft.
+  const normalize = (value = rail.scrollLeft) => { if (!loop) return; if(value < loop) value += loop; if(value >= loop*2) value -= loop; rail.scrollLeft = value; position = value; };
   const browse = direction => { pause(); const origin = track.children[0].offsetLeft; const offsets = [...track.children].map(card => card.offsetLeft - origin); const current = rail.scrollLeft; const target = direction > 0 ? offsets.find(offset => offset > current + 2) : offsets.filter(offset => offset < current - 2).at(-1); rail.scrollLeft = target ?? current + direction * (originals[0].getBoundingClientRect().width + 12); normalize(); };
   controls.querySelector('[data-wins-previous]').addEventListener('click', () => browse(-1));
   controls.querySelector('[data-wins-next]').addEventListener('click', () => browse(1));
   motion.textContent = manual ? 'Play slideshow' : 'Pause motion';
-  motion.addEventListener('click', () => { if(reduced.matches) return; manual = !manual; motion.textContent = manual ? 'Play slideshow' : 'Pause motion'; });
+  motion.addEventListener('click', () => { manual = !manual; position = rail.scrollLeft; last = 0; motion.textContent = manual ? 'Play slideshow' : 'Pause motion'; });
   rail.addEventListener('mouseenter', () => hovered = true);
   rail.addEventListener('mouseleave', () => hovered = false);
   rail.addEventListener('focusin', pause);
@@ -28,10 +29,10 @@ const setupWins = track => {
   rail.addEventListener('pointermove', event => { if(pointer!==event.pointerId) return;event.preventDefault();rail.scrollLeft=startScroll-(event.clientX-startX); });
   const finish = event => { if(pointer!==event.pointerId) return;pointer=undefined;if(rail.hasPointerCapture(event.pointerId))rail.releasePointerCapture(event.pointerId);normalize(); };
   rail.addEventListener('pointerup', finish);rail.addEventListener('pointercancel', finish);
-  rail.addEventListener('scroll', () => { if(pointer===undefined)normalize(); }, {passive:true});
+  rail.addEventListener('scroll', () => { if(manual && pointer===undefined)normalize(); }, {passive:true});
   reduced.addEventListener('change', pause);
   new ResizeObserver(measure).observe(rail);measure();
-  const animate = now => { if(last && !manual && !hovered && !document.hidden && !reduced.matches && pointer===undefined){const bounds=rail.getBoundingClientRect();if(bounds.top<innerHeight&&bounds.bottom>0){position+=Math.min(now-last,50)*.065;rail.scrollLeft=position;normalize();}}last=now;requestAnimationFrame(animate); };requestAnimationFrame(animate);
+  const animate = now => { if(last && !manual && !hovered && !document.hidden && pointer===undefined){const bounds=rail.getBoundingClientRect();if(bounds.top<innerHeight&&bounds.bottom>0){position+=Math.min(now-last,50)*.065;normalize(position);}}last=now;requestAnimationFrame(animate); };requestAnimationFrame(animate);
 };
 const verifiedResultsTrack = document.querySelector('[data-verified-results-track]');
 if (verifiedResultsTrack) {
