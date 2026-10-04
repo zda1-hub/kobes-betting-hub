@@ -47,7 +47,7 @@ test('membership date filter respects midnight, missing dates, all-dates overrid
 });
 test('range summary retains the Phoenix date after UTC midnight',()=>{
  const h=harness();h.context.range=range;
- assert.match(h.run('rangeLabel(range)'),/2026-09-26 to 2026-09-26 · Phoenix time/);
+ assert.match(h.run('rangeLabel(range)'),/2026-09-26 to 2026-09-26 · MST/);
 });
 test('changing a date input automatically selects Custom',()=>{
  const h=harness();h.context.inputs=[{},{ }];
@@ -79,4 +79,28 @@ test('invalid custom dates release a superseded refresh',async()=>{
  assert.equal(h.element('[data-dashboard]').attributes['aria-busy'],'false');
  resolve({ok:true,json:async()=>({})});await pending;
  assert.match(h.element('[data-status]').textContent,/Choose both/);
+});
+
+test('bento overview distinguishes current totals from selected-date payments and keeps unknown values unavailable',()=>{
+ const h=harness();h.context.d={scoreboard:{activePaid:8,mrrCents:26392},revenue:{collectedCents:1999,openFailedInvoices:2},traffic:{uniqueVisitors:12},conversion:{successfulPayments:1,checkoutStarts:4,checkoutPurchaseConversionRate:.25,funnel:[]},discord:{paidWithoutVip:3,roleCheckUnavailable:1},operations:{}};
+ h.run('renderOverview(d)');
+ assert.match(h.element('[data-summary]').innerHTML,/Active subscriptions.*8.*Right now/);
+ assert.match(h.element('[data-summary]').innerHTML,/Collected revenue.*\$19\.99.*Selected dates/);
+ assert.match(h.element('[data-summary]').innerHTML,/25\.0%.*1 payments \/ 4 checkout starts/);
+ assert.match(h.element('[data-priority-alerts]').innerHTML,/data-open-section="membership-report"/);
+ h.context.d.scoreboard.activePaid=null;h.context.d.conversion.checkoutPurchaseConversionRate=null;h.run('renderOverview(d)');
+ assert.match(h.element('[data-summary]').innerHTML,/Active subscriptions.*Unavailable/);
+ assert.match(h.element('[data-summary]').innerHTML,/Checkout → paid.*Unavailable/);
+});
+test('custom dates appear only for Custom without changing range boundaries',()=>{
+ const h=harness();h.run("selectRange('custom')");assert.equal(h.element('[data-custom-dates]').hidden,false);
+ h.run("selectRange('7d')");assert.equal(h.element('[data-custom-dates]').hidden,true);
+});
+test('report navigation opens the collapsed report before jumping to its member list',()=>{
+ const h=harness();let handler;h.element('[data-dashboard]').addEventListener=(_,callback)=>handler=callback;
+ const order=[],group={tagName:'DETAILS',get open(){return false},set open(value){order.push('open:'+value)}};
+ const target={tagName:'SECTION',closest:()=>group,scrollIntoView(){order.push('scroll')}};
+ h.context.document.getElementById=id=>id==='members'?target:null;h.run('setupDashboardNavigation()');
+ handler({target:{closest:()=>({getAttribute:()=> '#members',dataset:{}})},preventDefault(){order.push('prevent')}});
+ assert.deepEqual(order,['prevent','open:true','scroll']);
 });
