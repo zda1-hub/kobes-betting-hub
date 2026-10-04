@@ -33,6 +33,7 @@ const setupWins = track => {
 };
 const verifiedResultsTrack = document.querySelector('[data-verified-results-track]');
 if (verifiedResultsTrack) {
+  const winsOnly = verifiedResultsTrack.hasAttribute('data-wins-only');
   const rail = verifiedResultsTrack.parentElement;
   rail.addEventListener('keydown', event => { if (['ArrowLeft','ArrowRight'].includes(event.key)) { event.preventDefault(); rail.scrollLeft += (event.key === 'ArrowRight' ? 1 : -1) * rail.clientWidth * .7; } });
   let startX = 0;
@@ -69,10 +70,17 @@ if (verifiedResultsTrack) {
       const summary = document.querySelector('[data-home-record]');
       const record = snapshot.overall;
       if (summary && record && ['wins','losses','pushes','voids'].every(key => Number.isFinite(record[key]))) {
-        summary.textContent = `${record.wins} wins · ${record.losses} losses · ${record.pushes} pushes · ${record.voids} voids`;
+        summary.textContent = winsOnly ? `${record.wins} tracked wins` : `${record.wins} wins · ${record.losses} losses · ${record.pushes} pushes · ${record.voids} voids`;
       }
-      const results = Array.isArray(snapshot.recent) ? snapshot.recent.filter((item) => ['W', 'L', 'P', 'V'].includes(item.result)).slice(0, 16) : [];
-      if (!results.length) throw new Error('No settled results available');
+      const since = document.querySelector('[data-tracking-since]');
+      if (since && /^\d{4}-\d{2}-\d{2}$/.test(snapshot.trackingSince || '')) {
+        const date = new Date(`${snapshot.trackingSince}T12:00:00Z`);
+        if (Number.isFinite(date.getTime())) since.textContent = `Since ${date.toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric', timeZone:'UTC' })}. Updates automatically as published picks are verified.`;
+      }
+      const settled = Array.isArray(snapshot.recent) ? snapshot.recent.filter(item => ['W','L','P','V'].includes(item.result)) : [];
+      const wins = settled.filter(item => item.result === 'W').slice(0, 16);
+      const results = winsOnly ? wins : settled.slice(0, 16);
+      if (!results.length && !winsOnly) throw new Error('No settled results available');
       const labels = { W: 'Win', L: 'Loss', P: 'Push', V: 'Void' };
       const makeResultCard = (item) => {
         const card = document.createElement('article');
@@ -92,9 +100,9 @@ if (verifiedResultsTrack) {
         return card;
       };
       verifiedResultsTrack.replaceChildren(...results.map(makeResultCard));
+      if (!results.length) verifiedResultsTrack.textContent = "No recent verified wins are available.";
       const winsTrack = document.querySelector("[data-wins-track]");
       if (winsTrack) {
-        const wins = results.filter(item => item.result === "W");
         winsTrack.replaceChildren(...wins.map(makeResultCard));
         if (!wins.length) winsTrack.textContent = "No recent verified wins are available.";
         else setupWins(winsTrack);

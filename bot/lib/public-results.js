@@ -37,6 +37,7 @@ function buildPublicResults(rows, today, now = new Date()) {
   return {
     generatedAt: now.toISOString(),
     operatingDate: today,
+    trackingSince: published.length ? published.map(row => row.operating_date).sort()[0] : null,
     overall: counts(settled),
     today: counts(settled.filter((row) => row.operating_date === today)),
     pending: published.filter((row) => !verified(row)).length,

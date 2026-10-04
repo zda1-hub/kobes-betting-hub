@@ -17,3 +17,9 @@ test('public results include every verified published outcome and keep pending s
   assert.equal(snapshot.settled, 4);
   assert.deepEqual(snapshot.recent.map((item) => item.result).sort(), ['L', 'P', 'V', 'W']);
 });
+
+test('tracking start uses the earliest published pick, including pending, rather than the recent window', () => {
+  const snapshot = buildPublicResults([row('1', 'W'), row('2', 'PENDING', { operating_date: '2026-09-10' }), row('3', 'W', { operating_date: '2026-08-01', published_at: '' })], '2026-10-04');
+  assert.equal(snapshot.trackingSince, '2026-09-10');
+  assert.equal(buildPublicResults([], '2026-10-04').trackingSince, null);
+});
