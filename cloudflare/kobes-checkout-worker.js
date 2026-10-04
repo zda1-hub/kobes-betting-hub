@@ -2571,6 +2571,18 @@ async function activateCheckoutAssociation(env, association, eventId = null) {
   }
 }
 
+async function verifiedPurchaseReceipt(env, association) {
+  if (!['PAYMENT_CONFIRMED','VIP_PENDING','VIP_ACTIVE','VIP_FAILED'].includes(association?.status)
+      || !association.stripe_checkout_session_id) return null;
+  const session = await stripeGet(env, `/checkout/sessions/${encodeURIComponent(association.stripe_checkout_session_id)}`);
+  if (session.id !== association.stripe_checkout_session_id || session.metadata?.checkout_association_id !== association.id
+      || session.status !== 'complete' || session.payment_status !== 'paid' || session.livemode !== true
+      || !Number.isSafeInteger(session.amount_total) || session.amount_total <= 0
+      || String(session.currency || '').toLowerCase() !== 'usd') return null;
+  // An opaque stable ID avoids exposing checkout, customer, or subscription identifiers to Meta.
+  return { eventId: `purchase:${await sha256Text(session.id)}`, value: session.amount_total / 100, currency: session.currency.toUpperCase() };
+}
+
 async function onboardingStatus(request, env, origin) {
   const token = new URL(request.url).searchParams.get('state') || '';
   const association = await checkoutAssociationByToken(env, token);
@@ -2581,7 +2593,10 @@ async function onboardingStatus(request, env, origin) {
     : association.status === 'VIP_FAILED' ? 'failed'
       : ['PAYMENT_CONFIRMED', 'VIP_PENDING'].includes(association.status) ? 'processing'
         : association.status === 'CHECKOUT_STARTED' ? 'awaiting_payment' : 'verifying';
-  return json({ state, paymentConfirmed: ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_ACTIVE','VIP_FAILED'].includes(association.status), discordConnected: Boolean(association.discord_user_id), vipActive: association.status === 'VIP_ACTIVE', retryAvailable: ['VIP_PENDING','VIP_FAILED'].includes(association.status), errorCode: association.last_error_code || null }, 200, origin);
+  let purchase = null;
+  try { purchase = await verifiedPurchaseReceipt(env, association); }
+  catch { console.warn('Verified purchase receipt temporarily unavailable.'); }
+  return json({ state, paymentConfirmed: ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_ACTIVE','VIP_FAILED'].includes(association.status), discordConnected: Boolean(association.discord_user_id), vipActive: association.status === 'VIP_ACTIVE', retryAvailable: ['VIP_PENDING','VIP_FAILED'].includes(association.status), errorCode: association.last_error_code || null, purchase }, 200, origin);
 }
 
 async function retryOnboarding(request, env, origin) {
@@ -3302,6 +3317,7 @@ export default {
 };
 
 export const __test = {
+  verifiedPurchaseReceipt,
   dashboardReportingData,
   summarizeFailedPayments,
   firstMonthBackActive,

@@ -188,7 +188,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
     const outputPath = path.join(outputRoot, file);
     let source = await readFile(outputPath, 'utf8');
     if (!source.includes('src="/meta-pixel.js')) {
-      source = source.replace('</head>', '  <script src="/meta-pixel.js?v=20260924" defer></script>\n</head>');
+      source = source.replace('</head>', '  <script src="/meta-pixel.js?v=20261004-purchase" defer></script>\n</head>');
     }
     if (!source.includes('facebook.com/tr?id=4640857832799621')) {
       source = source.replace(/<body([^>]*)>/i, '<body$1>\n  <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=4640857832799621&amp;ev=PageView&amp;noscript=1"></noscript>');
