@@ -232,7 +232,7 @@ test('one review and one VIP message preserve separate expert decisions', async 
     const guild = { id: '123', roles: { everyone: { id: 'everyone' } } };
     const cards = new Map();
     const posts = new Map();
-    const now = Date.parse('2026-09-21T18:00:00Z');
+    let now = Date.parse('2026-09-21T18:00:00Z');
     const source = { id: '456', guild, messages: { fetch: async () => new Map() } };
     function grade(name, id, result = 'W') {
       return { pick_id: id, source_name: name, status: 'GRADED', result, wager_scope: 'individual',
@@ -293,8 +293,18 @@ test('one review and one VIP message preserve separate expert decisions', async 
     assert.doesNotMatch(vipText, /Kelly In Vegas/);
     assert.match(card.content, /2 approved · 1 rejected · 0 pending/);
     const statePath = path.join(directory, 'state.json');
-    const beforeFormatChange = JSON.parse(await fs.readFile(statePath, 'utf8'));
     const benKey = createHash('sha256').update('benburns').digest('hex').slice(0, 16);
+    const oldState = JSON.parse(await fs.readFile(statePath, 'utf8'));
+    oldState.experts[benKey].evidence_digest = createHash('sha256').update(JSON.stringify([
+      '2026-09-21', 'benburns', [['W', Date.parse('2026-09-20T18:00:00Z'),
+        'https://discord.com/channels/123/789/111', '']]
+    ])).digest('hex').slice(0, 20);
+    await fs.writeFile(statePath, JSON.stringify(oldState));
+    now += 86400000;
+    await pulse.refresh();
+    assert.match(card.content, /2 approved · 1 rejected · 0 pending/);
+    assert.match([...posts.values()][0].embeds.map((embed) => embed.description).join('\n'), /Ben Burns/);
+    const beforeFormatChange = JSON.parse(await fs.readFile(statePath, 'utf8'));
     beforeFormatChange.experts[benKey].digest = 'display-format-changed';
     await fs.writeFile(statePath, JSON.stringify(beforeFormatChange));
     await pulse.refresh();
