@@ -25,6 +25,8 @@ const { buildFreePickRecapEmbed, freePickRecapRows } = require('./lib/free-recap
 const { buildFreePickResults, freeRows, verified } = require('./lib/free-pick-results');
 const { syncFreePickResultReplies, resultReplyConfig } = require('./lib/free-pick-result-replies');
 const { buildPublicResults } = require('./lib/public-results');
+const { publicResultRows } = require('./lib/public-result-rows');
+const { recoverResultsBacklog } = require('./lib/results-backlog');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
 const { gradeWagerRows, sourcePacketPath } = require('./lib/wager-ledger');
@@ -741,7 +743,8 @@ function startPublicResultsSync() {
     if (running) return;
     running = true;
     try {
-      const snapshot = buildPublicResults(await readPickLog(), dailyPickOperatingDate(new Date()));
+      const rows = await publicResultRows({ rows: await readPickLog(), root: reviewQueueRoot, directory: path.dirname(pickLogPath()) });
+      const snapshot = buildPublicResults(rows, dailyPickOperatingDate(new Date()));
       const content = JSON.stringify({ ...snapshot, generatedAt: null });
       if (content === lastContent) return;
       const response = await fetch(`${origin}/api/results`, {
@@ -1147,6 +1150,29 @@ async function publishDueFreeRecap(date) {
   }
 }
 
+let resultsBacklogCursor = 0;
+async function recoverOlderResults() {
+  if (freeRecapInProgress || process.env.AUTO_GRADE_FREE_PICKS === 'false') return;
+  freeRecapInProgress = true;
+  try {
+    const gradingFetch = createGradingFetch();
+    const report = await recoverResultsBacklog({ rows: await readPickLog(),
+      beforeDate: previousPacificOperatingDate(), root: reviewQueueRoot,
+      directory: path.dirname(pickLogPath()), cursor: resultsBacklogCursor,
+      grade: row => gradePickFromEspn(row, { fetchImpl: gradingFetch }),
+      updatePick: updateOfficialPick,
+      onAttempt: (parentId, wagerId, attempt) => recordGradeAttempt({
+        pickId: parentId, result: attempt.result || null, status: attempt.status || 'PENDING',
+        provider: 'ESPN', sourceReference: attempt.source || null,
+        snapshot: { ...attempt, wager_id: wagerId, recovery: true }, errorDetail: attempt.reason || null
+      }) });
+    resultsBacklogCursor = report.nextCursor;
+    console.log(`Historical result recovery: ${report.pendingBefore} unresolved wagers; ${report.attempted} checked; ${report.recovered} verified outcomes recovered.`);
+    for (const attempt of report.attempts) console.log('Historical result verification:', JSON.stringify(attempt));
+  } catch (error) { console.error('Historical result recovery needs attention:', error.message); }
+  finally { freeRecapInProgress = false; }
+}
+
 function startFreeRecapSchedule() {
   if (!freeRecapEnabled()) {
     console.log('Automatic daily recaps are disabled. Set FREE_RECAP_ENABLED=true to resume them.');
@@ -1169,6 +1195,7 @@ function startFreeRecapSchedule() {
     }
     catch (error) { console.error(`Public free-pick results failed: ${error instanceof Error ? error.message : error}`); }
     await publishDueFreeRecap(date);
+    await recoverOlderResults();
   })();
   const interval = freeRecapIntervalMs();
   freeRecapTimer = setInterval(run, interval);
