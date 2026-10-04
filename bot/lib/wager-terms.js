@@ -1,7 +1,27 @@
 // Parser-only normalization. Stored selections, odds and result fingerprints
 // remain the exact original publication; this never substitutes betting lines.
+function leadingWagerTerms(value) {
+  let selection = String(value || '').trim();
+  const leagues = new Set();
+  // Only recognizable publication annotations are discarded. Never strip a
+  // team/player name, betting line, odds, or an arbitrary promotional phrase.
+  for (let pass = 0; pass < 8; pass++) {
+    const before = selection;
+    selection = selection
+      .replace(/^(?:\d+(?:\.\d+)?|\.\d+)\s*(?:U\b|units?\b|\*|%)\s*(?:-\s*)?/i, '')
+      .replace(/^\d{1,4}(?::\d{2})?\s*(?:am|pm)\s+/i, '')
+      .replace(/^(CFB|NCAAF|NFL|MLB)\b\s*:?\s*/i, (_, league) => {
+        leagues.add(league.toUpperCase() === 'CFB' ? 'NCAAF' : league.toUpperCase());
+        return '';
+      })
+      .replace(/^MAX\s+(?:WHALEPLAY|BET)\b\s*:?\s*/i, '').trim();
+    if (selection === before) break;
+  }
+  return { selection, league: leagues.size === 1 ? [...leagues][0] : '', conflictingLeagues: leagues.size > 1 };
+}
+
 function normalizeSelection(value) {
-  return String(value || '').trim()
+  return leadingWagerTerms(value).selection
     .replace(/^(?:\d+(?:\.\d+)?|\.\d+)\s*(?:U\s*-|u\s*-|\*|%|units?\s+(?:NFL|MLB|CFB)\s*:?)\s*/i, '')
     .replace(/^\d{1,4}(?::\d{2})?\s*(?:am|pm)\s+/i, '')
     .replace(/\b([ou])\s*(\d+(?:\.\d+)?)/gi, (_, side, line) => `${side.toLowerCase() === 'o' ? 'Over' : 'Under'} ${line}`)
@@ -38,7 +58,7 @@ function combinationSelections(selection) {
   return parts;
 }
 
-module.exports = { normalizeSelection, combinationSelections };
+module.exports = { normalizeSelection, combinationSelections, leadingWagerTerms };
 function playerNameMatches(published, official) {
   const compact = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const withoutSuffix = value => String(value || '').replace(/\s+(?:Jr\.?|Sr\.?|II|III|IV)$/i, '');

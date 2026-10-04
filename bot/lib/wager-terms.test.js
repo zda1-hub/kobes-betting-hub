@@ -25,3 +25,15 @@ test('only explicit unambiguous player abbreviations and omitted official suffix
   assert.equal(playerNameMatches('J.Allen', 'Josh Allen'), true);
   assert.equal(playerNameMatches('J.Allen', 'Joe Allen'), true, 'caller must enforce full-slate uniqueness');
 });
+test('strips only recognized leading publication wrappers and retains explicit league', () => {
+  const { leadingWagerTerms } = require('./wager-terms');
+  assert.deepEqual(leadingWagerTerms('5U CFB MAX WHALEPLAY HOUSTON +7.5 -105'), {
+    selection: 'HOUSTON +7.5 -105', league: 'NCAAF', conflictingLeagues: false
+  });
+  assert.equal(normalizeSelection('2U CFB MIAMI FLORIDA -20.5 -110'), 'MIAMI FLORIDA -20.5 -110');
+  assert.equal(normalizeSelection('CFB: Miami -20.5 -110 3U'), 'Miami -20.5 -110 3U');
+  assert.equal(normalizeSelection('1030pm Portland State +57.5 -110 (1.5u)'), 'Portland State +57.5 -110 (1.5u)');
+  assert.equal(normalizeSelection('MAX BET Brewers -1.5 -110'), 'Brewers -1.5 -110');
+  assert.equal(normalizeSelection('UNSUPPORTED HYPE Brewers -1.5'), 'UNSUPPORTED HYPE Brewers -1.5');
+  assert.equal(leadingWagerTerms('CFB NFL Houston +7.5').conflictingLeagues, true);
+});

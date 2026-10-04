@@ -240,3 +240,53 @@ test('grades only explicitly labeled team spreads', () => {
   });
   assert.equal(spreadGrade({ selection: 'Dallas Cowboys -110', published_line: '-110' }, final), null);
 });
+test('recognized leading wrappers use the explicit league and preserve original terms', async () => {
+  const teams = [
+    { displayName: 'Houston Cougars', shortDisplayName: 'Houston', location: 'Houston', abbreviation: 'HOU' },
+    { displayName: 'Baylor Bears', shortDisplayName: 'Baylor', location: 'Baylor', abbreviation: 'BAY' }
+  ];
+  const game = { id: 'cfb-exact', status: { type: { completed: true } }, competitions: [{ competitors: teams.map(team => ({ team })) }] };
+  const box = { header: { competitions: [{ id: 'cfb-exact', status: { type: { completed: true } }, competitors: teams.map((team, index) => ({ team, score: index ? '21' : '20' })) }] } };
+  const urls = [];
+  const fetchImpl = async url => { urls.push(url); return new Response(JSON.stringify(url.includes('/summary?') ? box : { events: [game] })); };
+  const row = { pick_id: '20260918-001-X-W001', operating_date: '2026-09-18', selection: '5U CFB MAX WHALEPLAY HOUSTON +7.5 -105', result: 'PENDING' };
+  const original = structuredClone(row);
+  assert.equal((await gradePickFromEspn(row, { fetchImpl })).result, 'W');
+  assert.deepEqual(row, original);
+  assert.ok(urls.every(url => url.includes('/football/college-football/')));
+  assert.ok(urls.filter(url => url.includes('/scoreboard?')).every(url => url.includes('dates=20260918')));
+  const ambiguous = await gradePickFromEspn(row, { fetchImpl: async url => new Response(JSON.stringify(url.includes('/summary?') ? box : { events: [game, { ...game, id: 'other' }] })) });
+  assert.equal(ambiguous.status, 'PENDING');
+  assert.equal((await gradePickFromEspn({ ...row, selection: '5U CFB MAX WHALEPLAY HOUSTON' }, { fetchImpl })).status, 'PENDING');
+  assert.equal((await gradePickFromEspn({ ...row, league: 'NFL' }, { fetchImpl })).status, 'PENDING');
+  assert.equal((await gradePickFromEspn({ ...row, selection: 'CFB NFL Houston +7.5' }, { fetchImpl })).status, 'PENDING');
+  assert.equal((await gradePickFromEspn(row, { fetchImpl: async () => new Response(JSON.stringify({ events: [] })) })).status, 'PENDING');
+});
+test('uniquely resolved scoreboard team identity survives missing summary aliases', async () => {
+  // Minimal fields from ESPN Sept 19, 2026 event 401856687: the summary
+  // omits scoreboard shortDisplayName, but keeps the exact team IDs.
+  const teams = [
+    { id: '2', displayName: 'Auburn Tigers', shortDisplayName: 'Auburn', location: 'Auburn', name: 'Tigers', abbreviation: 'AUB' },
+    { id: '57', displayName: 'Florida Gators', shortDisplayName: 'Florida', location: 'Florida', name: 'Gators', abbreviation: 'FLA' }
+  ];
+  const game = { id: '401856687', status: { type: { completed: true } }, competitions: [{ competitors: teams.map(team => ({ id: team.id, team })) }] };
+  const box = { header: { competitions: [{ id: '401856687', status: { type: { completed: true } }, competitors: teams.map((team, index) => ({ id: team.id, team: { ...team, shortDisplayName: undefined }, winner: !!index, score: index ? '44' : '39' })) }] } };
+  const row = { operating_date: '2026-09-19', league: 'NCAAF', selection: 'Florida ML (-120) 2U', result: 'PENDING' };
+  const grade = async (selection, final = box, events = [game]) => gradePickFromEspn({ ...row, selection }, { fetchImpl: async url => new Response(JSON.stringify(url.includes('/summary?') ? final : { events })) });
+  assert.equal((await grade(row.selection)).result, 'W');
+  assert.equal((await grade('Florida -5 (-110) 2U')).result, 'P');
+  assert.equal((await grade('Florida -5.5 (-110) 2U')).result, 'L');
+  assert.equal((await grade('Florida -4.5 (-110) 2U')).result, 'W');
+  const reordered = structuredClone(box); reordered.header.competitions[0].competitors.reverse();
+  assert.equal((await grade(row.selection, reordered)).result, 'W');
+  for (const change of [
+    value => { value.header.competitions[0].competitors[1].team.id = '999'; value.header.competitions[0].competitors[1].id = '999'; },
+    value => { delete value.header.competitions[0].competitors[1].team.id; delete value.header.competitions[0].competitors[1].id; },
+    value => { value.header.competitions[0].competitors[0].team.id = '57'; }
+  ]) {
+    const invalid = structuredClone(box); change(invalid);
+    assert.equal((await grade(row.selection, invalid)).status, 'PENDING');
+  }
+  assert.equal((await grade(row.selection, box, [game, { ...game, id: 'other' }])).status, 'PENDING');
+  assert.equal((await grade('Florida', box)).status, 'PENDING');
+});
