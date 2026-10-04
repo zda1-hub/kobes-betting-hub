@@ -49,6 +49,7 @@ const publicFiles = [
   'brand.css',
   'home.css',
   'home.js',
+  'home-results.js',
   'email-signup.css',
   'email-signup.js',
   'membership.css',

@@ -23,40 +23,8 @@ if (heroExperts) {
     })
     .catch(() => {
       const status = heroExperts.querySelector('.hero-experts-status');
-      if (status) status.textContent = 'View the verified lineup and rates on the exclusives page.';
+      if (status) status.textContent = 'View the published directory on the exclusives page.';
     });
-}
-
-const vipPreview = document.querySelector('[data-vip-preview]');
-const vipPreviewList = document.querySelector('[data-vip-preview-list]');
-if (vipPreview && vipPreviewList) {
-  const permittedTopics = new Set(['Usage and opportunity', 'Recent production', 'Matchup context', 'Availability context']);
-  const permittedSports = new Set(['football', 'baseball', 'basketball', 'hockey', 'soccer', 'sports']);
-  fetch('https://bettinghub-publisher.kobedirwin.workers.dev/api/vip-preview/current', {
-    headers: { Accept: 'application/json' }
-  }).then((response) => {
-    if (!response.ok) throw new Error('VIP preview unavailable');
-    return response.json();
-  }).then((board) => {
-    if (!Array.isArray(board?.previews) || !board.previews.length) return;
-    for (const [index, preview] of board.previews.entries()) {
-      const sport = permittedSports.has(preview.sport) ? preview.sport : 'sports';
-      const topics = Array.isArray(preview.topics) ? preview.topics.filter((topic) => permittedTopics.has(topic)).slice(0, 3) : [];
-      const stats = Array.isArray(preview.stats) ? preview.stats.filter((stat) => typeof stat === 'string').slice(0, 3) : [];
-      const card = document.createElement('article');
-      card.className = 'vip-preview-card';
-      const label = document.createElement('span');
-      label.className = 'vip-preview-card-label';
-      label.textContent = `${sport.toUpperCase()} / PLAY ${index + 1}`;
-      const title = document.createElement('h3');
-      title.textContent = 'Exact pick hidden';
-      const detail = document.createElement('p');
-      detail.textContent = stats.length ? `${stats.join('; ')}.` : topics.length ? `Research covers ${topics.join(', ').toLowerCase()}.` : 'Full supporting research is inside VIP.';
-      card.append(label, title, detail);
-      vipPreviewList.append(card);
-    }
-    vipPreview.hidden = false;
-  }).catch(() => { /* Do not display stale or unverified plays. */ });
 }
 
 const menuToggle = document.querySelector('[data-menu-toggle]');
@@ -76,165 +44,74 @@ document.addEventListener('click', (event) => {
   }
 });
 
-const dialog = document.querySelector('[data-dialog]');
-const dialogImage = document.querySelector('[data-dialog-image]');
-const dialogTitle = document.querySelector('[data-dialog-title]');
-const dialogCaption = document.querySelector('[data-dialog-caption]');
-const dialogKicker = document.querySelector('[data-dialog-kicker]');
-let pausedRail = null;
-const closeImage = () => {
-  dialog.hidden = true;
-  dialog.setAttribute('aria-hidden', 'true');
-  document.body.classList.remove('dialog-open');
-  if (pausedRail) pausedRail.classList.remove('is-paused');
-  pausedRail = null;
-};
-const openImage = (card) => {
-  pausedRail = card.closest('[data-rail]');
-  if (pausedRail) pausedRail.classList.add('is-paused');
-  dialogImage.src = card.dataset.image;
-  dialogImage.alt = card.querySelector('img').alt;
-  dialogTitle.textContent = card.dataset.title;
-  dialogCaption.textContent = card.dataset.caption;
-  dialogKicker.textContent = card.closest('#community') ? 'Community' : card.closest('.recent-section') ? 'Recent picks' : 'Kobe’s Betting Hub';
-  dialog.hidden = false;
-  dialog.setAttribute('aria-hidden', 'false');
-  document.body.classList.add('dialog-open');
-  dialog.querySelector('[data-dialog-close]').focus();
-};
-document.querySelector('[data-dialog-close]').addEventListener('click', closeImage);
-dialog.addEventListener('click', (event) => { if (event.target === dialog) closeImage(); });
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !dialog.hidden) closeImage(); });
-document.querySelectorAll('.media-card').forEach((card) => {
-  if (!card.closest('[data-rail]')) card.addEventListener('click', () => openImage(card));
-});
-
 document.querySelectorAll('[data-rail]').forEach((rail) => {
   const track = rail.querySelector('.rail-track');
   const originals = [...track.children];
-  // Keep review screenshots still and fully readable on phones. The moving,
-  // cropped carousel makes long member messages difficult to read.
-  if (window.matchMedia('(max-width: 800px)').matches && rail.closest('#real-reviews-row, #more-reviews-row')) {
-    rail.addEventListener('click', (event) => {
-      const card = event.target.closest('.media-card');
-      if (card) openImage(card);
-    });
-    return;
-  }
   let loopWidth = 0;
-  let autoScrollLeft = rail.scrollLeft;
-  let writingAutoScroll = false;
-  let autoWriteUntil = 0;
-  let resumeAutoAt = 0;
-  let hovered = false;
+  let manual = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let dragging = false;
+  let pointerX = 0;
+  let scrollStart = 0;
   let lastFrame = 0;
-  const pauseAutoFor = (milliseconds = 900) => {
-    resumeAutoAt = Math.max(resumeAutoAt, performance.now() + milliseconds);
-  };
+  let autoWrite = false;
+  let autoWriteUntil = 0;
+  const measure = () => { loopWidth = track.children[originals.length]?.offsetLeft || 0; };
   originals.forEach((item) => {
     const copy = item.cloneNode(true);
     copy.setAttribute('aria-hidden', 'true');
-    copy.tabIndex = -1;
     track.append(copy);
   });
-  let dragging = false;
-  let trackingPointer = false;
-  let moved = false;
-  let suppressClick = false;
-  let startX = 0;
-  let startScroll = 0;
-  let dragMultiplier = 1;
-  const measureLoop = () => {
-    const firstCopy = track.children[originals.length];
-    loopWidth = firstCopy ? firstCopy.offsetLeft : 0;
-    if (loopWidth) autoScrollLeft = rail.scrollLeft % loopWidth;
+  const normalize = () => {
+    if (loopWidth && rail.scrollLeft >= loopWidth) rail.scrollLeft -= loopWidth;
+    if (loopWidth && rail.scrollLeft < 0) rail.scrollLeft += loopWidth;
   };
-  const normalizeLoop = () => {
-    if (!loopWidth) return;
-    if (rail.scrollLeft >= loopWidth) rail.scrollLeft -= loopWidth;
-    if (rail.scrollLeft < 0) rail.scrollLeft += loopWidth;
-  };
-
   rail.addEventListener('pointerdown', (event) => {
-    pauseAutoFor(1100);
-    trackingPointer = true;
-    dragging = false;
-    startX = event.clientX;
-    startScroll = rail.scrollLeft;
-    dragMultiplier = event.pointerType === 'touch' ? 1.85 : 1.25;
-    moved = false;
+    manual = true;
+    if (event.pointerType === 'touch') return;
+    dragging = true;
+    pointerX = event.clientX;
+    scrollStart = rail.scrollLeft;
+    rail.setPointerCapture(event.pointerId);
+    rail.classList.add('is-dragging');
   });
   rail.addEventListener('pointermove', (event) => {
-    if (!trackingPointer) return;
-    const distance = event.clientX - startX;
-    const threshold = event.pointerType === 'touch' ? 3 : 5;
-    if (!dragging && Math.abs(distance) < threshold) return;
-    if (!dragging) {
-      dragging = true;
-      moved = true;
-      rail.setPointerCapture(event.pointerId);
-      rail.classList.add('is-dragging');
-    }
+    if (!dragging) return;
     event.preventDefault();
-    pauseAutoFor(1100);
-    rail.scrollLeft = startScroll - (distance * dragMultiplier);
-    normalizeLoop();
-    autoScrollLeft = rail.scrollLeft;
-  }, { passive:false });
+    rail.scrollLeft = scrollStart - (event.clientX - pointerX);
+    normalize();
+  });
   const endDrag = (event) => {
-    if (!trackingPointer) return;
-    trackingPointer = false;
-    const didDrag = dragging;
+    if (!dragging) return;
     dragging = false;
-    suppressClick = didDrag;
-    pauseAutoFor(didDrag ? 900 : 500);
-    if (didDrag) window.setTimeout(() => { suppressClick = false; }, 0);
     rail.classList.remove('is-dragging');
     if (rail.hasPointerCapture(event.pointerId)) rail.releasePointerCapture(event.pointerId);
   };
   rail.addEventListener('pointerup', endDrag);
   rail.addEventListener('pointercancel', endDrag);
-  rail.addEventListener('click', (event) => {
-    const card = event.target.closest('.media-card');
-    if (!card) return;
-    if (suppressClick) {
-      event.preventDefault();
-      suppressClick = false;
-      return;
-    }
-    openImage(card);
-  });
-  rail.addEventListener('mouseenter', () => { hovered = true; });
-  rail.addEventListener('mouseleave', () => { hovered = false; });
   rail.addEventListener('wheel', (event) => {
+    manual = true;
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
       event.preventDefault();
-      pauseAutoFor(1200);
       rail.scrollLeft += event.deltaY;
+      normalize();
     }
-  }, { passive:false });
-  rail.addEventListener('scroll', () => {
-    if (!writingAutoScroll && performance.now() > autoWriteUntil) pauseAutoFor(1100);
-    normalizeLoop();
-    autoScrollLeft = rail.scrollLeft;
-  }, { passive:true });
-  document.addEventListener('visibilitychange', () => { lastFrame = 0; });
-  window.addEventListener('resize', measureLoop);
-  window.addEventListener('load', measureLoop, { once:true });
-  new ResizeObserver(measureLoop).observe(track);
-  window.requestAnimationFrame(measureLoop);
+  }, { passive: false });
+  rail.addEventListener('scroll', () => { if (!autoWrite && performance.now() > autoWriteUntil) manual = true; normalize(); }, { passive: true });
+  rail.addEventListener('mouseenter', () => { manual = true; });
+  window.addEventListener('resize', measure);
+  window.addEventListener('load', measure, { once: true });
+  new ResizeObserver(measure).observe(track);
+  requestAnimationFrame(measure);
   const animate = (time) => {
-    if (lastFrame && !dragging && performance.now() >= resumeAutoAt && !rail.classList.contains('is-paused') && loopWidth) {
-      const elapsed = Math.min((time - lastFrame) / 1000, .1);
-      autoScrollLeft += elapsed * (hovered ? 34 : 72);
-      if (autoScrollLeft >= loopWidth) autoScrollLeft -= loopWidth;
-      writingAutoScroll = true;
-      autoWriteUntil = performance.now() + 80;
-      rail.scrollLeft = autoScrollLeft;
-      writingAutoScroll = false;
+    if (lastFrame && !manual && loopWidth && !document.hidden) {
+      autoWrite = true;
+      rail.scrollLeft += Math.min((time - lastFrame) / 1000, .1) * 50;
+      normalize();
+      autoWriteUntil = performance.now() + 150;
+      autoWrite = false;
     }
     lastFrame = time;
-    window.requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
   };
-  window.requestAnimationFrame(animate);
+  requestAnimationFrame(animate);
 });
