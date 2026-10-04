@@ -1,36 +1,55 @@
 (() => {
+  let initialized = false;
+  const initialize = () => {
+  if (initialized) return;
+  // Preview and staging must never contribute to the production ad dataset.
+  if (!['kobesbettinghub.com', 'www.kobesbettinghub.com', 'kobes-betting-hub.kobedirwin.workers.dev'].includes(location.hostname)
+      || window.__KBH_MEMBERSHIP_CONFIG__?.environment === 'staging') return;
+  // Never load the advertising SDK while a private activation/OAuth credential is in the URL.
+  if (['state', 'session_id', 'code', 'token', 'auth'].some(key => new URLSearchParams(location.search).has(key))) return;
+  initialized = true;
   const pixelId = '4640857832799621';
-  if (window.fbq) return;
-
-  const fbq = function (...args) {
-    if (fbq.callMethod) fbq.callMethod(...args);
-    else fbq.queue.push(args);
-  };
-  window.fbq = fbq;
-  if (!window._fbq) window._fbq = fbq;
-  fbq.push = fbq;
-  fbq.loaded = true;
-  fbq.version = '2.0';
-  fbq.queue = [];
-
-  const script = document.createElement('script');
-  script.async = true;
-  script.src = 'https://connect.facebook.net/en_US/fbevents.js';
-  const firstScript = document.getElementsByTagName('script')[0];
-  firstScript.parentNode.insertBefore(script, firstScript);
-
-  fbq('init', pixelId);
-  fbq('track', 'PageView');
-
-  // Checkout remains authoritative in Stripe. This browser event measures
-  // intent only and never grants access or records a purchase.
-  document.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-checkout]');
-    if (!button || button.disabled) return;
-    fbq('track', 'InitiateCheckout', {
-      content_name: `Kobe's Betting Hub ${String(button.dataset.checkout || 'membership')}`,
-      content_category: 'VIP membership',
-      currency: 'USD'
-    });
+  let fbq = window.fbq;
+  if (!fbq) {
+    fbq = function (...args) {
+      if (fbq.callMethod) fbq.callMethod(...args);
+      else fbq.queue.push(args);
+    };
+    window.fbq = fbq;
+    if (!window._fbq) window._fbq = fbq;
+    fbq.push = fbq; fbq.loaded = true; fbq.version = '2.0'; fbq.queue = [];
+    const script = document.createElement('script'); script.async = true;
+    script.src = 'https://connect.facebook.net/en_US/fbevents.js';
+    const firstScript = document.getElementsByTagName('script')[0];
+    firstScript.parentNode.insertBefore(script, firstScript);
+    fbq('set', 'autoConfig', false, pixelId);
+    fbq('init', pixelId); fbq('track', 'PageView');
+  }
+  const sent = new Set();
+  const offers = new Set(['starter', 'trial_2_day', 'referral_trial', 'first_month_back', 'six_month', 'annual']);
+  window.KBHMeta = Object.freeze({
+    trackCheckout(offer, requestId) {
+      if (!offers.has(offer) || !/^[0-9a-f-]{36}$/i.test(requestId || '')) return false;
+      const id = `checkout:${requestId}`;
+      if (sent.has(id)) return false;
+      fbq('track', 'InitiateCheckout', { content_name: `Kobe's Betting Hub ${offer}`, content_category: 'VIP membership', currency: 'USD' }, { eventID: id });
+      sent.add(id); return true;
+    },
+    trackPurchase(receipt) {
+      if (!receipt || !/^purchase:[0-9a-f]{64}$/.test(receipt.eventId || '')
+          || !Number.isFinite(receipt.value) || receipt.value <= 0
+          || !/^[A-Z]{3}$/.test(receipt.currency || '')) return false;
+      const key = `kbh.meta.${receipt.eventId}`;
+      if (sent.has(key)) return false;
+      try { if (window.localStorage.getItem(key)) return false; } catch { /* In-memory dedupe remains available. */ }
+      fbq('track', 'Purchase', { value: receipt.value, currency: receipt.currency, content_category: 'VIP membership' }, { eventID: receipt.eventId });
+      sent.add(key);
+      try { window.localStorage.setItem(key, 'queued'); } catch { /* Storage is optional; Meta also receives a stable event ID. */ }
+      return true;
+    }
   });
+  if (window.__KBH_VERIFIED_PURCHASE__) window.KBHMeta.trackPurchase(window.__KBH_VERIFIED_PURCHASE__);
+  };
+  window.addEventListener('kbh:tracking-url-ready', initialize, { once: true });
+  initialize();
 })();

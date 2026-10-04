@@ -65,7 +65,14 @@ const clearCheckoutRequestId = (offer) => {
   try { window.sessionStorage.removeItem(checkoutRequestStorageKey(offer)); } catch { /* Browser storage may be unavailable. */ }
 };
 const checkoutState = new URLSearchParams(window.location.search).get('checkout');
-const checkoutSession = new URLSearchParams(window.location.search).get('session_id');
+const checkoutSession = new URLSearchParams(window.location.search).get('session_id')
+  || (checkoutState === 'success' && typeof window.history?.state?.kbhCheckoutSession === 'string' ? window.history.state.kbhCheckoutSession : null);
+if (checkoutSession) {
+  const publicUrl = new URL(window.location.href);
+  publicUrl.searchParams.delete('session_id');
+  window.history?.replaceState({ kbhCheckoutSession: checkoutSession }, '', `${publicUrl.pathname}${publicUrl.search}${publicUrl.hash}`);
+  window.dispatchEvent?.(new Event('kbh:tracking-url-ready'));
+}
 const requestedReferralCode = (new URLSearchParams(window.location.search).get('ref') || '').toUpperCase();
 const referralCode = /^(KBH|KBC)-[A-Z0-9]{10}$/.test(requestedReferralCode) ? requestedReferralCode : '';
 
@@ -162,6 +169,13 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
       if (response.status >= 400 && response.status < 500) clearCheckoutRequestId(offer);
       throw new Error(result.error || 'Unable to open checkout right now.');
     }
+    const redirectUrl = new URL(result.url);
+    if (redirectUrl.protocol !== 'https:' || !['discord.com', 'discordapp.com', 'checkout.stripe.com'].includes(redirectUrl.hostname)) {
+      throw new Error('Checkout returned an invalid destination. Please try again.');
+    }
+    // The confirmed preparation starts the Discord-first checkout journey.
+    // This intent event does not report a purchase or grant membership access.
+    try { window.KBHMeta?.trackCheckout(offer, requestId); } catch { /* Advertising must never block checkout. */ }
     clearCheckoutRequestId(offer);
     window.location.assign(result.url);
   } catch (error) {

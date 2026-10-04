@@ -1,5 +1,12 @@
 const config = window.__KBH_MEMBERSHIP_CONFIG__;
-const state = new URLSearchParams(location.search).get('state') || '';
+const incomingState = new URLSearchParams(location.search).get('state');
+const rememberedState = window.history.state?.kbhActivationState;
+const state = incomingState || (typeof rememberedState === 'string' ? rememberedState : '');
+// Keep the private activation credential in memory and out of advertising page URLs.
+const publicUrl = new URL(location.href);
+for (const key of ['state', 'session_id', 'code', 'token', 'auth']) publicUrl.searchParams.delete(key);
+window.history.replaceState({ kbhActivationState: state }, '', `${publicUrl.pathname}${publicUrl.search}${publicUrl.hash}`);
+window.dispatchEvent(new Event('kbh:tracking-url-ready'));
 const title = document.querySelector('[data-title]');
 const message = document.querySelector('[data-message]');
 const status = document.querySelector('[data-status]');
@@ -16,6 +23,11 @@ async function check() {
     const response = await fetch(`${config.workerOrigin}/onboarding/status?state=${encodeURIComponent(state)}`);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Unable to verify activation.');
+    // Only the private status endpoint's Stripe-verified paid receipt can report a purchase.
+    if (data.paymentConfirmed && data.purchase) {
+      window.__KBH_VERIFIED_PURCHASE__ = data.purchase;
+      try { window.KBHMeta?.trackPurchase(data.purchase); } catch { /* Advertising must never block membership confirmation. */ }
+    }
     payment.textContent = `Payment: ${data.paymentConfirmed ? 'Confirmed ✅' : 'Waiting'}`;
     discord.textContent = `Discord: ${data.discordConnected ? 'Connected ✅' : 'Waiting'}`;
     vip.textContent = `VIP: ${data.vipActive ? 'Active ✅' : data.state === 'failed' ? 'Needs attention' : 'Activating…'}`;

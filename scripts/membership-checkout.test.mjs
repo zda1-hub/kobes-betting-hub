@@ -10,9 +10,10 @@ const productionConfig = {
   workerOrigin: 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev',
 };
 
-function checkoutPage(fetchImpl, { config = productionConfig, search = '' } = {}) {
+function checkoutPage(fetchImpl, { config = productionConfig, search = '', historyState = null } = {}) {
   const storage = new Map();
   const assignedUrls = [];
+  const tracking = [];
   const buttons = ['starter', 'trial_2_day'].map((offer) => ({
     dataset: { checkout: offer },
     disabled: false,
@@ -50,7 +51,9 @@ function checkoutPage(fetchImpl, { config = productionConfig, search = '' } = {}
     addEventListener() {},
     __KBH_MEMBERSHIP_CONFIG__: config,
     crypto: globalThis.crypto,
-    location: { search, assign: (url) => assignedUrls.push(url) },
+    history: { state: historyState, replaceState(state) { this.state = state; } },
+    KBHMeta: { trackCheckout: (...args) => tracking.push(args) },
+    location: { href: `https://kobesbettinghub.com/join${search}`, search, assign: (url) => assignedUrls.push(url) },
     sessionStorage: {
       getItem: (key) => storage.get(key) || null,
       setItem: (key, value) => storage.set(key, value),
@@ -63,9 +66,10 @@ function checkoutPage(fetchImpl, { config = productionConfig, search = '' } = {}
     fetch: fetchImpl,
     URL,
     URLSearchParams,
+    Event,
     window,
   });
-  return { buttons, storage, assignedUrls, checkoutMessage, connectionPanel, connectionTitle, connectionMessage, discordConnect, salesSection };
+  return { tracking, buttons, storage, assignedUrls, checkoutMessage, connectionPanel, connectionTitle, connectionMessage, discordConnect, salesSection };
 }
 
 test('paid checkout handoff exposes Discord first and prevents a second purchase', async () => {
@@ -126,7 +130,7 @@ test('checkout retries reuse an in-flight request ID and clear it after Stripe r
     requestIds.push(options.headers['X-Checkout-Request-Id']);
     attempt += 1;
     if (attempt === 1) throw new TypeError('network interrupted');
-    return Response.json({ url: `https://checkout.stripe.test/session-${attempt}` });
+    return Response.json({ url: `https://checkout.stripe.com/session-${attempt}` });
   });
 
   await page.buttons[0].click();
@@ -134,7 +138,7 @@ test('checkout retries reuse an in-flight request ID and clear it after Stripe r
   await page.buttons[0].click();
   assert.equal(requestIds[1], requestIds[0]);
   assert.equal(page.storage.size, 0);
-  assert.deepEqual(page.assignedUrls, ['https://checkout.stripe.test/session-2']);
+  assert.deepEqual(page.assignedUrls, ['https://checkout.stripe.com/session-2']);
 
   await page.buttons[0].click();
   assert.notEqual(requestIds[2], requestIds[1]);
@@ -144,7 +148,7 @@ test('staging checkout only calls the configured staging Worker', async () => {
   const requests = [];
   const page = checkoutPage(async (url) => {
     requests.push(url);
-    return Response.json({ url: 'https://checkout.stripe.test/staging-session' });
+    return Response.json({ url: 'https://checkout.stripe.com/staging-session' });
   }, {
     config: {
       environment: 'staging',
@@ -160,7 +164,7 @@ test('staging checkout fails closed when configured with the production Worker',
   let fetchCalls = 0;
   const page = checkoutPage(async () => {
     fetchCalls += 1;
-    return Response.json({ url: 'https://checkout.stripe.test/should-not-open' });
+    return Response.json({ url: 'https://checkout.stripe.com/should-not-open' });
   }, {
     config: {
       environment: 'staging',
@@ -171,4 +175,18 @@ test('staging checkout fails closed when configured with the production Worker',
   await page.buttons[0].click();
   assert.equal(fetchCalls, 0);
   assert.match(page.checkoutMessage.textContent, /not configured for a valid membership environment/i);
+});
+
+test('checkout tracking fires only after preparation succeeds and its redirect is valid', async () => {
+  for (const response of [Response.json({ error: 'unavailable' }, { status: 503 }), Response.json({ url: 'https://evil.example/private' })]) {
+    const page = checkoutPage(async () => response);
+    await page.buttons[0].click(); assert.equal(page.tracking.length, 0); assert.equal(page.assignedUrls.length, 0);
+  }
+  const page = checkoutPage(async () => Response.json({ url: 'https://discord.com/oauth2/authorize?state=private' }));
+  await page.buttons[0].click(); assert.equal(page.tracking.length, 1); assert.equal(page.tracking[0][0], 'starter');
+});
+test('legacy paid return still exposes Discord connection after sanitized URL reload', () => {
+  const page = checkoutPage(() => {}, { search: '?checkout=success', historyState: { kbhCheckoutSession: 'cs_live_example123' } });
+  assert.equal(page.discordConnect.hidden, false);
+  assert.match(page.discordConnect.href, /session_id=cs_live_example123$/);
 });
