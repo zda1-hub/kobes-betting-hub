@@ -5,3 +5,7 @@
 .first-month .button{background:#3ca1fa;color:#fff}
 @media(max-width:600px){.seven-days h2{font-size:14px;white-space:nowrap}.six-months h2{font-size:15px;white-space:nowrap}}
 .membership-share .share-subtitle{color:#ff9440}.membership-vip>p{color:#292015}
+
+/* Give the two featured plans a stronger title without changing their card gutters. */
+.membership-design .first-month h2,.membership-design .one-year h2{font-size:44px;line-height:1.12;font-weight:600;padding:8px 0 12px;margin-bottom:18px}
+@media(max-width:600px){.membership-design .first-month h2,.membership-design .one-year h2{font-size:clamp(28px,8vw,34px);padding:8px 0 10px;margin-bottom:14px}}
