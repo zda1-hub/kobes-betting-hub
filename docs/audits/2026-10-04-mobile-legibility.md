@@ -22,3 +22,9 @@ Prepared locally on codex/mobile-legibility from latest origin/main 85c2f3e. Git
 
 ## Limits
 Browser responsive checks simulate phone dimensions; no physical-device check. Larger text does not establish a conversion improvement without subsequent visitor/purchase measurements.
+
+## Published receipt
+- GitHub PR #138 merged: https://github.com/zda1-hub/kobes-betting-hub/pull/138 ; change commit e73b5f8.
+- Cloudflare static Worker deployed version 75ec3b56-ffa3-4476-8695-35940dd56411, using 139 whitelisted assets (23 changed). Checkout/backend workers were not deployed.
+- Live homepage at 390px: document width 390px, Join height 36px, footer 9.6px, zero email checkboxes and visible Send confirmation; new stylesheet version present. Live stylesheet matches the built asset byte-for-byte.
+- Saved live homepage and membership screenshots in outputs/mobile-legibility-2026-10-04/live-home-mobile.png and live-membership-mobile.png in the primary workspace.
