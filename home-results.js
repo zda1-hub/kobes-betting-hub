@@ -1,6 +1,40 @@
+(() => {
+const setupWins = track => {
+  const rail = track.parentElement, originals = [...track.children];
+  for (const side of ['before','after']) {
+    const copies = originals.map(card => { const clone = card.cloneNode(true); clone.setAttribute('aria-hidden','true'); return clone; });
+    if (side === 'before') track.prepend(...copies); else track.append(...copies);
+  }
+  const motion = document.querySelector('[data-wins-motion]');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  let manual = reduced.matches, hovered = false, last = 0, loop = 0, position = 0, pointer, startX, startScroll;
+  const pause = () => { manual = true; motion.textContent = 'Play slideshow'; };
+  const measure = () => { loop = track.children[originals.length * 2].offsetLeft - track.children[originals.length].offsetLeft; position = loop; rail.scrollLeft = position; };
+  const normalize = () => { if (!loop) return; let value = rail.scrollLeft; if(value < loop) value += loop; if(value >= loop*2) value -= loop; rail.scrollLeft = value; position = value; };
+  const browse = direction => { pause(); const origin = track.children[0].offsetLeft; const offsets = [...track.children].map(card => card.offsetLeft - origin); const current = rail.scrollLeft; const target = direction > 0 ? offsets.find(offset => offset > current + 2) : offsets.filter(offset => offset < current - 2).at(-1); rail.scrollLeft = target ?? current + direction * (originals[0].getBoundingClientRect().width + 12); normalize(); };
+  document.querySelector('[data-wins-previous]').addEventListener('click', () => browse(-1));
+  document.querySelector('[data-wins-next]').addEventListener('click', () => browse(1));
+  motion.textContent = manual ? 'Play slideshow' : 'Pause motion';
+  motion.addEventListener('click', () => { if(reduced.matches) return; manual = !manual; motion.textContent = manual ? 'Play slideshow' : 'Pause motion'; });
+  rail.addEventListener('mouseenter', () => hovered = true);
+  rail.addEventListener('mouseleave', () => hovered = false);
+  rail.addEventListener('focusin', pause);
+  rail.addEventListener('touchstart', pause, {passive:true});
+  rail.addEventListener('wheel', event => { pause(); event.preventDefault(); rail.scrollLeft += Math.abs(event.deltaX)>Math.abs(event.deltaY)?event.deltaX:event.deltaY; normalize(); }, {passive:false});
+  rail.addEventListener('keydown', event => { if(['ArrowLeft','ArrowRight'].includes(event.key)){event.preventDefault();browse(event.key==='ArrowRight'?1:-1);} });
+  rail.addEventListener('pointerdown', event => { pause(); if(event.pointerType==='touch'||event.button!==0) return;pointer=event.pointerId; startX=event.clientX;startScroll=rail.scrollLeft;rail.setPointerCapture(pointer); });
+  rail.addEventListener('pointermove', event => { if(pointer!==event.pointerId) return;event.preventDefault();rail.scrollLeft=startScroll-(event.clientX-startX); });
+  const finish = event => { if(pointer!==event.pointerId) return;pointer=undefined;if(rail.hasPointerCapture(event.pointerId))rail.releasePointerCapture(event.pointerId);normalize(); };
+  rail.addEventListener('pointerup', finish);rail.addEventListener('pointercancel', finish);
+  rail.addEventListener('scroll', () => { if(pointer===undefined)normalize(); }, {passive:true});
+  reduced.addEventListener('change', pause);
+  new ResizeObserver(measure).observe(rail);measure();
+  const animate = now => { if(last && !manual && !hovered && !document.hidden && !reduced.matches && pointer===undefined){const bounds=rail.getBoundingClientRect();if(bounds.top<innerHeight&&bounds.bottom>0){position+=Math.min(now-last,50)*.065;rail.scrollLeft=position;normalize();}}last=now;requestAnimationFrame(animate); };requestAnimationFrame(animate);
+};
 const verifiedResultsTrack = document.querySelector('[data-verified-results-track]');
 if (verifiedResultsTrack) {
   const rail = verifiedResultsTrack.parentElement;
+  rail.addEventListener('keydown', event => { if (['ArrowLeft','ArrowRight'].includes(event.key)) { event.preventDefault(); rail.scrollLeft += (event.key === 'ArrowRight' ? 1 : -1) * rail.clientWidth * .7; } });
   let startX = 0;
   let startScroll = 0;
   let dragging = false;
@@ -26,16 +60,21 @@ if (verifiedResultsTrack) {
     event.preventDefault();
     rail.scrollLeft += event.deltaY;
   }, { passive: false });
-  fetch('https://bettinghub-publisher.kobedirwin.workers.dev/api/results', { cache: 'no-store' })
+  fetch((['localhost','127.0.0.1','::1'].includes(location.hostname) ? '/preview-api/results' : 'https://bettinghub-publisher.kobedirwin.workers.dev/api/results'), { cache: 'no-store' })
     .then((response) => {
       if (!response.ok) throw new Error('Verified results unavailable');
       return response.json();
     })
     .then((snapshot) => {
+      const summary = document.querySelector('[data-home-record]');
+      const record = snapshot.overall;
+      if (summary && record && ['wins','losses','pushes','voids'].every(key => Number.isFinite(record[key]))) {
+        summary.textContent = `${record.wins} wins · ${record.losses} losses · ${record.pushes} pushes · ${record.voids} voids`;
+      }
       const results = Array.isArray(snapshot.recent) ? snapshot.recent.filter((item) => ['W', 'L', 'P', 'V'].includes(item.result)).slice(0, 16) : [];
       if (!results.length) throw new Error('No settled results available');
       const labels = { W: 'Win', L: 'Loss', P: 'Push', V: 'Void' };
-      verifiedResultsTrack.replaceChildren(...results.map((item) => {
+      const makeResultCard = (item) => {
         const card = document.createElement('article');
         card.className = 'verified-result-card';
         const meta = document.createElement('span');
@@ -51,9 +90,22 @@ if (verifiedResultsTrack) {
         card.append(meta, badge, selection);
         if (terms.textContent) card.append(terms);
         return card;
-      }));
+      };
+      verifiedResultsTrack.replaceChildren(...results.map(makeResultCard));
+      const winsTrack = document.querySelector("[data-wins-track]");
+      if (winsTrack) {
+        const wins = results.filter(item => item.result === "W");
+        winsTrack.replaceChildren(...wins.map(makeResultCard));
+        if (!wins.length) winsTrack.textContent = "No recent verified wins are available.";
+        else setupWins(winsTrack);
+      }
     })
     .catch(() => {
+      const summary = document.querySelector('[data-home-record]');
+      if (summary) summary.textContent = 'The published record is temporarily unavailable.';
+      const winsTrack = document.querySelector('[data-wins-track]');
+      if (winsTrack) winsTrack.textContent = 'Verified wins are temporarily unavailable.';
+      document.querySelectorAll('[data-wins-previous],[data-wins-next],[data-wins-motion]').forEach(button => button.disabled = true);
       verifiedResultsTrack.replaceChildren();
       const message = document.createElement('p');
       message.className = 'verified-results-message';
@@ -61,3 +113,5 @@ if (verifiedResultsTrack) {
       verifiedResultsTrack.append(message);
     });
 }
+
+})();

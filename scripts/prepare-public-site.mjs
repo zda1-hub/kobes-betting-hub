@@ -20,6 +20,20 @@ const guideFiles = [
 ];
 
 const publicFiles = [
+  'proof.html',
+  'approach.html',
+  'site.css',
+  'site.js',
+  'extras.css',
+  'gallery.css',
+  'membership-design.css',
+  'mobile-polish.css',
+  'subsite-bento.css',
+  'lineup-bento.css',
+  'arbitrage-guide.css',
+  'referral-preview.js',
+  'referral-production.js',
+
   '_redirects',
   'index.html',
   'exclusives.html',
@@ -163,6 +177,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
   // pages. Keep it out of private admin, member, creator and partner portals
   // so internal activity cannot contaminate ad results.
   const metaPixelFiles = new Set([
+    'proof.html', 'approach.html',
     'index.html', 'exclusives.html', 'join.html', 'membership.html',
     'cancel.html', 'welcome.html', 'recaps.html', 'results.html', 'free-pick.html',
     'faq.html', 'support.html', 'terms.html', 'privacy.html',

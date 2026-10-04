@@ -1,0 +1,626 @@
+[
+  {
+    "route": "approach.html",
+    "width": 360,
+    "overflow": false,
+    "mainLeft": 24,
+    "headerLeft": 24,
+    "bodyText": [
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 312,
+        "left": 24
+      }
+    ]
+  },
+  {
+    "route": "support.html",
+    "width": 360,
+    "overflow": false,
+    "mainLeft": 24,
+    "headerLeft": 24,
+    "bodyText": [
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 312,
+        "left": 24
+      }
+    ]
+  },
+  {
+    "route": "faq.html",
+    "width": 360,
+    "overflow": false,
+    "mainLeft": 24,
+    "headerLeft": 24,
+    "bodyText": [
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 312,
+        "left": 24
+      }
+    ]
+  },
+  {
+    "route": "guides/index.html",
+    "width": 360,
+    "overflow": false,
+    "mainLeft": 24,
+    "headerLeft": 24,
+    "bodyText": [
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 312,
+        "left": 24
+      },
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 312,
+        "left": 24
+      }
+    ]
+  },
+  {
+    "route": "approach.html",
+    "width": 390,
+    "overflow": false,
+    "mainLeft": 24,
+    "headerLeft": 24,
+    "bodyText": [
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 342,
+        "left": 24
+      }
+    ]
+  },
+  {
+    "route": "support.html",
+    "width": 390,
+    "overflow": false,
+    "mainLeft": 24,
+    "headerLeft": 24,
+    "bodyText": [
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 342,
+        "left": 24
+      }
+    ]
+  },
+  {
+    "route": "faq.html",
+    "width": 390,
+    "overflow": false,
+    "mainLeft": 24,
+    "headerLeft": 24,
+    "bodyText": [
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 342,
+        "left": 24
+      }
+    ]
+  },
+  {
+    "route": "guides/index.html",
+    "width": 390,
+    "overflow": false,
+    "mainLeft": 24,
+    "headerLeft": 24,
+    "bodyText": [
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 342,
+        "left": 24
+      },
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 342,
+        "left": 24
+      }
+    ]
+  },
+  {
+    "route": "approach.html",
+    "width": 768,
+    "overflow": false,
+    "mainLeft": 28,
+    "headerLeft": 28,
+    "bodyText": [
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 346,
+        "left": 28
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 346,
+        "left": 394
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 346,
+        "left": 28
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 346,
+        "left": 394
+      }
+    ]
+  },
+  {
+    "route": "support.html",
+    "width": 768,
+    "overflow": false,
+    "mainLeft": 28,
+    "headerLeft": 28,
+    "bodyText": [
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 346,
+        "left": 28
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 346,
+        "left": 394
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 712,
+        "left": 28
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 712,
+        "left": 28
+      }
+    ]
+  },
+  {
+    "route": "faq.html",
+    "width": 768,
+    "overflow": false,
+    "mainLeft": 28,
+    "headerLeft": 28,
+    "bodyText": [
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 712,
+        "left": 28
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 712,
+        "left": 28
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 712,
+        "left": 28
+      }
+    ]
+  },
+  {
+    "route": "guides/index.html",
+    "width": 768,
+    "overflow": false,
+    "mainLeft": 28,
+    "headerLeft": 28,
+    "bodyText": [
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 346,
+        "left": 28
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 346,
+        "left": 394
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 346,
+        "left": 28
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 346,
+        "left": 394
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 712,
+        "left": 28
+      },
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 712,
+        "left": 28
+      }
+    ]
+  },
+  {
+    "route": "approach.html",
+    "width": 1440,
+    "overflow": false,
+    "mainLeft": 140,
+    "headerLeft": 140,
+    "bodyText": [
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 570,
+        "left": 140
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 570,
+        "left": 730
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 570,
+        "left": 140
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 570,
+        "left": 730
+      }
+    ]
+  },
+  {
+    "route": "support.html",
+    "width": 1440,
+    "overflow": false,
+    "mainLeft": 140,
+    "headerLeft": 140,
+    "bodyText": [
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 570,
+        "left": 140
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 570,
+        "left": 730
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 1160,
+        "left": 140
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 1160,
+        "left": 140
+      }
+    ]
+  },
+  {
+    "route": "faq.html",
+    "width": 1440,
+    "overflow": false,
+    "mainLeft": 140,
+    "headerLeft": 140,
+    "bodyText": [
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px",
+      "16px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 373.328125,
+        "left": 140
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 373.328125,
+        "left": 533.328125
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 373.34375,
+        "left": 926.65625
+      }
+    ]
+  },
+  {
+    "route": "guides/index.html",
+    "width": 1440,
+    "overflow": false,
+    "mainLeft": 140,
+    "headerLeft": 140,
+    "bodyText": [
+      "17px",
+      "17px",
+      "17px",
+      "17px",
+      "17px"
+    ],
+    "cards": [
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 570,
+        "left": 140
+      },
+      {
+        "color": "rgb(255, 121, 0)",
+        "width": 570,
+        "left": 730
+      },
+      {
+        "color": "rgb(22, 22, 22)",
+        "width": 570,
+        "left": 140
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 570,
+        "left": 730
+      },
+      {
+        "color": "rgb(255, 244, 229)",
+        "width": 1160,
+        "left": 140
+      },
+      {
+        "color": "rgb(56, 120, 222)",
+        "width": 1160,
+        "left": 140
+      }
+    ]
+  }
+]

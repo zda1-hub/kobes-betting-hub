@@ -1,0 +1,74 @@
+[
+  {
+    "cardOverflow": false,
+    "manage": true,
+    "overflow": false,
+    "path": "/join.html",
+    "plans": 4,
+    "width": 360
+  },
+  {
+    "cardOverflow": false,
+    "manage": true,
+    "overflow": false,
+    "path": "/membership.html",
+    "plans": 4,
+    "width": 360
+  },
+  {
+    "cardOverflow": false,
+    "manage": false,
+    "overflow": false,
+    "path": "/proof.html",
+    "plans": 0,
+    "width": 360
+  },
+  {
+    "cardOverflow": false,
+    "manage": true,
+    "overflow": false,
+    "path": "/join.html",
+    "plans": 4,
+    "width": 390
+  },
+  {
+    "cardOverflow": false,
+    "manage": true,
+    "overflow": false,
+    "path": "/membership.html",
+    "plans": 4,
+    "width": 390
+  },
+  {
+    "cardOverflow": false,
+    "manage": false,
+    "overflow": false,
+    "path": "/proof.html",
+    "plans": 0,
+    "width": 390
+  },
+  {
+    "cardOverflow": false,
+    "manage": true,
+    "overflow": false,
+    "path": "/join.html",
+    "plans": 4,
+    "width": 1440
+  },
+  {
+    "cardOverflow": false,
+    "manage": true,
+    "overflow": false,
+    "path": "/membership.html",
+    "plans": 4,
+    "width": 1440
+  },
+  {
+    "cardOverflow": false,
+    "manage": false,
+    "overflow": false,
+    "path": "/proof.html",
+    "plans": 0,
+    "width": 1440
+  }
+]

@@ -1,0 +1,13 @@
+/* Image dimensions follow each source ratio, with no inner screenshot padding. */
+[data-rail] .rail-track{padding:0 12px;align-items:center;gap:12px;min-height:1px}
+[data-rail] .media-card:nth-child(n){width:var(--gallery-width,240px);height:var(--gallery-height,160px);padding:0;border:0;flex:none;background:transparent;overflow:hidden;max-width:calc(100% - 24px)}
+[data-rail] .media-card img{display:block;width:100%;height:100%;object-fit:contain;border-radius:inherit}
+[data-rail] .review-card{cursor:grab}
+.rail-navigation{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex:none}
+.rail-controls{flex-wrap:wrap;gap:8px;padding:10px 12px 0}
+.rail-controls .rail-arrow{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:none;border:1px solid #cfc9bf;border-radius:50%;background:#fff;color:#181818;font-size:18px;line-height:1;cursor:pointer;box-shadow:0 2px 0 #ded8ce}
+.rail-controls .rail-arrow:hover{background:#f8f3ec;transform:translateY(-1px)}
+.rail-controls .rail-arrow:focus-visible,.rail-controls .rail-resume:focus-visible{outline:2px solid #3ca1fa;outline-offset:3px}
+.lower-bento .rail-controls{padding:8px 12px 0}
+.lower-bento .rail-navigation{width:100%;justify-content:space-between}
+@media(max-width:600px){.rail-controls .rail-resume{font-size:9px;padding:5px 7px}.rail-controls .rail-arrow{width:30px;height:30px}.lower-bento .rail-controls{padding-top:8px}}

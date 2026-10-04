@@ -1,0 +1,58 @@
+/* Color and reading scale for selected informational pages; shared shell remains in site.css. */
+.subsite-layout .subsite-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:stretch;margin:0 0 24px}
+.subsite-layout .info-card,.subsite-layout .faq-group {min-width:0;padding:clamp(26px,3vw,38px);border-radius:var(--radius);box-shadow:var(--card-shadow)}
+.subsite-layout .info-card {display:flex;flex-direction:column}
+.subsite-layout .info-card h2,.subsite-layout .faq-group h2 {font-size:clamp(27px,3vw,39px);line-height:1.12;letter-spacing:-.045em;margin:8px 0 18px}
+.subsite-layout .info-card p,.subsite-layout .faq-group p {font-size:17px;line-height:1.7;color:inherit;margin:0 0 18px}
+.subsite-layout .info-card p:last-child {margin-bottom:0}
+.subsite-layout .page-hero>p:last-child,.subsite-layout .subpage-header .dek {font-size:17px;line-height:1.7;max-width:730px}
+.subsite-layout .tile-kicker {font-size:12px;color:inherit;opacity:.9;letter-spacing:.12em;margin:0 0 24px}
+.subsite-layout .hub-blue {background:var(--blue);border-color:var(--blue);color:#fff}
+.subsite-layout .hub-orange {background:var(--orange);border-color:var(--orange);color:#16110c}
+.subsite-layout .hub-black {background:#161616;border-color:#161616;color:#fff}
+.subsite-layout .hub-cream {background:#fff4e5;border-color:#ead8bd;color:#252018}
+.subsite-layout .hub-blue p,.subsite-layout .hub-black p {color:#fff}
+.subsite-layout .hub-orange p,.subsite-layout .hub-cream p {color:#292015}
+.subsite-layout .hub-blue a,.subsite-layout .hub-black a {color:inherit}
+.subsite-layout .hub-blue .button,.subsite-layout .hub-orange .button {background:#fff;color:#2054ae;border-color:#fff;box-shadow:0 3px 0 #214e94,0 6px 12px #11111117}
+.subsite-layout .hub-orange .button {color:#703800;box-shadow:0 3px 0 #c96307,0 6px 12px #11111117}
+.subsite-layout .info-card a:not(.button),.subsite-layout .faq-group p a {text-underline-offset:4px;font-weight:700}
+.subsite-layout .approach-grid .info-card {min-height:275px}
+.subsite-layout .approach-grid .info-card p:last-child {max-width:510px}
+.subsite-layout .subsite-actions {display:flex;align-items:center;flex-wrap:wrap;gap:22px;margin:26px 0 12px}
+.subsite-layout .text-link {font-size:16px;font-weight:800;text-decoration:none}
+.subsite-layout .support-grid .info-card:last-child {grid-column:1/-1;min-height:0}
+.subsite-layout .support-notice {margin:0 0 20px}
+.subsite-layout .support-notice strong {font-size:24px;line-height:1.25;margin-bottom:12px}
+.subsite-layout .support-notice p {max-width:830px;font-size:16px}
+.subsite-layout .faq-grid {grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
+.subsite-layout .faq-group h2 {font-size:28px;min-height:65px}
+.subsite-layout .faq-group details {padding:17px 0;border-top:1px solid #ffffff55}
+.subsite-layout .faq-group.hub-cream details {border-top-color:#dacbb7}
+.subsite-layout .faq-group summary {cursor:pointer;font-size:17px;font-weight:800;line-height:1.5;list-style:none;display:flex;justify-content:space-between;gap:12px}
+.subsite-layout .faq-group summary::-webkit-details-marker {display:none}
+.subsite-layout .faq-group summary::after {content:'+';flex:none;font-size:22px;font-weight:500;line-height:1.15}
+.subsite-layout .faq-group details[open] summary::after {content:'−'}
+.subsite-layout .faq-group p {font-size:16px;margin:15px 0 0;line-height:1.7}
+.subsite-layout.learning-page .guide-cards {gap:20px;align-items:stretch}
+.subsite-layout.learning-page .guide-cards .info-card {margin:0;position:relative;min-height:235px}
+.subsite-layout.learning-page .card h2 a {color:inherit}
+.subsite-layout.learning-page .card h2 a::after {color:inherit}
+.subsite-layout.learning-page .card h2 a::before {content:'';position:absolute;inset:0;border-radius:var(--radius)}
+.subsite-layout.learning-page .card:hover {transform:translateY(-2px);box-shadow:0 7px 22px #29231c16}
+.subsite-layout.learning-page .callout {font-size:16px;line-height:1.7;display:block}
+.subsite-layout.learning-page .callout strong {font-size:22px;margin-bottom:14px}
+.subsite-layout.learning-page .cta a {font-size:16px;padding:4px 0;margin:10px 20px 0 0}
+@media(max-width:950px) {.subsite-layout .faq-grid {grid-template-columns:1fr}.subsite-layout .faq-group h2 {min-height:0}.subsite-layout .faq-group {padding:30px}}
+@media(max-width:700px) {
+.subsite-layout .subsite-grid,.subsite-layout.learning-page .guide-cards {grid-template-columns:1fr;gap:16px}
+.subsite-layout .info-card,.subsite-layout .faq-group {padding:26px}
+.subsite-layout .info-card h2 {font-size:31px;line-height:1.15}
+.subsite-layout .info-card p,.subsite-layout .page-hero>p:last-child,.subsite-layout .subpage-header .dek {font-size:16px;line-height:1.7}
+.subsite-layout .approach-grid .info-card {min-height:0}
+.subsite-layout .tile-kicker {margin-bottom:15px;font-size:11px}
+.subsite-layout .subsite-actions {align-items:flex-start;flex-direction:column;gap:20px}
+.subsite-layout.learning-page .guide-cards .info-card {min-height:0}
+.subsite-layout .faq-group summary {font-size:17px;min-height:44px;align-items:center}
+.subsite-layout .support-notice strong {font-size:23px}
+}
