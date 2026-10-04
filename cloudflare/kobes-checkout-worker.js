@@ -1756,7 +1756,7 @@ async function prepareCheckout(request, env, origin) {
   let referralOwner = null;
   if (data.offer === 'referral_trial' || (data.offer === 'first_month_back' && referralCode)) {
     referralOwner = await referralOwnerForCode(env, referralCode);
-    if (!referralOwner || (data.offer === 'first_month_back' && referralOwner.kind !== 'creator')) return json({ error: 'That referral link is not currently eligible for this offer.' }, 400, origin);
+    if (!referralOwner) return json({ error: 'That referral link is not currently eligible for this offer.' }, 400, origin);
   }
   const sessionId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(data.analytics_session_id || '')
     ? data.analytics_session_id.toLowerCase() : null;
@@ -1846,7 +1846,7 @@ async function createCheckout(request, env, origin) {
     const referralCode = String(data.referral_code || '').toUpperCase();
     if (!supabaseReady(env)) return json({ error: 'That referral link is invalid or expired.' }, 400, origin);
     referralOwner = await referralOwnerForCode(env, referralCode);
-    if (!referralOwner || (data.offer === 'first_month_back' && referralOwner.kind !== 'creator')) return json({ error: 'That referral link is not currently eligible for this offer.' }, 400, origin);
+    if (!referralOwner) return json({ error: 'That referral link is not currently eligible for this offer.' }, 400, origin);
   }
 
   // Go straight to the canonical confirmation page, avoiding the legacy
@@ -1911,10 +1911,10 @@ async function processReferralInvoicePaid(env, invoice, eventId) {
   if (!subscriptionId || String(invoice?.currency || '').toLowerCase() !== 'usd') return 'INVOICE_NOT_REFERRAL_QUALIFIED';
   const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
   const metadata = subscription.metadata || {};
-  const creatorFirstMonth = metadata.offer === 'first_month_back' && Boolean(metadata.creator_profile_id);
+  const referredFirstMonth = metadata.offer === 'first_month_back' && Boolean(metadata.creator_profile_id || metadata.referrer_discord_user_id);
   const memberOrCreatorTrial = metadata.offer === 'referral_trial';
-  const minimumPaid = creatorFirstMonth ? 1999 : 3299;
-  if ((!creatorFirstMonth && !memberOrCreatorTrial) || Number(invoice?.amount_paid || 0) < minimumPaid
+  const minimumPaid = referredFirstMonth ? 1999 : 3299;
+  if ((!referredFirstMonth && !memberOrCreatorTrial) || Number(invoice?.amount_paid || 0) < minimumPaid
       || !metadata.referral_code || !(metadata.referrer_discord_user_id || metadata.creator_profile_id)) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
   if (stripeId(subscription.items?.data?.[0]?.price) !== env.STRIPE_MONTHLY_PRICE_ID) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
   let reward = await referralRewardForSubscription(env, subscriptionId);
@@ -2043,10 +2043,11 @@ function referralSafetyFailure(reason, status = 'REVIEW_REQUIRED') {
 
 async function qualifyingReferralCharge(env, reward) {
   let minimumPaid = 3299;
-  if (reward.creator_profile_id) {
+  if (reward.creator_profile_id || reward.referrer_discord_user_id) {
     const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(reward.referred_subscription_id)}`);
     if (subscription.metadata?.offer === 'first_month_back'
-        && subscription.metadata?.creator_profile_id === reward.creator_profile_id
+        && ((reward.creator_profile_id && subscription.metadata?.creator_profile_id === reward.creator_profile_id)
+          || (reward.referrer_discord_user_id && subscription.metadata?.referrer_discord_user_id === reward.referrer_discord_user_id))
         && subscription.metadata?.referral_code === reward.referral_code
         && stripeId(subscription.items?.data?.[0]?.price) === env.STRIPE_MONTHLY_PRICE_ID) minimumPaid = 1999;
   }

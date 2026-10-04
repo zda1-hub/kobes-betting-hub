@@ -1,6 +1,20 @@
 const year = document.getElementById('year');
 if (year) year.textContent = new Date().getFullYear();
 
+const memberReferralPromoActive = Date.now() >= Date.parse('2026-09-22T07:00:00Z') && Date.now() < Date.parse('2026-10-23T07:00:00Z');
+if (memberReferralPromoActive) {
+  const offerCopy = {
+    lead: 'Active members receive $10 for each eligible friend who joins through their link and pays $19.99 for the first month during the offer, after verification and a seven-day hold.',
+    step2: '<span>02</span>Share your personal link. Through October 22 (Arizona time), friends pay $19.99 for the first month, then $32.99/month until canceled. No free trial.',
+    step3: '<span>03</span>After the first successful $19.99 payment, seven-day hold, and verification, Stripe sends your reward.',
+    rules: 'The friend must be a new member using your link, select the referral offer, and successfully pay the first $19.99 charge by October 22 (Arizona time). After the offer ends, the link returns to a two-day trial; the first $32.99 payment then qualifies.'
+  };
+  for (const [key, value] of Object.entries(offerCopy)) {
+    const element = document.querySelector(`[data-referral-offer-copy="${key}"]`);
+    if (element) element.innerHTML = value;
+  }
+}
+
 const menuToggle = document.querySelector('[data-menu-toggle]');
 const menu = document.querySelector('[data-menu]');
 if (menuToggle && menu) {
