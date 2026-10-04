@@ -1,19 +1,21 @@
 (() => {
 const setupWins = track => {
-  const rail = track.parentElement, originals = [...track.children];
+  const rail = track.parentElement, controls = rail.closest?.('section') || rail.parentElement;
+  const motion = controls?.querySelector('[data-wins-motion]');
+  if (!motion) return;
+  const originals = [...track.children];
   for (const side of ['before','after']) {
     const copies = originals.map(card => { const clone = card.cloneNode(true); clone.setAttribute('aria-hidden','true'); return clone; });
     if (side === 'before') track.prepend(...copies); else track.append(...copies);
   }
-  const motion = document.querySelector('[data-wins-motion]');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let manual = reduced.matches, hovered = false, last = 0, loop = 0, position = 0, pointer, startX, startScroll;
   const pause = () => { manual = true; motion.textContent = 'Play slideshow'; };
   const measure = () => { loop = track.children[originals.length * 2].offsetLeft - track.children[originals.length].offsetLeft; position = loop; rail.scrollLeft = position; };
   const normalize = () => { if (!loop) return; let value = rail.scrollLeft; if(value < loop) value += loop; if(value >= loop*2) value -= loop; rail.scrollLeft = value; position = value; };
   const browse = direction => { pause(); const origin = track.children[0].offsetLeft; const offsets = [...track.children].map(card => card.offsetLeft - origin); const current = rail.scrollLeft; const target = direction > 0 ? offsets.find(offset => offset > current + 2) : offsets.filter(offset => offset < current - 2).at(-1); rail.scrollLeft = target ?? current + direction * (originals[0].getBoundingClientRect().width + 12); normalize(); };
-  document.querySelector('[data-wins-previous]').addEventListener('click', () => browse(-1));
-  document.querySelector('[data-wins-next]').addEventListener('click', () => browse(1));
+  controls.querySelector('[data-wins-previous]').addEventListener('click', () => browse(-1));
+  controls.querySelector('[data-wins-next]').addEventListener('click', () => browse(1));
   motion.textContent = manual ? 'Play slideshow' : 'Pause motion';
   motion.addEventListener('click', () => { if(reduced.matches) return; manual = !manual; motion.textContent = manual ? 'Play slideshow' : 'Pause motion'; });
   rail.addEventListener('mouseenter', () => hovered = true);
@@ -34,6 +36,7 @@ const setupWins = track => {
 const verifiedResultsTrack = document.querySelector('[data-verified-results-track]');
 if (verifiedResultsTrack) {
   const winsOnly = verifiedResultsTrack.hasAttribute('data-wins-only');
+  if (!verifiedResultsTrack.hasAttribute('data-wins-only')) {
   const rail = verifiedResultsTrack.parentElement;
   rail.addEventListener('keydown', event => { if (['ArrowLeft','ArrowRight'].includes(event.key)) { event.preventDefault(); rail.scrollLeft += (event.key === 'ArrowRight' ? 1 : -1) * rail.clientWidth * .7; } });
   let startX = 0;
@@ -61,6 +64,7 @@ if (verifiedResultsTrack) {
     event.preventDefault();
     rail.scrollLeft += event.deltaY;
   }, { passive: false });
+  }
   fetch((['localhost','127.0.0.1','::1'].includes(location.hostname) ? '/preview-api/results' : 'https://bettinghub-publisher.kobedirwin.workers.dev/api/results'), { cache: 'no-store' })
     .then((response) => {
       if (!response.ok) throw new Error('Verified results unavailable');
@@ -100,6 +104,7 @@ if (verifiedResultsTrack) {
         return card;
       };
       verifiedResultsTrack.replaceChildren(...results.map(makeResultCard));
+      if (results.length && winsOnly) setupWins(verifiedResultsTrack);
       if (!results.length) verifiedResultsTrack.textContent = "No recent verified wins are available.";
       const winsTrack = document.querySelector("[data-wins-track]");
       if (winsTrack) {
