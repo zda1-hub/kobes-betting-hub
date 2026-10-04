@@ -9,3 +9,10 @@
 /* Give the two featured plans a stronger title without changing their card gutters. */
 .membership-design .first-month h2,.membership-design .one-year h2{font-size:44px;line-height:1.12;font-weight:600;padding:8px 0 12px;margin-bottom:18px}
 @media(max-width:600px){.membership-design .first-month h2,.membership-design .one-year h2{font-size:clamp(28px,8vw,34px);padding:8px 0 10px;margin-bottom:14px}}
+
+/* Highlight the featured offer without moving the card contents. */
+.membership-design .mock-plan.one-year .plan-subtitle{font-size:20px;line-height:1.4;font-weight:500;margin-bottom:10px}
+.membership-design .offer-attention{animation:offer-attention-pulse 2.8s ease-in-out infinite}
+@keyframes offer-attention-pulse{0%,100%{opacity:1;text-shadow:0 0 0 transparent}50%{opacity:.72;text-shadow:0 0 8px #ffffff60}}
+@media(max-width:600px){.membership-design .mock-plan.one-year .plan-subtitle{font-size:14px}}
+@media(prefers-reduced-motion:reduce){.membership-design .offer-attention{animation:none}}
