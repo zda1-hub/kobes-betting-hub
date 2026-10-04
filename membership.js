@@ -85,16 +85,17 @@ const referralCode = /^(KBH|KBC)-[A-Z0-9]{10}$/.test(requestedReferralCode) ? re
 
 if (referralCode && !checkoutState) {
   const referralGrid = document.querySelector('.offer-card-grid');
-  const creatorPromotionActive = referralCode.startsWith('KBC-') && Date.now() >= Date.parse('2026-09-22T07:00:00Z') && Date.now() < Date.parse('2026-10-23T07:00:00Z');
+  const creatorReferral = referralCode.startsWith('KBC-');
+  const referralPromotionActive = Date.now() >= Date.parse('2026-09-22T07:00:00Z') && Date.now() < Date.parse('2026-10-23T07:00:00Z');
   if (referralGrid) {
     referralGrid.querySelectorAll('.offer-choice:not(.offer-choice-referral)').forEach(card => { card.hidden = true; });
     const referralCard = referralGrid.querySelector('[data-referral-card]');
     if (referralCard) referralCard.hidden = false;
     const referralFields = {
-      label: creatorPromotionActive ? 'CREATOR OFFER' : 'REFERRAL OFFER',
-      title: creatorPromotionActive ? 'First month' : 'Two-day trial',
-      price: creatorPromotionActive ? '$19.99 <span>today</span>' : '$0 <span>today</span>',
-      renewal: creatorPromotionActive ? 'One full month, then $32.99/month until canceled.' : '2 days free, then $32.99/month until canceled.'
+      label: creatorReferral ? 'CREATOR OFFER' : 'MEMBER REFERRAL OFFER',
+      title: referralPromotionActive ? 'First month' : 'Two-day trial',
+      price: referralPromotionActive ? '$19.99 <span>today</span>' : '$0 <span>today</span>',
+      renewal: referralPromotionActive ? 'One full month, then $32.99/month until canceled. No free trial.' : '2 days free, then $32.99/month until canceled.'
     };
     for (const [key, value] of Object.entries(referralFields)) {
       const field = referralCard?.querySelector(`[data-referral-${key}]`);
@@ -102,11 +103,11 @@ if (referralCode && !checkoutState) {
     }
     const referralButton = referralCard?.querySelector('[data-referral-button]');
     if (referralButton) {
-      referralButton.dataset.checkout = creatorPromotionActive ? 'first_month_back' : 'referral_trial';
-      referralButton.innerHTML = creatorPromotionActive ? 'Join for $19.99 <span aria-hidden="true">→</span>' : 'Start free trial <span aria-hidden="true">→</span>';
+      referralButton.dataset.checkout = referralPromotionActive ? 'first_month_back' : 'referral_trial';
+      referralButton.innerHTML = referralPromotionActive ? 'Join for $19.99 <span aria-hidden="true">→</span>' : 'Start free trial <span aria-hidden="true">→</span>';
     }
     document.querySelectorAll('[data-term-note]').forEach(element => { element.hidden = true; });
-    setCheckoutMessage(creatorPromotionActive ? 'Creator offer: $19.99 for the first month, then $32.99/month until canceled.' : 'Referral offer: 2 days free, then $32.99/month until canceled.');
+    setCheckoutMessage(referralPromotionActive ? 'Referral offer: $19.99 charged today for the first month, then $32.99/month until canceled. No free trial.' : 'Referral offer: 2 days free, then $32.99/month until canceled.');
   } else {
   const starterButton = document.querySelector('[data-checkout="starter"]');
   const trialButton = document.querySelector('[data-checkout="trial_2_day"]');
@@ -116,13 +117,13 @@ if (referralCode && !checkoutState) {
   if (starterButton) starterButton.hidden = true;
   document.querySelectorAll('[data-term-plans], [data-term-note]').forEach(element => { element.hidden = true; });
   if (trialButton) {
-    trialButton.dataset.checkout = creatorPromotionActive ? 'first_month_back' : 'referral_trial';
-    trialButton.innerHTML = creatorPromotionActive ? 'Join for $19.99 this month <span aria-hidden="true">→</span>' : 'Start with 2 days free <span aria-hidden="true">→</span>';
+    trialButton.dataset.checkout = referralPromotionActive ? 'first_month_back' : 'referral_trial';
+    trialButton.innerHTML = referralPromotionActive ? 'Join for $19.99 this month <span aria-hidden="true">→</span>' : 'Start with 2 days free <span aria-hidden="true">→</span>';
   }
-  if (offerBadge) offerBadge.innerHTML = creatorPromotionActive ? '<strong>CREATOR OFFER</strong><span>$19.99 first month through October 22</span>' : '<strong>REFERRAL OFFER</strong><span>Exclusive two-day free trial</span>';
-  if (priceAmount && creatorPromotionActive) priceAmount.textContent = '$19.99';
-  if (priceDescription) priceDescription.textContent = creatorPromotionActive ? 'for your first month, then $32.99/month' : 'per month after your 2-day free trial';
-  setCheckoutMessage(creatorPromotionActive ? 'Creator offer: $19.99 for the first month, then $32.99/month until canceled.' : 'Referral offer: 2 days free, then $32.99/month until canceled. The $10 starter option is not available with referrals.');
+  if (offerBadge) offerBadge.innerHTML = referralPromotionActive ? '<strong>REFERRAL OFFER</strong><span>$19.99 first month through October 22</span>' : '<strong>REFERRAL OFFER</strong><span>Exclusive two-day free trial</span>';
+  if (priceAmount && referralPromotionActive) priceAmount.textContent = '$19.99';
+  if (priceDescription) priceDescription.textContent = referralPromotionActive ? 'for your first month, then $32.99/month' : 'per month after your 2-day free trial';
+  setCheckoutMessage(referralPromotionActive ? 'Referral offer: $19.99 charged today for the first month, then $32.99/month until canceled. No free trial.' : 'Referral offer: 2 days free, then $32.99/month until canceled. The $10 starter option is not available with referrals.');
   }
 }
 

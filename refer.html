@@ -31,7 +31,7 @@
         <div class="referral-copy">
           <p class="eyebrow">MEMBER REFERRALS</p>
           <h1 id="referral-title">Share the Hub. Get $10 cash.</h1>
-          <p class="referral-lead">Active members receive $10 for each eligible friend who joins through their link and completes the first $32.99 membership payment.</p>
+          <p class="referral-lead" data-referral-offer-copy="lead">Active members receive $10 for each eligible friend who joins through their link and completes the first $32.99 membership payment.</p>
           <a class="button referral-login" data-referral-login href="https://kobes-betting-hub-checkout.kobedirwin.workers.dev/referrals/login">Connect Discord &amp; get my link <span aria-hidden="true">→</span></a>
           <p class="responsible">US members only. You must be of legal betting age where you live. Rewards are subject to verification, the seven-day hold, and the program rules below.</p>
         </div>
@@ -41,8 +41,8 @@
           <div class="referral-amount"><strong>$10</strong><span>cash per eligible paid referral</span></div>
           <ol>
             <li><span>01</span>Connect the Discord account that currently has Betting Hub VIP access.</li>
-            <li><span>02</span>Share your personal link. It offers only the two-day trial, then $32.99/month.</li>
-            <li><span>03</span>After the first successful $32.99 payment, seven-day hold, and verification, Stripe sends your reward.</li>
+            <li data-referral-offer-copy="step2"><span>02</span>Share your personal link. It offers only the two-day trial, then $32.99/month.</li>
+            <li data-referral-offer-copy="step3"><span>03</span>After the first successful $32.99 payment, seven-day hold, and verification, Stripe sends your reward.</li>
           </ol>
         </aside>
       </section>
@@ -67,7 +67,7 @@
       <section class="referral-rules" aria-labelledby="rules-title">
         <div><p class="eyebrow">PROGRAM RULES</p><h2 id="rules-title">Simple, verified, auditable.</h2></div>
         <div class="rules-grid">
-          <article><h3>Eligible purchase</h3><p>The friend must be a new member using your link, select the referral offer, finish the two-day trial, and successfully pay the first $32.99 charge.</p></article>
+          <article><h3>Eligible purchase</h3><p data-referral-offer-copy="rules">The friend must be a new member using your link, select the referral offer, finish the two-day trial, and successfully pay the first $32.99 charge.</p></article>
           <article><h3>Seven-day hold</h3><p>The reward enters a seven-day review period after that payment. Refunded, disputed, duplicate, fraudulent, or self-referred purchases do not qualify. Shared payment cards or identities may require extra review; the same new member or qualifying payment cannot earn multiple rewards.</p></article>
           <article><h3>Cash delivery</h3><p>Rewards are sent in US dollars through Stripe to the payout method you provide directly to Stripe. Processing time and eligibility can depend on Stripe verification.</p></article>
           <article><h3>Taxes and review</h3><p>You are responsible for applicable taxes. Kobe's Betting Hub may request tax information, pause suspicious rewards, or correct payment errors.</p></article>
@@ -76,6 +76,6 @@
     </main>
     <footer><span>© <span id="year"></span> KOBE'S BETTING HUB</span><span class="footer-nav"><a href="index.html">Home</a><a href="join.html">Membership</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></span><span>LEGAL AGE • WAGER RESPONSIBLY</span>  <span class="footer-social"><a href="https://www.instagram.com/kobebettinghub/" target="_blank" rel="noopener noreferrer" aria-label="Instagram — @kobebettinghub"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg></a><a href="https://x.com/kobesbettinghub" target="_blank" rel="noopener noreferrer" aria-label="X — @kobesbettinghub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h4.8l4.3 5.8L18 3h2l-6.1 7.2L20 21h-4.8l-4.7-6.3L5.2 21H3.1l6.3-7.4L4 3Zm3.1 1.8L16.1 19.2h1L8.1 4.8Z"/></svg></a></span>
     </footer>
-    <script src="referral.js?v=20260922-vip-access"></script>
+    <script src="referral.js?v=20261004-member-promo"></script>
   </body>
 </html>

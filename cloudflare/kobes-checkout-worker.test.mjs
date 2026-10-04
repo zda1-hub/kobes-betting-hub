@@ -575,6 +575,51 @@ test('creator first-month charge passes payout review only for its matching crea
     { message: 'PAYMENT_NO_LONGER_QUALIFIES' });
 });
 
+test('member first-month referral qualifies on the $19.99 payment and matching member identity', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const patches = [];
+  globalThis.fetch = async (input, options = {}) => {
+    const path = new URL(input).pathname;
+    if (path.endsWith('/subscriptions/sub_member_promo')) return Response.json({
+      metadata: { offer: 'first_month_back', referral_code: 'KBH-ABCDEF1234', referrer_discord_user_id: 'discord_referrer' },
+      items: { data: [{ price: { id: 'price_monthly' } }] },
+    });
+    if (path.endsWith('/referral_rewards') && options.method === 'PATCH') {
+      patches.push(JSON.parse(options.body));
+      return Response.json([{ id: 'reward_member_promo', status: 'HOLDING' }]);
+    }
+    if (path.endsWith('/referral_rewards')) return Response.json([{
+      id: 'reward_member_promo', status: 'PENDING_PAYMENT', referred_stripe_customer_id: 'cus_member', first_paid_invoice_id: null,
+    }]);
+    if (path.endsWith('/api_call_events') || path.endsWith('/referral_events')) return new Response(null, { status: 204 });
+    if (path.endsWith('/invoices/in_member_promo')) return Response.json({
+      id: 'in_member_promo', status: 'paid', currency: 'usd', amount_paid: 1999,
+      customer: 'cus_member', subscription: 'sub_member_promo', charge: 'ch_member',
+    });
+    if (path.endsWith('/charges/ch_member')) return Response.json({
+      paid: true, captured: true, status: 'succeeded', currency: 'usd', amount_captured: 1999,
+      customer: 'cus_member', refunded: false, amount_refunded: 0,
+      payment_method_details: { card: { fingerprint: 'fingerprint_member' } },
+    });
+    if (path.endsWith('/refunds')) return Response.json({ data: [], has_more: false });
+    throw new Error(`Unexpected request: ${options.method || 'GET'} ${path}`);
+  };
+  const env = { STRIPE_SECRET_KEY: 'sk_test', STRIPE_MONTHLY_PRICE_ID: 'price_monthly',
+    SUPABASE_URL: 'https://project.supabase.test', SUPABASE_SECRET_KEY: 'sb_secret' };
+  const result = await workerTest.processReferralInvoicePaid(env, {
+    id: 'in_member_promo', currency: 'usd', amount_paid: 1999, customer: 'cus_member',
+    subscription: 'sub_member_promo', created: 1790186400,
+  }, 'evt_member_promo');
+  assert.equal(result, 'REFERRAL_HOLD_STARTED');
+  assert.equal(patches[0].status, 'HOLDING');
+  const reward = { referrer_discord_user_id: 'discord_referrer', referral_code: 'KBH-ABCDEF1234',
+    referred_subscription_id: 'sub_member_promo', first_paid_invoice_id: 'in_member_promo', referred_stripe_customer_id: 'cus_member' };
+  assert.equal((await workerTest.qualifyingReferralCharge(env, reward)).chargeId, 'ch_member');
+  await assert.rejects(workerTest.qualifyingReferralCharge(env, { ...reward, referrer_discord_user_id: 'other_member' }),
+    { message: 'PAYMENT_NO_LONGER_QUALIFIES' });
+});
+
 test('checkout offer composition matches the published intro pricing without charging in the test', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });

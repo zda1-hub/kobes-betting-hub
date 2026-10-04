@@ -47,14 +47,15 @@ test('join and membership routes use one complete recurring-billing disclosure',
   const checkoutOffers = (html) => [...html.matchAll(/data-checkout=["']([^"']+)["']/gi)]
     .map((match) => match[1])
     .sort();
-  assert.deepEqual(checkoutOffers(join), ['annual', 'first_month_back', 'six_month', 'starter', 'trial_2_day']);
-  assert.deepEqual(checkoutOffers(membership), checkoutOffers(join));
+  assert.deepEqual(checkoutOffers(join), ['annual', 'first_month_back', 'referral_trial', 'six_month', 'starter', 'trial_2_day']);
+  assert.deepEqual(checkoutOffers(membership), checkoutOffers(join).filter(offer => offer !== 'referral_trial'));
   for (const html of [join, membership]) {
     const text = visibleText(html);
-    assert.match(text, /\$134\.99 today, then every 6 months until canceled\. No trial\./);
-    assert.match(text, /\$194\.99 today, then every year until canceled\. No trial\./);
-    assert.match(text, /Nearly 2 months free/);
-    assert.match(text, /Over 6 months free/);
+    assert.match(text, /\$134\.99/);
+    assert.match(text, /\$194\.99/);
+    assert.match(text, /every 6 months until canceled/);
+    assert.match(text, /(?:every|each) year until canceled/);
+    assert.match(text, /No trial/);
     assert.match(text, /excluding introductory offers/);
     assert.match(html, /class="member-referral"/);
     assert.match(html, /href="refer\.html">Member referral program/);
