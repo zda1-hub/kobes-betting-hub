@@ -26,7 +26,8 @@ const { buildFreePickResults, freeRows, verified } = require('./lib/free-pick-re
 const { syncFreePickResultReplies, resultReplyConfig } = require('./lib/free-pick-result-replies');
 const { buildPublicResults } = require('./lib/public-results');
 const { publicResultRows } = require('./lib/public-result-rows');
-const { recoverResultsBacklog } = require('./lib/results-backlog');
+const { recordEligibility } = require('./lib/record-eligibility');
+const { recoverResultsBacklog, readResultsBacklogCursor } = require('./lib/results-backlog');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
 const { gradeWagerRows, sourcePacketPath } = require('./lib/wager-ledger');
@@ -738,12 +739,19 @@ function startPublicResultsSync() {
   }
   const origin = (process.env.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
   let lastContent = '';
+  let lastEligibility = '';
   let running = false;
   const run = async () => {
     if (running) return;
     running = true;
     try {
-      const rows = await publicResultRows({ rows: await readPickLog(), root: reviewQueueRoot, directory: path.dirname(pickLogPath()) });
+      const eligibility = recordEligibility(await readPickLog());
+      const eligibilitySummary = JSON.stringify({ eligiblePublications: eligibility.eligible.length, excluded: eligibility.excluded });
+      if (eligibilitySummary !== lastEligibility) {
+        console.log('Kobe-approved website record eligibility:', eligibilitySummary);
+        lastEligibility = eligibilitySummary;
+      }
+      const rows = await publicResultRows({ rows: eligibility.eligible, root: reviewQueueRoot, directory: path.dirname(pickLogPath()) });
       const snapshot = buildPublicResults(rows, dailyPickOperatingDate(new Date()));
       const content = JSON.stringify({ ...snapshot, generatedAt: null });
       if (content === lastContent) return;
@@ -1150,11 +1158,12 @@ async function publishDueFreeRecap(date) {
   }
 }
 
-let resultsBacklogCursor = 0;
+let resultsBacklogCursor = null;
 async function recoverOlderResults() {
   if (freeRecapInProgress || process.env.AUTO_GRADE_FREE_PICKS === 'false') return;
   freeRecapInProgress = true;
   try {
+    if (resultsBacklogCursor === null) resultsBacklogCursor = await readResultsBacklogCursor(path.dirname(pickLogPath()));
     const gradingFetch = createGradingFetch();
     const report = await recoverResultsBacklog({ rows: await readPickLog(),
       beforeDate: previousPacificOperatingDate(), root: reviewQueueRoot,

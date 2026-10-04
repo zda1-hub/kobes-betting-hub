@@ -51,8 +51,21 @@ async function recoverResultsBacklog({ rows, beforeDate, root, directory, grade,
     recovered: attempts.filter(a => a.status === 'GRADED' && ['W','L','P','V'].includes(a.result) && a.source).length,
     nextCursor: ordered.length ? (cursor + selected.size) % ordered.length : 0, attempts };
   await fs.mkdir(directory, { recursive: true });
-  await fs.writeFile(path.join(directory, 'results-backlog-last-run.json'), JSON.stringify(report), { mode: 0o600 });
+  const reportPath = path.join(directory, 'results-backlog-last-run.json');
+  await fs.writeFile(`${reportPath}.tmp`, JSON.stringify(report), { mode: 0o600 });
+  await fs.rename(`${reportPath}.tmp`, reportPath);
   return report;
 }
 
-module.exports = { recoverResultsBacklog };
+async function readResultsBacklogCursor(directory) {
+  try {
+    const report = JSON.parse(await fs.readFile(path.join(directory, 'results-backlog-last-run.json'), 'utf8'));
+    if (!Number.isSafeInteger(report.nextCursor) || report.nextCursor < 0) throw new Error('Invalid saved results recovery cursor.');
+    return report.nextCursor;
+  } catch (error) {
+    if (error.code === 'ENOENT') return 0;
+    throw error;
+  }
+}
+
+module.exports = { recoverResultsBacklog, readResultsBacklogCursor };

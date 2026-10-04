@@ -2,7 +2,7 @@ const ESPN_BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports';
 const { auditedFetch } = require('../../pipeline/api-client');
 const { specialMarketGrade, number: verifiedNumber } = require('./espn-special-markets');
 const { matchTennisCompetition, gradeTennisMatch } = require('./espn-tennis-grading');
-const { normalizeSelection, combinationSelections, playerNameMatches } = require('./wager-terms');
+const { normalizeSelection, combinationSelections, playerNameMatches, leadingWagerTerms } = require('./wager-terms');
 const { reviewedAdjudication } = require('./verified-adjudications');
 
 const LEAGUES = {
@@ -163,15 +163,26 @@ function inningsToOuts(value) {
   return Number(match[1]) * 3 + Number(match[2] || 0);
 }
 
-function moneylineGrade(row, summary) {
+function selectedCompetitor(row, summary, resolvedTeam) {
+  const competitors = summary.header?.competitions?.[0]?.competitors || [];
+  if (competitors.length !== 2) return null;
+  const matches = competitors.filter(competitor => {
+    // Carry the uniquely resolved scoreboard identity into the final summary;
+    // summaries often omit the short name used to match the original wager.
+    if (resolvedTeam?.id) return String(competitor.team?.id || competitor.id || '') === resolvedTeam.id;
+    if (resolvedTeam?.displayName) return compact(competitor.team?.displayName) === compact(resolvedTeam.displayName);
+    const names = [competitor.team?.displayName, competitor.team?.shortDisplayName, competitor.team?.abbreviation, competitor.team?.name]
+      .map(compact).filter(name => name.length >= 3);
+    return names.some(name => compact(row.selection).includes(name));
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function moneylineGrade(row, summary, resolvedTeam) {
   const text = `${row.selection || ''} ${row.market || ''} ${row.published_line || ''}`.toLowerCase();
   if (!/\b(?:ml|moneyline)\b/.test(text)) return null;
   const competitors = summary.header?.competitions?.[0]?.competitors || [];
-  const team = competitors.find((competitor) => {
-    const names = [competitor.team?.displayName, competitor.team?.shortDisplayName, competitor.team?.abbreviation, competitor.team?.name]
-      .map(compact).filter((name) => name.length >= 3);
-    return names.some((name) => compact(row.selection).includes(name));
-  });
+  const team = selectedCompetitor(row, summary, resolvedTeam);
   if (!team || typeof team.winner !== 'boolean') return null;
   const scores = competitors.map(c => verifiedNumber(c.score));
   if (scores.length === 2 && scores.every(Number.isFinite) && scores[0] === scores[1]) return null;
@@ -190,15 +201,11 @@ function gameTotalGrade(row, summary) {
   return { result: compare(actual, comparison), outcome: `Final game total: ${actual}` };
 }
 
-function spreadGrade(row, summary) {
+function spreadGrade(row, summary, resolvedTeam) {
   const text = `${row.selection || ''} ${row.market || ''} ${row.published_line || ''}`;
   if (!/\bspread\b/i.test(text)) return null;
   const competitors = summary.header?.competitions?.[0]?.competitors || [];
-  const team = competitors.find((competitor) => {
-    const names = [competitor.team?.displayName, competitor.team?.shortDisplayName, competitor.team?.abbreviation, competitor.team?.name]
-      .map(compact).filter((name) => name.length >= 2);
-    return names.some((name) => compact(row.selection).includes(name));
-  });
+  const team = selectedCompetitor(row, summary, resolvedTeam);
   const opponent = competitors.find((competitor) => competitor !== team);
   const line = Number(`${row.selection || ''} ${row.published_line || ''}`.match(/(?:^|\s)([+-]\d+(?:\.\d+)?)(?=\s|$)/)?.[1]);
   const teamScore = verifiedNumber(team?.score);
@@ -253,7 +260,9 @@ async function resolveStraightWager(row, fetchImpl) {
       const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, league === LEAGUES.ncaaf ? c.team?.location : ''].map(compact).filter(Boolean));
       const matched = names.map(name => aliases.flatMap((values, index) => values.includes(name) ? [index] : []));
       if (!matched.every(indices => indices.length === 1) || new Set(matched.flat()).size !== names.length) continue;
-      candidates.push({ league, event, market: moneyline ? 'Moneyline' : spread ? 'Spread' : firstInning ? 'First inning runs' : btts ? 'BTTS' : teamTotal ? 'Team total' : 'Full game total' });
+      const team = (moneyline || spread) && competitors[matched[0][0]];
+      const resolvedTeam = team ? { id: String(team.team?.id || team.id || ''), displayName: team.team?.displayName || '' } : undefined;
+      candidates.push({ league, event, resolvedTeam, market: moneyline ? 'Moneyline' : spread ? 'Spread' : firstInning ? 'First inning runs' : btts ? 'BTTS' : teamTotal ? 'Team total' : 'Full game total' });
     }
   }
   // Ambiguous names and doubleheaders remain pending; no arbitrary first match.
@@ -301,7 +310,13 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
   const reviewed = reviewedAdjudication(row);
   if (reviewed) return reviewed;
   if (String(row.result || 'PENDING').toUpperCase() !== 'PENDING') return { status: 'SKIPPED', reason: 'Pick is already graded.' };
-  row = { ...row, selection: normalizeSelection(row.selection) };
+  const leading = leadingWagerTerms(row.selection);
+  if (leading.conflictingLeagues) return { status: 'PENDING', reason: 'Conflicting explicit league labels in the published selection.' };
+  const labelledLeague = leading.league && leagueFor({ league: leading.league });
+  const metadataLeague = leagueFor(row);
+  if (labelledLeague && metadataLeague && labelledLeague !== metadataLeague) return { status: 'PENDING', reason: 'The explicit selection league conflicts with the published metadata.' };
+  row = { ...row, selection: normalizeSelection(row.selection),
+    ...(labelledLeague ? { league: leading.league, sport: leading.league, league_from_group: false } : {}) };
   // Split source publications are independent approval cards, not the original
   // source's parent parlay. A stale parent market must not swallow their result.
   if (/^\d{8}-\d+-\d+-X$/.test(row.pick_id || '') && /parlay/i.test(row.market || '') && combinationSelections(row.selection).length === 1) row.market = '';
@@ -392,11 +407,11 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
   }
   const special = specialMarketGrade(row, summary, league.path);
   if (special) return special.status === 'PENDING' ? special : finish(special);
-  const moneyline = moneylineGrade(row, summary);
+  const moneyline = moneylineGrade(row, summary, resolved?.resolvedTeam);
   if (moneyline) return finish(moneyline);
   const gameTotal = gameTotalGrade(row, summary);
   if (gameTotal) return finish(gameTotal);
-  const spread = spreadGrade(row, summary);
+  const spread = spreadGrade(row, summary, resolved?.resolvedTeam);
   if (spread) return finish(spread);
   const comparison = directionAndLine(row);
   if (!comparison) return { status: 'PENDING', reason: 'No clear over/under line was found.' };

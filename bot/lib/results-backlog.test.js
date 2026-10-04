@@ -3,11 +3,28 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { recoverResultsBacklog } = require('./results-backlog');
+const { recoverResultsBacklog, readResultsBacklogCursor } = require('./results-backlog');
 const { publicResultRows } = require('./public-result-rows');
 const { sourcePacketPath } = require('./wager-ledger');
 const { buildPublicResults } = require('./public-results');
 const row = (id='20260901-001-X',date='2026-09-01')=>({pick_id:id,operating_date:date,selection:`${id} moneyline`,status:'PUBLISHED',result:'PENDING',published_at:`${date}T20:00:00Z`,post_reference:'https://discord.com/channels/1/2/3'});
+test('restarted recovery resumes saved position and checks the next batch',async t=>{
+ const f=await fixture(t,[row('a'),row('b'),row('c')]);
+ assert.equal(await readResultsBacklogCursor(f.directory),0);
+ await recoverResultsBacklog({...f.options,limit:1});
+ const cursor=await readResultsBacklogCursor(f.directory);
+ assert.equal(cursor,1);
+ f.calls.length=0;
+ await recoverResultsBacklog({...f.options,limit:1,cursor});
+ assert.deepEqual(f.calls,['b']);
+});
+test('invalid persisted recovery state is surfaced instead of silently restarting',async t=>{
+ const f=await fixture(t,[]);
+ await fs.writeFile(path.join(f.directory,'results-backlog-last-run.json'),JSON.stringify({nextCursor:-1}));
+ await assert.rejects(readResultsBacklogCursor(f.directory),/Invalid saved/);
+ await fs.writeFile(path.join(f.directory,'results-backlog-last-run.json'),'broken');
+ await assert.rejects(readResultsBacklogCursor(f.directory),SyntaxError);
+});
 async function fixture(t, rows, plays) {
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'kbh-backlog-'));t.after(()=>fs.rm(directory,{recursive:true,force:true}));
  const root=path.join(directory,'packets'),calls=[],updates=[];
