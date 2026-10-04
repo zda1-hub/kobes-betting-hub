@@ -8,4 +8,4 @@ Files: `membership-design.css`, `join.html`, `membership.html`.
 
 Browser validation at 320px, 390px and 1280px shows no horizontal overflow; the annual subtitle wraps inside its card on the narrowest phone. At 390px both attention spans have a running 2.8-second animation and the subtitle renders at 14px; desktop subtitle renders at 20px. Checkout was not started.
 
-Publication: release and live verification receipt will be appended. This change does not alter billing, ads, emails or results.
+Publication: GitHub PR #131 merged; Cloudflare production version `e72c2b1e-06ee-4bee-bffc-68c874b9e46b`. Live `/join` at 390px confirms the 14px annual subtitle, two running attention animations and no page overflow. Ten existing bento/public-build checks and whitespace checks passed. Private screenshot: `outputs/membership-pulse-2026-10-04/live-mobile.png`. This change does not alter billing, ads, emails or results.
