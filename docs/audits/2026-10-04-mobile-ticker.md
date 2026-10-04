@@ -12,4 +12,4 @@ Validation: JavaScript syntax and whitespace checks pass. The relevant bento/pub
 
 An additional existing shared-header suite fails two unrelated expectations on the unchanged baseline (flush-top header rule and cache-busted home stylesheet on all public pages). This narrow patch does not revise subsite header positioning or add a site-wide asset rewrite to satisfy those pre-existing expectations.
 
-Publication: pending verification and release. No payment, email, ad or results-processing behavior changes.
+Publication: GitHub PR #129 merged as `ba733d4061f7d3016682d89942471d84c75fb63d`; Cloudflare production version `dc060858-eb8d-4d37-bb3f-7a1b9af57961`. Live homepage verified at 390px: transform position advances, pause/play works and no horizontal overflow. Screenshot saved privately under `outputs/mobile-ticker-2026-10-04/live-mobile.png`. No payment, email, ad or results-processing behavior changes.
