@@ -13,6 +13,16 @@ function harness(){
   return {context,element,run:code=>vm.runInContext(code,context)};
 }
 const range={preset:'today',start:'2026-09-26T07:00:00.000Z',end:'2026-09-27T05:00:00.000Z'};
+test('separately loaded publishing data updates the overview status without inventing a current-day pick',()=>{
+  const h=harness(),card=h.element('[data-priority-alerts] a[href="#publishing-status"]');
+  h.run('updatePickAttention({publishedDate:pacificDate()})');
+  assert.match(card.innerHTML,/>Published</);
+  h.run("updatePickAttention({publishedDate:'2000-01-01'})");
+  assert.match(card.innerHTML,/>Not published</);
+  assert.match(card.innerHTML,/Latest: 2000-01-01/);
+  h.run('updatePickAttention(null)');
+  assert.match(card.innerHTML,/>Unavailable</);
+});
 test('dashboard opens on Today and isolates executive totals from filtered metrics',()=>{
   const h=harness();assert.equal(h.run('currentRange'),'today');
   h.element('[data-primary]').innerHTML='filtered result';

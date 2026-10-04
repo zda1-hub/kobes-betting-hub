@@ -15,7 +15,7 @@ Reorganize the private business dashboard so the owner can find essential inform
 
 ## Verification
 
-- 23 automated checks passed across dashboard date filters/navigation, campaign links, public-site preparation and existing bento release contracts.
+- 24 automated checks passed across dashboard date filters/navigation, campaign links, public-site preparation and existing bento release contracts.
 - Browser checks at 320px, 390px and 1280px showed no horizontal page overflow. At 320px both custom date controls fit inside the page; report navigation opened the intended collapsed section.
 - Member search and mobile row labels were checked using synthetic demo data. The demo and screenshots are explicitly labeled and are not production metrics. No private customer fixture was saved or deployed.
 - Public-site preparation includes the updated admin page, CSS and JavaScript. Deployment and signed-in production verification are recorded below after release.
@@ -26,4 +26,4 @@ This redesign does not fix missing historical analytics or change how the existi
 
 ## Release receipt
 
-Pending deployment verification.
+Initial release merged through PR #135 (cec7ff08f604e4c54f7395ac96681ca8bc75110b), deployed as Cloudflare static version 4b946ae5-491d-4219-a493-5f00b8d10e26. Signed-in native monitor successfully refreshed with real membership and traffic data. Production verification identified a separately fetched free-pick status that needed to update its new overview card; a follow-up fixes that synchronization and adds a regression check. Final release receipt follows after deployment.
