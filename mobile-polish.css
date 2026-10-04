@@ -19,3 +19,5 @@
 @media(max-width:600px){.lower-bento .wins-tile{min-height:255px}.wins-rail .verified-result-card{min-height:155px;padding:13px}.wins-rail .verified-result-card>strong{font-size:17px}.wins-rail .verified-result-meta,.wins-rail .verified-result-card>small{font-size:10px}.wins-rail .verified-result-badge{font-size:10px}}
 /* Discord invite icons use the reference button shadow as a click cue. */
 .social-icon.discord,.inline-discord{background:#f5f5f5;border-radius:50%;box-shadow:-2px 3px 6px #00000040;transition:transform .12s,box-shadow .12s}.inline-discord{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;margin-left:3px;vertical-align:middle}.inline-discord img{width:18px;height:18px}.social-icon.discord:hover,.inline-discord:hover{transform:translateY(-1px);box-shadow:-2px 4px 8px #00000040}.social-icon.discord:active,.inline-discord:active{transform:translateY(1px);box-shadow:-1px 1px 3px #00000040}
+
+.landing-record .rail-navigation{width:100%;justify-content:space-between}.landing-record .rail-arrow,.landing-record .rail-resume{min-width:44px;min-height:44px}.landing-record .rail-resume{font-size:12px;padding:7px 12px}
