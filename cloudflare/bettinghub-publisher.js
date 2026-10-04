@@ -799,9 +799,10 @@ function normalizedPublicResults(input) {
   if (!input || !validDate(input.operatingDate) || !Number.isFinite(Date.parse(input.generatedAt || ''))) return null;
   const overall = record(input.overall), today = record(input.today), pending = count(input.pending), settled = count(input.settled);
   if (!overall || !today || pending === null || settled === null || !Array.isArray(input.recent) || input.recent.length > 50) return null;
+  if (input.trackingSince != null && (!validDate(input.trackingSince) || input.trackingSince > input.operatingDate)) return null;
   const recent = input.recent.map(item);
   if (recent.some((value) => !value)) return null;
-  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, settled, recent };
+  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, settled, recent, trackingSince: input.trackingSince || null };
 }
 
 async function putPublicResults(request, env) {

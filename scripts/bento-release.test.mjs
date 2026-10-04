@@ -81,7 +81,7 @@ test('landing wins retain full-record links and proof retains unique inline revi
 });
 
 test('public results rendering includes losses and excludes unresolved outcomes', async () => {
-  const track = { parentElement: { addEventListener() {} }, replaceChildren(...cards) { this.cards = cards; } };
+  const track = { hasAttribute() { return false; }, parentElement: { addEventListener() {} }, replaceChildren(...cards) { this.cards = cards; } };
   const summary = {};
   const document = {
     querySelector(selector) { return selector === '[data-verified-results-track]' ? track : selector === '[data-home-record]' ? summary : null; },
@@ -100,6 +100,20 @@ test('public results rendering includes losses and excludes unresolved outcomes'
   assert.equal(track.cards.length, 4);
   assert.deepEqual(track.cards.map(card=>card.children[1].textContent), ['Win','Loss','Push','Void']);
   assert.match(summary.textContent, /1 wins · 1 losses · 1 pushes · 1 voids/);
+});
+
+test('homepage highlights only wins, uses the overall live count and the supplied tracking date', async () => {
+  const track = { hasAttribute() { return true; }, parentElement:{addEventListener(){}}, replaceChildren(...cards){this.cards=cards;} };
+  const summary = {}, since = {};
+  const document = { querySelector(selector){return {'[data-verified-results-track]':track,'[data-home-record]':summary,'[data-tracking-since]':since}[selector] || null;}, createElement(tag){return {tag,children:[],append(...children){this.children.push(...children);}};} };
+  const recent = [...Array(20).fill({result:'L'}), {result:'W', selection:'Verified winner', date:'2026-10-04'}, {result:'PENDING'}];
+  vm.runInNewContext(await read('home-results.js'), {document,location:{hostname:'kobesbettinghub.com'},fetch:async()=>({ok:true,json:async()=>({overall:{wins:323,losses:299,pushes:11,voids:0},trackingSince:'2026-09-10',recent})})});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(track.cards.length,1);
+  assert.equal(track.cards[0].children[1].textContent,'Win');
+  assert.equal(summary.textContent,'323 tracked wins');
+  assert.match(since.textContent,/Since September 10, 2026/);
+  assert.match(await read('index.html'),/Winning highlights only/);
 });
 
 test('legal and portal artifacts retain current approved operator and secure access', async () => {
