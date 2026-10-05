@@ -60,12 +60,17 @@ test('capper cards preserve every wager, original terms and exact source channel
     { ...row, pick_id: 'unverified', selection: 'Blues ML', result_verified_source: '' },
     { ...row, pick_id: 'another', source_name: 'OtherCapper' },
     { ...row, pick_id: 'draft', published_at: '' }, { ...row, pick_id: 'free', post_reference: 'https://discord.com/channels/111/444/555' }]);
-  assert.equal(groups.length, 2);
+  assert.equal(groups.length, 3);
   assert.match(groups[0].body, /Codycoverspreads 1-1💸 \(1 pending\)/);
   assert.match(groups[0].body, /Reds ML -110 \(1U\) ☘️/);
   assert.match(groups[0].body, /Bills -3.5 -115 💥/);
   assert.equal(groups[0].pending, 1);
   assert.equal(groups[0].total, 3);
+  const partial = groups.find(group => group.keySuffix === 'verified-portion');
+  assert.equal(partial.pending, 0);
+  assert.match(partial.body, /VERIFIED PORTION ONLY/);
+  assert.match(partial.body, /Reds ML -110/);
+  assert.doesNotMatch(partial.body, /Blues ML|⏳/);
   assert.throws(() => recapApprovalGroups({ date: '../secret', rows: [], sourceChannelIds: [] }), /date/);
 });
 
@@ -75,6 +80,28 @@ test('overall writeup grouping creates one source-free recap card', () => {
   assert.equal(groups.length, 1);
   assert.equal(groups[0].body, 'Overall record 1-1\n\nReds ML -110 (1U) ☘️\nBills -3.5 -115 💥');
   assert.doesNotMatch(groups[0].body, /Codycoverspreads|Source not stated/);
+});
+
+test('Kobe can approve only the verified portion while the full recap remains held', async () => {
+  const unresolved = { ...row, pick_id: 'unresolved', selection: 'Unverified team ML',
+    result: 'PENDING', result_verified_source: '' };
+  const f = await fixture([row, unresolved]), engine = f.create();
+  await engine.prepare(f.groups());
+  const full = f.groups().find(group => group.pending);
+  const partial = f.groups().find(group => group.keySuffix === 'verified-portion');
+  assert.ok(full && partial);
+  const cards = [...f.channels.review.records.values()];
+  const fullCard = cards.find(card => card.embeds[0].footer.text.includes(full.key));
+  const partialCard = cards.find(card => card.embeds[0].footer.text.includes(partial.key));
+  assert.equal(fullCard.payload.components[0].components[0].disabled, true);
+  assert.equal(partialCard.payload.components[0].components[0].disabled, false);
+  const approve = partialCard.payload.components[0].components[0].custom_id;
+  assert.equal((await engine.decide({ customId: approve, userId: 'kobe', guildId: 'guild',
+    channelId: 'review', messageId: partialCard.id })).status, 'PUBLISHED');
+  const published = [...f.channels.wins.records.values()];
+  assert.equal(published.length, 1);
+  assert.match(published[0].embeds[0].description, /VERIFIED PORTION ONLY/);
+  assert.doesNotMatch(published[0].embeds[0].description, /Unverified team ML/);
 });
 
 test('private preparation never publishes; only Kobe’s exact-card approval sends, with double-click/restart deduplication', async () => {
