@@ -42,12 +42,23 @@ test('manual capper gets a private approval card and only publishes after approv
     assert.match(card.embeds[0].description, /A note from Kobe/);
     assert.match(card.content, /No win rate has been verified/);
     assert.equal((await pulse.submitManual(input)).status, 'DUPLICATE');
+    const edit = card.components[0].components.find((button) => button.label === 'Edit message');
+    assert.ok(edit);
+    const editArgs = { customId: edit.custom_id, userId: 'kobe', ownerId: 'kobe', guildId: '123', channelId: '567', messageId: card.id };
+    assert.equal((await pulse.beginManualEdit(editArgs)).message, input.message);
+    await assert.rejects(pulse.editManual({ id: result.messageId, messageId: card.id, message: 'Changed',
+      userId: 'other', ownerId: 'kobe', guildId: '123', channelId: '567' }), /Only Kobe/);
+    const id = edit.custom_id.split(':')[2];
+    assert.equal((await pulse.editManual({ id, messageId: card.id, message: 'Exact revised note from Kobe.',
+      userId: 'kobe', ownerId: 'kobe', guildId: '123', channelId: '567' })).status, 'UPDATED');
+    assert.match(card.embeds[0].description, /Exact revised note/);
     const approve = card.components[0].components[0].custom_id;
     await assert.rejects(pulse.decideManual({ customId: approve, userId: 'other', ownerId: 'kobe',
       guildId: '123', channelId: '567', messageId: card.id }), /Only Kobe/);
     assert.equal((await pulse.decideManual({ customId: approve, userId: 'kobe', ownerId: 'kobe',
       guildId: '123', channelId: '567', messageId: card.id })).status, 'APPROVED');
     assert.equal(posts.size, 1);
+    assert.match([...posts.values()][0].embeds[0].description, /Exact revised note/);
     assert.match([...posts.values()][0].content, /No win rate has been verified/);
     assert.equal((await pulse.decideManual({ customId: approve, userId: 'kobe', ownerId: 'kobe',
       guildId: '123', channelId: '567', messageId: card.id })).status, 'APPROVED');

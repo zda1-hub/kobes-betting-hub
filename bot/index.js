@@ -1293,6 +1293,14 @@ function trendApprovalEmbed(draft, { preview = true } = {}) {
   return embed;
 }
 
+function trendApprovalControls(id) {
+  return [{ type: 1, components: [
+    { type: 2, style: 1, label: 'Post Trends', custom_id: `trend-review:${id}:publish` },
+    { type: 2, style: 2, label: 'Edit text', custom_id: `trend-review:${id}:edit` },
+    { type: 2, style: 4, label: 'Reject', custom_id: `trend-review:${id}:reject` }
+  ] }];
+}
+
 async function loadTrendReview(id) {
   if (!/^[A-Za-z0-9_-]+$/.test(String(id || ''))) return null;
   try {
@@ -1356,13 +1364,12 @@ async function collectTrendEmails() {
       await fs.mkdir(path.dirname(packetPath), { recursive: true });
       await fs.writeFile(packetPath, `${JSON.stringify(draft, null, 2)}\n`);
       try {
-        await approvalChannel.send({
+        const reviewMessage = await approvalChannel.send({
           embeds: [trendApprovalEmbed(draft)],
-          components: [{ type: 1, components: [
-            { type: 2, style: 1, label: `Post ${item.league.toUpperCase()} Trends`, custom_id: `trend-review:${item.id}:publish` },
-            { type: 2, style: 4, label: 'Reject', custom_id: `trend-review:${item.id}:reject` }
-          ] }]
+          components: trendApprovalControls(item.id)
         });
+        draft.review_message_id = reviewMessage.id;
+        await fs.writeFile(packetPath, `${JSON.stringify(draft, null, 2)}\n`);
       } catch (error) {
         await fs.unlink(packetPath).catch(() => {});
         throw error;
@@ -2277,25 +2284,28 @@ async function handleSourceReviewButton(interaction) {
 
 async function handleTrendReviewButton(interaction) {
   const [, id, action] = interaction.customId.split(':');
-  await interaction.deferReply({ ephemeral: true });
   if (!isPickApprover(interaction)) {
-    await interaction.editReply('Only Kobe can approve or reject a Trends sheet.');
-    return;
+    throw new Error('Only Kobe can edit or decide a Trends sheet.');
   }
-  if (!['publish', 'reject'].includes(action)) {
-    await interaction.editReply('This Trends action is not recognized.');
-    return;
-  }
+  if (interaction.guildId !== process.env.DISCORD_GUILD_ID || interaction.channelId !== pickApprovalChannelId)
+    throw new Error('Use the private pick approval channel for Trends review.');
+  if (!['publish', 'edit', 'reject'].includes(action)) throw new Error('This Trends action is not recognized.');
   const found = await loadTrendReview(id);
-  if (!found) {
-    await interaction.editReply('This Trends preview is no longer available. Send it from Kobe email again.');
-    return;
-  }
+  if (!found) throw new Error('This Trends preview is no longer available. Send it from Kobe email again.');
   const { draft, packetPath } = found;
-  if (draft.status !== 'PENDING_APPROVAL') {
-    await interaction.editReply(`This Trends sheet was already ${String(draft.status || '').toLowerCase()}.`);
+  if (draft.status !== 'PENDING_APPROVAL') throw new Error(`This Trends sheet was already ${String(draft.status || '').toLowerCase()}.`);
+  if (draft.review_message_id && draft.review_message_id !== interaction.message.id) throw new Error('Use the latest Trends approval card.');
+  if (action === 'edit') {
+    const modal = new ModalBuilder().setCustomId(`trend-edit:${id}:${approvalCopySha256(draft.body).slice(0, 20)}:${interaction.message.id}`)
+      .setTitle(`Edit ${String(draft.league).toUpperCase()} Trends`);
+    const body = new TextInputBuilder().setCustomId('body').setLabel('Exact text to post after review')
+      .setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(20).setMaxLength(4000)
+      .setValue(String(draft.body || '').slice(0, 4000));
+    modal.addComponents(new ActionRowBuilder().addComponents(body));
+    await interaction.showModal(modal);
     return;
   }
+  await interaction.deferReply({ ephemeral: true });
   if (action === 'reject') {
     draft.status = 'REJECTED';
     draft.decided_at = new Date().toISOString();
@@ -2318,6 +2328,32 @@ async function handleTrendReviewButton(interaction) {
   } catch (error) {
     await interaction.editReply(error instanceof Error ? error.message : 'Unable to publish the approved Trends sheet.');
   }
+}
+
+async function handleTrendEditSubmit(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  if (!isPickApprover(interaction)) throw new Error('Only Kobe can edit a Trends sheet.');
+  if (interaction.guildId !== process.env.DISCORD_GUILD_ID || interaction.channelId !== pickApprovalChannelId)
+    throw new Error('Use the private pick approval channel for Trends editing.');
+  const match = interaction.customId.match(/^trend-edit:([A-Za-z0-9_-]+):([a-f0-9]{20}):(\d+)$/);
+  if (!match) throw new Error('Invalid Trends edit form.');
+  const found = await loadTrendReview(match[1]);
+  if (!found || found.draft.status !== 'PENDING_APPROVAL'
+    || (found.draft.review_message_id && found.draft.review_message_id !== match[3])
+    || approvalCopySha256(found.draft.body).slice(0, 20) !== match[2])
+    throw new Error('This Trends edit is stale. Reopen Edit text on the latest card.');
+  const body = interaction.fields.getTextInputValue('body').trim();
+  if (body.length < 20 || body.length > 4000 || /@everyone|@here|<@/i.test(body))
+    throw new Error('Keep the Trends text between 20 and 4,000 characters and remove Discord mentions.');
+  const channel = await approvedTextChannel(interaction.channelId);
+  const message = await channel.messages.fetch(match[3]);
+  if (message.embeds?.[0]?.title !== `${String(found.draft.league).toUpperCase()} Trends — Approval Preview`)
+    throw new Error('The Trends review message no longer matches this draft.');
+  found.draft.body = body;
+  found.draft.review_message_id = message.id;
+  await fs.writeFile(found.packetPath, `${JSON.stringify(found.draft, null, 2)}\n`);
+  await message.edit({ embeds: [trendApprovalEmbed(found.draft)], components: trendApprovalControls(found.draft.id), allowedMentions: { parse: [] } });
+  await interaction.editReply('Trends text updated on the private preview. Review it there before posting.');
 }
 
 function canPostSupportInfo(interaction) {
@@ -2919,8 +2955,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
   if (interaction.isButton() && interaction.customId.startsWith('expert-manual:')) {
     try {
-      await interaction.deferReply({ ephemeral: true });
       if (!expertPulse) throw new Error('Expert cheat sheet is not configured.');
+      if (interaction.customId.startsWith('expert-manual:edit:')) {
+        const draft = await expertPulse.beginManualEdit({ customId: interaction.customId,
+          userId: interaction.user.id, ownerId: interaction.guild?.ownerId,
+          guildId: interaction.guildId, channelId: interaction.channelId, messageId: interaction.message.id });
+        const modal = new ModalBuilder().setCustomId(`expert-manual-edit:${draft.id}:${interaction.message.id}`)
+          .setTitle('Edit manual expert message');
+        modal.addComponents(new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('message').setLabel('Exact note to show in VIP')
+            .setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(1500).setValue(draft.message)));
+        await interaction.showModal(modal);
+        return;
+      }
+      await interaction.deferReply({ ephemeral: true });
       const result = await expertPulse.decideManual({ customId: interaction.customId,
         userId: interaction.user.id, ownerId: interaction.guild?.ownerId,
         guildId: interaction.guildId, channelId: interaction.channelId, messageId: interaction.message.id });
@@ -2929,6 +2977,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
         : `${result.name} was rejected; nothing was posted to VIP.`);
     } catch (error) {
       await respondToInteractionFailure(interaction, error.message || 'Could not decide this capper.', 'Manual expert decision');
+    }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('expert-manual-edit:')) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      if (!expertPulse) throw new Error('Expert cheat sheet is not configured.');
+      const match = interaction.customId.match(/^expert-manual-edit:([a-f0-9]{16}):(\d+)$/);
+      if (!match) throw new Error('Invalid manual expert edit form.');
+      await expertPulse.editManual({ id: match[1], messageId: match[2], message: interaction.fields.getTextInputValue('message'),
+        userId: interaction.user.id, ownerId: interaction.guild?.ownerId,
+        guildId: interaction.guildId, channelId: interaction.channelId });
+      await interaction.editReply('Manual expert message updated. Review the card before approval.');
+    } catch (error) {
+      await respondToInteractionFailure(interaction, error.message || 'Could not edit this expert message.', 'Manual expert edit');
     }
     return;
   }
@@ -2999,6 +3062,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       console.error(error);
       await respondToInteractionFailure(interaction, 'Unable to complete this Trends action. No public post was made.', 'Trends interaction');
     }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('trend-edit:')) {
+    try { await handleTrendEditSubmit(interaction); }
+    catch (error) { await respondToInteractionFailure(interaction, error.message || 'Could not edit this Trends sheet.', 'Trends edit interaction'); }
     return;
   }
   if (interaction.isButton() && interaction.customId.startsWith('source-review:')) {
