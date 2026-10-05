@@ -21,4 +21,4 @@ Show the Discord-to-payment sequence near the top of the membership page without
 ## Limitations and release
 
 - This is a wording and anchor-alignment change, not a checkout redesign. The measured funnel must be compared prospectively after publication to learn whether the line helps.
-- Local preview only until release confirmation is appended below.
+- PR [#155](https://github.com/zda1-hub/kobes-betting-hub/pull/155) merged into `main` as `4888cc62821e307894e9d51e3d5b9208a7ad365e`. The production whitelist prepared 81 public entries; Cloudflare dry run accepted the asset bundle. The live site Worker deployed as version `f2509728-8641-4b30-bf12-f8f9a49cf1cb`, uploading only `join.html`, `membership-design.css`, and `membership.js`. At 390 × 844, the live custom-domain `join#offer` view showed the complete step line and unchanged first-month pricing card below the header after page load. No payment or Discord authorization was completed during verification.
