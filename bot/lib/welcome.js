@@ -36,7 +36,7 @@ function buildVipWelcome(env = process.env) {
     `💰 Arbitrage: ${channel(env.ARBITRAGE_DESTINATION_CHANNEL_ID, '#arbitrage')}`,
     `🔥 Expert Picks: ${channel(env.EXPERT_PICKS_CHANNEL_ID || env.PUBLISH_CHANNEL_ID, '#expert-picks')}`,
     `📝 Write-Ups: ${channel(env.DAILY_WRITEUPS_CHANNEL_ID, '#all-writeups')}`,
-    `🏆 Results: ${channel(env.VIP_WINS_CHANNEL_ID, '#vip-expert-wins')}`,
+    `🏆 Results: ${channel(env.VIP_WINS_CHANNEL_ID, '#exclusive-wins')}`,
     `💬 Community: ${channel(env.COMMUNITY_CHANNEL_ID, '#community-chat')}`
   ];
   return {

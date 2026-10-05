@@ -57,6 +57,7 @@ function manualPayload(entry, status = 'PENDING') {
       footer: { text: `${MANUAL_MARKER} · ${entry.id} · ${status.toLowerCase()}` } }],
     components: status === 'PENDING' ? [{ type: 1, components: [
       { type: 2, style: 3, label: 'Approve for VIP', custom_id: `expert-manual:approve:${entry.id}` },
+      { type: 2, style: 2, label: 'Edit message', custom_id: `expert-manual:edit:${entry.id}` },
       { type: 2, style: 4, label: 'Reject', custom_id: `expert-manual:reject:${entry.id}` }
     ] }] : []
   };
@@ -680,10 +681,34 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     await card.edit(manualPayload(entry, 'APPROVED'));
     return { status: 'APPROVED', name: entry.name };
   }
+  async function beginManualEditUnlocked({ customId, userId, ownerId, guildId, channelId, messageId }) {
+    const match = String(customId).match(/^expert-manual:edit:([a-f0-9]{16})$/);
+    if (!match || !isApprover({ userId, ownerId })) throw new Error('Only Kobe can edit this manual capper card.');
+    const { source, review } = await channels();
+    if (guildId !== source.guild.id || channelId !== review.id) throw new Error('Edit from the private expert review channel.');
+    const state = await readState(), entry = state.manual?.[match[1]];
+    if (!entry || entry.review_message_id !== messageId || entry.status !== 'PENDING') throw new Error('This manual capper card is stale or already decided.');
+    return { id: entry.id, message: entry.message || '' };
+  }
+  async function editManualUnlocked({ id, messageId, message, userId, ownerId, guildId, channelId }) {
+    if (!isApprover({ userId, ownerId })) throw new Error('Only Kobe can edit this manual capper card.');
+    const { source, review } = await channels();
+    if (guildId !== source.guild.id || channelId !== review.id) throw new Error('Edit from the private expert review channel.');
+    const state = await readState(), entry = state.manual?.[id];
+    if (!entry || entry.review_message_id !== messageId || entry.status !== 'PENDING') throw new Error('This manual capper card is stale or already decided.');
+    const updated = manualSubmission(entry.name, message);
+    entry.message = updated.message;
+    await writeState(state);
+    const card = await review.messages.fetch(messageId);
+    await card.edit(manualPayload(entry));
+    return { status: 'UPDATED', name: entry.name };
+  }
   return { refresh: () => locked(refreshUnlocked), decide: (args) => locked(() => decideUnlocked(args)),
     approveAll: (args) => locked(() => approveAllUnlocked(args)),
     editNote: (args) => locked(() => editNoteUnlocked(args)),
     submitManual: (args) => locked(() => submitManualUnlocked(args)),
+    beginManualEdit: (args) => locked(() => beginManualEditUnlocked(args)),
+    editManual: (args) => locked(() => editManualUnlocked(args)),
     decideManual: (args) => locked(() => decideManualUnlocked(args)) };
 }
 

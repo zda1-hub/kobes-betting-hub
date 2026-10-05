@@ -60,41 +60,42 @@ function safeEvidenceStats(row) {
     // own bullet, without carrying its names or persuasive explanation.
     if (selectedName.test(plain) || /^when he has had multiple receptions\b/i.test(plain)) {
       const snapCondition = plain.match(/\bover (\d{1,3}(?:\.\d+)?)% of the snaps\b/i);
-      if (snapCondition) add(`>${snapCondition[1]}% snaps`);
+      if (snapCondition) add(`Snaps >${snapCondition[1]}%`);
+      if (/^when he has had multiple receptions\b/i.test(plain)) add('Receptions ≥2');
       const conditionalRecord = plain.match(/\bover (?:this|the) line in (\d{1,2})\s*\/\s*(\d{1,2}) games\b/i)
         || plain.match(/\bgone over in (\d{1,2})\s*\/\s*(\d{1,2})\b/i);
       if (conditionalRecord && Number(conditionalRecord[1]) <= Number(conditionalRecord[2]) && Number(conditionalRecord[2]) <= 25)
-        add(`${conditionalRecord[1]}/${conditionalRecord[2]} over line`);
+        add(`Line: ${conditionalRecord[1]}/${conditionalRecord[2]}`);
       const conditionalAverage = plain.match(/\baveraging (\d{1,3}(?:\.\d+)?) yards per game\b/i);
-      if (conditionalAverage) add(`${conditionalAverage[1]} yards/game`);
+      if (conditionalAverage) add(`Yds/g: ${conditionalAverage[1]}`);
     }
     // Matchup rates can be shown without naming either club. Accept only
     // labeled statistics, never a free-floating number or forecast.
     const allowedYards = plain.match(/\ballowed (?:the )?(\d{1,2}(?:st|nd|rd|th)) most receiving yards to TE['’]?s per game[^\d]*(\d{1,3}(?:\.\d+)?)\b/i);
-    if (allowedYards) add(`TE yards allowed: ${allowedYards[2]}/game (${allowedYards[1]} most)`);
+    if (allowedYards) add(`TE yds allowed/g: ${allowedYards[2]} (rank ${allowedYards[1]})`);
     const outsideYpc = plain.match(/\boutside zone:\s*(\d{1,2}(?:\.\d+)?)\s*YPC\s*\((\d{1,2}(?:st|nd|rd|th)) highest\)/i);
-    if (outsideYpc) add(`Outside zone: ${outsideYpc[1]} YPC (${outsideYpc[2]} highest)`);
+    if (outsideYpc) add(`Outside-zone YPC: ${outsideYpc[1]} (rank ${outsideYpc[2]})`);
     const outsideSuccess = plain.match(/\boutside zone:\s*(\d{1,3}(?:\.\d+)?)%\s*success rate\s*\((\d{1,2}(?:st|nd|rd|th)) highest\)/i);
-    if (outsideSuccess) add(`Outside zone: ${outsideSuccess[1]}% success (${outsideSuccess[2]} highest)`);
-    const redZoneRun = plain.match(/\brunning in the red\s*zone at the (\d{1,2})(?:st|nd|rd|th) highest rate\b/i);
-    if (redZoneRun) add(`Red-zone run rate allowed: ${redZoneRun[1]}th highest`);
-    const redZoneStuff = plain.match(/\b(\d{1,2})(?:st|nd|rd|th) lowest red\s*zone stuff rate\b/i);
-    if (redZoneStuff) add(`Red-zone stuff rate: ${redZoneStuff[1]}th lowest`);
+    if (outsideSuccess) add(`Outside-zone success: ${outsideSuccess[1]}% (rank ${outsideSuccess[2]})`);
+    const redZoneRun = plain.match(/\brunning in the red\s*zone at the (\d{1,2}(?:st|nd|rd|th)) highest rate\b/i);
+    if (redZoneRun) add(`RZ run rate allowed: ${redZoneRun[1]}-highest`);
+    const redZoneStuff = plain.match(/\b(\d{1,2}(?:st|nd|rd|th)) lowest red\s*zone stuff rate\b/i);
+    if (redZoneStuff) add(`RZ stuff rate: ${redZoneStuff[1]}-lowest`);
     // A self-contained usage bullet has no competing named subject or wager.
     const usageBullet = sentence.match(/^(\d{1,2}) (targets|carries|receptions|attempts) in Weeks? \d{1,2}\s*[-–&]\s*\d{1,2}$/i);
-    if (usageBullet && Number(usageBullet[1]) <= 60) add(usageBullet[1] + ' ' + usageBullet[2].toLowerCase() + ' across the cited weeks');
+    if (usageBullet && Number(usageBullet[1]) <= 60) add(`${usageBullet[2]}: ${usageBullet[1]} (weeks ${sentence.match(/Weeks? (\d{1,2}\s*[-–&]\s*\d{1,2})/i)?.[1] || ''})`);
     const season = plain.match(/^over in all (\d{1,2}) games this season, averaging (\d{1,3}(?:\.\d+)?) (receiving|rushing|passing) yards per game\b/i);
     if (season && Number(season[1]) <= 25) {
-      add(`${season[1]}/${season[1]} in recent games`);
-      add(`${season[2]} ${season[3].toLowerCase()} yards per game in the cited sample`);
+      add(`Line: ${season[1]}/${season[1]}`);
+      add(`${season[3]} yds/g: ${season[2]}`);
     }
     const covered = plain.match(/^he's covered this line in (\d{1,2})\s*\/\s*(\d{1,2}) games\b/i);
     if (covered && Number(covered[2]) <= 25 && Number(covered[1]) <= Number(covered[2]))
-      add(`${covered[1]}/${covered[2]} in recent games`);
+      add(`Line: ${covered[1]}/${covered[2]}`);
     const recentGame = plain.match(/^he's coming off a (\d{1,3})-yard game with (\d{1,2}) receptions on (\d{1,2}) targets\b/i);
     if (recentGame && Number(recentGame[2]) <= Number(recentGame[3]) && Number(recentGame[3]) <= 30 &&
         /receiv/i.test(`${row.published_line || ''} ${row.selection || ''}`))
-      add(`${recentGame[1]} receiving yards and ${recentGame[3]} targets in the cited game`);
+      add(`Last game: ${recentGame[1]} rec yds; ${recentGame[2]} rec; ${recentGame[3]} targets`);
     const mention = sentence.match(subjectMention);
     if (!mention) continue;
     const context = sentence.slice(mention[0].length).toLowerCase();
@@ -102,32 +103,31 @@ function safeEvidenceStats(row) {
     if (/\b(?:not|never|projected|expected|could|would|should|will|might|may)\b/.test(context)) continue;
     const targetCatches = context.match(/^has turned (\d{1,2}) targets into (\d{1,2}) catches\b.*\bover his last two games\b/);
     if (targetCatches && Number(targetCatches[2]) <= Number(targetCatches[1]) && Number(targetCatches[1]) <= 40)
-      add(`${targetCatches[1]} targets and ${targetCatches[2]} catches across two cited games`);
+      add(`2 games: ${targetCatches[1]} targets; ${targetCatches[2]} rec`);
     const ratio = context.match(/^(?:has\s+)?(?:went over|went under|hit|cleared|covered)(?:\s+in)?\s+(\d{1,2})\s*(?:\/|of)\s*(\d{1,2})(?![\d./])\b/);
     if (ratio) {
       const hits = Number(ratio[1]);
       const sample = Number(ratio[2]);
       if (sample && hits <= sample && sample <= 25) {
-        let label = 'the cited sample';
-        if (/\b(?:against|versus|vs\.?)\b/.test(context)) label = 'the stated matchup sample';
-        else if (/\b(?:when|without|inactive|doesn['’]?t play|lineup)\b/.test(context)) label = 'the stated lineup condition';
-        else if (/\b(?:at home|home games?)\b/.test(context)) label = 'recent home games';
-        else if (/\b(?:on the road|away games?)\b/.test(context)) label = 'recent away games';
-        else if (/\b(?:recent games?|last \d+ games?)\b/.test(context)) label = 'recent games';
-        add(hits + '/' + sample + ' in ' + label);
+        let label = 'Line';
+        if (/\b(?:against|versus|vs\.?)\b/.test(context)) label = 'Matchup';
+        else if (/\b(?:when|without|inactive|doesn['’]?t play|lineup)\b/.test(context)) label = 'Lineup split';
+        else if (/\b(?:at home|home games?)\b/.test(context)) label = 'Home';
+        else if (/\b(?:on the road|away games?)\b/.test(context)) label = 'Away';
+        add(`${label}: ${hits}/${sample}`);
       }
     }
     const catches = context.match(/^coming off? (?:a )?(?:solid |strong )?week \d{1,2} where he hauled in (\d{1,2}) (?:grabs|catches|receptions) on (\d{1,2}) targets\b/);
     if (catches && Number(catches[1]) <= Number(catches[2]) && Number(catches[2]) <= 30)
-      add(catches[2] + ' targets in the cited game');
+      add(`Week: ${catches[1]} rec; ${catches[2]} targets`);
     const outputs = context.match(/^(?:recorded|posted|finished with)\s+(\d{1,3})\s*(?:&|and|,)\s*(\d{1,3})\s+(?:receiving\s+|rushing\s+|passing\s+)?yards\b/);
     if (outputs && /\b(?:weeks?|games?|recent|first two)\b/.test(context))
-      add('Recent yardage outputs: ' + outputs[1] + ' and ' + outputs[2]);
+      add(`Yd outputs: ${outputs[1]}, ${outputs[2]}`);
     const usage = context.match(/^(?:has|had|saw|received|recorded|logged)\s+(\d{1,2})\s+(targets|carries|receptions|attempts)\b/);
     if (usage && Number(usage[1]) <= 60)
-      add(usage[1] + ' ' + usage[2] + ' in the cited sample');
+      add(`${usage[2]}: ${usage[1]}`);
     const average = context.match(/^(?:is\s+)?averag(?:ing|ed)\s+(\d{1,3}(?:\.\d+)?)\s+(receiving|rushing|passing)\s+yards\s+(?:per game|a game)\b/);
-    if (average) add(average[1] + ' ' + average[2] + ' yards per game in the cited sample');
+    if (average) add(`${average[2]} yds/g: ${average[1]}`);
   }
   return stats;
 }

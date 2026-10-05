@@ -38,9 +38,9 @@ test('keeps split-market lines visible while hiding identities and odds', () => 
   assert.deepEqual(previews, [{
     number: 1, emoji: '⚾', sport: 'baseball',
     topics: ['Recent production', 'Matchup context'],
-    stats: ['4/4 in recent games', '2/2 in the stated matchup sample'],
+    stats: ['Line: 4/4', 'Matchup: 2/2'],
     prop: 'Over 14.5 outs',
-    breakdown: '4/4 in recent games; 2/2 in the stated matchup sample.'
+    breakdown: 'Line: 4/4; Matchup: 2/2.'
   }]);
   assert.doesNotMatch(JSON.stringify(previews), /Payton|Tolle|-125|CLE|27th|OPS|64/);
 
@@ -66,8 +66,8 @@ test('shows concrete source-backed notes without revealing the selected play', (
     sport: 'football', selection: 'Tetairoa McMillan', published_line: 'Over 60 yards',
     teaser_source: 'McMillan recorded 75 & 101 yards in Weeks 1 & 2. McMillan has 14 targets through two games. Carolina plays Arizona.'
   }], '2026-09-26')[0];
-  assert.match(preview.breakdown, /Recent yardage outputs: 75 and 101/);
-  assert.match(preview.breakdown, /14 targets/);
+  assert.match(preview.breakdown, /Yd outputs: 75, 101/);
+  assert.match(preview.breakdown, /targets: 14/);
   assert.doesNotMatch(JSON.stringify(preview), /Tetairoa|McMillan|Carolina|Arizona/);
 });
 
@@ -77,8 +77,8 @@ test('keeps decimals intact and rejects projections, other subjects, dates, and 
     destination: '#football-writeups', sport: 'football', selection: 'Blake Corum',
     teaser_source: source
   }], '2026-09-26')[0].breakdown;
-  assert.match(preview('Corum averaged 43.9 rushing yards per game this season.'), /43\.9 rushing yards per game/);
-  assert.match(preview('Blake Corum hit in 4 of 5 recent games.'), /4\/5 in recent games/);
+  assert.match(preview('Corum averaged 43.9 rushing yards per game this season.'), /rushing yds\/g: 43\.9/);
+  assert.match(preview('Blake Corum hit in 4 of 5 recent games.'), /Line: 4\/5/);
   for (const source of [
     'Compared with Corum, Williams had 14 targets in two games.',
     'Corum and Williams recorded 75 and 101 yards in two games.',
@@ -99,8 +99,8 @@ test('handles the current approved bullet formats without copying player or team
     row('Carnell Tate', '- Tate has not had his breakout week yet.\n- 11 targets in Weeks 1-2'),
     row('Under 48.5', '- no Alonza Barnett for UCF, starting a back up QB\n- they might go run heavy @ home')
   ], '2026-09-26');
-  assert.match(previews[0].breakdown, /6 targets in the cited game/);
-  assert.match(previews[1].breakdown, /11 targets across the cited weeks/);
+  assert.match(previews[0].breakdown, /Week: 5 rec; 6 targets/);
+  assert.match(previews[1].breakdown, /targets: 11 \(weeks 1-2\)/);
   assert.equal(previews[2].breakdown, '—');
   assert.doesNotMatch(JSON.stringify(previews), /Fannin|Buccaneers|Tate|Barnett|UCF/);
 });
@@ -120,10 +120,12 @@ test('today’s source bullets yield numerical records and matchup rates without
       'Saints vs outside zone: 53.3% Success rate (2nd highest)'
     ].join('\n'))
   ], '2026-10-05');
-  assert.match(previews[0].breakdown, /50% snaps; 8\/12 over line; 37\.8 yards\/game; 8\/10 over line; 44\.0 yards\/game; TE yards allowed: 83\.3\/game/);
-  assert.match(previews[1].breakdown, /8th highest|4th lowest/);
-  assert.match(previews[1].breakdown, /5\.10 YPC \(7th highest\)/);
-  assert.match(previews[1].breakdown, /53\.3% success \(2nd highest\)/);
+  assert.match(previews[0].breakdown, /Snaps &gt;50%|Snaps >50%/);
+  assert.match(previews[0].breakdown, /Line: 8\/12; Yds\/g: 37\.8; Receptions ≥2; Line: 8\/10; Yds\/g: 44\.0; TE yds allowed\/g: 83\.3/);
+  assert.match(previews[1].breakdown, /RZ run rate allowed: 8th-highest/);
+  assert.match(previews[1].breakdown, /RZ stuff rate: 4th-lowest/);
+  assert.match(previews[1].breakdown, /Outside-zone YPC: 5\.10 \(rank 7th\)/);
+  assert.match(previews[1].breakdown, /Outside-zone success: 53\.3% \(rank 2nd\)/);
   assert.doesNotMatch(previews.map(item => item.breakdown).join(' '), /Pitts|Robinson|Saints|usage and opportunity|recent production/i);
 });
 
@@ -136,9 +138,9 @@ test('turns the current football writeup formats into anonymous source-backed st
     row('Harold Fannin Jr.', 'Over 4.5 receptions', '- Fannin has turned 15 targets into 12 catches, 125 yards and 2 touchdowns over his last two games')
   ], '2026-10-01');
   assert.deepEqual(previews.map(item => item.stats), [
-    ['3/3 in recent games', '65 receiving yards per game in the cited sample'],
-    ['2/3 in recent games', '67 receiving yards and 4 targets in the cited game'],
-    ['15 targets and 12 catches across two cited games']
+    ['Line: 3/3', 'receiving yds/g: 65'],
+    ['Line: 2/3', 'Last game: 67 rec yds; 3 rec; 4 targets'],
+    ['2 games: 15 targets; 12 rec']
   ]);
   assert.doesNotMatch(JSON.stringify(previews), /Boston|Washington|Fannin|Steelers|Browns/);
 });
