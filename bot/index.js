@@ -63,6 +63,7 @@ const { createVipExpertList } = require('./lib/vip-expert-list');
 const { createExpertPulse } = require('./lib/expert-pulse');
 const { createExpertTrendReminder } = require('./lib/expert-trend-reminder');
 const { createMorningDeliveryAlert } = require('./lib/morning-delivery-alert');
+const { recapDeliveryIssues } = require('./lib/recap-delivery-status');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
@@ -252,8 +253,7 @@ const checkMorningDelivery = vipExpertPulseApprovalChannelId ? createMorningDeli
           issues.push(`Public results for ${recapDate} have not reached Discord.`);
         if (recap.public_results_pending > 0)
           issues.push(`${recap.public_results_pending} result(s) from ${recapDate} still await verification; no win/loss was assumed.`);
-        if (recapEmailConfigured() && !['EMAIL_SENT', 'PUBLISHED'].includes(recap.status))
-          issues.push(`Kobe's private recap for ${recapDate} is not fully queued (${recap.status || 'no receipt'}).`);
+        if (recapEmailConfigured()) issues.push(...recapDeliveryIssues(recap, recapDate));
       }
     } catch (error) { issues.push(`Recap delivery could not be verified: ${error.message}`); }
     return issues;
