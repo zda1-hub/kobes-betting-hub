@@ -21,7 +21,7 @@ test('renders current writeups as one table with visible prop lines and hidden i
   const metadata = await require('sharp')(payload[0].files[0].attachment).metadata();
   assert.equal(metadata.format, 'png'); assert.equal(metadata.width, 2000);
   assert.match(text, /Player or Game prop/);
-  assert.match(text, /Short breakdown, full breakdown in channel/);
+  assert.match(text, /Numerical stats; full writeup in VIP/);
   assert.match(text, /Over 4\.5 receptions/);
   assert.match(text, /Over 38\.5 yards/);
   assert.match(text, /x1="710"/);
@@ -101,9 +101,30 @@ test('handles the current approved bullet formats without copying player or team
   ], '2026-09-26');
   assert.match(previews[0].breakdown, /6 targets in the cited game/);
   assert.match(previews[1].breakdown, /11 targets across the cited weeks/);
-  assert.match(previews[2].breakdown, /Backup quarterback noted in the matchup/);
-  assert.match(previews[2].breakdown, /considers a run-heavy game plan/);
+  assert.equal(previews[2].breakdown, '—');
   assert.doesNotMatch(JSON.stringify(previews), /Fannin|Buccaneers|Tate|Barnett|UCF/);
+});
+
+test('today’s source bullets yield numerical records and matchup rates without names or generic filler', () => {
+  const row = (selection, teaser_source) => ({ pick_id: selection, selection, teaser_source,
+    operating_date: '2026-10-05', status: 'PUBLISHED', destination: '#football-writeups', sport: 'football' });
+  const previews = publicPreviews([
+    row('Kyle Pitts Over 28.5 receiving yards', [
+      'When he is playing and Pitts plays over 50% of the snaps, he has gone over this line in 8/12 games and averaging 37.8 yards per game',
+      'When he has had multiple receptions on top of that as well, he’s gone over in 8/10, averaging 44.0 yards per game',
+      'They have allowed the 3rd MOST receiving yards to TE’s per game…83.3'
+    ].join('\n')),
+    row('Bijan Robinson anytime touchdown and 70+ rushing yards', [
+      'Teams have been running in the redzone at the 8th highest rate against the Saints and the Saints have had the 4th lowest redzone stuff rate',
+      'Saints vs outside zone: 5.10 YPC (7th highest)',
+      'Saints vs outside zone: 53.3% Success rate (2nd highest)'
+    ].join('\n'))
+  ], '2026-10-05');
+  assert.match(previews[0].breakdown, /50% snaps; 8\/12 over line; 37\.8 yards\/game; 8\/10 over line; 44\.0 yards\/game; TE yards allowed: 83\.3\/game/);
+  assert.match(previews[1].breakdown, /8th highest|4th lowest/);
+  assert.match(previews[1].breakdown, /5\.10 YPC \(7th highest\)/);
+  assert.match(previews[1].breakdown, /53\.3% success \(2nd highest\)/);
+  assert.doesNotMatch(previews.map(item => item.breakdown).join(' '), /Pitts|Robinson|Saints|usage and opportunity|recent production/i);
 });
 
 test('turns the current football writeup formats into anonymous source-backed stats', () => {

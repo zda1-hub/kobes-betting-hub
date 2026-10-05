@@ -47,8 +47,6 @@ function safeEvidenceStats(row) {
     ? subject[1].replace(/[^a-z]/gi, '') : '';
   const stats = [];
   const seen = new Set();
-  if (/\bstarting (?:a )?back ?up (?:qb|quarterback)\b/i.test(source)) stats.push('Backup quarterback noted in the matchup');
-  if (/\b(?:might|may|could) go run[ -]heavy\b/i.test(source)) stats.push('Writeup considers a run-heavy game plan');
   if (!surname) return stats;
   const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const subjectMention = new RegExp(`^(?:${escape(subject.join(' '))}|${escape(surname)})\\s+`, 'i');
@@ -57,6 +55,31 @@ function safeEvidenceStats(row) {
   // the selected player; merely mentioning that player in a comparison is unsafe.
   for (const sentence of source.split(/(?<!\d)\.|\.(?!\d)|[\n;!?]+/).map((item) => item.replace(/^\s*[-•*]\s*/, '').trim()).filter(Boolean)) {
     const plain = sentence.replace(/[’]/g, "'");
+    const selectedName = new RegExp(`\\b${escape(surname)}\\b`, 'i');
+    // Retain quantitative conditions and results from the selected player's
+    // own bullet, without carrying its names or persuasive explanation.
+    if (selectedName.test(plain) || /^when he has had multiple receptions\b/i.test(plain)) {
+      const snapCondition = plain.match(/\bover (\d{1,3}(?:\.\d+)?)% of the snaps\b/i);
+      if (snapCondition) add(`>${snapCondition[1]}% snaps`);
+      const conditionalRecord = plain.match(/\bover (?:this|the) line in (\d{1,2})\s*\/\s*(\d{1,2}) games\b/i)
+        || plain.match(/\bgone over in (\d{1,2})\s*\/\s*(\d{1,2})\b/i);
+      if (conditionalRecord && Number(conditionalRecord[1]) <= Number(conditionalRecord[2]) && Number(conditionalRecord[2]) <= 25)
+        add(`${conditionalRecord[1]}/${conditionalRecord[2]} over line`);
+      const conditionalAverage = plain.match(/\baveraging (\d{1,3}(?:\.\d+)?) yards per game\b/i);
+      if (conditionalAverage) add(`${conditionalAverage[1]} yards/game`);
+    }
+    // Matchup rates can be shown without naming either club. Accept only
+    // labeled statistics, never a free-floating number or forecast.
+    const allowedYards = plain.match(/\ballowed (?:the )?(\d{1,2}(?:st|nd|rd|th)) most receiving yards to TE['’]?s per game[^\d]*(\d{1,3}(?:\.\d+)?)\b/i);
+    if (allowedYards) add(`TE yards allowed: ${allowedYards[2]}/game (${allowedYards[1]} most)`);
+    const outsideYpc = plain.match(/\boutside zone:\s*(\d{1,2}(?:\.\d+)?)\s*YPC\s*\((\d{1,2}(?:st|nd|rd|th)) highest\)/i);
+    if (outsideYpc) add(`Outside zone: ${outsideYpc[1]} YPC (${outsideYpc[2]} highest)`);
+    const outsideSuccess = plain.match(/\boutside zone:\s*(\d{1,3}(?:\.\d+)?)%\s*success rate\s*\((\d{1,2}(?:st|nd|rd|th)) highest\)/i);
+    if (outsideSuccess) add(`Outside zone: ${outsideSuccess[1]}% success (${outsideSuccess[2]} highest)`);
+    const redZoneRun = plain.match(/\brunning in the red\s*zone at the (\d{1,2})(?:st|nd|rd|th) highest rate\b/i);
+    if (redZoneRun) add(`Red-zone run rate allowed: ${redZoneRun[1]}th highest`);
+    const redZoneStuff = plain.match(/\b(\d{1,2})(?:st|nd|rd|th) lowest red\s*zone stuff rate\b/i);
+    if (redZoneStuff) add(`Red-zone stuff rate: ${redZoneStuff[1]}th lowest`);
     // A self-contained usage bullet has no competing named subject or wager.
     const usageBullet = sentence.match(/^(\d{1,2}) (targets|carries|receptions|attempts) in Weeks? \d{1,2}\s*[-–&]\s*\d{1,2}$/i);
     if (usageBullet && Number(usageBullet[1]) <= 60) add(usageBullet[1] + ' ' + usageBullet[2].toLowerCase() + ' across the cited weeks');
@@ -105,9 +128,8 @@ function safeEvidenceStats(row) {
       add(usage[1] + ' ' + usage[2] + ' in the cited sample');
     const average = context.match(/^(?:is\s+)?averag(?:ing|ed)\s+(\d{1,3}(?:\.\d+)?)\s+(receiving|rushing|passing)\s+yards\s+(?:per game|a game)\b/);
     if (average) add(average[1] + ' ' + average[2] + ' yards per game in the cited sample');
-    if (stats.length >= 3) break;
   }
-  return stats.slice(0, 3);
+  return stats;
 }
 
 function publicPropLine(row) {
@@ -123,8 +145,7 @@ function publicPropLine(row) {
 
 function shortBreakdown(stats, topics) {
   if (stats.length) return `${stats.join('; ')}.`;
-  if (topics.length) return `${new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(topics.map((topic) => topic.toLowerCase()))}. Full writeup in VIP.`;
-  return 'Full writeup in VIP; source preview unavailable.';
+  return '—';
 }
 
 function publicPreviews(rows, date) {
@@ -175,7 +196,7 @@ function freeWriteupTableSvg(previews) {
     <style>text{font-family:Arial,Helvetica,sans-serif;font-size:32px;fill:#151515}</style>
     <rect width="100%" height="100%" fill="white"/>
     <text x="355" y="49" text-anchor="middle">Player or Game prop</text>
-    <text x="1355" y="49" text-anchor="middle">Short breakdown, full breakdown in channel</text>
+    <text x="1355" y="49" text-anchor="middle">Numerical stats; full writeup in VIP</text>
     <line x1="0" y1="1" x2="${width}" y2="1" stroke="#aaa" stroke-width="2"/>
     <line x1="0" y1="${header}" x2="${width}" y2="${header}" stroke="#444" stroke-width="2"/>
     <line x1="${split}" y1="0" x2="${split}" y2="${height}" stroke="#b5b5b5" stroke-width="2"/>
