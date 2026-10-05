@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 const { buildCapperRecap, buildOverallRecap } = require('./capper-recap');
 const { splitRecapBody } = require('./recap-review');
 const { isPublishedRow } = require('./recap');
+const { verifiedResult } = require('./capper-recap');
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const noMentions = { parse: [] };
@@ -15,8 +16,25 @@ function recapApprovalGroups({ date, rows, sourceChannelIds, grouping = 'source'
     && sourceChannelIds.includes(String(row.post_reference).match(/^https:\/\/discord\.com\/channels\/\d+\/(\d+)\/\d+$/)?.[1]));
   if (!selected.length) return [];
   const recap = grouping === 'overall' ? buildOverallRecap({ date, rows: selected }) : buildCapperRecap({ date, rows: selected });
-  return recap.reviews.map(review => ({ ...review, date,
-    key: hash([date, review.name.toLowerCase().replace(/[^a-z0-9]/g, '')]).slice(0, 20),
+  const reviews = [...recap.reviews];
+  // Let Kobe approve the verified portion while unrelated wagers are being
+  // researched. The original full card stays private and disabled until final.
+  for (const review of recap.reviews.filter(item => item.pending > 0)) {
+    const included = new Set(review.includedPickIds);
+    const settled = selected.filter(row => included.has(row.pick_id) && verifiedResult(row) !== 'PENDING');
+    if (!settled.length) continue;
+    const partial = (grouping === 'overall'
+      ? buildOverallRecap({ date, rows: settled })
+      : buildCapperRecap({ date, rows: settled })).reviews.find(item => item.name === review.name);
+    if (!partial || partial.pending || !partial.total) continue;
+    reviews.push({ ...partial, name: `${review.name} verified portion`,
+      body: `VERIFIED PORTION ONLY — ${date}. Other published picks are unresolved and excluded. This is not the final recap.\n\n${partial.body}`,
+      keySuffix: 'verified-portion' });
+  }
+  return reviews.map(review => ({ ...review, date,
+    key: hash(review.keySuffix
+      ? [date, review.name.toLowerCase().replace(/[^a-z0-9]/g, ''), review.keySuffix]
+      : [date, review.name.toLowerCase().replace(/[^a-z0-9]/g, '')]).slice(0, 20),
     digest: hash([date, review.body, review.evidence]).slice(0, 20),
     parts: splitRecapBody(review.body, 3400)
   }));
@@ -127,7 +145,7 @@ function createRecapApprovals({ root, config, channelFor, loadGroups, audit = as
           body: note ? `${group.body}\n\nKobe's note: ${note}` : group.body,
           parts: note ? splitRecapBody(`${group.body}\n\nKobe's note: ${note}`, 3400) : group.parts,
           approveLabel: config.approve_label || 'Post to exclusive wins',
-          publicTitle: config.public_title || 'Exclusive recap',
+          publicTitle: group.keySuffix ? 'Verified partial recap' : config.public_title || 'Exclusive recap',
           reviewTitle: config.review_title || 'Recap approval',
           status: revisionChanged ? 'AWAITING_APPROVAL' : state.status,
           reviewReceipts: state?.reviewReceipts || [], publicReceipts: [] };
