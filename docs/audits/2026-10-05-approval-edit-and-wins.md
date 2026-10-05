@@ -27,4 +27,6 @@
 
 ## Release
 
-Local branch only until PR merge and Render deployment are confirmed below.
+PR #153 merged into `main` as `e986106b64e434ac9e818c2f4ff13ed4f8a613ee` on October 5. Render deployed that exact commit as `dep-db1vj03l550s73brd14g` and reported `live` at 19:25:24 UTC. Runtime logs resumed after deployment. The private Discord channel rename and access change were applied directly through Discord settings; no approved recap was posted as a live permission test.
+
+The focused 26 tests passed. The broader suite could not be used as a gate in this worktree because `discord.js` was absent and unrelated site asset assertions failed. Bot syntax and diff checks passed.
