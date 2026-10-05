@@ -30,3 +30,6 @@ Cloudflare rejected the extra cron trigger because the Workers Free account is a
 
 ## Follow-up — send now
 The user asked to run delivery immediately. The one-hour queue delay is removed so the existing five-minute sender can process the queued reminders on its next tick. The live Stripe recheck, deduplication, and send-outcome review hold remain. The scan counter now distinguishes newly inserted rows from existing deduplicated rows, and the sender emits an aggregate delivery count for verification. Release and delivery results must be recorded separately.
+
+## Delivery verification — October 4, 7:20 PM MST
+The live Cloudflare tail for Worker version `3ded45ea-73f3-401d-9e7b-8c1a8e1d2a8b` showed the five-minute scheduled event completed successfully and logged `Member email delivery { sent: 5 }`, with no exceptions. The prior 7:15 PM scan logged `scanned: 5, queued: 5`. This confirms five email send calls were accepted and marked delivered by the Worker. The aggregate log does not disclose recipient identities, so it does not independently prove which named customer received each message or inbox placement.
