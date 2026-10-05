@@ -16,3 +16,4 @@
 @keyframes offer-attention-pulse{0%,100%{opacity:1;text-shadow:0 0 0 transparent}50%{opacity:.72;text-shadow:0 0 8px #ffffff60}}
 @media(max-width:600px){.membership-design .mock-plan.one-year .plan-subtitle{font-size:14px}}
 @media(prefers-reduced-motion:reduce){.membership-design .offer-attention{animation:none}}
+.membership-design .join-flow-note{margin:0 0 12px;text-align:center;color:#354159;font-size:13px;font-weight:600;line-height:1.4}
