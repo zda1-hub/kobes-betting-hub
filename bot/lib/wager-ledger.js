@@ -21,11 +21,32 @@ function expandPublication(row, packet) {
   if (!extraction?.lossless_text_terms || !Array.isArray(plays) || !plays.length || plays.length > 30) return null;
   if (String(plays[0].selection || '').trim() !== String(row.selection || '').trim()) return null;
   if (plays.some(play => !String(play.selection || '').trim())) return null;
-  return plays.map((play, index) => {
+  return plays.flatMap((play, index) => {
     const selection = String(play.selection).trim();
+    // A shared ML suffix is two independent team calls, not a matchup or an
+    // inferred parlay. Keep the source play number stable for ledger receipts.
+    // Other slash syntax (including an explicit parlay) remains one wager.
+    const sharedMoneylines = !/parlay|teaser/i.test(`${selection} ${play.market || ''} ${row.market || ''}`)
+      && !play.event && !play.line && !play.odds_american && !play.units
+      && selection.match(/^([A-Za-z][A-Za-z .'-]*)\s*\/\s*([A-Za-z][A-Za-z .'-]*)\s+(?:ML|moneyline)$/i);
+    if (sharedMoneylines) return [sharedMoneylines[1], sharedMoneylines[2]].map((team, leg) => ({
+      ...row,
+      parent_pick_id: row.pick_id,
+      pick_id: `${row.pick_id}-W${String(index + 1).padStart(3, '0')}${leg ? 'B' : 'A'}`,
+      wager_scope: 'individual',
+      league_from_group: plays.length > 1 && !play.league && !play.sport,
+      selection: `${team.trim()} ML`,
+      source_selection: selection,
+      event: '',
+      league: play.league || extraction.league || (plays.length === 1 ? row.league : '') || '',
+      sport: play.sport || extraction.sport || (plays.length === 1 ? row.sport : '') || '',
+      market: 'Moneyline', published_line: '', published_odds_american: '', units_risked: '',
+      result: 'PENDING', status: 'PUBLISHED', net_units: '',
+      score_or_outcome: '', result_verified_source: '', result_verified_at: '', graded_by: ''
+    }));
     const odds = selection.match(/(?:^|\s|\()([+-]\d{3,4})(?=\s|\)|$)/g) || [];
     const units = selection.match(/\((\d+(?:\.\d+)?)\s*U\)/i)?.[1] || '';
-    return {
+    return [{
       ...row,
       parent_pick_id: row.pick_id,
       pick_id: `${row.pick_id}-W${String(index + 1).padStart(3, '0')}`,
@@ -42,7 +63,7 @@ function expandPublication(row, packet) {
       units_risked: play.units || units,
       result: 'PENDING', status: 'PUBLISHED', net_units: '',
       score_or_outcome: '', result_verified_source: '', result_verified_at: '', graded_by: ''
-    };
+    }];
   });
 }
 

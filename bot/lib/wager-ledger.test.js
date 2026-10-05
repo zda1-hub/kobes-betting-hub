@@ -32,6 +32,22 @@ test('does not reconstruct rewritten publications or identity/first-selection mi
   assert.equal(expandPublication(row, { ...packet, analysis: { extraction: { plays: packet.analysis.extraction.plays } } }), null);
 });
 
+test('shared moneyline suffix creates separate verifiable wagers without inventing odds or stakes', () => {
+  const source = { ...row, selection: 'Bills/Rams ML', league: 'NFL', market: '' };
+  const exact = { pick_id: source.pick_id, analysis: { extraction: { lossless_text_terms: true,
+    plays: [{ selection: 'Bills/Rams ML' }] } } };
+  const children = expandPublication(source, exact);
+  assert.deepEqual(children.map(child => child.selection), ['Bills ML', 'Rams ML']);
+  assert.deepEqual(children.map(child => child.pick_id), [`${source.pick_id}-W001A`, `${source.pick_id}-W001B`]);
+  assert.ok(children.every(child => child.league === 'NFL' && child.event === '' && child.result === 'PENDING'));
+  assert.ok(children.every(child => child.units_risked === '' && child.published_odds_american === ''));
+  assert.equal(children[0].source_selection, 'Bills/Rams ML');
+  assert.equal(expandPublication({ ...source, market: 'Parlay' }, exact).length, 1);
+  assert.equal(expandPublication({ ...source, selection: 'Bills/Rams ML -110' }, {
+    ...exact, analysis: { extraction: { lossless_text_terms: true,
+      plays: [{ selection: 'Bills/Rams ML -110' }] } } }).length, 1);
+});
+
 test('source paths support Telegram and X and reject traversal', () => {
   assert.equal(sourcePacketPath('/queue', row.pick_id), '/queue/2026-09-17/20260917-123.json');
   assert.equal(sourcePacketPath('/queue', 'tg-20260917-123-4'), '/queue/2026-09-17/tg-20260917-123-4.json');
