@@ -19,3 +19,6 @@ The checkout worker test suite passes, including new eligibility cases for paid/
 
 ## Status and limitations
 Local only until the migration and Worker are published. Only open, automatic-collection subscription invoices from the past 30 days are backfilled. Stripe must provide a hosted invoice URL and customer email. An unknown email delivery outcome is held for manual review, as in the existing sender.
+
+## Release follow-up — October 4, 7:05 PM MST
+Merged as PR #140 at commit `4e931f5`. The production migration workflow succeeded and reported no pending migrations. The production checkout Worker was deployed as version `27a3332f-0919-4e85-aad1-af729e8b986d`; its live health endpoint returned that version. Cloudflare lists `RESEND_API_KEY` as a configured Worker secret. The 30-day failed-invoice scan runs with the next daily 9:15 AM MST trigger. Email delivery waits one hour after queueing and rechecks Stripe. No customer delivery is confirmed by this release check.
