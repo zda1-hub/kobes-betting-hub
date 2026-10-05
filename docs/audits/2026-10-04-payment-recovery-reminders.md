@@ -22,3 +22,6 @@ Local only until the migration and Worker are published. Only open, automatic-co
 
 ## Release follow-up — October 4, 7:05 PM MST
 Merged as PR #140 at commit `4e931f5`. The production migration workflow succeeded and reported no pending migrations. The production checkout Worker was deployed as version `27a3332f-0919-4e85-aad1-af729e8b986d`; its live health endpoint returned that version. Cloudflare lists `RESEND_API_KEY` as a configured Worker secret. The 30-day failed-invoice scan runs with the next daily 9:15 AM MST trigger. Email delivery waits one hour after queueing and rechecks Stripe. No customer delivery is confirmed by this release check.
+
+## Follow-up — earlier backfill
+The user asked whether the previously seen customers had already been emailed. They had not: those failures predated deployment and the first scan was set for the next morning. Add a second scan at 7:15 PM MST (`15 2 * * *` UTC), while retaining the 9:15 AM MST scan. This affects the checkout Worker and `wrangler.jsonc`; it does not change pricing, access, or the email body. Verify the live deployment and review the email outbox after the trigger. Until then, no delivery is claimed.

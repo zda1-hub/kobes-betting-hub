@@ -3383,8 +3383,10 @@ export default {
   scheduled(controller, env, ctx) {
     const frequent = Promise.all([retryPendingActivations(env), expireCreatorTrials(env), activateReadyCreators(env), deliverMemberEmailsFromDomain(env)]);
     const daily = controller.cron === '15 16 * * *'
-      ? Promise.all([reconcileMemberships(env), processReferralPayouts(env), queueLifecycleReminders(env), scanRecentFailedInvoices(env)]) : Promise.resolve();
-    ctx.waitUntil(Promise.all([frequent, daily]));
+      ? Promise.all([reconcileMemberships(env), processReferralPayouts(env), queueLifecycleReminders(env)]) : Promise.resolve();
+    const paymentScan = ['15 16 * * *', '15 2 * * *'].includes(controller.cron)
+      ? scanRecentFailedInvoices(env) : Promise.resolve();
+    ctx.waitUntil(Promise.all([frequent, daily, paymentScan]));
   },
 };
 
