@@ -3384,8 +3384,9 @@ export default {
     const frequent = Promise.all([retryPendingActivations(env), expireCreatorTrials(env), activateReadyCreators(env), deliverMemberEmailsFromDomain(env)]);
     const daily = controller.cron === '15 16 * * *'
       ? Promise.all([reconcileMemberships(env), processReferralPayouts(env), queueLifecycleReminders(env)]) : Promise.resolve();
-    const paymentScan = ['15 16 * * *', '15 2 * * *'].includes(controller.cron)
-      ? scanRecentFailedInvoices(env) : Promise.resolve();
+    const eveningScan = controller.cron === '*/5 * * * *' && new Date(controller.scheduledTime).getUTCHours() === 2 && new Date(controller.scheduledTime).getUTCMinutes() === 15;
+    const paymentScan = controller.cron === '15 16 * * *' || eveningScan
+      ? scanRecentFailedInvoices(env).then(summary => { console.log('Payment reminder scan', summary); }) : Promise.resolve();
     ctx.waitUntil(Promise.all([frequent, daily, paymentScan]));
   },
 };
