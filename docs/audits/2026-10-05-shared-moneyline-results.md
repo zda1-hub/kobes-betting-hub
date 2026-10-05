@@ -26,4 +26,16 @@ After: the original full card remains private and disabled; a separate, explicit
 
 Verification: 14 focused recap-approval tests passed, including a simulated private review and Kobe-only publication proving the unresolved selection is absent from the VIP payload. Live delivery and Kobe's approval are not inferred from tests.
 
-Release status: local worktree only for this follow-up as of this entry.
+Release status: PR #150 merged at 2026-10-05 18:40 UTC. Render deploy `dep-db1uu1s9v7es73ft1f60` reached `live`. At 18:41 UTC the worker reported 14 new verified-only October 4 approval cards in the private exclusive recap channel. These were not sent to VIP; Kobe must approve each exact card. The full October 4 recap still reported 41 unresolved entries, so a complete final recap remains held.
+
+## Follow-up: X image-only intake
+
+Requested change: queue more qualifying X source picks for Kobe while preserving the existing approval-card format and review gates.
+
+Affected runtime setting: Render worker `X_MONITOR_MAX_MEDIA_ONLY_PER_SOURCE_PER_RUN`, raised from its code default of `1` to `3`. No source roster, card renderer, publication rule, or secret was changed.
+
+Before: the 18:41 UTC scan created five review packets but deferred three media-only candidates while using zero of four extraction calls. Each source admitted only one such post per scan.
+
+After: Render deploy `dep-db1v0o4s728c73aer6p0` reached `live` at 18:46 UTC. Its first scan checked 39 enabled X sources and queued four new approval cards. It deferred one later media-only post after a source used all three slots; that post remains eligible for a later pass. The existing exact-term and Kobe approval checks remain active.
+
+Verification: Render deployment and worker logs. This confirms private cards were queued, not that Kobe approved them or that they were sent to members. The 15-minute scan interval and four extraction-call limit remain in place.
