@@ -4,7 +4,10 @@ const year = document.getElementById('year');
 // a direct pricing link. Browser scroll restoration can otherwise cover it.
 const alignOfferAnchor = () => {
   if (window.location.hash !== '#offer') return;
-  document.getElementById('offer')?.scrollIntoView({ block: 'start' });
+  const offer = document.getElementById('offer');
+  if (!offer) return;
+  const headerBottom = document.querySelector('.site-header')?.getBoundingClientRect().bottom || 0;
+  window.scrollTo({ top: Math.max(0, offer.getBoundingClientRect().top + window.scrollY - headerBottom - 12), behavior: 'auto' });
 };
 window.addEventListener('load', alignOfferAnchor);
 window.addEventListener('hashchange', alignOfferAnchor);
