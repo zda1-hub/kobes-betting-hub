@@ -31,6 +31,21 @@ test('checkout worker health endpoint responds without credentials', async () =>
   assert.deepEqual(await response.json(), { ok: true, version: null });
 });
 
+test('payment reminders require an unpaid live subscription invoice and a real Stripe payment link', () => {
+  const invoice = {
+    id: 'in_123', livemode: true, status: 'open', collection_method: 'charge_automatically',
+    amount_remaining: 3299, customer: 'cus_123', subscription: 'sub_123',
+    hosted_invoice_url: 'https://invoice.stripe.com/i/testlink',
+  };
+  const env = { DASHBOARD_TEST_CUSTOMER_IDS: 'cus_test' };
+  assert.equal(workerTest.paymentReminderEligible(invoice, env), true);
+  assert.equal(workerTest.paymentReminderEligible({ ...invoice, status: 'paid' }, env), false);
+  assert.equal(workerTest.paymentReminderEligible({ ...invoice, livemode: false }, env), false);
+  assert.equal(workerTest.paymentReminderEligible({ ...invoice, customer: 'cus_test' }, env), false);
+  assert.equal(workerTest.paymentReminderEligible({ ...invoice, hosted_invoice_url: 'https://example.com/pay' }, env), false);
+  assert.equal(workerTest.paymentReminderEligible({ ...invoice, amount_remaining: 0 }, env), false);
+});
+
 test('dashboard excludes only configured test customers and their linked reporting history without changing source records', () => {
   const raw = {
     customers: [{ stripe_customer_id: 'cus_test' }, { stripe_customer_id: 'cus_real' }],

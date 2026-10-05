@@ -2410,6 +2410,58 @@ async function queueLifecycleReminders(env) {
   return { queued };
 }
 
+function paymentReminderEligible(invoice, env) {
+  const excluded = String(env.DASHBOARD_TEST_CUSTOMER_IDS || '').split(',').map(x => x.trim());
+  const customerId = stripeId(invoice?.customer);
+  let invoiceUrl;
+  try { invoiceUrl = new URL(invoice?.hosted_invoice_url); } catch { return false; }
+  return env.APP_ENV !== 'staging' && invoice?.livemode === true && invoice?.status === 'open'
+    && invoice?.collection_method === 'charge_automatically' && Number(invoice?.amount_remaining) > 0
+    && /^in_[a-zA-Z0-9]+$/.test(invoice?.id || '') && /^cus_[a-zA-Z0-9]+$/.test(customerId || '')
+    && /^sub_[a-zA-Z0-9]+$/.test(invoiceSubscriptionId(invoice) || '')
+    && !excluded.includes(customerId) && invoiceUrl.protocol === 'https:' && invoiceUrl.hostname === 'invoice.stripe.com';
+}
+
+async function queuePaymentReminderForInvoice(env, invoice) {
+  if (!paymentReminderEligible(invoice, env)) return false;
+  const customerId = stripeId(invoice.customer);
+  const customer = await stripeGet(env, `/customers/${encodeURIComponent(customerId)}`);
+  const recipient = String(customer?.email || '').trim();
+  if (customer?.deleted || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient)) return false;
+  await supabase(env, 'member_lifecycle_outbox?on_conflict=dedupe_key', {
+    method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal',
+    body: {
+      dedupe_key: `payment-failed:${invoice.id}`,
+      stripe_subscription_id: invoiceSubscriptionId(invoice), stripe_customer_id: customerId,
+      email_type: 'PAYMENT_FAILED', recipient,
+      subject: 'Action needed: Kobe’s Betting Hub payment',
+      body: `Hi, your Kobe’s Betting Hub membership payment has not gone through. You can review and complete it securely through Stripe: ${invoice.hosted_invoice_url}\n\nIf your bank declined the charge, contact them or use another payment method. If you have already paid, no action is needed. Reply to support@kobesbettinghub.com if you need help.\n\nKobe’s Betting Hub`,
+    },
+  });
+  return true;
+}
+
+async function scanRecentFailedInvoices(env) {
+  if (env.APP_ENV === 'staging' || !supabaseReady(env)) return { skipped: true };
+  const since = Math.floor((Date.now() - 30 * 86400000) / 1000);
+  let cursor = '';
+  let scanned = 0;
+  let queued = 0;
+  for (let page = 0; page < 5; page += 1) {
+    const params = new URLSearchParams({ status: 'open', limit: '100', 'created[gte]': String(since) });
+    if (cursor) params.set('starting_after', cursor);
+    const response = await stripeGet(env, `/invoices?${params}`);
+    for (const invoice of response.data || []) {
+      scanned += 1;
+      if (Number(invoice.attempt_count || 0) > 0 && await queuePaymentReminderForInvoice(env, invoice)) queued += 1;
+    }
+    if (!response.has_more) return { scanned, queued };
+    cursor = response.data?.at(-1)?.id;
+    if (!cursor) throw new Error('Stripe invoice pagination stopped unexpectedly.');
+  }
+  throw new Error('Recent failed-invoice scan exceeded five pages; no further pages were processed.');
+}
+
 async function handleMemberWelcomeQueue(request, env) {
   const expected = String(env.MEMBER_WELCOME_QUEUE_SECRET || '');
   if (!expected || !await secureEqual(request.headers.get('authorization') || '', `Bearer ${expected}`)) {
@@ -2425,7 +2477,7 @@ async function handleMemberWelcomeQueue(request, env) {
       // List identities only. Content is returned once, after an atomic claim.
       const [welcome, lifecycle] = await Promise.all([
         supabase(env, 'member_welcome_outbox?status=eq.QUEUED&select=id,created_at&order=created_at.asc&limit=10'),
-        supabase(env, 'member_lifecycle_outbox?status=eq.QUEUED&select=id,created_at&order=created_at.asc&limit=10'),
+        supabase(env, 'member_lifecycle_outbox?status=eq.QUEUED&email_type=neq.PAYMENT_FAILED&select=id,created_at&order=created_at.asc&limit=10'),
       ]);
       return reply({ notifications: [...(welcome || []), ...(lifecycle || [])].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).slice(0,10).map(({id})=>({id})) });
     }
@@ -2437,7 +2489,8 @@ async function handleMemberWelcomeQueue(request, env) {
       const token = crypto.randomUUID();
       let row = null;
       for (const table of ['member_welcome_outbox','member_lifecycle_outbox']) {
-        const rows = await supabase(env, `${table}?id=eq.${data.id}&status=eq.QUEUED`, { method: 'PATCH', prefer: 'return=representation', body: { status: 'SEND_STARTED', claim_token: token, send_started_at: new Date().toISOString() } });
+        const filter = table === 'member_lifecycle_outbox' ? '&email_type=neq.PAYMENT_FAILED' : '';
+        const rows = await supabase(env, `${table}?id=eq.${data.id}&status=eq.QUEUED${filter}`, { method: 'PATCH', prefer: 'return=representation', body: { status: 'SEND_STARTED', claim_token: token, send_started_at: new Date().toISOString() } });
         if (rows?.[0]) { row = rows[0]; break; }
       }
       if (!row) return reply({ error: 'Already claimed.' }, 409);
@@ -2463,10 +2516,10 @@ async function deliverMemberEmailsFromDomain(env) {
   if (!env.RESEND_API_KEY || !supabaseReady(env)) return { skipped: 'not_configured' };
   const [welcome, lifecycle] = await Promise.all([
     supabase(env, 'member_welcome_outbox?status=eq.QUEUED&select=id,created_at&order=created_at.asc&limit=5'),
-    supabase(env, 'member_lifecycle_outbox?status=eq.QUEUED&select=id,created_at&order=created_at.asc&limit=5'),
+    supabase(env, 'member_lifecycle_outbox?status=eq.QUEUED&select=id,created_at,email_type,dedupe_key&order=created_at.asc&limit=100'),
   ]);
   const queued = [...(welcome || []).map(row => ({ ...row, table: 'member_welcome_outbox' })),
-    ...(lifecycle || []).map(row => ({ ...row, table: 'member_lifecycle_outbox' }))]
+    ...(lifecycle || []).filter(row => row.email_type !== 'PAYMENT_FAILED' || Date.now() - Date.parse(row.created_at) >= 60 * 60 * 1000).map(row => ({ ...row, table: 'member_lifecycle_outbox' }))]
     .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))).slice(0, 10);
   let sent = 0;
   for (const item of queued) {
@@ -2478,6 +2531,16 @@ async function deliverMemberEmailsFromDomain(env) {
     const message = rows?.[0];
     if (!message) continue;
     try {
+      if (message.email_type === 'PAYMENT_FAILED') {
+        const invoiceId = String(message.dedupe_key || '').replace(/^payment-failed:/, '');
+        const invoice = await stripeGet(env, `/invoices/${encodeURIComponent(invoiceId)}`);
+        if (!paymentReminderEligible(invoice, env) || stripeId(invoice.customer) !== message.stripe_customer_id) {
+          await supabase(env, `${item.table}?id=eq.${message.id}&claim_token=eq.${claimToken}&status=eq.SEND_STARTED`, {
+            method: 'PATCH', prefer: 'return=minimal', body: { status: 'CANCELLED' },
+          });
+          continue;
+        }
+      }
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `kbh-member-${message.id}` },
@@ -3205,6 +3268,15 @@ async function handleWebhook(request, env) {
       const invoice = event.data?.object;
       await recordBillingEvent(env, event, { eventType: 'invoice_failed', invoiceId: invoice?.id, customerId: stripeId(invoice?.customer), subscriptionId: invoiceSubscriptionId(invoice), amountCents: Number(invoice?.amount_due), currency: invoice?.currency });
       outcome = await processInvoicePaymentFailed(env, event.data?.object, event.id);
+      if (invoice?.id && invoice?.livemode === true) {
+        try {
+          const currentInvoice = await stripeGet(env, `/invoices/${encodeURIComponent(invoice.id)}`);
+          await queuePaymentReminderForInvoice(env, currentInvoice);
+        } catch (error) {
+          // Stripe's webhook must still acknowledge the billing event. The daily scan retries reminder setup.
+          console.error('Payment reminder queue needs attention', { invoiceId: invoice.id, status: error?.message });
+        }
+      }
     } else if (event.type === 'charge.refunded') {
       const chargeObject = event.data?.object;
       const invoiceId = stripeId(chargeObject?.invoice);
@@ -3311,7 +3383,7 @@ export default {
   scheduled(controller, env, ctx) {
     const frequent = Promise.all([retryPendingActivations(env), expireCreatorTrials(env), activateReadyCreators(env), deliverMemberEmailsFromDomain(env)]);
     const daily = controller.cron === '15 16 * * *'
-      ? Promise.all([reconcileMemberships(env), processReferralPayouts(env), queueLifecycleReminders(env)]) : Promise.resolve();
+      ? Promise.all([reconcileMemberships(env), processReferralPayouts(env), queueLifecycleReminders(env), scanRecentFailedInvoices(env)]) : Promise.resolve();
     ctx.waitUntil(Promise.all([frequent, daily]));
   },
 };
@@ -3345,6 +3417,7 @@ export const __test = {
   ensurePerMemberRetentionCoupon,
   acceptLastChanceRetention,
   invoiceSubscriptionId,
+  paymentReminderEligible,
   listStripeSubscriptions,
   processReferralInvoicePaid,
   processReferralPayouts,

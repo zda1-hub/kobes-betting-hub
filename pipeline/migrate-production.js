@@ -51,6 +51,11 @@ const APPROVED_MIGRATIONS = [
     version: '016_discord_join_attribution',
     sha256: '4358d8fb70ea1cb245f5e98c26d2fd23f15294cc8a79e3f8ad0074a372a1e552',
   },
+  {
+    name: '017_payment_recovery_reminders.sql',
+    version: '017_payment_recovery_reminders',
+    sha256: 'b426742ea7c588d50d766d2560e191f3093105a6dac9c908044772e5e39afabe',
+  },
 ];
 const PROTECTED_TABLES = [
   'source_posts',
