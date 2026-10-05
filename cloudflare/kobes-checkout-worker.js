@@ -2428,8 +2428,8 @@ async function queuePaymentReminderForInvoice(env, invoice) {
   const customer = await stripeGet(env, `/customers/${encodeURIComponent(customerId)}`);
   const recipient = String(customer?.email || '').trim();
   if (customer?.deleted || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient)) return false;
-  await supabase(env, 'member_lifecycle_outbox?on_conflict=dedupe_key', {
-    method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal',
+  const inserted = await supabase(env, 'member_lifecycle_outbox?on_conflict=dedupe_key', {
+    method: 'POST', prefer: 'resolution=ignore-duplicates,return=representation',
     body: {
       dedupe_key: `payment-failed:${invoice.id}`,
       stripe_subscription_id: invoiceSubscriptionId(invoice), stripe_customer_id: customerId,
@@ -2438,7 +2438,7 @@ async function queuePaymentReminderForInvoice(env, invoice) {
       body: `Hi, your Kobe’s Betting Hub membership payment has not gone through. You can review and complete it securely through Stripe: ${invoice.hosted_invoice_url}\n\nIf your bank declined the charge, contact them or use another payment method. If you have already paid, no action is needed. Reply to support@kobesbettinghub.com if you need help.\n\nKobe’s Betting Hub`,
     },
   });
-  return true;
+  return Boolean(inserted?.length);
 }
 
 async function scanRecentFailedInvoices(env) {
@@ -2519,7 +2519,7 @@ async function deliverMemberEmailsFromDomain(env) {
     supabase(env, 'member_lifecycle_outbox?status=eq.QUEUED&select=id,created_at,email_type,dedupe_key&order=created_at.asc&limit=100'),
   ]);
   const queued = [...(welcome || []).map(row => ({ ...row, table: 'member_welcome_outbox' })),
-    ...(lifecycle || []).filter(row => row.email_type !== 'PAYMENT_FAILED' || Date.now() - Date.parse(row.created_at) >= 60 * 60 * 1000).map(row => ({ ...row, table: 'member_lifecycle_outbox' }))]
+    ...(lifecycle || []).map(row => ({ ...row, table: 'member_lifecycle_outbox' }))]
     .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))).slice(0, 10);
   let sent = 0;
   for (const item of queued) {
@@ -3381,7 +3381,7 @@ export default {
     return json({ error: 'Not found.' }, 404, origin);
   },
   scheduled(controller, env, ctx) {
-    const frequent = Promise.all([retryPendingActivations(env), expireCreatorTrials(env), activateReadyCreators(env), deliverMemberEmailsFromDomain(env)]);
+    const frequent = Promise.all([retryPendingActivations(env), expireCreatorTrials(env), activateReadyCreators(env), deliverMemberEmailsFromDomain(env).then(summary => { console.log('Member email delivery', summary); })]);
     const daily = controller.cron === '15 16 * * *'
       ? Promise.all([reconcileMemberships(env), processReferralPayouts(env), queueLifecycleReminders(env)]) : Promise.resolve();
     const eveningScan = controller.cron === '*/5 * * * *' && new Date(controller.scheduledTime).getUTCHours() === 2 && new Date(controller.scheduledTime).getUTCMinutes() === 15;
