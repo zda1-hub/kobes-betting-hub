@@ -14,7 +14,7 @@ const {
 } = require('./audit-store');
 const { auditedFetch } = require('./api-client');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
-const { approvalChannelIdForPacket } = require('../bot/lib/approval-routing');
+const { approvalChannelIdForPacket, paidChannelIdForPacket } = require('../bot/lib/approval-routing');
 const { isSupportedSportPick, upcomingEventStatuses } = require('../bot/lib/event-timing');
 const { fillMissingEvidence } = require('../bot/lib/espn-pick-research');
 const { isolatePlayPacket } = require('../bot/lib/play-evidence');
@@ -458,24 +458,6 @@ function shouldSplitPlayPackets(packet) {
   return packet.source?.publish_mode !== 'terms_only' && !isSinglePlayPacket(packet);
 }
 
-function normalizedSport(packet) {
-  const sourceSport = `${packet.analysis?.extraction?.sport || ''} ${packet.analysis?.extraction?.league || ''}`.toLowerCase();
-  if (/baseball|mlb/.test(sourceSport)) return 'baseball';
-  if (/football|nfl|ncaaf/.test(sourceSport)) return 'football';
-  if (/basketball|nba|wnba|ncaab/.test(sourceSport)) return 'basketball';
-  if (/hockey|nhl/.test(sourceSport)) return 'hockey';
-  if (/soccer|fifa|mls/.test(sourceSport)) return 'soccer';
-  return '';
-}
-
-function sportChannelId(packet) {
-  const sport = normalizedSport(packet);
-  const entries = (process.env.SPORT_CHANNEL_MAP || '').split(',')
-    .map((entry) => entry.trim().split(':'))
-    .filter(([key, value]) => key && value);
-  return entries.find(([key]) => key.toLowerCase() === sport)?.[1] || '';
-}
-
 async function discordChannelLabel(channelId, fallback) {
   const token = process.env.DISCORD_TOKEN;
   if (!channelId || !token) return fallback;
@@ -498,9 +480,7 @@ async function discordChannelLabel(channelId, fallback) {
 
 async function approvalButtonLabels(packet) {
   const free = await discordChannelLabel(process.env.FREE_PICK_CHANNEL_ID, '#daily-free-play');
-  const paidChannelId = packet.source?.publish_mode === 'terms_only'
-    ? (process.env.EXPERT_PICKS_CHANNEL_ID || process.env.PUBLISH_CHANNEL_ID)
-    : sportChannelId(packet);
+  const paidChannelId = paidChannelIdForPacket(packet);
   const paidFallback = packet.source?.publish_mode === 'terms_only' ? '#expert-picks' : '#paid-sport';
   const paid = await discordChannelLabel(paidChannelId, paidFallback);
   return {
