@@ -66,7 +66,7 @@ const { createMorningDeliveryAlert } = require('./lib/morning-delivery-alert');
 const { recapDeliveryIssues } = require('./lib/recap-delivery-status');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
-const { exclusiveApprovalChannelId } = require('./lib/approval-routing');
+const { approvalChannelIdForPacket, exclusiveApprovalChannelId, paidChannelIdForPacket } = require('./lib/approval-routing');
 const { isTrendOnlySource } = require('./lib/trend-only-source');
 const retiredTrendCardIds = new Set(['20260926-167-X']);
 const { datedTimeOverride, nextArizonaDailyStartMs } = require('./lib/daily-window');
@@ -98,6 +98,7 @@ for (const name of required) {
 
 const publisherRoleIds = listFromEnv(process.env.PUBLISHER_ROLE_IDS);
 const allowedChannelIds = listFromEnv(process.env.ALLOWED_CHANNEL_IDS);
+if (process.env.HOCKEY_PICK_CHANNEL_ID) allowedChannelIds.add(process.env.HOCKEY_PICK_CHANNEL_ID);
 // Explicit repository-controlled recap route, not an arbitrary slash-command destination.
 for (const workflow of recapWorkflowConfigs) {
   allowedChannelIds.add(workflow.review_channel_id);
@@ -221,7 +222,7 @@ const expertPulse = vipExpertPulseChannelId && vipExpertPulseApprovalChannelId ?
     })));
     return results.flatMap((result) => result.rows);
   },
-  paidChannelIds: () => [expertPicksChannelId, ...sportChannelMap.values(), process.env.EXCLUSIVES_CHANNEL_ID].filter(Boolean),
+  paidChannelIds: () => [expertPicksChannelId, ...sportChannelMap.values(), process.env.HOCKEY_PICK_CHANNEL_ID, process.env.EXCLUSIVES_CHANNEL_ID].filter(Boolean),
   isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId),
   stateFile: path.join(path.dirname(pickLogPath()), useExpertCheatChannels
     ? `expert-cheat-${vipExpertPulseChannelId}.json` : 'expert-pulse.json'),
@@ -2223,7 +2224,7 @@ async function handleSourceReviewButton(interaction) {
     }
     const channel = action === 'free'
       ? await approvedTextChannel(freePickChannelId)
-      : await approvedTextChannel(configuredTermsOnly ? expertPicksChannelId : (sport ? sportChannelMap.get(sport) : undefined));
+      : await approvedTextChannel(paidChannelIdForPacket(publicationPacket));
     const label = action === 'free' ? 'FREE PICK' : 'PAID PICK';
     const extraction = publicationPacket.analysis.extraction;
     const firstPlay = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;
@@ -2571,8 +2572,7 @@ async function refreshPendingResearchApprovals() {
     if (error.code === 'ENOENT') return;
     throw error;
   }
-  const approvalChannel = await client.channels.fetch(pickApprovalChannelId);
-  if (!approvalChannel?.isTextBased() || !approvalChannel.messages) return;
+  const approvalChannels = new Map();
   let refreshed = 0;
   for (const file of files) {
     const packetPath = path.join(directory, file);
@@ -2582,6 +2582,13 @@ async function refreshPendingResearchApprovals() {
     } catch {
       continue;
     }
+    const channelId = approvalChannelIdForPacket(packet);
+    if (!channelId) continue;
+    if (!approvalChannels.has(channelId)) {
+      approvalChannels.set(channelId, await client.channels.fetch(channelId).catch(() => null));
+    }
+    const approvalChannel = approvalChannels.get(channelId);
+    if (!approvalChannel?.isTextBased() || !approvalChannel.messages) continue;
     if (isTrendOnlySource(packet) && packet.discord_review_message_id && !packet.approval?.decision) {
       try {
         const message = await approvalChannel.messages.fetch(packet.discord_review_message_id);
@@ -2642,8 +2649,7 @@ async function refreshPendingResearchApprovals() {
       exact_final_copy_sha256: approvalCopySha256(exactFinalCopy)
     };
     presentationPacket.approval = { ...packet.approval };
-    const sport = normalizedSport(packet);
-    const paidChannelId = sport ? sportChannelMap.get(sport) : undefined;
+    const paidChannelId = paidChannelIdForPacket(packet);
     const labels = {
       freeLabel: `Post to ${await channelLabel(freePickChannelId, '#daily-free-play')}`,
       paidLabel: `Post to ${await channelLabel(paidChannelId, '#paid-sport')}`
