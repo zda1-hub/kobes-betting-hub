@@ -17,3 +17,6 @@ Use the user-supplied Kobe’s Betting Hub circular logo across the website, cen
 
 ## Release status and limitations
 Prepared on codex/new-website-logo from latest origin/main bed6a02. Cloudflare/GitHub publication is authorized by the current session. Public build whitelist only; no checkout, email, attribution or backend deployment. Physical phone testing not performed; browser viewport checks cover mobile widths. Publication and live receipt will be appended.
+
+## Published receipt
+GitHub PR #157 merged: https://github.com/zda1-hub/kobes-betting-hub/pull/157 (change c840bfb). Cloudflare static version a283c760-9d37-42a4-a7b5-6aa853582919 deployed with 140 public assets, 25 changed. Live logo bytes match the supplied source. Live mobile logo center x195, image-slot y35, tagline y116, buttons y148.59375 match preview/baseline. Screenshot saved in outputs/website-logo-2026-10-05/live-mobile.png in the primary workspace.
