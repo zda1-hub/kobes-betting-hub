@@ -14,9 +14,10 @@ test('reads Kobe’s original list and recognizes only actual expert-picks posts
     { content: 'Hammering Hank 5u max\n• Falcons +2.5' }
   ], baselineNames(list));
   assert.deepEqual(names, ['Ben Burns', 'Hammering Hank', 'Kelly In Vegas', 'LearLocks', 'McBets']);
-  const payload = payloadFor(names, 3, `${listMonth(list)} List`);
-  assert.equal(payload.embeds[0].title, 'September 2026 List');
+  const payload = payloadFor(names);
+  assert.equal(payload.embeds[0].title, 'Current list of experts: 5');
   assert.deepEqual(managedNames({ embeds: payload.embeds }), names);
-  assert.match(payload.content, /5 sources.*2 added/);
+  assert.equal(payload.content, '');
+  assert.equal(payload.embeds[0].footer.text, 'KBH vip-expert-list-v1');
   assert.doesNotMatch(JSON.stringify(payload), /Falcons|Broncos|Rams|\$150/);
 });
