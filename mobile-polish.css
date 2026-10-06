@@ -61,3 +61,6 @@ footer{font-size:9.6px}
 
 .email-tile>div,.email-tile>form{min-width:0}
 @media(max-width:600px){.email-tile{grid-template-columns:minmax(0,1fr)}}
+
+/* New circular brand artwork inside the existing 275 × 100 header slot. */
+.site-header .brand img{padding:10px 0 18px;object-fit:contain;object-position:center;clip-path:circle(35px at 50% 46%)}
