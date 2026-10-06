@@ -209,7 +209,7 @@ test('keeps review private and prepares a dated review even when VIP privacy is 
     try {
       const result = await pulse.refresh();
       assert.equal(result.status, 'VIP_HELD');
-      assert.match(result.reason, /VIP destination privacy could not be verified/);
+      assert.match(result.reason, /destination private visibility could not be verified/);
     } finally { await fs.rm(directory, { recursive: true, force: true }); }
   }
   const publicReview = { id: '567', guild, permissionsFor: () => ({ has: () => true }) };
@@ -217,6 +217,30 @@ test('keeps review private and prepares a dated review even when VIP privacy is 
     reviewChannelFor: async () => publicReview, destinationChannelFor: async () => ({ id: '789', guild }),
     stateFile: '/tmp/unused-expert-pulse-state.json' });
   await assert.rejects(pulse.refresh(), /review privacy could not be verified/);
+});
+
+test('public cheat sheet keeps review private and requires approved experts', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'expert-pulse-public-'));
+  try {
+    const guild = { id: '123', roles: { everyone: { id: 'everyone' } } };
+    const source = { id: '456', guild, messages: { fetch: async () => new Map() } };
+    const reviewMessages = new Map();
+    const review = { id: '567', guild, permissionsFor: () => ({ has: () => false }),
+      messages: { fetch: async () => reviewMessages },
+      send: async payload => {
+        const message = { id: 'review-1', ...payload };
+        reviewMessages.set(message.id, message);
+        return message;
+      } };
+    const destination = { id: '789', guild, permissionsFor: () => ({ has: () => true }),
+      messages: { fetch: async () => new Map() },
+      send: async () => { throw new Error('Unapproved experts must not publish.'); } };
+    const pulse = createExpertPulse({ sourceChannelFor: async () => source,
+      reviewChannelFor: async () => review, destinationChannelFor: async () => destination,
+      destinationVisibility: 'public', stateFile: path.join(directory, 'state.json') });
+    assert.equal((await pulse.refresh()).status, 'REVIEW_UPDATED');
+    assert.equal(reviewMessages.size, 1);
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
 });
 
 test('can reuse a private expert source as the VIP destination while keeping review separate', async () => {
