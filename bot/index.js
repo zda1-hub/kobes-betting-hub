@@ -203,6 +203,7 @@ const expertPulse = vipExpertPulseChannelId && vipExpertPulseApprovalChannelId ?
   sourceChannelFor: () => approvedTextChannel(expertPicksChannelId),
   reviewChannelFor: () => approvedTextChannel(vipExpertPulseApprovalChannelId),
   destinationChannelFor: () => approvedTextChannel(vipExpertPulseChannelId),
+  destinationVisibility: useExpertCheatChannels ? 'public' : 'private',
   // Reconstruct every exact wager from the immutable review packet and its
   // saved grade. An unexpanded source group must never inherit one result.
   rowsFor: async () => {

@@ -223,8 +223,10 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
 }
 
 function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChannelFor,
-  rowsFor = async () => [], paidChannelIds = [], isApprover = () => false, stateFile, legacyStateFile, now = () => Date.now() }) {
+  rowsFor = async () => [], paidChannelIds = [], isApprover = () => false, stateFile, legacyStateFile,
+  destinationVisibility = 'private', now = () => Date.now() }) {
   if (!reviewChannelFor || !destinationChannelFor || !stateFile) throw new Error('Private expert pulse review, VIP destination, and state file are required.');
+  if (!['private', 'public'].includes(destinationVisibility)) throw new Error('Unsupported expert pulse destination visibility.');
   let queue = Promise.resolve();
   function locked(action) {
     const run = queue.then(action, action);
@@ -361,8 +363,9 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     return state;
   }
   async function syncVip(snapshot, state, destination) {
-    if (destination.permissionsFor(destination.guild.roles.everyone)?.has('ViewChannel') !== false) {
-      throw new Error('Expert pulse VIP destination privacy could not be verified; refusing to publish VIP selections.');
+    const everyoneCanView = destination.permissionsFor(destination.guild.roles.everyone)?.has('ViewChannel');
+    if (everyoneCanView !== (destinationVisibility === 'public')) {
+      throw new Error(`Expert pulse destination ${destinationVisibility} visibility could not be verified; refusing to publish selections.`);
     }
     const approved = snapshot.records.filter((record) => {
       const key = expertId(record.name);
@@ -504,7 +507,7 @@ function createExpertPulse({ sourceChannelFor, reviewChannelFor, destinationChan
     try {
       await syncVip(snapshot, state, destination);
     } catch (error) {
-      if (!/VIP destination privacy could not be verified/.test(error.message || '')) throw error;
+      if (!/destination (?:private|public) visibility could not be verified/.test(error.message || '')) throw error;
       return { status: 'VIP_HELD', expertCount: snapshot.items.size, messageId: card.id,
         reason: error.message };
     }
