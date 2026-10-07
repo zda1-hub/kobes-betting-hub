@@ -140,6 +140,24 @@ export function injectMembershipConfig(source, config, fileName = 'HTML file') {
   return source.replace(membershipConfigPattern, replacement);
 }
 
+export function useCanonicalPageLinks(source, fileName) {
+  const pageDirectory = path.posix.dirname(`/${fileName}`);
+  return source.replace(/\bhref="([^"\s]+\.html(?:[?#][^"\s]*)?)"/g, (full, href) => {
+    if (/^[a-z]+:/i.test(href) || href.startsWith('//')) return full;
+    const match = href.match(/^([^?#]+\.html)([?#].*)?$/);
+    if (!match) return full;
+    const absolute = path.posix.resolve(pageDirectory, match[1]);
+    const route = absolute === '/index.html'
+      ? '/'
+      : absolute.endsWith('/index.html')
+        ? absolute.slice(0, -'/index.html'.length)
+        : absolute === '/cancel.html'
+          ? '/managemembership'
+          : absolute.slice(0, -'.html'.length);
+    return `href="${route}${match[2] || ''}"`;
+  });
+}
+
 export async function preparePublicSite({ env = process.env } = {}) {
   const membershipConfig = resolveMembershipConfig(env);
 
@@ -169,8 +187,10 @@ export async function preparePublicSite({ env = process.env } = {}) {
   await Promise.all(htmlFiles.map(async file => {
     const outputPath = path.join(outputRoot, file);
     const source = await readFile(outputPath, 'utf8');
-    if (source.includes('src="analytics.js')) return;
-    await writeFile(outputPath, source.replace('</body>', '  <script src="/analytics.js?v=20260929-visit-attribution"></script>\n  </body>'));
+    const withAnalytics = source.includes('src="analytics.js')
+      ? source
+      : source.replace('</body>', '  <script src="/analytics.js?v=20260929-visit-attribution"></script>\n  </body>');
+    await writeFile(outputPath, useCanonicalPageLinks(withAnalytics, file));
   }));
 
   // Meta campaign measurement belongs only on public marketing and checkout
