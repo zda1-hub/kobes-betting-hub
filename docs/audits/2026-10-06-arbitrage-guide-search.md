@@ -20,3 +20,10 @@ Improve the sports betting arbitrage guide's search visibility while preserving 
 
 - Search Console previously showed this guide receiving impressions without clicks. These edits improve accuracy and query relevance, but search rank and clicks depend on Google's indexing, competition, and external signals. A #1 position cannot be guaranteed.
 - Status: local pending release.
+
+## Release follow-up — October 6, 2026
+
+- PR [#161](https://github.com/zda1-hub/kobes-betting-hub/pull/161) merged into `main` as `044c440b4507e326703c3262994a1dd54c23c63e`.
+- Rebuilt the explicit production public asset list from that exact main commit: 81 declared entries. Wrangler production dry run succeeded; the Cloudflare deployment uploaded exactly two changed assets, the guide HTML and sitemap XML. Site Worker version: `5cf43b6e-47bb-4f62-a693-0b380ce30050`.
+- The live custom-domain guide and sitemap both returned HTTP 200. The guide contained the corrected stakes, payout, updated date and search title; the sitemap contained the October 6 lastmod. No backend, membership, referral, email, or attribution code was deployed.
+- Status: published on GitHub and Cloudflare. Ranking movement is unverified and must be measured after Google recrawls the page.
