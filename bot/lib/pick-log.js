@@ -88,6 +88,19 @@ async function appendOfficialPick(entry, logPath = pickLogPath()) {
   return row;
 }
 
+async function appendOrRetryPermissionFailedPick(entry, logPath = pickLogPath()) {
+  const rows = await readPickLog(logPath);
+  const prior = rows.find((row) => row.pick_id === entry.pick_id);
+  if (!prior) return appendOfficialPick(entry, logPath);
+  if (prior.status !== 'POST_FAILED'
+    || prior.post_reference
+    || prior.destination !== entry.destination
+    || !/Discord post failed:.*(?:Missing Permissions|50013)/i.test(prior.notes || '')) {
+    throw new Error(`Pick ID ${entry.pick_id} already exists in pick-log.csv.`);
+  }
+  return updateOfficialPick(entry.pick_id, { ...entry, status: 'PUBLISHING', post_reference: '' }, logPath);
+}
+
 async function updateOfficialPick(pickId, patch, logPath = pickLogPath()) {
   const rows = await readPickLog(logPath);
   const index = rows.findIndex((row) => row.pick_id === pickId);
@@ -140,6 +153,7 @@ module.exports = {
   DEFAULT_PICK_LOG_PATH,
   PICK_LOG_HEADERS,
   appendOfficialPick,
+  appendOrRetryPermissionFailedPick,
   makePickId,
   netUnitsFor,
   pacificOperatingDate,

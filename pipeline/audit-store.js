@@ -294,7 +294,20 @@ async function recordApprovalCard(packet, { channelId, messageId, payload }) {
 async function recordApprovalAction(packet, { action, actorId, status }) {
   const candidateId = await candidateIdFor(packet);
   if (!candidateId) return !auditConfigured();
-  const result = await query(`UPDATE approval_cards SET status=$2, action=$3, action_actor_id=$4, action_at=$5 WHERE candidate_id=$1 AND status='PENDING' RETURNING id`, [candidateId, status, action, actorId, nowIso()]);
+  // A definite Discord 50013 rejection cannot have created a public post.
+  // Allow the same button to be retried after channel permissions are repaired,
+  // while keeping all other completed or uncertain deliveries locked.
+  const result = await query(`UPDATE approval_cards SET status=$2, action=$3, action_actor_id=$4, action_at=$5
+    WHERE candidate_id=$1 AND (
+      status='PENDING' OR (
+        status='POST_FAILED' AND action=$3 AND EXISTS (
+          SELECT 1 FROM published_picks p
+          WHERE p.candidate_id=$1 AND p.status='POST_FAILED'
+            AND p.discord_message_id IS NULL AND p.post_reference IS NULL
+            AND (p.error_detail ILIKE '%Missing Permissions%' OR p.error_detail LIKE '%50013%')
+        )
+      )
+    ) RETURNING id`, [candidateId, status, action, actorId, nowIso()]);
   if (!result?.rows?.length) return false;
   await recordWorkflowEvent(packet, { eventType: 'APPROVAL_ACTION', actorType: 'discord_user', actorId, beforeState: 'PENDING_APPROVAL', afterState: status, details: { action } });
   return true;

@@ -31,7 +31,7 @@ const { recoverResultsBacklog, readResultsBacklogCursor } = require('./lib/resul
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
 const { gradeWagerRows, sourcePacketPath } = require('./lib/wager-ledger');
-const { appendOfficialPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
+const { appendOfficialPick, appendOrRetryPermissionFailedPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm, buildVipWelcome, vipRoleIds } = require('./lib/welcome');
 const {
   assertApprovalCopyMatches,
@@ -1805,7 +1805,7 @@ async function syncApprovedPickToDailyQueue(entry) {
 async function postAndLogOfficialPick({ channel, payload, entry, packet = null }) {
   await recordPublicationAttempt(packet, { entry, payload });
   try {
-    await appendOfficialPick(entry);
+    await appendOrRetryPermissionFailedPick(entry);
   } catch (error) {
     await recordPublicationResult(packet, { pickId: entry.pick_id, status: 'LOG_FAILED', errorDetail: error instanceof Error ? error.message : String(error) });
     throw error;
