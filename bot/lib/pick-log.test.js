@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { appendOfficialPick, netUnitsFor, readPickLog, updateOfficialPick } = require('./pick-log');
+const { appendOfficialPick, appendOrRetryPermissionFailedPick, netUnitsFor, readPickLog, updateOfficialPick } = require('./pick-log');
 
 test('keeps exact published terms and a Discord reference in the canonical log', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'kobe-pick-log-'));
@@ -28,4 +28,24 @@ test('keeps exact published terms and a Discord reference in the canonical log',
   assert.equal(row.post_reference, 'https://discord.com/channels/1/2/3');
   assert.equal(row.published_line, 'OVER 1.5 hits');
   await fs.rm(directory, { recursive: true, force: true });
+});
+
+test('retries only a definite permission failure with no Discord post', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'kobe-pick-retry-'));
+  const logPath = path.join(directory, 'pick-log.csv');
+  const entry = {
+    pick_id: '20261007-NFL-001', operating_date: '2026-10-07',
+    published_at: '2026-10-07T15:00:00.000Z', destination: '#free-picks', result: 'PENDING'
+  };
+  try {
+    await appendOfficialPick(entry, logPath);
+    await updateOfficialPick(entry.pick_id, { status: 'POST_FAILED', notes: 'Discord post failed: Missing Permissions' }, logPath);
+    await appendOrRetryPermissionFailedPick(entry, logPath);
+    assert.equal((await readPickLog(logPath))[0].status, 'PUBLISHING');
+    await assert.rejects(appendOrRetryPermissionFailedPick(entry, logPath), /already exists/);
+    await updateOfficialPick(entry.pick_id, { status: 'POST_FAILED', post_reference: 'https://discord.com/channels/1/2/3', notes: 'Discord post failed: Missing Permissions' }, logPath);
+    await assert.rejects(appendOrRetryPermissionFailedPick(entry, logPath), /already exists/);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
 });
