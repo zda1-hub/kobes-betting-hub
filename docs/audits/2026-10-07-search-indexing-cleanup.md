@@ -22,3 +22,7 @@ Targeted indexing, public build, and billing tests passed (10/10). The public bu
 ## Limitations
 
 Google may continue to report historical redirected `.html` URLs and intentionally private `noindex` pages; those statuses do not mean that a public page is broken. Search Console's affected URL examples are needed to confirm every row in the alert. Indexing and ranking are decided by Google and are not immediate after deployment.
+
+## Publication follow-up — October 7, 2026 MST
+
+PR #165 merged into `main` at `7228665`. The public-only bundle was deployed through `wrangler.site.jsonc` to Cloudflare Worker `kobes-betting-hub`, version `664d86db-ab91-47b2-b195-963f3014e768`. Live checks confirmed the sitemap lists `/guides` directly, `/guides`, `/join`, and `/exclusives` return public content with matching canonical URLs, and the live membership page links directly to `/faq` rather than `faq.html`. No checkout Worker, billing, or access integration was deployed. Search Console has not yet recrawled these changes.
