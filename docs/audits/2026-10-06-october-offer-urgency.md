@@ -28,3 +28,9 @@ The proposed $49.99 monthly price, $149 football season pass, $349 lifetime pass
 ## Follow-up
 
 Before selling new tiers, define their price IDs, duration, cancellation and access rules, fulfillment obligations, and creator/referral commission treatment. Confirm whether the $19.99 first-month offer should end for direct checkout at the same deadline as referral checkout.
+
+## Deployment follow-up — October 6, 2026 MST
+
+User clarified that this release should include only the banner and exit prompt, with all existing prices and membership plans retained. PR #163 was merged into `main` at `abc3a5e9f8b4b7339129e5f2926ed4d46e889dcb`. The public-only `.public-site` bundle from that commit was deployed through `wrangler.site.jsonc` to Cloudflare Worker `kobes-betting-hub`, version `3872dfcf-7406-4361-94c6-accce8671faf`. No checkout Worker, payment product, access rule, or integration was deployed.
+
+Live verification: `https://kobesbettinghub.com/join` loaded the October offer banner and continued to show $19.99 for the first month followed by $32.99/month, along with the existing $10 seven-day, $134.99 six-month, and $194.99 annual options. The live `site.js` contained the October 23 00:00 MST deadline. No live purchase was attempted. The exit prompt's trigger was verified locally before release; live payment conversion remains to be observed.
