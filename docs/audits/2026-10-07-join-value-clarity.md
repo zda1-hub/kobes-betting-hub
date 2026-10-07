@@ -19,4 +19,6 @@ Make the membership offer easier to understand and more compelling without chang
 ## Limitations and release
 
 - Copy clarity does not establish a conversion lift. Compare plan clicks, checkout starts, and completed payments after release, accounting for the recent dashboard launch and small sample.
-- Status: local, pending publication.
+- PR [#168](https://github.com/zda1-hub/kobes-betting-hub/pull/168) merged into `main` as `9cb87c6`. Built the explicit public whitelist from that merged commit and deployed only the public site Worker. Cloudflare uploaded one changed asset, `/join.html`; deployed version `e2ac0e30-aca4-4fbd-80d1-6baca5dd3742`.
+- The custom-domain `/join` and `/join.html` pages returned HTTP 200. Cache-busted reads confirmed the new benefit line and `$19.99` CTA on the custom domain and Worker domain. An initial unqualified `/join` fetch still returned the prior copy from cache immediately after deployment; cache propagation should be checked separately.
+- Status: published, with browser visual verification unavailable under current browser policy.
