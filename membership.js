@@ -85,6 +85,8 @@ if (referralCode && !checkoutState) {
   const referralPromotionActive = Date.now() >= Date.parse('2026-09-22T07:00:00Z') && Date.now() < Date.parse('2026-10-23T07:00:00Z');
   if (referralGrid) {
     referralGrid.querySelectorAll('.offer-choice:not(.offer-choice-referral)').forEach(card => { card.hidden = true; });
+    const secondaryOffers = referralGrid.querySelector('.secondary-offers');
+    if (secondaryOffers) secondaryOffers.hidden = true;
     const referralCard = referralGrid.querySelector('[data-referral-card]');
     if (referralCard) referralCard.hidden = false;
     const referralFields = {

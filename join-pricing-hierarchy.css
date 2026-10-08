@@ -1,0 +1,102 @@
+/* The featured offer stays above all alternatives at every viewport width. */
+.membership-design .membership-offers [hidden] { display: none !important; }
+.membership-design .featured-offer { width: 100%; }
+.membership-design .featured-offer .mock-plan {
+  width: 100%;
+  min-height: 320px;
+  padding: 36px 28px;
+  align-items: center;
+  text-align: center;
+}
+.membership-design .featured-offer .new-member-badge {
+  font-size: 13px;
+  padding: 7px 13px;
+  margin-bottom: 8px;
+}
+.membership-design .featured-offer .mock-plan h2 {
+  font-size: clamp(36px, 5vw, 52px);
+  line-height: 1.1;
+  margin: 8px 0 18px;
+  padding: 0;
+}
+.membership-design .featured-offer .mock-price {
+  font-size: clamp(34px, 4.5vw, 48px);
+  margin: 0 0 13px;
+}
+.membership-design .featured-offer .mock-price small { font-size: 15px; }
+.membership-design .featured-offer .mock-plan > p:not(.mock-price) {
+  max-width: 540px;
+  font-size: 17px;
+  line-height: 1.5;
+}
+.membership-design .featured-offer .mock-plan .button {
+  min-height: 50px;
+  padding: 13px 24px;
+  font-size: 17px;
+  margin-top: 8px;
+}
+.membership-design .featured-offer .mock-plan .plan-note {
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 16px 0 0;
+}
+.membership-design .secondary-offers { margin-top: 32px; }
+.membership-design .secondary-offers > h2 {
+  margin: 0 0 15px;
+  color: #354159;
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 700;
+  text-align: left;
+}
+.membership-design .secondary-plan-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.membership-design .secondary-plan-grid .mock-plan {
+  min-width: 0;
+  min-height: 260px;
+  padding: 22px 18px;
+  align-items: center;
+  text-align: center;
+}
+.membership-design .secondary-plan-grid .mock-plan h3 {
+  margin: 0 0 12px;
+  color: #fff;
+  font: 600 25px/1.2 Arial, sans-serif;
+  letter-spacing: 0;
+}
+.membership-design .secondary-plan-grid .mock-plan .mock-price {
+  margin: 7px 0 12px;
+  font-size: 30px;
+}
+.membership-design .secondary-plan-grid .mock-price small { font-size: 13px; }
+.membership-design .secondary-plan-grid .mock-plan > p {
+  font-size: 14px;
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+.membership-design .secondary-plan-grid .mock-plan .plan-subtitle { font-size: 13px; }
+.membership-design .secondary-plan-grid .mock-plan.one-year .plan-subtitle { font-size: 14px; margin-bottom: 8px; }
+.membership-design .secondary-plan-grid .mock-plan .plan-note { font-size: 12px; line-height: 1.45; margin: 13px 0 0; }
+.membership-design .secondary-plan-grid .mock-plan .button {
+  min-height: 44px;
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+@media (max-width: 700px) {
+  .membership-design .join-flow-note { font-size: 15px; line-height: 1.5; margin-bottom: 18px; }
+  .membership-design .featured-offer .mock-plan { min-height: 345px; padding: 27px 21px; }
+  .membership-design .featured-offer .mock-plan h2 { font-size: clamp(34px, 9vw, 42px); }
+  .membership-design .featured-offer .mock-price { font-size: 34px; }
+  .membership-design .featured-offer .mock-plan > p:not(.mock-price) { font-size: 16px; }
+  .membership-design .featured-offer .mock-plan .button { min-height: 50px; width: min(100%, 260px); }
+  .membership-design .secondary-offers { margin-top: 30px; }
+  .membership-design .secondary-plan-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .membership-design .secondary-plan-grid .mock-plan { min-height: 0; padding: 24px 20px; }
+  .membership-design .secondary-plan-grid .mock-plan h3 { font-size: 26px; }
+  .membership-design .secondary-plan-grid .mock-plan .mock-price { font-size: 30px; }
+  .membership-design .secondary-plan-grid .mock-plan > p { font-size: 15px; }
+  .membership-design .secondary-plan-grid .mock-plan .plan-note { font-size: 13px; }
+}
