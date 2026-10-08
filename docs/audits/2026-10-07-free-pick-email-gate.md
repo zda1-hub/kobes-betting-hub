@@ -33,3 +33,6 @@ The first release queued pick details but could omit the actual card when an app
 
 ## Follow-up: restore the simple email form
 The user requested removal of the visible checkboxes and the extra name field. `index.html` and `free-pick.html` now ask for email only, with the same submit-button age and email-consent notice used by the previous homepage signup. The existing backend validation still receives the age and consent attestations. The in-page reveal, email delivery, VIP prompt, and gate switch are unchanged. Verify the public build and live form after deployment.
+
+## Follow-up: no-pick VIP path
+The user requested a direct message and arrow link when no free pick is posted. `index.html`, `free-pick.html`, `free-pick.js`, and `free-pick.css` now show “No free pick is posted today. Join → to see the full VIP slate.” on no-pick days. The link opens `/join` and records the existing CTA-click event. The email form remains available for future picks. The link hides when a current pick is available. The public build and live pages are to be checked after deployment.
