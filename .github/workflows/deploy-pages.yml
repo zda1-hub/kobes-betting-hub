@@ -26,6 +26,8 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Prepare public site
+        env:
+          KBH_GA4_ID: ${{ vars.KBH_GA4_ID }}
         run: node scripts/prepare-public-site.mjs
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
