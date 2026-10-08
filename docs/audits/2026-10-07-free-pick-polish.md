@@ -21,3 +21,6 @@ Actual current-day pick delivery cannot be tested against a live pick while the 
 
 ## Release state
 Local change; append the published version and live verification after deployment.
+
+## Follow-up: live signup failure
+The first live signup check returned a network error before saving the tag. Cloudflare Worker logs identified an invalid KV rate-limit TTL of 10 seconds; Cloudflare requires at least 60 seconds. `cloudflare/bettinghub-publisher.js` now uses 60 seconds, and the test KV stub enforces the same minimum. `free-pick.js` now shows a useful connection error if a network failure occurs, with `index.html` and `free-pick.html` loading the new asset version. The initial release was merged in PR #176 and deployed as publisher `5512c09b-187e-4c1b-ac62-181a49f0f95e`, site `c78a2238-a31f-42f4-94d8-d87102ffa5a8`. Repeat live signup, tag, and Resend checks after this fix is published.

@@ -339,7 +339,7 @@ async function unlockFreePick(request, env, ctx) {
   const actorKey = `free-pick-actor:${await sha256Hex(actor)}`;
   if (await env.FREE_PICK_KV.get(rateKey) || await env.FREE_PICK_KV.get(actorKey)) return json({ error: 'Please wait before requesting another pick.' }, 429, headers);
   await env.FREE_PICK_KV.put(rateKey, '1', { expirationTtl: 60 });
-  await env.FREE_PICK_KV.put(actorKey, '1', { expirationTtl: 10 });
+  await env.FREE_PICK_KV.put(actorKey, '1', { expirationTtl: 60 });
   const pick = await todaysFreePick(env, new URL(request.url).origin);
   await ensureEmailSubscribers(env);
   const now = new Date().toISOString();

@@ -148,7 +148,7 @@
       showVip(revealedPick);
       if (nodes.caption) nodes.caption.textContent = revealedPick ? 'Unlocked. Check your email for a copy.' : 'You’re on the list. There is no free pick today.';
     } catch (error) {
-      status.textContent = error.message || 'We couldn’t unlock the pick. Please try again.';
+      status.textContent = error instanceof TypeError ? 'We couldn’t connect to the email service. Please try again.' : (error.message || 'We couldn’t unlock the pick. Please try again.');
     } finally { button.disabled = false; }
   });
   initialize();
