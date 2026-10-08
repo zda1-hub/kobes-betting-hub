@@ -9,6 +9,8 @@ const MAX_POST_LENGTH = 280;
 const FREE_PICK_STATE_KEY = "free-picks/current.json";
 const FREE_PICK_BY_DATE_PREFIX = "free-picks/by-date/";
 const FREE_PICK_RESULTS_KEY = "free-picks/verified-results.json";
+const FREE_PICK_GATE_KEY = "free-picks/email-gate-enabled";
+const FREE_PICK_DAY_STATE_KEY = "free-picks/day-state.json";
 const PUBLIC_RESULTS_KEY = "results/verified-results.json";
 const FREE_PICK_MAX_BYTES = 5 * 1024 * 1024;
 const TREND_EMAIL_MAX_BYTES = 12 * 1024;
@@ -127,18 +129,18 @@ async function auditedXFetch(env, endpoint, init, audit) {
 }
 
 export default {
-  fetch(request, env) {
-    return handleRequest(request, env);
+  fetch(request, env, ctx) {
+    return handleRequest(request, env, ctx);
   },
 
   scheduled(controller, env, ctx) {
-    ctx.waitUntil(Promise.all([dispatchDuePosts(controller.scheduledTime, env), deliverPendingLeadEmails(env)]));
+    ctx.waitUntil(Promise.all([dispatchDuePosts(controller.scheduledTime, env), deliverPendingLeadEmails(env), deliverPendingFreePickEmails(env)]));
   },
 };
 
-async function handleRequest(request, env) {
+async function handleRequest(request, env, ctx) {
   const url = new URL(request.url);
-  if (url.pathname === "/api/email/subscribe" && request.method === "OPTIONS") {
+  if (["/api/email/subscribe", "/api/free-pick/unlock", "/api/free-pick/track"].includes(url.pathname) && request.method === "OPTIONS") {
     const headers = leadCors(request);
     return new Response(null, { status: headers ? 204 : 403, headers: headers || undefined });
   }
@@ -148,6 +150,10 @@ async function handleRequest(request, env) {
   }
   if (url.pathname === "/api/email/subscribe" && request.method === "POST") return subscribeEmail(request, env);
   if (url.pathname === "/api/email/unsubscribe" && request.method === "GET") return unsubscribeEmail(url, env);
+  if (url.pathname === "/api/free-pick/gate" && request.method === "GET") return getFreePickGate(request, env);
+  if (url.pathname === "/api/free-pick/gate" && request.method === "PUT") return putFreePickGate(request, env);
+  if (url.pathname === "/api/free-pick/unlock" && request.method === "POST") return unlockFreePick(request, env, ctx);
+  if (url.pathname === "/api/free-pick/track" && request.method === "POST") return trackFreePickGate(request, env);
   if (url.pathname === START_PATH) {
     if (!await hasBearer(request, env.QUEUE_INGEST_SECRET)) return json({ error: "Unauthorized" }, 401);
     return beginXAuthorization(url, env);
@@ -190,7 +196,17 @@ async function ensureEmailSubscribers(env) {
       welcome_status TEXT NOT NULL DEFAULT 'pending',
       welcome_sent_at TEXT
     )`),
-    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_email_subscribers_pending ON email_subscribers (welcome_status, subscribed, consent_at)")
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_email_subscribers_pending ON email_subscribers (welcome_status, subscribed, consent_at)"),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS email_subscriber_tags (
+      email TEXT NOT NULL, tag TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'direct', first_name TEXT,
+      created_at TEXT NOT NULL, PRIMARY KEY (email, tag)
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS free_pick_email_outbox (
+      id TEXT PRIMARY KEY, email TEXT NOT NULL, pick_json TEXT NOT NULL, unsubscribe_token TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL, sent_at TEXT
+    )`),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_free_pick_email_outbox_pending ON free_pick_email_outbox (status, created_at)")
   ]);
 }
 
@@ -268,6 +284,147 @@ async function unsubscribeEmail(url, env) {
   await ensureEmailSubscribers(env);
   await env.DB.prepare("UPDATE email_subscribers SET subscribed = 0 WHERE unsubscribe_token = ?").bind(token).run();
   return html("You are unsubscribed from Kobe's Betting Hub emails.");
+}
+
+async function freePickGateEnabled(env) {
+  return (await env.FREE_PICK_KV?.get(FREE_PICK_GATE_KEY)) === 'on';
+}
+
+async function todaysFreePick(env, origin) {
+  const date = phoenixDate();
+  const stateText = await env.FREE_PICK_KV?.get(FREE_PICK_DAY_STATE_KEY);
+  let state;
+  try { state = JSON.parse(stateText || 'null'); } catch { state = null; }
+  if (state?.date === date && state?.status === 'no_pick') return null;
+  const pick = await readFreePick(env);
+  return pick?.publishedDate === date ? publicFreePick(pick, origin) : null;
+}
+
+async function getFreePickGate(request, env) {
+  const headers = corsHeaders(request);
+  headers.set('cache-control', 'no-store');
+  const enabled = await freePickGateEnabled(env);
+  const pick = await todaysFreePick(env, new URL(request.url).origin);
+  return json({ enabled, date: phoenixDate(), hasPick: Boolean(pick) }, 200, headers);
+}
+
+async function putFreePickGate(request, env) {
+  if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({ error: 'Unauthorized' }, 401);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+  if (typeof data.enabled !== 'boolean') return json({ error: 'enabled must be true or false' }, 400);
+  if (data.dayStatus != null && !['published', 'no_pick'].includes(data.dayStatus)) return json({ error: 'Invalid dayStatus' }, 400);
+  await env.FREE_PICK_KV.put(FREE_PICK_GATE_KEY, data.enabled ? 'on' : 'off');
+  if (data.dayStatus) await env.FREE_PICK_KV.put(FREE_PICK_DAY_STATE_KEY, JSON.stringify({ date: phoenixDate(), status: data.dayStatus }));
+  return json({ enabled: data.enabled, dayStatus: data.dayStatus || null, date: phoenixDate() });
+}
+
+async function unlockFreePick(request, env, ctx) {
+  const headers = leadCors(request);
+  if (!headers) return json({ error: 'This form is only available on the Hub website.' }, 403);
+  if (Number(request.headers.get('content-length') || 0) > 4096) return json({ error: 'Request is too large.' }, 413, headers);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid form data.' }, 400, headers); }
+  const email = String(data.email || '').trim().toLowerCase();
+  const firstName = String(data.firstName || '').trim().slice(0, 80);
+  const source = String(data.source || 'direct').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 60) || 'direct';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 ||
+      (firstName && !/^[\p{L}\p{M} .'-]+$/u.test(firstName)) || data.legalAge !== true || data.consent !== true) {
+    return json({ error: 'Enter a valid email and confirm both checkboxes.' }, 400, headers);
+  }
+  if (data.website) return json({ ok: true, hasPick: false, message: 'Thanks.' }, 200, headers);
+  if (!await freePickGateEnabled(env)) return json({ error: 'The email gate is currently off. Refresh this page.' }, 409, headers);
+  const actor = request.headers.get('cf-connecting-ip') || 'unknown';
+  const rateKey = `free-pick-unlock:${await sha256Hex(`${actor}:${email}`)}`;
+  const actorKey = `free-pick-actor:${await sha256Hex(actor)}`;
+  if (await env.FREE_PICK_KV.get(rateKey) || await env.FREE_PICK_KV.get(actorKey)) return json({ error: 'Please wait before requesting another pick.' }, 429, headers);
+  await env.FREE_PICK_KV.put(rateKey, '1', { expirationTtl: 60 });
+  await env.FREE_PICK_KV.put(actorKey, '1', { expirationTtl: 10 });
+  const pick = await todaysFreePick(env, new URL(request.url).origin);
+  await ensureEmailSubscribers(env);
+  const now = new Date().toISOString();
+  const existing = await env.DB.prepare('SELECT subscribed, unsubscribe_token FROM email_subscribers WHERE email = ?').bind(email).first();
+  if (!existing) {
+    await env.DB.prepare('INSERT INTO email_subscribers (email, unsubscribe_token, consent_at, welcome_status) VALUES (?, ?, ?, ?)')
+      .bind(email, randomBase64Url(32), now, pick ? 'sent' : 'pending').run();
+  } else if (!existing.subscribed) {
+    await env.DB.prepare('UPDATE email_subscribers SET subscribed = 1, consent_at = ?, welcome_status = ? WHERE email = ?')
+      .bind(now, pick ? 'sent' : 'pending', email).run();
+  } else if (pick) {
+    await env.DB.prepare("UPDATE email_subscribers SET welcome_status = 'sent' WHERE email = ? AND welcome_status = 'pending'").bind(email).run();
+  }
+  await env.DB.prepare(`INSERT INTO email_subscriber_tags (email, tag, source, first_name, created_at)
+    VALUES (?, 'free-pick-subscriber', ?, ?, ?) ON CONFLICT(email, tag) DO UPDATE SET source=excluded.source, first_name=excluded.first_name`)
+    .bind(email, source, firstName || null, now).run();
+  if (pick) {
+    const token = existing?.unsubscribe_token || (await env.DB.prepare('SELECT unsubscribe_token FROM email_subscribers WHERE email = ?').bind(email).first()).unsubscribe_token;
+    const id = await sha256Hex(`${email}:${pick.pickId || pick.publishedDate}`);
+    await env.DB.prepare(`INSERT OR IGNORE INTO free_pick_email_outbox (id, email, pick_json, unsubscribe_token, created_at)
+      VALUES (?, ?, ?, ?, ?)`).bind(id, email, JSON.stringify(pick), token, now).run();
+    if (ctx?.waitUntil) ctx.waitUntil(deliverPendingFreePickEmails(env, id));
+  }
+  headers['cache-control'] = 'no-store';
+  return json({ ok: true, hasPick: Boolean(pick), pick, message: pick ? 'Unlocked. We’re sending the same pick to your email.' : 'You’re on the list. There is no free pick today.' }, 200, headers);
+}
+
+async function deliverPendingFreePickEmails(env, onlyId = null) {
+  if (!env.RESEND_API_KEY || !env.DB) return;
+  await ensureEmailSubscribers(env);
+  await env.DB.prepare("UPDATE free_pick_email_outbox SET status = 'pending' WHERE status = 'sending' AND created_at < ?")
+    .bind(new Date(Date.now() - 5 * 60 * 1000).toISOString()).run();
+  const query = onlyId
+    ? env.DB.prepare("SELECT * FROM free_pick_email_outbox WHERE id = ? AND status = 'pending' LIMIT 1").bind(onlyId)
+    : env.DB.prepare("SELECT * FROM free_pick_email_outbox WHERE status = 'pending' ORDER BY created_at LIMIT 10");
+  const { results } = await query.all();
+  for (const row of results) {
+    const claim = await env.DB.prepare("UPDATE free_pick_email_outbox SET status = 'sending', attempts = attempts + 1 WHERE id = ? AND status = 'pending'").bind(row.id).run();
+    if (!claim.meta?.changes) continue;
+    try {
+      const pick = JSON.parse(row.pick_json);
+      const details = pick.details || {};
+      const unsubscribeUrl = `https://bettinghub-publisher.kobedirwin.workers.dev/api/email/unsubscribe?token=${encodeURIComponent(row.unsubscribe_token)}`;
+      const lines = [
+        `Today's free pick — ${pick.publishedDate} (MST)`, '',
+        details.selection || details.pick || 'Approved free pick',
+        [details.line, details.odds ? `(${details.odds})` : '', details.units ? `${details.units}u` : ''].filter(Boolean).join(' '),
+        [details.sport, details.event].filter(Boolean).join(' · '), '',
+        details.reason || '', '',
+        'See the Hub: https://kobesbettinghub.com/free-pick',
+        'VIP membership: https://kobesbettinghub.com/join', '',
+        'Picks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.', '',
+        `Unsubscribe: ${unsubscribeUrl}`,
+      ];
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `kbh-free-pick-${row.id}` },
+        body: JSON.stringify({ from: "Kobe's Betting Hub <support@kobesbettinghub.com>", to: [row.email], reply_to: 'support@kobesbettinghub.com', subject: `Today's free pick — ${pick.publishedDate}`, text: lines.join('\n') }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error(`Resend returned ${response.status}`);
+      await env.DB.prepare("UPDATE free_pick_email_outbox SET status = 'sent', sent_at = ? WHERE id = ?").bind(new Date().toISOString(), row.id).run();
+    } catch (error) {
+      console.error('Free pick email deferred', { id: row.id, message: String(error?.message || error) });
+      await env.DB.prepare("UPDATE free_pick_email_outbox SET status = 'pending' WHERE id = ?").bind(row.id).run();
+    }
+  }
+}
+
+async function trackFreePickGate(request, env) {
+  const headers = leadCors(request);
+  if (!headers) return json({ error: 'Forbidden' }, 403);
+  if (Number(request.headers.get('content-length') || 0) > 1024) return json({ error: 'Too large' }, 413, headers);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, headers); }
+  if (!['form_view', 'submit_success', 'pick_revealed', 'cta_click'].includes(data.event) ||
+      !/^[0-9a-f-]{36}$/i.test(data.sessionId || '') ||
+      !['home', 'free-pick'].includes(data.page)) return json({ error: 'Invalid event' }, 400, headers);
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS free_pick_gate_events (
+    id TEXT PRIMARY KEY, event TEXT NOT NULL, session_id TEXT NOT NULL, page TEXT NOT NULL,
+    source TEXT NOT NULL, occurred_at TEXT NOT NULL
+  )`).run();
+  await env.DB.prepare('INSERT INTO free_pick_gate_events (id, event, session_id, page, source, occurred_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), data.event, data.sessionId, data.page, String(data.source || 'direct').replace(/[^a-z0-9_-]/gi, '').slice(0, 60), new Date().toISOString()).run();
+  return json({ ok: true }, 200, headers);
 }
 
 const VIP_PREVIEW_KEY = 'vip-preview/current.json';
