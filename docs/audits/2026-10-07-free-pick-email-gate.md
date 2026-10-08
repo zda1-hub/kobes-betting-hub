@@ -22,4 +22,8 @@ Add an email-gated free pick to the homepage and `/free-pick`, reveal the curren
 - Delivery is queued after the page responds and retried on the existing five-minute schedule. The form response cannot guarantee sub-two-second completion or immediate inbox delivery.
 
 ## Release state
-Local implementation; update this section with production release and smoke-test results when published.
+PR #170 merged into `main` at `98127cd1637cc1a4098d9df1ab676e1a9a32293b`. Publisher Worker version `8eb8f755-492c-4a66-8037-cbf9889c4854` and public site Worker version `cb5b3b62-3b54-44b9-906a-6f119ec67813` deployed from that commit on October 7. The KV gate switch was then set to `on`.
+
+Live checks: `/free-pick` returned HTTP 200 with the new client asset; `/api/free-pick/gate` returned `enabled: true`, `hasPick: false`, and the current MST date `2026-10-07`; the live unlock route rejected invalid email and missing consent with HTTP 400 and the expected site CORS header. No production subscriber address was supplied for a positive live delivery test, so inbox arrival is unverified. The current feed has no October 7 pick; the site should display the no-pick state until an approved pick is published.
+
+The focused publisher suite passed 15/15. Three existing `bento-release` assertions failed against rewritten production links (`/results` versus `results.html`) when run after the public build; no checkout or referral code changed in this release.
