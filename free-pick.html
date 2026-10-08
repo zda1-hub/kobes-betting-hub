@@ -33,12 +33,11 @@
           <form class="free-pick-gate-form" data-free-pick-gate-form hidden>
             <label for="free-pick-email">Email address</label>
             <input id="free-pick-email" name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@example.com" />
-            <label for="free-pick-name">First name <span>(optional)</span></label>
-            <input id="free-pick-name" name="firstName" maxlength="80" autocomplete="given-name" />
-            <label class="free-pick-check"><input name="legalAge" type="checkbox" required /> I confirm I’m 21+ and betting is permitted where I live.</label>
-            <label class="free-pick-check"><input name="consent" type="checkbox" required /> Email me this pick and occasional Hub updates. I can unsubscribe anytime.</label>
+            <input type="hidden" name="legalAge" value="on" />
+            <input type="hidden" name="consent" value="on" />
             <input class="sr-only" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
             <button class="button button-primary" type="submit">Unlock today’s pick <span aria-hidden="true">→</span></button>
+            <p class="email-consent">By selecting Unlock, I confirm I am 21+, betting is permitted where I live, and I agree to receive this pick and occasional Hub emails. I can unsubscribe anytime. <a href="privacy.html">Privacy</a></p>
             <p class="free-pick-form-status" role="status" data-free-pick-form-status></p>
           </form>
           <a class="button button-primary" data-free-pick-legacy-cta href="join.html#offer">Get the full board <span aria-hidden="true">→</span></a>

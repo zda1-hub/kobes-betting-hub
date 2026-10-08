@@ -30,3 +30,6 @@ The focused publisher suite passed 15/15. Three existing `bento-release` asserti
 
 ## Follow-up: image-card email completeness
 The first release queued pick details but could omit the actual card when an approved pick was image-only. The email now includes the approved caption and a direct link to the same pick card. The outbox identifier also includes the publication timestamp, so an intentional replacement can be emailed once per subscriber. Publisher syntax and focused tests were repeated before this follow-up release.
+
+## Follow-up: restore the simple email form
+The user requested removal of the visible checkboxes and the extra name field. `index.html` and `free-pick.html` now ask for email only, with the same submit-button age and email-consent notice used by the previous homepage signup. The existing backend validation still receives the age and consent attestations. The in-page reveal, email delivery, VIP prompt, and gate switch are unchanged. Verify the public build and live form after deployment.
