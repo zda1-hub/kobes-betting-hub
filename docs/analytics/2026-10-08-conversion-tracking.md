@@ -50,3 +50,5 @@ The private dashboard retains date filtering, sources/campaigns, landing pages, 
 2. Add consent, central named interactions, clean attribution, and dormant Google adapter.
 3. Extend the existing private dashboard and verify the public build, Worker tests, and live behavior after deployment.
 4. Activate GA4/GTM, Google Ads, and optional Meta CAPI only after credentials, consent requirements, and test events are validated.
+
+Reporting interpretation: the visitor funnel and conversion percentage use only measured, consented sessions. Payment totals include every Stripe-verified customer. A payment without a linked session is grouped as `unattributed`, not `direct`, and the dashboard shows that count separately. This prevents a tracking decline from falsely inflating a measured visit conversion rate.
