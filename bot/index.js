@@ -27,6 +27,7 @@ const { syncFreePickResultReplies, resultReplyConfig } = require('./lib/free-pic
 const { buildPublicResults } = require('./lib/public-results');
 const { publicResultRows } = require('./lib/public-result-rows');
 const { recordEligibility } = require('./lib/record-eligibility');
+const { approvalUserIds } = require('./lib/approval-access');
 const { recoverResultsBacklog, readResultsBacklogCursor } = require('./lib/results-backlog');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
@@ -274,7 +275,9 @@ const trendsChannelMap = new Map(
     .filter(([league, channelId]) => league && channelId)
     .map(([league, channelId]) => [league.toLowerCase(), channelId])
 );
-const pickApproverUserIds = listFromEnv(process.env.PICK_APPROVER_USER_IDS);
+// The same authorized Kobe account can decide every private approval card,
+// including picks, trends, expert sheets, and arbitrage, without Render setup.
+const pickApproverUserIds = approvalUserIds(process.env.PICK_APPROVER_USER_IDS);
 const reviewQueueRoot = reviewQueuePath();
 const trendsInboxQueueUrl = (process.env.TRENDS_INBOX_QUEUE_URL || '').replace(/\/$/, '');
 const trendsInboxQueueSecret = process.env.TRENDS_INBOX_QUEUE_SECRET || '';
