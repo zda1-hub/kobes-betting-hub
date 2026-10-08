@@ -395,7 +395,7 @@ async function startArbitragePaperTest() {
     minimumEdgePercent: Number(process.env.ARBITRAGE_MIN_EDGE_PERCENT || 2),
     bookmakers: arbitrageBookmakers(process.env.ARBITRAGE_BOOKMAKERS),
     sports: arbitrageSports(process.env.ARBITRAGE_SPORTS),
-    windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '08:00-15:00').split(',').map(value => value.trim()).filter(Boolean),
+    windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '08:00-18:00').split(',').map(value => value.trim()).filter(Boolean),
     memberPostingEnabled: process.env.ARBITRAGE_MEMBER_POSTING_ENABLED === 'true',
     isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId)
   });
