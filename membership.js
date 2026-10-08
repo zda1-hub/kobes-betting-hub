@@ -165,8 +165,8 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
       body: JSON.stringify({
         offer,
         ...(['referral_trial','first_month_back'].includes(offer) && referralCode ? { referral_code: referralCode } : {}),
-        analytics_session_id: window.KBHAnalytics?.sessionId || null,
-        attribution: window.KBHAnalytics?.attribution || {},
+        analytics_session_id: window.KBHConsent?.allowed() ? window.KBHAnalytics?.sessionId || null : null,
+        attribution: window.KBHConsent?.allowed() ? window.KBHAnalytics?.attribution || {} : {},
       }),
     });
     const result = await response.json();

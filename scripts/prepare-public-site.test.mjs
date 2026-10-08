@@ -65,6 +65,10 @@ test('production site preparation includes every declared public asset', async (
   assert.equal(alias, source);
   assert.match(alias, /https:\/\/kobesbettinghub.com\/managemembership/);
   assert.match(alias, /data-portal-login/);
+  const home = await readFile(new URL('../.public-site/index.html', import.meta.url), 'utf8');
+  assert.match(home, /\/consent\.js/);
+  assert.match(home, /\/analytics-integrations\.js/);
+  assert.doesNotMatch(home, /facebook\.com\/tr\?/);
   const redirects = await readFile(new URL('../.public-site/_redirects', import.meta.url), 'utf8');
   assert.match(redirects, /^\/cancel \/managemembership 301/m);
   assert.match(redirects, /^\/cancel\.html \/managemembership 301/m);

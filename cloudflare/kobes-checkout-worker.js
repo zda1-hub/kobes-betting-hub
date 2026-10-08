@@ -632,10 +632,13 @@ function cleanAttribution(value = {}) {
   return {
     first_source: source(value.first_source) || 'direct', first_medium: text(value.first_medium),
     first_campaign: text(value.first_campaign), first_content: text(value.first_content),
+    first_term: text(value.first_term),
     last_source: source(value.last_source) || source(value.first_source) || 'direct', last_medium: text(value.last_medium),
     last_campaign: text(value.last_campaign), last_content: text(value.last_content),
+    last_term: text(value.last_term),
     utm_source: text(value.utm_source), utm_medium: text(value.utm_medium),
-    utm_campaign: text(value.utm_campaign), utm_content: text(value.utm_content),
+    utm_campaign: text(value.utm_campaign), utm_content: text(value.utm_content), utm_term: text(value.utm_term),
+    gclid: text(value.gclid, 160), fbclid: text(value.fbclid, 160), msclkid: text(value.msclkid, 160),
     referral_identifier: text(value.referral_identifier, 64), document_referrer: text(value.document_referrer, 500),
     referrer_host: text(value.referrer_host), country: text(value.country, 2).toUpperCase(),
     device: text(value.device, 24), browser: text(value.browser, 40),
@@ -2729,6 +2732,30 @@ async function collectEngagement(request, env, origin) {
   return json({ ok: true }, 202, origin);
 }
 
+// Interaction records use the existing page_view row type until the analytics
+// event-name constraint is migrated. The kind field keeps them out of view counts.
+async function collectInteraction(request, env, origin) {
+  if (Number(request.headers.get('content-length') || 0) > 2048) return json({ error: 'Invalid interaction.' }, 413, origin);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const events = new Set(['cta_click', 'form_view', 'form_start', 'form_submit_attempt', 'form_validation_error', 'generate_lead', 'section_view', 'scroll_depth']);
+  const path = data?.path === '/join.html' ? '/join' : data?.path;
+  const identifier = /^[a-z][a-z0-9_]{2,79}$/;
+  if (!uuid.test(data?.session_id || '') || !uuid.test(data?.interaction_id || '') || !events.has(data?.event_name)
+      || typeof path !== 'string' || path.length > 120 || !/^\/[a-z0-9/.-]*$/.test(path)
+      || /^\/(?:admin|admin-analytics|member|partner|creator|welcome)(?:\/|\.|$)/.test(path)
+      || !identifier.test(data?.target_id || '')) return json({ error: 'Invalid interaction.' }, 400, origin);
+  const properties = { kind: 'interaction', action: data.event_name, target_id: data.target_id,
+    location: identifier.test(data.location || '') ? data.location : 'unknown',
+    destination: typeof data.destination === 'string' && /^\/[a-z0-9/.-]{0,119}$/.test(data.destination) ? data.destination : null,
+    cta_text: data.event_name === 'cta_click' && typeof data.cta_text === 'string' && data.cta_text.length <= 100 && !/@|\+?[0-9][0-9 ()-]{7,}/.test(data.cta_text) ? data.cta_text.replace(/[\u0000-\u001f]/g, '').trim() : '',
+    device: requestAttribution(request).device };
+  await recordAnalyticsEvent(env, { eventName: 'page_view', sessionId: data.session_id.toLowerCase(), path,
+    properties, dedupeKey: `interaction:${data.interaction_id.toLowerCase()}` });
+  return json({ ok: true }, 202, origin);
+}
+
 async function readAdminSession(request, env) {
   const token = String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   const [body, signature, ...extra] = token.split('.');
@@ -2919,6 +2946,31 @@ function engagementSummary(events = []) {
     joinSamples, joinAvgForegroundSeconds: joinSamples ? joinSeconds / joinSamples : 0,
     joinAvgMaxScrollPct: joinSamples ? joinScroll / joinSamples : 0, heatmap,
   };
+}
+
+function interactionSummary(events = [], sessions = []) {
+  const interactions = events.filter(event => event.properties?.kind === 'interaction');
+  const byAction = groupCount(interactions, item => item.properties.action);
+  const ctas = new Map(); const forms = new Map();
+  const sessionById = new Map(sessions.map(item => [item.id, item]));
+  for (const event of interactions) {
+    const p = event.properties;
+    const touch = sessionById.get(event.session_id)?.first_touch || {};
+    const source = String(touch.first_source || 'direct').slice(0, 40);
+    const campaign = String(touch.first_campaign || 'uncategorized').slice(0, 120);
+    if (p.action === 'cta_click') {
+      const key = `${p.target_id}:${p.location}:${event.path}:${source}:${campaign}`;
+      const row = ctas.get(key) || { id: p.target_id, location: p.location, path: event.path, source, campaign, clicks: 0, visitors: new Set() };
+      row.clicks += 1; if (event.session_id) row.visitors.add(event.session_id); ctas.set(key, row);
+    }
+    if (p.action.startsWith('form_') || p.action === 'generate_lead') {
+      const key = `${p.target_id}:${source}:${campaign}`;
+      const row = forms.get(key) || { id: p.target_id, source, campaign, views: 0, starts: 0, attempts: 0, errors: 0, leads: 0 };
+      const field = ({ form_view: 'views', form_start: 'starts', form_submit_attempt: 'attempts', form_validation_error: 'errors', generate_lead: 'leads' })[p.action];
+      if (field) row[field] += 1; forms.set(key, row);
+    }
+  }
+  return { byAction, ctas: [...ctas.values()].map(row => ({ ...row, uniqueVisitors: row.visitors.size, visitors: undefined })).sort((a, b) => b.clicks - a.clicks), forms: [...forms.values()] };
 }
 
 function dashboardReportingData(raw, excludedCustomerConfig = '') {
@@ -3213,7 +3265,7 @@ async function adminAnalytics(request, env, origin) {
     scoreboard: { todayPhoenix, activePaid: eligible.length, mrrCents: Math.round(mrr), newPaidToday, cancelledToday: cancellationTodayComplete ? cancelledToday : null, netAddsToday: cancellationTodayComplete ? newPaidToday - cancelledToday : null, newPaidLast7, netAddsLast7: cancellationLast7Complete ? newPaidLast7 - cancelledLast7 : null },
     traffic: { uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
     conversion: { funnel, offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), purchaseConversionRate: rangedSessions.length ? countEvents('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: countEvents('payment_completed') ? countEvents('vip_activated') / countEvents('payment_completed') : 0 },
-    engagement: engagementSummary(rangedEvents),
+    engagement: engagementSummary(rangedEvents), interactions: interactionSummary(rangedEvents, rangedSessions),
     revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPaymentSummary.attemptCount, failedInvoices: failedPaymentSummary.invoiceCount, affectedCustomers: failedPaymentSummary.affectedCustomers, openFailedInvoices: failedPaymentSummary.openInvoices, recoveredFailedInvoices: failedPaymentSummary.recoveredInvoices, introRevenueCents: invoiceWithinRange.filter(item => [1000, 1999].includes(item.amountPaid)).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
     membership: { active: eligible.length, intro: eligible.filter(item => item.offer === 'starter').length, monthly: eligible.filter(item => ['trial_2_day','referral_trial','first_month_back'].includes(item.offer)).length, sixMonth: eligible.filter(item => item.offer === 'six_month').length, annual: eligible.filter(item => item.offer === 'annual').length, newMembers: countEvents('payment_completed'), renewals: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason === 'subscription_cycle').length, scheduledCancellations: eligible.filter(item => item.cancel_at_period_end || item.cancel_at).length, actualCancellations: canceled.filter(item => range.includes(item.updated_at)).length, duplicateGroups, duplicateCount: duplicateGroups.length, highRiskDuplicateCount: duplicateGroups.filter(item => item.risk === 'high').length, members },
     discord: { paidWithoutVip: paidWithoutVipDetails.length, roleCheckUnavailable: roleCheckUnavailableDetails.length, vipActive: activeIds.size, pending: (associations || []).filter(item => item.status === 'VIP_PENDING').length, failed: (associations || []).filter(item => item.status === 'VIP_FAILED').length, recovered: (associations || []).filter(item => item.status === 'VIP_ACTIVE' && Number(item.activation_attempts || 0) > 1).length, paidDiscordMissing: paidWithoutVipDetails.filter(item => !item.discordConnected).length, vipWithoutEntitlement, details: [...paidWithoutVipDetails, ...roleCheckUnavailableDetails] },
@@ -3424,6 +3476,7 @@ export default {
     if (request.method === 'POST' && url.pathname === '/admin/retry-vip') return adminRetryVip(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/analytics/event') return collectAnalytics(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/analytics/engagement') return collectEngagement(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/analytics/interaction') return collectInteraction(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/checkout/prepare') {
       const limited = await checkoutRateLimitResponse(request, env, origin);
       return limited || prepareCheckout(request, env, origin);
@@ -3458,6 +3511,7 @@ export default {
 
 export const __test = {
   engagementSummary,
+  interactionSummary,
   verifiedPurchaseReceipt,
   dashboardReportingData,
   summarizeFailedPayments,

@@ -72,6 +72,8 @@ const publicFiles = [
   'first-month-promo.js',
   'membership-theme.css',
   'analytics.js',
+  'consent.js',
+  'analytics-integrations.js',
   'meta-pixel.js',
   'welcome.html',
   'welcome.js',
@@ -184,13 +186,22 @@ export async function preparePublicSite({ env = process.env } = {}) {
 
   // First-party page views are injected into every public HTML artifact so the
   // funnel has one consistent session identity without third-party trackers.
-  const htmlFiles = [...publicFiles, ...guideFiles].filter(file => file.endsWith('.html'));
+  const trackingConfig = membershipConfig.environment === 'production' ? {
+    gtm: /^GTM-[A-Z0-9]+$/.test(env.KBH_GTM_ID || '') ? env.KBH_GTM_ID : '',
+    ga4: /^G-[A-Z0-9]+$/.test(env.KBH_GA4_ID || '') ? env.KBH_GA4_ID : '',
+    googleAds: /^AW-[0-9]+$/.test(env.KBH_GOOGLE_ADS_ID || '') ? env.KBH_GOOGLE_ADS_ID : '',
+    leadLabel: /^[A-Za-z0-9_-]+$/.test(env.KBH_GOOGLE_ADS_LEAD_LABEL || '') ? env.KBH_GOOGLE_ADS_LEAD_LABEL : '',
+    purchaseLabel: /^[A-Za-z0-9_-]+$/.test(env.KBH_GOOGLE_ADS_PURCHASE_LABEL || '') ? env.KBH_GOOGLE_ADS_PURCHASE_LABEL : '',
+  } : { gtm: '', ga4: '', googleAds: '', leadLabel: '', purchaseLabel: '' };
+  const htmlFiles = [...publicFiles, ...guideFiles].filter(file => file.endsWith('.html') && !/^(?:admin|member|partner|creator)(?:-analytics)?\.html$/.test(file));
   await Promise.all(htmlFiles.map(async file => {
     const outputPath = path.join(outputRoot, file);
     const source = await readFile(outputPath, 'utf8');
-    const withAnalytics = source.includes('src="analytics.js')
-      ? source
-      : source.replace('</body>', '  <script src="/analytics.js?v=20261008-engagement"></script>\n  </body>');
+    const withConsent = source.includes('src="/consent.js') ? source : source.replace('</head>', '  <script src="/consent.js?v=20261008"></script>\n</head>');
+    const withGoogle = withConsent.includes('src="/analytics-integrations.js') ? withConsent : withConsent.replace('</head>', `  <script>window.__KBH_TRACKING_CONFIG__=${JSON.stringify(trackingConfig)}</script>\n  <script src="/analytics-integrations.js?v=20261008"></script>\n</head>`);
+    const withAnalytics = withGoogle.includes('src="analytics.js')
+      ? withGoogle
+      : withGoogle.replace('</body>', '  <script src="/analytics.js?v=20261008-funnel"></script>\n  </body>');
     await writeFile(outputPath, useCanonicalPageLinks(withAnalytics, file));
   }));
 
@@ -211,9 +222,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
     if (!source.includes('src="/meta-pixel.js')) {
       source = source.replace('</head>', '  <script src="/meta-pixel.js?v=20261004-purchase" defer></script>\n</head>');
     }
-    if (!source.includes('facebook.com/tr?id=4640857832799621')) {
-      source = source.replace(/<body([^>]*)>/i, '<body$1>\n  <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=4640857832799621&amp;ev=PageView&amp;noscript=1"></noscript>');
-    }
+    // A noscript pixel would bypass the visitor's tracking choice.
     await writeFile(outputPath, source);
   }));
 

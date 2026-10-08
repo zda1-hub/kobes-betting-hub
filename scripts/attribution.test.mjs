@@ -15,11 +15,11 @@ function visit({ url, referrer = '', storage = new Map(), now = Date.now() }) {
     location: { hostname: parsed.hostname, pathname: parsed.pathname, search: parsed.search },
     document: { referrer },
     fetch: async (requestUrl, options) => { calls.push({ requestUrl, body: JSON.parse(options.body) }); return { ok: true }; },
-    window: { __KBH_MEMBERSHIP_CONFIG__: { workerOrigin: 'https://worker.test' } },
+    window: { __KBH_MEMBERSHIP_CONFIG__: { workerOrigin: 'https://worker.test' }, KBHConsent: { allowed: () => true } },
   };
   context.window.KBHAnalytics = null;
   vm.runInNewContext(source, context);
-  return { attribution: context.window.KBHAnalytics.attribution, storage, event: calls[0].body };
+  return { attribution: context.window.KBHAnalytics.attribution, storage, event: calls[0]?.body };
 }
 
 test('Discord campaign is normalized and retained through an OAuth/Stripe return', () => {
@@ -94,5 +94,6 @@ test('a returning browser starts a new visit after 30 minutes', () => {
   const first = visit({ url: 'https://kobesbettinghub.com/', storage, now: 100000000 });
   const second = visit({ url: 'https://kobesbettinghub.com/join?utm_source=ig', storage, now: 101800001 });
   assert.notEqual(second.event.session_id, first.event.session_id);
-  assert.equal(second.attribution.first_source, 'instagram');
+  assert.equal(second.attribution.first_source, 'direct');
+  assert.equal(second.attribution.last_source, 'instagram');
 });

@@ -141,6 +141,8 @@
       const result = await response.json();
       if (!response.ok || !result.ok) throw new Error(result.error || 'Please try again.');
       track('submit_success');
+      window.KBHAnalytics?.track('generate_lead', `${page === 'home' ? 'home' : 'free_pick'}_free_pick_gate`, 'free_pick');
+      window.KBHMeta?.trackLead(`${page === 'home' ? 'home' : 'free_pick'}_free_pick_gate`);
       nodes.form.hidden = true;
       const revealedPick = Boolean(result.hasPick && renderPick(result.pick));
       if (revealedPick) track('pick_revealed');
