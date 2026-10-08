@@ -17,3 +17,6 @@
 @media(max-width:600px){.membership-design .mock-plan.one-year .plan-subtitle{font-size:14px}}
 @media(prefers-reduced-motion:reduce){.membership-design .offer-attention{animation:none}}
 .membership-design .join-flow-note{margin:0 0 12px;text-align:center;color:#354159;font-size:13px;font-weight:600;line-height:1.4}
+
+.membership-design .first-month .new-member-badge{display:inline-block;align-self:center;margin:0 0 3px;padding:5px 10px;border-radius:999px;background:#fff;color:#0074ce;font:700 10px/1.2 Arial,sans-serif;box-shadow:0 2px 6px #00000022;letter-spacing:.02em}
+@media(max-width:600px){.membership-design .first-month .new-member-badge{font-size:8px;padding:4px 7px}}

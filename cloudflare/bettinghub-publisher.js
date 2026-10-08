@@ -330,7 +330,7 @@ async function unlockFreePick(request, env, ctx) {
   const source = String(data.source || 'direct').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 60) || 'direct';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 ||
       (firstName && !/^[\p{L}\p{M} .'-]+$/u.test(firstName)) || data.legalAge !== true || data.consent !== true) {
-    return json({ error: 'Enter a valid email and confirm both checkboxes.' }, 400, headers);
+    return json({ error: 'Enter a valid email and confirm you meet the age and email terms.' }, 400, headers);
   }
   if (data.website) return json({ ok: true, hasPick: false, message: 'Thanks.' }, 200, headers);
   if (!await freePickGateEnabled(env)) return json({ error: 'The email gate is currently off. Refresh this page.' }, 409, headers);
