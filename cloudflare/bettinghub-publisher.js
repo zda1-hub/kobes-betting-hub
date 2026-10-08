@@ -149,6 +149,7 @@ async function handleRequest(request, env, ctx) {
     return json({ service: "bettinghub-publisher", status: "ready", xConnected: await hasXConnection(env), freePickReady: hasFreePickStore(env) });
   }
   if (url.pathname === "/api/email/subscribe" && request.method === "POST") return subscribeEmail(request, env);
+  if (url.pathname === "/api/admin/email-stats" && request.method === "GET") return emailStats(request, env);
   if (url.pathname === "/api/email/unsubscribe" && request.method === "GET") return unsubscribeEmail(url, env);
   if (url.pathname === "/api/free-pick/gate" && request.method === "GET") return getFreePickGate(request, env);
   if (url.pathname === "/api/free-pick/gate" && request.method === "PUT") return putFreePickGate(request, env);
@@ -206,8 +207,34 @@ async function ensureEmailSubscribers(env) {
       status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL, sent_at TEXT
     )`),
-    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_free_pick_email_outbox_pending ON free_pick_email_outbox (status, created_at)")
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_free_pick_email_outbox_pending ON free_pick_email_outbox (status, created_at)"),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS free_pick_unlock_events (
+      id TEXT PRIMARY KEY, source TEXT NOT NULL, has_pick INTEGER NOT NULL, occurred_at TEXT NOT NULL
+    )`)
   ]);
+}
+
+async function emailStats(request, env) {
+  if (!await hasBearer(request, env.DASHBOARD_STATS_SECRET)) return json({ error: 'Unauthorized' }, 401);
+  const url = new URL(request.url);
+  const start = url.searchParams.get('start') || '1970-01-01T00:00:00.000Z';
+  const end = url.searchParams.get('end') || new Date().toISOString();
+  if (![start, end].every(value => /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value) && Number.isFinite(Date.parse(value))) || start >= end) {
+    return json({ error: 'Invalid date range' }, 400);
+  }
+  await ensureEmailSubscribers(env);
+  const [active, optedIn, unlocks, withPick, delivered, pending] = await Promise.all([
+    env.DB.prepare('SELECT COUNT(*) AS count FROM email_subscribers WHERE subscribed = 1').first(),
+    env.DB.prepare('SELECT COUNT(*) AS count FROM email_subscribers WHERE subscribed = 1 AND consent_at >= ? AND consent_at < ?').bind(start, end).first(),
+    env.DB.prepare('SELECT COUNT(*) AS count FROM free_pick_unlock_events WHERE occurred_at >= ? AND occurred_at < ?').bind(start, end).first(),
+    env.DB.prepare('SELECT COUNT(*) AS count FROM free_pick_unlock_events WHERE has_pick = 1 AND occurred_at >= ? AND occurred_at < ?').bind(start, end).first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM free_pick_email_outbox WHERE status = 'sent' AND sent_at >= ? AND sent_at < ?").bind(start, end).first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM free_pick_email_outbox WHERE status != 'sent'").first(),
+  ]);
+  return json({ activeSubscribers: Number(active?.count || 0), optIns: Number(optedIn?.count || 0),
+    unlocks: Number(unlocks?.count || 0), unlocksWithPick: Number(withPick?.count || 0),
+    pickEmailsSent: Number(delivered?.count || 0), pickEmailsPending: Number(pending?.count || 0) }, 200,
+    { 'cache-control': 'no-store' });
 }
 
 function leadCors(request) {
@@ -367,6 +394,8 @@ async function unlockFreePick(request, env, ctx) {
       VALUES (?, ?, ?, ?, ?)`).bind(id, email, JSON.stringify(pick), token, now).run();
     if (ctx?.waitUntil) ctx.waitUntil(deliverPendingFreePickEmails(env, id));
   }
+  await env.DB.prepare('INSERT INTO free_pick_unlock_events (id, source, has_pick, occurred_at) VALUES (?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), source, pick ? 1 : 0, now).run();
   headers['cache-control'] = 'no-store';
   return json({ ok: true, hasPick: Boolean(pick), pick, message: pick ? 'Unlocked. We’re sending the same pick to your email.' : 'You’re on the list. There is no free pick today.' }, 200, headers);
 }
