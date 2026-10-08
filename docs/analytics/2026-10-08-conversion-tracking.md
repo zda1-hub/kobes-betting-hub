@@ -52,3 +52,5 @@ The private dashboard retains date filtering, sources/campaigns, landing pages, 
 4. Activate GA4/GTM, Google Ads, and optional Meta CAPI only after credentials, consent requirements, and test events are validated.
 
 Reporting interpretation: the visitor funnel and conversion percentage use only measured, consented sessions. Payment totals include every Stripe-verified customer. A payment without a linked session is grouped as `unattributed`, not `direct`, and the dashboard shows that count separately. This prevents a tracking decline from falsely inflating a measured visit conversion rate.
+
+Email-list source handling: both the gated free-pick form and legacy signup send the consented last-touch source at submission time. The publisher stores the existing `free-pick-subscriber` tag and source in D1. If optional tracking is declined, it records `direct` without creating an analytics session. The form success signal means the subscriber row was stored; email delivery is separately queued/retried and is not counted as delivered by `generate_lead`.
