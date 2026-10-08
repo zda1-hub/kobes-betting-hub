@@ -55,7 +55,7 @@ services:
       - key: ARBITRAGE_MIN_EDGE_PERCENT
         value: "2"
       - key: ARBITRAGE_WINDOWS_ARIZONA
-        value: 08:00-15:00
+        value: 08:00-18:00
       - key: SPORT_CHANNEL_MAP
         sync: false
       - key: PUBLISHER_ROLE_IDS
