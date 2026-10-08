@@ -25,3 +25,7 @@ After: The dashboard links to Google Analytics; shows active subscriber count, o
 - Discord invite attribution is conservative: ambiguous, unmapped, or unavailable invite data is shown as unknown. The bot has recent production receipts confirming join recording is enabled.
 
 State: local, pending publication.
+
+## Publication follow-up
+
+PR #192 merged to main at `f9cb808`. The publisher Worker was deployed as `a00f737f-3e49-4762-a4d0-5856bca7a8e7`; the checkout Worker as `14dcb045-57d8-4bcf-939a-0df3109563be`; and the public site Worker as `2e8ccaad-d864-4938-9086-3ebd3a6efdbe`, using the GA4 ID for the static build. Both backend Workers have the same private `DASHBOARD_STATS_SECRET`. The live subscriber endpoint returned HTTP 401 without the secret and HTTP 200 with it. Its initial aggregate result was 4 active subscribers, 4 opt-ins over the all-time test range, 0 newly recorded unlock completions, and no pending pick emails. The live `/admin/analytics` HTML contains the new report sections and the checkout health endpoint returned HTTP 200. Full dashboard rendering could not be inspected in the in-app browser because its Discord account was not signed in; no admin session was bypassed. State: published; authorized dashboard visual verification remains available when the owner signs in.
