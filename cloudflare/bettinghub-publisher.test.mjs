@@ -102,6 +102,26 @@ test('text-only Free Pick remains readable after publication', async () => {
   assert.equal(current.storyUrl, null);
 });
 
+test('email gate exposes only availability, supports an authorized switch, and rejects invalid consent', async () => {
+  const env = { FREE_PICK_KV: memoryKv(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret' };
+  const endpoint = 'https://publisher.test/api/free-pick/gate';
+  const before = await worker.fetch(new Request(endpoint, { headers: { origin: 'https://kobesbettinghub.com' } }), env);
+  assert.equal(before.status, 200);
+  assert.deepEqual(await before.json(), { enabled: false, date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()), hasPick: false });
+  assert.equal((await worker.fetch(new Request(endpoint, { method: 'PUT', body: JSON.stringify({ enabled: true }) }), env)).status, 401);
+  const enabled = await worker.fetch(new Request(endpoint, { method: 'PUT', headers: { authorization: 'Bearer fixture-secret' }, body: JSON.stringify({ enabled: true, dayStatus: 'no_pick' }) }), env);
+  assert.equal(enabled.status, 200);
+  const state = await (await worker.fetch(new Request(endpoint), env)).json();
+  assert.equal(state.enabled, true);
+  assert.equal(state.hasPick, false);
+  const invalid = await worker.fetch(new Request('https://publisher.test/api/free-pick/unlock', {
+    method: 'POST', headers: { origin: 'https://kobesbettinghub.com', 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'person@example.com', legalAge: true, consent: false }),
+  }), env);
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.headers.get('access-control-allow-origin'), 'https://kobesbettinghub.com');
+});
+
 test('result reply parent lookup requires a confirmed original X receipt', async () => {
   const env = {
     FREE_PICK_X_QUEUE_SECRET: 'test-key', FREE_PICK_KV: memoryKv(),
