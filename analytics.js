@@ -72,4 +72,61 @@
     method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ event_name: eventName, session_id: sessionId, path: location.pathname, attribution: current, dedupe_key: `${eventName}:${sessionId}:${location.pathname}:${bucket}` }),
   }).catch(() => {});
+
+  // One bounded, anonymous engagement sample per page load. Never collect text,
+  // form values, element identifiers, or clicks inside private inputs.
+  if (/^\/(?:admin|admin-analytics|member|partner|creator|welcome)(?:\/|\.|$)/.test(location.pathname)) return;
+  const pageId = crypto.randomUUID();
+  const path = location.pathname === '/join.html' ? '/join' : location.pathname;
+  const cells = new Map();
+  let visibleSince = document.visibilityState === 'visible' ? performance.now() : null;
+  let foregroundMs = 0;
+  let maxScroll = 0;
+  let clicks = 0;
+  let lastReport = 0;
+  const measure = () => {
+    const height = Math.max(document.documentElement.scrollHeight - innerHeight, 0);
+    maxScroll = Math.max(maxScroll, height ? Math.round(scrollY / height * 100) : 100);
+  };
+  const elapsed = () => foregroundMs + (visibleSince === null ? 0 : Math.max(0, performance.now() - visibleSince));
+  const report = (force = false) => {
+    if (!force && performance.now() - lastReport < 14000) return;
+    lastReport = performance.now();
+    measure();
+    const payload = JSON.stringify({
+      session_id: sessionId, page_id: pageId, path,
+      foreground_seconds: Math.min(1800, Math.round(elapsed() / 1000)),
+      max_scroll_pct: Math.min(100, maxScroll), click_count: clicks,
+      click_cells: [...cells].map(([cell, count]) => ({ cell, count })),
+    });
+    fetch(`${workerOrigin}/analytics/engagement`, {
+      method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: payload,
+    }).catch(() => {});
+  };
+  addEventListener('scroll', measure, { passive: true });
+  document.addEventListener('click', event => {
+    if (event.target.closest?.('input,textarea,select,[contenteditable],form')) return;
+    if (clicks >= 20) return;
+    if (path === '/join') {
+      const width = Math.max(innerWidth, 1);
+      const height = Math.max(document.documentElement.scrollHeight, 1);
+      const x = Math.min(11, Math.max(0, Math.floor(event.clientX / width * 12)));
+      const y = Math.min(11, Math.max(0, Math.floor((event.clientY + scrollY) / height * 12)));
+      const cell = y * 12 + x;
+      cells.set(cell, Math.min(20, (cells.get(cell) || 0) + 1));
+    }
+    clicks += 1;
+    report();
+  }, { passive: true });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && visibleSince !== null) {
+      foregroundMs += performance.now() - visibleSince;
+      visibleSince = null;
+      report(true);
+    } else if (document.visibilityState === 'visible' && visibleSince === null) {
+      visibleSince = performance.now();
+    }
+  });
+  addEventListener('pagehide', () => report(true));
+  setInterval(() => { if (document.visibilityState === 'visible') report(); }, 15000);
 })();

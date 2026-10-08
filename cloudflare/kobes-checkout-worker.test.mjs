@@ -31,6 +31,49 @@ test('checkout worker health endpoint responds without credentials', async () =>
   assert.deepEqual(await response.json(), { ok: true, version: null });
 });
 
+test('engagement summary measures quick exits and join click density without treating ordinary page views as samples', () => {
+  const events = [
+    { session_id: 's1', path: '/join', properties: { kind: 'engagement', foreground_seconds: 6, click_count: 0, max_scroll_pct: 20, device: 'mobile', click_cells: [] } },
+    { session_id: 's2', path: '/', properties: { kind: 'engagement', foreground_seconds: 12, click_count: 1, max_scroll_pct: 50, device: 'desktop', click_cells: [] } },
+    { session_id: 's2', path: '/join', properties: { kind: 'engagement', foreground_seconds: 25, click_count: 2, max_scroll_pct: 80, device: 'desktop', click_cells: [{ cell: 13, count: 2 }] } },
+    { session_id: 's3', path: '/join', properties: {} },
+  ];
+  const report = workerTest.engagementSummary(events);
+  assert.equal(report.measuredSessions, 2);
+  assert.equal(report.measuredPageViews, 3);
+  assert.equal(report.quickExitRate, .5);
+  assert.equal(report.singlePageRate, .5);
+  assert.equal(report.avgForegroundSeconds, 21.5);
+  assert.equal(report.joinSamples, 2);
+  assert.equal(report.joinAvgMaxScrollPct, 50);
+  assert.equal(report.heatmap.desktop[13], 2);
+});
+
+test('engagement endpoint rejects invalid or sensitive payloads before writing', async () => {
+  const base = { session_id: '11111111-1111-4111-8111-111111111111', page_id: '22222222-2222-4222-8222-222222222222', path: '/join', foreground_seconds: 12, max_scroll_pct: 45, click_count: 1, click_cells: [{ cell: 3, count: 1 }] };
+  for (const payload of [{ ...base, path: '/admin/analytics' }, { ...base, click_cells: [{ cell: 144, count: 1 }] }, { ...base, foreground_seconds: 99999 }]) {
+    const response = await worker.fetch(new Request('https://worker.test/analytics/engagement', { method: 'POST', body: JSON.stringify(payload) }), {});
+    assert.equal(response.status, 400);
+  }
+});
+
+test('engagement endpoint stores a bounded sample without request text or private fields', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const writes = [];
+  globalThis.fetch = async (input, options) => {
+    writes.push({ url: String(input), method: options.method, body: JSON.parse(options.body) });
+    return new Response(null, { status: 204 });
+  };
+  const payload = { session_id: '11111111-1111-4111-8111-111111111111', page_id: '22222222-2222-4222-8222-222222222222', path: '/join', foreground_seconds: 12, max_scroll_pct: 45, click_count: 1, click_cells: [{ cell: 3, count: 1 }], typed_email: 'do-not-store@example.com' };
+  const response = await worker.fetch(new Request('https://worker.test/analytics/engagement', { method: 'POST', body: JSON.stringify(payload) }), { SUPABASE_URL: 'https://database.test', SUPABASE_SECRET_KEY: 'db_test' });
+  assert.equal(response.status, 202);
+  assert.deepEqual(writes.map(write => write.method), ['POST', 'PATCH']);
+  assert.equal(writes[0].body.event_name, 'page_view');
+  assert.equal(writes[1].body.properties.kind, 'engagement');
+  assert.equal(JSON.stringify(writes).includes('do-not-store@example.com'), false);
+});
+
 test('payment reminders require an unpaid live subscription invoice and a real Stripe payment link', () => {
   const invoice = {
     id: 'in_123', livemode: true, status: 'open', collection_method: 'charge_automatically',

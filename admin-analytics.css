@@ -16,3 +16,8 @@
 .data-notice{padding:10px 14px;border:1px solid #efcfaa;border-radius:12px;background:#fff6e9;margin:12px 0;font-size:14px}.data-notice summary{min-height:28px;font-weight:700;cursor:pointer}.data-notice p{margin:10px 0 2px;overflow-wrap:anywhere}.conversion-signal{font-size:14px;padding:12px 14px;background:#fff3e5;border-radius:12px;line-height:1.45;margin:14px 0 0}.summary-note{font-size:13px}.refresh-button{border:0}
 
 @media(max-width:640px){.member-table tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:14px}.member-table td{min-width:0}.member-table td:first-child,.member-table td:nth-child(6),.member-table td:last-child,.member-table td[colspan]{grid-column:1/-1}.member-table td:first-child strong{font-size:17px}.member-table td{padding:11px 0}.member-table td:nth-child(4){overflow-wrap:anywhere}}
+.heatmap-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:18px;max-width:700px}
+.heatmap-pair h4{margin:8px 0}
+.click-heatmap{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:2px;aspect-ratio:1/1;padding:8px;background:#f4f6f8;border:1px solid #dce1e5;border-radius:16px}
+.click-heatmap span{display:block;border-radius:2px;background:rgba(255,114,20,var(--heat));min-width:0}
+.engagement-panel .metric-grid{margin:16px 0 24px}

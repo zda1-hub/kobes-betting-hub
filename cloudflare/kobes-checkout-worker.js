@@ -2699,6 +2699,36 @@ async function collectAnalytics(request, env, origin) {
   return json({ ok: true }, 202, origin);
 }
 
+async function collectEngagement(request, env, origin) {
+  if (Number(request.headers.get('content-length') || 0) > 4096) return json({ error: 'Invalid engagement sample.' }, 413, origin);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  const path = data?.path === '/join.html' ? '/join' : data?.path;
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuid.test(data?.session_id || '') || !uuid.test(data?.page_id || '') || typeof path !== 'string' || path.length > 120 || !/^\/[a-z0-9/.-]*$/.test(path) || /^\/(?:admin|admin-analytics|member|partner|creator|welcome)(?:\/|\.|$)/.test(path)) return json({ error: 'Invalid engagement sample.' }, 400, origin);
+  const bounded = (value, max) => Number.isInteger(value) && value >= 0 && value <= max ? value : null;
+  const seconds = bounded(data.foreground_seconds, 1800);
+  const scroll = bounded(data.max_scroll_pct, 100);
+  const clickCount = bounded(data.click_count, 20);
+  if (seconds === null || scroll === null || clickCount === null || !Array.isArray(data.click_cells) || data.click_cells.length > 20) return json({ error: 'Invalid engagement sample.' }, 400, origin);
+  const cells = [];
+  for (const item of data.click_cells) {
+    const cell = bounded(item?.cell, 143), count = bounded(item?.count, 20);
+    if (cell === null || count === null) return json({ error: 'Invalid engagement sample.' }, 400, origin);
+    cells.push({ cell, count });
+  }
+  const properties = { kind: 'engagement', page_id: data.page_id.toLowerCase(), foreground_seconds: seconds, max_scroll_pct: scroll, click_count: clickCount, click_cells: cells, device: requestAttribution(request).device };
+  const dedupeKey = `engagement:${data.page_id.toLowerCase()}`;
+  await supabase(env, 'analytics_events?on_conflict=dedupe_key', {
+    method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal',
+    body: { id: crypto.randomUUID(), dedupe_key: dedupeKey, session_id: data.session_id.toLowerCase(), event_name: 'page_view', path, properties },
+  });
+  await supabase(env, `analytics_events?dedupe_key=eq.${encodeURIComponent(dedupeKey)}`, {
+    method: 'PATCH', prefer: 'return=minimal', body: { properties },
+  });
+  return json({ ok: true }, 202, origin);
+}
+
 async function readAdminSession(request, env) {
   const token = String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   const [body, signature, ...extra] = token.split('.');
@@ -2858,6 +2888,39 @@ function roleCheckFromGuildList(item, guildMembers, complete, vipRoleId) {
 }
 
 // Reporting exclusions never modify billing records, entitlements, or access checks.
+function engagementSummary(events = []) {
+  const samples = events.filter(event => event.properties?.kind === 'engagement' && event.session_id);
+  const bySession = new Map();
+  const heatmap = { mobile: Array(144).fill(0), desktop: Array(144).fill(0) };
+  let joinSeconds = 0, joinSamples = 0, joinScroll = 0;
+  for (const event of samples) {
+    const p = event.properties;
+    const seconds = Math.min(1800, Math.max(0, Number(p.foreground_seconds) || 0));
+    const clicks = Math.min(20, Math.max(0, Number(p.click_count) || 0));
+    const current = bySession.get(event.session_id) || { pages: 0, seconds: 0, clicks: 0 };
+    current.pages += 1; current.seconds += seconds; current.clicks += clicks;
+    bySession.set(event.session_id, current);
+    if (event.path !== '/join') continue;
+    joinSamples += 1; joinSeconds += seconds; joinScroll += Math.min(100, Math.max(0, Number(p.max_scroll_pct) || 0));
+    const device = p.device === 'mobile' ? 'mobile' : 'desktop';
+    for (const point of Array.isArray(p.click_cells) ? p.click_cells : []) {
+      const cell = Number(point.cell), count = Number(point.count);
+      if (Number.isInteger(cell) && cell >= 0 && cell < 144 && Number.isInteger(count) && count > 0 && count <= 20) heatmap[device][cell] += count;
+    }
+  }
+  const values = [...bySession.values()];
+  const quickExits = values.filter(item => item.pages === 1 && item.seconds < 10 && item.clicks === 0).length;
+  const onePage = values.filter(item => item.pages === 1).length;
+  return {
+    measuredSessions: values.length, measuredPageViews: samples.length,
+    avgForegroundSeconds: values.length ? values.reduce((sum, item) => sum + item.seconds, 0) / values.length : 0,
+    singlePageRate: values.length ? onePage / values.length : 0,
+    quickExitRate: values.length ? quickExits / values.length : 0,
+    joinSamples, joinAvgForegroundSeconds: joinSamples ? joinSeconds / joinSamples : 0,
+    joinAvgMaxScrollPct: joinSamples ? joinScroll / joinSamples : 0, heatmap,
+  };
+}
+
 function dashboardReportingData(raw, excludedCustomerConfig = '') {
   const customerIds = new Set(String(excludedCustomerConfig).split(',').map(value => value.trim()).filter(Boolean));
   if ([...customerIds].some(id => !/^cus_[A-Za-z0-9]+$/.test(id))) throw new Error('Invalid dashboard test customer configuration.');
@@ -3150,6 +3213,7 @@ async function adminAnalytics(request, env, origin) {
     scoreboard: { todayPhoenix, activePaid: eligible.length, mrrCents: Math.round(mrr), newPaidToday, cancelledToday: cancellationTodayComplete ? cancelledToday : null, netAddsToday: cancellationTodayComplete ? newPaidToday - cancelledToday : null, newPaidLast7, netAddsLast7: cancellationLast7Complete ? newPaidLast7 - cancelledLast7 : null },
     traffic: { uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
     conversion: { funnel, offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), purchaseConversionRate: rangedSessions.length ? countEvents('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: countEvents('payment_completed') ? countEvents('vip_activated') / countEvents('payment_completed') : 0 },
+    engagement: engagementSummary(rangedEvents),
     revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPaymentSummary.attemptCount, failedInvoices: failedPaymentSummary.invoiceCount, affectedCustomers: failedPaymentSummary.affectedCustomers, openFailedInvoices: failedPaymentSummary.openInvoices, recoveredFailedInvoices: failedPaymentSummary.recoveredInvoices, introRevenueCents: invoiceWithinRange.filter(item => [1000, 1999].includes(item.amountPaid)).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
     membership: { active: eligible.length, intro: eligible.filter(item => item.offer === 'starter').length, monthly: eligible.filter(item => ['trial_2_day','referral_trial','first_month_back'].includes(item.offer)).length, sixMonth: eligible.filter(item => item.offer === 'six_month').length, annual: eligible.filter(item => item.offer === 'annual').length, newMembers: countEvents('payment_completed'), renewals: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason === 'subscription_cycle').length, scheduledCancellations: eligible.filter(item => item.cancel_at_period_end || item.cancel_at).length, actualCancellations: canceled.filter(item => range.includes(item.updated_at)).length, duplicateGroups, duplicateCount: duplicateGroups.length, highRiskDuplicateCount: duplicateGroups.filter(item => item.risk === 'high').length, members },
     discord: { paidWithoutVip: paidWithoutVipDetails.length, roleCheckUnavailable: roleCheckUnavailableDetails.length, vipActive: activeIds.size, pending: (associations || []).filter(item => item.status === 'VIP_PENDING').length, failed: (associations || []).filter(item => item.status === 'VIP_FAILED').length, recovered: (associations || []).filter(item => item.status === 'VIP_ACTIVE' && Number(item.activation_attempts || 0) > 1).length, paidDiscordMissing: paidWithoutVipDetails.filter(item => !item.discordConnected).length, vipWithoutEntitlement, details: [...paidWithoutVipDetails, ...roleCheckUnavailableDetails] },
@@ -3359,6 +3423,7 @@ export default {
     if (request.method === 'GET' && url.pathname === '/admin/analytics') return adminAnalytics(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/admin/retry-vip') return adminRetryVip(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/analytics/event') return collectAnalytics(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/analytics/engagement') return collectEngagement(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/checkout/prepare') {
       const limited = await checkoutRateLimitResponse(request, env, origin);
       return limited || prepareCheckout(request, env, origin);
@@ -3392,6 +3457,7 @@ export default {
 };
 
 export const __test = {
+  engagementSummary,
   verifiedPurchaseReceipt,
   dashboardReportingData,
   summarizeFailedPayments,
