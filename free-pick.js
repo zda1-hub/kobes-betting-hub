@@ -8,6 +8,7 @@
     line: document.querySelector('[data-free-pick-line]'), event: document.querySelector('[data-free-pick-event]'),
     reason: document.querySelector('[data-free-pick-reason]'), placeholder: document.querySelector('[data-free-pick-placeholder]'),
     form: document.querySelector('[data-free-pick-gate-form]'), vip: document.querySelector('[data-free-pick-vip]'),
+    noPickCta: document.querySelector('[data-free-pick-no-pick-cta]'),
   };
   if (!nodes.status || !nodes.form) return;
   const page = document.querySelector('.pick-tile') ? 'home' : 'free-pick';
@@ -32,7 +33,9 @@
   };
   const renderPick = (pick, allowHistorical = false) => {
     hidePick();
+    if (nodes.noPickCta) nodes.noPickCta.hidden = true;
     if (!pick?.publishedDate || (!allowHistorical && pick.publishedDate !== today())) return false;
+    if (nodes.noPickCta) nodes.noPickCta.hidden = pick.publishedDate === today();
     if (nodes.date) nodes.date.textContent = `${formatDate(pick.publishedDate)} · MST`;
     nodes.status.textContent = pick.publishedDate === today() ? 'LIVE' : `LATEST · ${formatDate(pick.publishedDate)}`;
     if (nodes.caption) nodes.caption.textContent = pick.publishedDate === today() ? 'Today’s approved free pick.' : `No free pick today. Latest posted: ${formatDate(pick.publishedDate)}.`;
@@ -53,8 +56,9 @@
   const showNoPick = () => {
     hidePick();
     nodes.status.textContent = 'NO PICK TODAY';
-    if (nodes.caption) nodes.caption.textContent = 'No free pick is posted today. You can still join the email list for future picks.';
-    if (nodes.placeholder) nodes.placeholder.textContent = 'No free pick today. Check back tomorrow.';
+    if (nodes.caption) nodes.caption.textContent = 'You can still join the email list for future picks.';
+    if (nodes.placeholder) nodes.placeholder.textContent = 'Check back for the next free pick.';
+    if (nodes.noPickCta) nodes.noPickCta.hidden = false;
   };
   const showVip = () => {
     if (!nodes.vip) return;
@@ -73,6 +77,7 @@
     }
   };
   nodes.vip?.querySelector('[data-free-pick-vip-link]')?.addEventListener('click', () => track('cta_click'));
+  nodes.noPickCta?.querySelector('a')?.addEventListener('click', () => track('cta_click'));
   async function loadLegacy() {
     try {
       const response = await fetch(`${publisher}/free-pick/current`, { cache: 'no-store' });
@@ -98,8 +103,9 @@
       nodes.form.hidden = false;
       nodes.status.textContent = gate.hasPick ? 'EMAIL UNLOCK' : 'NO PICK TODAY';
       if (nodes.date) nodes.date.textContent = 'Today · MST';
-      if (nodes.caption) nodes.caption.textContent = gate.hasPick ? 'Enter your email to unlock today’s pick immediately.' : 'No free pick is posted today. Join the list for future picks.';
-      if (nodes.placeholder) nodes.placeholder.textContent = gate.hasPick ? 'Enter your email to unlock today’s pick.' : 'No free pick today. You can still join the list.';
+      if (nodes.caption) nodes.caption.textContent = gate.hasPick ? 'Enter your email to unlock today’s pick immediately.' : 'You can still join the email list for future picks.';
+      if (nodes.placeholder) nodes.placeholder.textContent = gate.hasPick ? 'Enter your email to unlock today’s pick.' : 'Check back for the next free pick.';
+      if (nodes.noPickCta) nodes.noPickCta.hidden = Boolean(gate.hasPick);
       let viewed = false;
       const observer = new IntersectionObserver(entries => {
         if (!viewed && entries.some(entry => entry.isIntersecting)) { viewed = true; track('form_view'); observer.disconnect(); }
