@@ -46,6 +46,17 @@ test('interaction summary separates clicks and confirmed leads from page views',
   assert.equal(result.ctas[0].uniqueVisitors, 1);
 });
 
+test('Discord join summary counts bot-confirmed joins separately from invite clicks', () => {
+  const events = [
+    { event_name: 'discord_join', properties: { attribution_status: 'attributed', source: 'x', campaign: 'october' } },
+    { event_name: 'discord_join', properties: { attribution_status: 'unknown', source: 'unknown' } },
+    { event_name: 'page_view', properties: { kind: 'interaction', action: 'cta_click', target_id: 'free_discord' } },
+  ];
+  assert.deepEqual(workerTest.discordJoinSummary(events), {
+    total: 2, attributed: 1, unknown: 1, sources: [{ source: 'x', campaign: 'october', joins: 1 }],
+  });
+});
+
 test('interaction endpoint rejects PII-shaped target IDs', async () => {
   const response = await worker.fetch(new Request('https://worker.test/analytics/interaction', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
     session_id: crypto.randomUUID(), interaction_id: crypto.randomUUID(), event_name: 'cta_click', path: '/join', target_id: 'name@example.com', location: 'pricing',

@@ -157,7 +157,7 @@ test('legacy email signup records the campaign source and free-pick tag after su
 });
 
 test('unlock saves the source tag, reveals today’s pick, and sends the same pick with unsubscribe', async () => {
-  const env = { FREE_PICK_KV: memoryKv(), DB: memoryD1(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret', RESEND_API_KEY: 'fixture-key' };
+  const env = { FREE_PICK_KV: memoryKv(), DB: memoryD1(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret', DASHBOARD_STATS_SECRET: 'stats-fixture-secret', RESEND_API_KEY: 'fixture-key' };
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const originalFetch = globalThis.fetch;
   const sent = [];
@@ -192,6 +192,13 @@ test('unlock saves the source tag, reveals today’s pick, and sends the same pi
     assert.equal(sent[0].to[0], 'subscriber@example.com');
     assert.match(sent[0].text, /Team A moneyline/);
     assert.match(sent[0].text, /Unsubscribe: https:\/\//);
+    const statsPath = 'https://publisher.test/api/admin/email-stats?start=1970-01-01T00%3A00%3A00.000Z&end=2100-01-01T00%3A00%3A00.000Z';
+    const denied = await worker.fetch(new Request(statsPath), env);
+    assert.equal(denied.status, 401);
+    const statsResponse = await worker.fetch(new Request(statsPath, { headers: { authorization: 'Bearer stats-fixture-secret' } }), env);
+    assert.equal(statsResponse.status, 200);
+    assert.deepEqual(await statsResponse.json(), { activeSubscribers: 1, optIns: 1, unlocks: 1,
+      unlocksWithPick: 1, pickEmailsSent: 1, pickEmailsPending: 0 });
   } finally {
     globalThis.fetch = originalFetch;
     env.DB.close();
