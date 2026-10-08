@@ -62,20 +62,22 @@
     if (nodes.placeholder) nodes.placeholder.textContent = 'Check back for the next free pick.';
     if (nodes.noPickCta) nodes.noPickCta.hidden = false;
   };
-  const showVip = () => {
+  const showVip = (revealedPick) => {
     if (!nodes.vip) return;
     nodes.vip.hidden = false;
+    const headline = nodes.vip.querySelector('[data-free-pick-vip-headline]');
+    if (headline && !revealedPick) headline.textContent = 'No free pick today. VIP members get Kobe-reviewed picks, writeups, Discord, and arb alerts.';
     const clock = nodes.vip.querySelector('[data-free-pick-countdown]');
     const offer = nodes.vip.querySelector('p');
     const deadline = Date.parse('2026-10-23T00:00:00-07:00');
     const update = () => {
       const remaining = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
       if (!remaining) { offer.textContent = 'See current membership options and renewal terms.'; return false; }
-      if (clock) clock.textContent = `Offer ends in ${Math.floor(remaining / 86400)}d ${String(Math.floor(remaining % 86400 / 3600)).padStart(2, '0')}h ${String(Math.floor(remaining % 3600 / 60)).padStart(2, '0')}m.`;
+      if (clock) clock.textContent = `Offer ends in ${Math.floor(remaining / 86400)}d ${String(Math.floor(remaining % 86400 / 3600)).padStart(2, '0')}h ${String(Math.floor(remaining % 3600 / 60)).padStart(2, '0')}m ${String(remaining % 60).padStart(2, '0')}s.`;
       return true;
     };
     if (update()) {
-      const timer = setInterval(() => { if (!update()) clearInterval(timer); }, 60000);
+      const timer = setInterval(() => { if (!update()) clearInterval(timer); }, 1000);
     }
   };
   nodes.vip?.querySelector('[data-free-pick-vip-link]')?.addEventListener('click', () => track('cta_click'));
@@ -140,10 +142,11 @@
       if (!response.ok || !result.ok) throw new Error(result.error || 'Please try again.');
       track('submit_success');
       nodes.form.hidden = true;
-      if (result.hasPick && renderPick(result.pick)) track('pick_revealed');
+      const revealedPick = Boolean(result.hasPick && renderPick(result.pick));
+      if (revealedPick) track('pick_revealed');
       else showNoPick();
-      showVip();
-      if (nodes.caption) nodes.caption.textContent = result.hasPick ? 'Unlocked. Check your email for a copy.' : 'You’re on the list. There is no free pick today.';
+      showVip(revealedPick);
+      if (nodes.caption) nodes.caption.textContent = revealedPick ? 'Unlocked. Check your email for a copy.' : 'You’re on the list. There is no free pick today.';
     } catch (error) {
       status.textContent = error.message || 'We couldn’t unlock the pick. Please try again.';
     } finally { button.disabled = false; }

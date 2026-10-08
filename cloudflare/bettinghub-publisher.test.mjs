@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
 
 const source = await fs.readFile(new URL('./bettinghub-publisher.js', import.meta.url), 'utf8');
 const workerModule = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
@@ -53,6 +54,24 @@ function memoryKv() {
       const value = typeof stored.value === 'string' ? new TextEncoder().encode(stored.value).buffer : stored.value;
       return { value, metadata: stored.metadata };
     },
+  };
+}
+
+function memoryD1() {
+  const sqlite = new DatabaseSync(':memory:');
+  const wrap = (sql, args = []) => ({
+    bind(...values) { return wrap(sql, values); },
+    async run() {
+      const result = sqlite.prepare(sql).run(...args);
+      return { meta: { changes: Number(result.changes) } };
+    },
+    async first() { return sqlite.prepare(sql).get(...args) || null; },
+    async all() { return { results: sqlite.prepare(sql).all(...args) }; },
+  });
+  return {
+    prepare(sql) { return wrap(sql); },
+    async batch(statements) { return Promise.all(statements.map(statement => statement.run())); },
+    close() { sqlite.close(); },
   };
 }
 
@@ -120,6 +139,48 @@ test('email gate exposes only availability, supports an authorized switch, and r
   }), env);
   assert.equal(invalid.status, 400);
   assert.equal(invalid.headers.get('access-control-allow-origin'), 'https://kobesbettinghub.com');
+});
+
+test('unlock saves the source tag, reveals today’s pick, and sends the same pick with unsubscribe', async () => {
+  const env = { FREE_PICK_KV: memoryKv(), DB: memoryD1(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret', RESEND_API_KEY: 'fixture-key' };
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const originalFetch = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, 'https://api.resend.com/emails');
+    sent.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({ id: 'email_fixture' }), { status: 200 });
+  };
+  try {
+    await env.FREE_PICK_KV.put('free-picks/email-gate-enabled', 'on');
+    const published = await worker.fetch(new Request('https://publisher.test/api/free-pick/publish', {
+      method: 'POST', headers: { authorization: 'Bearer fixture-secret', 'content-type': 'application/json' },
+      body: JSON.stringify({ date, caption: 'Approved test pick', details: { selection: 'Team A moneyline', odds: '+110' } }),
+    }), env);
+    assert.equal(published.status, 201);
+    const background = [];
+    const response = await worker.fetch(new Request('https://publisher.test/api/free-pick/unlock', {
+      method: 'POST', headers: { origin: 'https://kobesbettinghub.com', 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.10' },
+      body: JSON.stringify({ email: 'subscriber@example.com', legalAge: true, consent: true, source: 'discord' }),
+    }), env, { waitUntil(promise) { background.push(promise); } });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.hasPick, true);
+    assert.equal(result.pick.details.selection, 'Team A moneyline');
+    await Promise.all(background);
+    const tag = await env.DB.prepare("SELECT tag, source FROM email_subscriber_tags WHERE email = 'subscriber@example.com'").first();
+    assert.equal(tag.tag, 'free-pick-subscriber');
+    assert.equal(tag.source, 'discord');
+    const outbox = await env.DB.prepare('SELECT status FROM free_pick_email_outbox').first();
+    assert.equal(outbox.status, 'sent');
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].to[0], 'subscriber@example.com');
+    assert.match(sent[0].text, /Team A moneyline/);
+    assert.match(sent[0].text, /Unsubscribe: https:\/\//);
+  } finally {
+    globalThis.fetch = originalFetch;
+    env.DB.close();
+  }
 });
 
 test('result reply parent lookup requires a confirmed original X receipt', async () => {
