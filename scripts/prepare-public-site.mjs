@@ -190,7 +190,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
     const source = await readFile(outputPath, 'utf8');
     const withAnalytics = source.includes('src="analytics.js')
       ? source
-      : source.replace('</body>', '  <script src="/analytics.js?v=20260929-visit-attribution"></script>\n  </body>');
+      : source.replace('</body>', '  <script src="/analytics.js?v=20261008-engagement"></script>\n  </body>');
     await writeFile(outputPath, useCanonicalPageLinks(withAnalytics, file));
   }));
 
