@@ -40,6 +40,7 @@ function memoryKv() {
   const values = new Map();
   return {
     async put(key, value, options = {}) {
+      if (options.expirationTtl && options.expirationTtl < 60) throw new Error('KV TTL must be at least 60 seconds');
       values.set(key, { value, metadata: options.metadata || null });
     },
     async get(key, type) {
