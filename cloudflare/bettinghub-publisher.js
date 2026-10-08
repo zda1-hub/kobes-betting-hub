@@ -358,7 +358,7 @@ async function unlockFreePick(request, env, ctx) {
     .bind(email, source, firstName || null, now).run();
   if (pick) {
     const token = existing?.unsubscribe_token || (await env.DB.prepare('SELECT unsubscribe_token FROM email_subscribers WHERE email = ?').bind(email).first()).unsubscribe_token;
-    const id = await sha256Hex(`${email}:${pick.pickId || pick.publishedDate}`);
+    const id = await sha256Hex(`${email}:${pick.pickId || pick.publishedDate}:${pick.websitePublishedAt || ''}`);
     await env.DB.prepare(`INSERT OR IGNORE INTO free_pick_email_outbox (id, email, pick_json, unsubscribe_token, created_at)
       VALUES (?, ?, ?, ?, ?)`).bind(id, email, JSON.stringify(pick), token, now).run();
     if (ctx?.waitUntil) ctx.waitUntil(deliverPendingFreePickEmails(env, id));
@@ -388,7 +388,9 @@ async function deliverPendingFreePickEmails(env, onlyId = null) {
         details.selection || details.pick || 'Approved free pick',
         [details.line, details.odds ? `(${details.odds})` : '', details.units ? `${details.units}u` : ''].filter(Boolean).join(' '),
         [details.sport, details.event].filter(Boolean).join(' · '), '',
-        details.reason || '', '',
+        details.reason || '',
+        pick.caption || '',
+        pick.imageUrl ? `View the approved pick card: ${pick.imageUrl}` : '', '',
         'See the Hub: https://kobesbettinghub.com/free-pick',
         'VIP membership: https://kobesbettinghub.com/join', '',
         'Picks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.', '',

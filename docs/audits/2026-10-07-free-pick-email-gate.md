@@ -27,3 +27,6 @@ PR #170 merged into `main` at `98127cd1637cc1a4098d9df1ab676e1a9a32293b`. Publis
 Live checks: `/free-pick` returned HTTP 200 with the new client asset; `/api/free-pick/gate` returned `enabled: true`, `hasPick: false`, and the current MST date `2026-10-07`; the live unlock route rejected invalid email and missing consent with HTTP 400 and the expected site CORS header. No production subscriber address was supplied for a positive live delivery test, so inbox arrival is unverified. The current feed has no October 7 pick; the site should display the no-pick state until an approved pick is published.
 
 The focused publisher suite passed 15/15. Three existing `bento-release` assertions failed against rewritten production links (`/results` versus `results.html`) when run after the public build; no checkout or referral code changed in this release.
+
+## Follow-up: image-card email completeness
+The first release queued pick details but could omit the actual card when an approved pick was image-only. The email now includes the approved caption and a direct link to the same pick card. The outbox identifier also includes the publication timestamp, so an intentional replacement can be emailed once per subscriber. Publisher syntax and focused tests were repeated before this follow-up release.
