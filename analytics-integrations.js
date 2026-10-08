@@ -13,7 +13,7 @@
   const start = () => {
     if (started || !window.KBHConsent?.allowed() || (!gtm && !ga4 && !ads)) return;
     started = true;
-    gtag('consent', 'update', { analytics_storage: 'granted', ad_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted' });
+    gtag('consent', 'update', { analytics_storage: 'granted', ad_storage: ads ? 'granted' : 'denied', ad_user_data: ads ? 'granted' : 'denied', ad_personalization: ads ? 'granted' : 'denied' });
     if (gtm) window.dataLayer.push({ event: 'gtm.js', 'gtm.start': Date.now() });
     const script = document.createElement('script'); script.async = true;
     script.src = gtm ? `https://www.googletagmanager.com/gtm.js?id=${encodeURIComponent(gtm)}` : `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(ga4 || ads)}`;
