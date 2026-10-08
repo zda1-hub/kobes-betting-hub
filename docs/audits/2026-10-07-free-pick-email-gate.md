@@ -36,3 +36,6 @@ The user requested removal of the visible checkboxes and the extra name field. `
 
 ## Follow-up: no-pick VIP path
 The user requested a direct message and arrow link when no free pick is posted. `index.html`, `free-pick.html`, `free-pick.js`, and `free-pick.css` now show “No free pick is posted today. Join → to see the full VIP slate.” on no-pick days. The link opens `/join` and records the existing CTA-click event. The email form remains available for future picks. The link hides when a current pick is available. The public build and live pages are to be checked after deployment.
+
+## Follow-up: privacy-link layout and no-pick form copy
+The new form reused the old `.email-consent` flex styling, which placed its Privacy link far from the sentence. At the user's request, the inline link was removed from the new form; the public footer still links to the privacy page. The notice is now one continuous line of copy, and its wording applies whether or not a pick is available. On no-pick days, the submit button reads “Get future free picks” instead of promising an immediate unlock. Files: `index.html`, `free-pick.html`, `free-pick.css`, `free-pick.js`. Verify the public build and live pages after deployment.

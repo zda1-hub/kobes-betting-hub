@@ -56,6 +56,8 @@
   const showNoPick = () => {
     hidePick();
     nodes.status.textContent = 'NO PICK TODAY';
+    const submitText = nodes.form.querySelector('[data-free-pick-submit-text]');
+    if (submitText) submitText.textContent = 'Get future free picks';
     if (nodes.caption) nodes.caption.textContent = 'You can still join the email list for future picks.';
     if (nodes.placeholder) nodes.placeholder.textContent = 'Check back for the next free pick.';
     if (nodes.noPickCta) nodes.noPickCta.hidden = false;
@@ -102,6 +104,8 @@
       hidePick();
       nodes.form.hidden = false;
       nodes.status.textContent = gate.hasPick ? 'EMAIL UNLOCK' : 'NO PICK TODAY';
+      const submitText = nodes.form.querySelector('[data-free-pick-submit-text]');
+      if (submitText) submitText.textContent = gate.hasPick ? 'Unlock today’s pick' : 'Get future free picks';
       if (nodes.date) nodes.date.textContent = 'Today · MST';
       if (nodes.caption) nodes.caption.textContent = gate.hasPick ? 'Enter your email to unlock today’s pick immediately.' : 'You can still join the email list for future picks.';
       if (nodes.placeholder) nodes.placeholder.textContent = gate.hasPick ? 'Enter your email to unlock today’s pick.' : 'Check back for the next free pick.';
