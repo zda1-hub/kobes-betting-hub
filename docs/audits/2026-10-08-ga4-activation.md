@@ -26,3 +26,7 @@ After: The production build contains the stream ID; the adapter loads Google Ana
 - Pending release and live browser verification will be appended below. Google Analytics reports may take time to populate; production purchase attribution is not proven by this configuration alone.
 
 State: local, pending publication.
+
+## Publication follow-up
+
+The implementation merged to GitHub main as PR #190 at `98622b25d8871fff90e288a1ab9ad772678d5575`. The Cloudflare public-site Worker was rebuilt from that revision with `KBH_GA4_ID=G-264TY91ZCT` and deployed as version `ff8438f3-8a0c-4c20-89a4-dd5377e26e82`. Live fetches of the homepage, privacy page, and analytics adapter confirmed the measurement ID, disclosure, and Google advertising-storage restriction. A consented live browser visit loaded the Google tag. Google Analytics initially displayed no received data; realtime/report arrival remains to be confirmed after processing. State: published, collection verification pending.
