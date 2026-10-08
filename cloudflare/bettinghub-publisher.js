@@ -224,6 +224,7 @@ async function subscribeEmail(request, env) {
   try { data = await request.json(); } catch { return json({ error: "Invalid form data." }, 400, headers); }
   if (data.website) return json({ ok: true }, 200, headers);
   const email = String(data.email || "").trim().toLowerCase();
+  const source = String(data.source || 'direct').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 60) || 'direct';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || data.consent !== true || data.legalAge !== true) {
     return json({ error: "Enter a valid email and confirm the two checkboxes." }, 400, headers);
   }
@@ -241,6 +242,9 @@ async function subscribeEmail(request, env) {
     await env.DB.prepare("UPDATE email_subscribers SET subscribed = 1, consent_at = ?, welcome_status = 'pending' WHERE email = ?")
       .bind(now, email).run();
   }
+  await env.DB.prepare(`INSERT INTO email_subscriber_tags (email, tag, source, created_at)
+    VALUES (?, 'free-pick-subscriber', ?, ?) ON CONFLICT(email, tag) DO UPDATE SET source=excluded.source`)
+    .bind(email, source, now).run();
   try { await deliverPendingLeadEmails(env, email); } catch { /* The scheduled retry keeps the welcome queued. */ }
   return json({ ok: true, message: "You're on the list. Check your inbox for a welcome email." }, 200, headers);
 }

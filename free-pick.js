@@ -12,7 +12,7 @@
   };
   if (!nodes.status || !nodes.form) return;
   const page = document.querySelector('.pick-tile') ? 'home' : 'free-pick';
-  const source = new URLSearchParams(location.search).get('utm_source') || 'direct';
+  const source = () => window.KBHConsent?.allowed() ? window.KBHAnalytics?.attribution?.last_source || 'direct' : 'direct';
   let sessionId;
   try {
     sessionId = sessionStorage.getItem('kbh.free-pick.session') || crypto.randomUUID();
@@ -22,7 +22,7 @@
     if (preview) return;
     fetch(`${publisher}/free-pick/track`, { method: 'POST', keepalive: true,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event, sessionId, page, source }) }).catch(() => {});
+      body: JSON.stringify({ event, sessionId, page, source: source() }) }).catch(() => {});
   };
   const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const formatDate = value => new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Phoenix' }).format(new Date(`${value}T12:00:00-07:00`));
@@ -136,7 +136,7 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: fields.get('email'), firstName: fields.get('firstName'),
           legalAge: fields.get('legalAge') === 'on', consent: fields.get('consent') === 'on',
-          website: fields.get('website'), source }),
+          website: fields.get('website'), source: source() }),
       });
       const result = await response.json();
       if (!response.ok || !result.ok) throw new Error(result.error || 'Please try again.');

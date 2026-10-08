@@ -13,7 +13,7 @@ if (signupForm) signupForm.addEventListener('submit', async (event) => {
     const response = await fetch('https://bettinghub-publisher.kobedirwin.workers.dev/api/email/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: fields.get('email'), legalAge: fields.get('legalAge') === 'on', consent: fields.get('consent') === 'on', website: fields.get('website') })
+      body: JSON.stringify({ email: fields.get('email'), legalAge: fields.get('legalAge') === 'on', consent: fields.get('consent') === 'on', website: fields.get('website'), source: window.KBHConsent?.allowed() ? window.KBHAnalytics?.attribution?.last_source || 'direct' : 'direct' })
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Please try again.');

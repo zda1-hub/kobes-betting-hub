@@ -142,6 +142,20 @@ test('email gate exposes only availability, supports an authorized switch, and r
   assert.equal(invalid.headers.get('access-control-allow-origin'), 'https://kobesbettinghub.com');
 });
 
+test('legacy email signup records the campaign source and free-pick tag after success', async () => {
+  const env = { FREE_PICK_KV: memoryKv(), DB: memoryD1() };
+  try {
+    const response = await worker.fetch(new Request('https://publisher.test/api/email/subscribe', {
+      method: 'POST', headers: { origin: 'https://kobesbettinghub.com', 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.21' },
+      body: JSON.stringify({ email: 'legacy@example.com', legalAge: true, consent: true, source: 'instagram' }),
+    }), env);
+    assert.equal(response.status, 200);
+    const tag = await env.DB.prepare("SELECT tag, source FROM email_subscriber_tags WHERE email = 'legacy@example.com'").first();
+    assert.equal(tag.tag, 'free-pick-subscriber');
+    assert.equal(tag.source, 'instagram');
+  } finally { env.DB.close(); }
+});
+
 test('unlock saves the source tag, reveals today’s pick, and sends the same pick with unsubscribe', async () => {
   const env = { FREE_PICK_KV: memoryKv(), DB: memoryD1(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret', RESEND_API_KEY: 'fixture-key' };
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
