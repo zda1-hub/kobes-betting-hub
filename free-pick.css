@@ -35,3 +35,5 @@
 @media(max-width:800px){.free-pick-result .free-pick-card{justify-self:start}.free-pick-gate-form{gap:9px}.free-pick-vip{padding:17px}.free-pick-vip strong{font-size:16px}}
 
 .free-pick-no-pick-cta[hidden]{display:none!important}.free-pick-no-pick-cta{margin:8px 0 18px;font:600 14px/1.5 'Manrope',sans-serif}.free-pick-no-pick-cta a{color:#bf5700;text-decoration:underline;text-underline-offset:3px}.pick-breakdown .free-pick-no-pick-cta{font-size:12px;margin:4px 0 12px}
+
+.free-pick-gate-form .email-consent{display:block;max-width:100%;margin:2px 0 0;line-height:1.5}
