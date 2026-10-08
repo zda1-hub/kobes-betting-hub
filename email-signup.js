@@ -17,6 +17,8 @@ if (signupForm) signupForm.addEventListener('submit', async (event) => {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Please try again.');
+    window.KBHAnalytics?.track('generate_lead', 'home_email_signup', 'home_grid');
+    window.KBHMeta?.trackLead('home_email_signup');
     status.textContent = result.message || 'You’re on the list. Check your email.';
     signupForm.reset();
   } catch (error) {

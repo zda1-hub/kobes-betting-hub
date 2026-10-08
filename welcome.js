@@ -27,6 +27,7 @@ async function check() {
     if (data.paymentConfirmed && data.purchase) {
       window.__KBH_VERIFIED_PURCHASE__ = data.purchase;
       try { window.KBHMeta?.trackPurchase(data.purchase); } catch { /* Advertising must never block membership confirmation. */ }
+      try { window.KBHGoogle?.track('purchase', { transaction_id: data.purchase.eventId, value: data.purchase.value, currency: data.purchase.currency }); } catch { /* Optional measurement. */ }
     }
     payment.textContent = `Payment: ${data.paymentConfirmed ? 'Confirmed ✅' : 'Waiting'}`;
     discord.textContent = `Discord: ${data.discordConnected ? 'Connected ✅' : 'Waiting'}`;

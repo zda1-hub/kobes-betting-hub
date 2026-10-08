@@ -5,10 +5,10 @@ import vm from 'node:vm';
 const pixel = await fs.readFile(new URL('../meta-pixel.js', import.meta.url), 'utf8');
 const workerSource = await fs.readFile(new URL('../cloudflare/kobes-checkout-worker.js', import.meta.url), 'utf8');
 const { __test: worker } = await import(`data:text/javascript;base64,${Buffer.from(workerSource).toString('base64')}`);
-function browser({ hostname = 'kobesbettinghub.com', search = '', storage = new Map(), environment = 'production' } = {}) {
+function browser({ hostname = 'kobesbettinghub.com', search = '', storage = new Map(), environment = 'production', consent = true } = {}) {
   const listeners = new Map();
   const location = { hostname, search };
-  const window = { __KBH_MEMBERSHIP_CONFIG__: { environment }, addEventListener(name, listener) { listeners.set(name, listener); }, localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) } };
+  const window = { __KBH_MEMBERSHIP_CONFIG__: { environment }, KBHConsent: { allowed: () => consent }, addEventListener(name, listener) { listeners.set(name, listener); }, localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) } };
   vm.runInNewContext(pixel, { window, location, URLSearchParams, document: { createElement: () => ({}), getElementsByTagName: () => [{ parentNode: { insertBefore() {} } }] } });
   return { window, location, listeners, storage, events: () => window.fbq?.queue.filter(args => args[0] === 'track') || [] };
 }
@@ -38,6 +38,11 @@ test('private URL prevents SDK and PageView initialization until credential remo
 });
 test('local, unrelated host and staging never contribute production pixel events', () => {
   for (const options of [{ hostname: 'localhost' }, { hostname: '127.0.0.1' }, { hostname: 'other.example' }, { environment: 'staging' }]) assert.equal(browser(options).window.fbq, undefined);
+});
+test('declining optional tracking prevents Meta SDK and purchase events', () => {
+  const page = browser({ consent: false });
+  assert.equal(page.window.fbq, undefined);
+  assert.equal(page.window.KBHMeta, undefined);
 });
 test('prepared checkout intent is explicit and deduplicated without a click handler', () => {
   const page = browser(); const id = '12345678-1234-4123-8123-123456789012';

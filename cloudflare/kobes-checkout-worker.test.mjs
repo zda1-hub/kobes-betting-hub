@@ -31,6 +31,28 @@ test('checkout worker health endpoint responds without credentials', async () =>
   assert.deepEqual(await response.json(), { ok: true, version: null });
 });
 
+test('interaction summary separates clicks and confirmed leads from page views', () => {
+  const events = [
+    { event_name: 'page_view', path: '/join', session_id: 'a', properties: {} },
+    { event_name: 'page_view', path: '/join', session_id: 'a', properties: { kind: 'interaction', action: 'cta_click', target_id: 'join_plan_first_month_back', location: 'pricing' } },
+    { event_name: 'page_view', path: '/join', session_id: 'a', properties: { kind: 'interaction', action: 'form_submit_attempt', target_id: 'home_email_signup', location: 'home_grid' } },
+    { event_name: 'page_view', path: '/', session_id: 'a', properties: { kind: 'interaction', action: 'generate_lead', target_id: 'home_email_signup', location: 'home_grid' } },
+  ];
+  const result = workerTest.interactionSummary(events);
+  assert.equal(result.byAction.cta_click, 1);
+  assert.equal(result.byAction.generate_lead, 1);
+  assert.equal(result.forms[0].attempts, 1);
+  assert.equal(result.forms[0].leads, 1);
+  assert.equal(result.ctas[0].uniqueVisitors, 1);
+});
+
+test('interaction endpoint rejects PII-shaped target IDs', async () => {
+  const response = await worker.fetch(new Request('https://worker.test/analytics/interaction', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    session_id: crypto.randomUUID(), interaction_id: crypto.randomUUID(), event_name: 'cta_click', path: '/join', target_id: 'name@example.com', location: 'pricing',
+  }) }), {});
+  assert.equal(response.status, 400);
+});
+
 test('engagement summary measures quick exits and join click density without treating ordinary page views as samples', () => {
   const events = [
     { session_id: 's1', path: '/join', properties: { kind: 'engagement', foreground_seconds: 6, click_count: 0, max_scroll_pct: 20, device: 'mobile', click_cells: [] } },
