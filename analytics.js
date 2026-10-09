@@ -110,7 +110,16 @@
     method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ event_name: eventName, session_id: sessionId, path: location.pathname, attribution: current, dedupe_key: `${eventName}:${sessionId}:${location.pathname}:${bucket}` }),
   }).catch(() => {});
-  try { window.KBHGoogle?.track('page_view', { page_path: pagePath }); } catch { /* Optional. */ }
+  let googlePageViewTracked = false;
+  const trackGooglePageView = () => {
+    if (googlePageViewTracked || !window.KBHConsent?.allowed()) return;
+    try {
+      window.KBHGoogle?.track('page_view', { page_path: pagePath });
+      googlePageViewTracked = Boolean(window.KBHGoogle);
+    } catch { /* Optional. */ }
+  };
+  trackGooglePageView();
+  window.addEventListener('kbh:consent-change', event => { if (event.detail.allowed) trackGooglePageView(); });
   if (typeof document.querySelectorAll !== 'function') return;
 
   const pageKey = pagePath === '/' || pagePath === '/index.html' ? 'home' : pagePath.replace(/^\//, '').replace(/\.html$/, '').replace(/[^a-z0-9]/g, '_');

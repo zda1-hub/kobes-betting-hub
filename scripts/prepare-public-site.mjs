@@ -201,7 +201,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
     const withGoogle = withConsent.includes('src="/analytics-integrations.js') ? withConsent : withConsent.replace('</head>', `  <script>window.__KBH_TRACKING_CONFIG__=${JSON.stringify(trackingConfig)}</script>\n  <script src="/analytics-integrations.js?v=20261008"></script>\n</head>`);
     const withAnalytics = withGoogle.includes('src="analytics.js')
       ? withGoogle
-      : withGoogle.replace('</body>', '  <script src="/analytics.js?v=20261008-funnel"></script>\n  </body>');
+      : withGoogle.replace('</body>', '  <script src="/analytics.js?v=20261009-consent"></script>\n  </body>');
     await writeFile(outputPath, useCanonicalPageLinks(withAnalytics, file));
   }));
 
