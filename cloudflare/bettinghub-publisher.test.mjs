@@ -205,6 +205,83 @@ test('unlock saves the source tag, reveals today’s pick, and sends the same pi
   }
 });
 
+test('a no-pick signup receives the next published pick once with a concise VIP link', async () => {
+  const env = { FREE_PICK_KV: memoryKv(), DB: memoryD1(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret', RESEND_API_KEY: 'fixture-key' };
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const originalFetch = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, 'https://api.resend.com/emails');
+    sent.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({ id: `email_${sent.length}` }), { status: 200 });
+  };
+  try {
+    await env.FREE_PICK_KV.put('free-picks/email-gate-enabled', 'on');
+    await env.FREE_PICK_KV.put('free-picks/day-state.json', JSON.stringify({ date, status: 'no_pick' }));
+    const signupTasks = [];
+    const signup = await worker.fetch(new Request('https://publisher.test/api/free-pick/unlock', {
+      method: 'POST', headers: { origin: 'https://kobesbettinghub.com', 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.11' },
+      body: JSON.stringify({ email: 'newfan@example.com', legalAge: true, consent: true, source: 'twitter' }),
+    }), env, { waitUntil(promise) { signupTasks.push(promise); } });
+    assert.equal((await signup.json()).hasPick, false);
+    await Promise.all(signupTasks);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].text, /No free pick is posted today/);
+
+    const publish = (replace = false) => worker.fetch(new Request('https://publisher.test/api/free-pick/publish', {
+      method: 'POST', headers: { authorization: 'Bearer fixture-secret', 'content-type': 'application/json' },
+      body: JSON.stringify({ date, replace, caption: 'Approved free pick', details: { selection: 'Team A moneyline', odds: '+110' } }),
+    }), env, { waitUntil(promise) { publishTasks.push(promise); } });
+    const publishTasks = [];
+    assert.equal((await publish()).status, 201);
+    await Promise.all(publishTasks);
+    assert.equal(sent.length, 2);
+    assert.match(sent[1].text, /Team A moneyline/);
+    assert.match(sent[1].text, /Join here: https:\/\/kobesbettinghub.com\/join/);
+    assert.doesNotMatch(sent[1].text, /See the Hub:/);
+    assert.equal((await env.DB.prepare("SELECT status FROM free_pick_email_outbox WHERE email = 'newfan@example.com'").first()).status, 'sent');
+    assert.equal((await (await worker.fetch(new Request('https://publisher.test/api/free-pick/gate'), env)).json()).hasPick, true);
+    publishTasks.length = 0;
+    assert.equal((await publish(true)).status, 201);
+    await Promise.all(publishTasks);
+    assert.equal(sent.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    env.DB.close();
+  }
+});
+
+test('homepage email signup receives the current pick instead of a second welcome email', async () => {
+  const env = { FREE_PICK_KV: memoryKv(), DB: memoryD1(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret', RESEND_API_KEY: 'fixture-key' };
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const originalFetch = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, 'https://api.resend.com/emails');
+    sent.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({ id: 'email_fixture' }), { status: 200 });
+  };
+  try {
+    assert.equal((await worker.fetch(new Request('https://publisher.test/api/free-pick/publish', {
+      method: 'POST', headers: { authorization: 'Bearer fixture-secret', 'content-type': 'application/json' },
+      body: JSON.stringify({ date, details: { selection: 'Team B spread', odds: '-110' } }),
+    }), env)).status, 201);
+    const background = [];
+    const signup = await worker.fetch(new Request('https://publisher.test/api/email/subscribe', {
+      method: 'POST', headers: { origin: 'https://kobesbettinghub.com', 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.12' },
+      body: JSON.stringify({ email: 'homepage@example.com', legalAge: true, consent: true, source: 'home' }),
+    }), env, { waitUntil(promise) { background.push(promise); } });
+    assert.equal(signup.status, 200);
+    await Promise.all(background);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].text, /Team B spread/);
+    assert.match(sent[0].text, /Join here: https:\/\/kobesbettinghub.com\/join/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    env.DB.close();
+  }
+});
+
 test('result reply parent lookup requires a confirmed original X receipt', async () => {
   const env = {
     FREE_PICK_X_QUEUE_SECRET: 'test-key', FREE_PICK_KV: memoryKv(),
