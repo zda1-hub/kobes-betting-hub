@@ -27,3 +27,8 @@ The owner asked to complete the Google Analytics setup steps shown in the email.
 - Google Tag Assistant connected to the public homepage and found `G-264TY91ZCT`, but its Hits Sent view reported no hits. This narrowed the remaining issue from tag installation to page-view delivery.
 - `analytics-integrations.js`: use the Google tag's default `page_view` on its single GA4 config call after consent. `analytics.js`: remove the separate manual GA4 page-view call to avoid duplicates. `scripts/prepare-public-site.mjs`: refresh both public script cache keys. The first-party funnel event remains unchanged.
 - The implementation follows Google's documented default behavior for a `gtag('config', measurementId)` call. Verify the new release in Tag Assistant and GA4 Realtime; if the connected tag still shows no hit, inspect consent and network delivery before marking collection complete.
+
+## Consent bootstrap follow-up
+
+- After the standard page-view release, Tag Assistant still found the tag but showed no hits and “Consent not configured.” GA4's web stream continued to show no data received in 48 hours; the Internal Traffic filter was in Testing state rather than Active.
+- `analytics-integrations.js` now declares the canonical global `gtag()` function and queues its native `arguments` object on `dataLayer`; `scripts/prepare-public-site.mjs` refreshes the cache key. This replaces the prior private rest-parameter arrow function. The existing deny-by-default and explicit opt-in remain.
