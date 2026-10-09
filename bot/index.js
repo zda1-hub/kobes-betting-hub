@@ -398,7 +398,7 @@ async function startArbitragePaperTest() {
     minimumEdgePercent: Number(process.env.ARBITRAGE_MIN_EDGE_PERCENT || 2),
     bookmakers: arbitrageBookmakers(process.env.ARBITRAGE_BOOKMAKERS),
     sports: arbitrageSports(process.env.ARBITRAGE_SPORTS),
-    windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '08:00-18:00').split(',').map(value => value.trim()).filter(Boolean),
+    windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '07:00-18:00').split(',').map(value => value.trim()).filter(Boolean),
     memberPostingEnabled: process.env.ARBITRAGE_MEMBER_POSTING_ENABLED === 'true',
     isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId)
   });
@@ -2680,8 +2680,23 @@ async function refreshPendingResearchApprovals() {
   if (refreshed) console.log(`Refreshed ${refreshed} pending approval card(s) into the locked evidence format.`);
 }
 
+async function clarifyStartHereArbitrage(readyClient) {
+  // Update the existing owner-requested welcome post in place, never create a duplicate.
+  if (process.env.DISCORD_GUILD_ID !== '1215407647155683358') return;
+  const channel = await readyClient.channels.fetch('1555363949606604971');
+  if (!channel?.isTextBased() || !channel.messages?.fetch) return;
+  const message = await channel.messages.fetch('1555365075894927412');
+  if (message.author.id !== readyClient.user.id) return;
+  const before = 'Open expert picks, write-ups, and arbitrage once access is active.';
+  if (!message.content.includes(before)) return;
+  const after = 'Open expert picks, write-ups, and betting arbitrage alerts once access is active.';
+  await message.edit({ content: message.content.replace(before, after) });
+  console.log('Start-here betting arbitrage wording updated in the existing post.');
+}
+
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  void clarifyStartHereArbitrage(readyClient).catch(error => console.error('Start-here wording update needs attention:', error.message));
   if (discordJoinAttribution) {
     const guild = process.env.DISCORD_GUILD_ID ? readyClient.guilds.cache.get(process.env.DISCORD_GUILD_ID) : null;
     if (!guild) console.error('Discord join attribution needs attention: DISCORD_GUILD_ID must identify a guild cached by this bot.');
