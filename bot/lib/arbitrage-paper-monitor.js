@@ -158,6 +158,9 @@ function activeWindow(now = new Date(), windows = DEFAULT_WINDOWS, durationMinut
 function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel, stateFile, fetchImpl = fetch, now = () => new Date(),
   bookmakers = DEFAULT_BOOKS, sports = ['upcoming'], windows = DEFAULT_WINDOWS, intervalMinutes = 5, minimumEdgePercent = 2, bankroll = 1000,
   memberPostingEnabled = false, isApprover = () => false, log = console.log }) {
+  if (!Number.isInteger(intervalMinutes) || intervalMinutes < 1 || intervalMinutes > 60) {
+    throw new Error('ARBITRAGE_SCAN_INTERVAL_MINUTES must be a whole number from 1 to 60.');
+  }
   let timer = null, scanning = false, quotaExhausted = false, state = { scans: [], opportunities: {} };
   const save = async () => {
     await fs.mkdir(path.dirname(stateFile), { recursive: true, mode: 0o700 });
@@ -235,7 +238,7 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
       // price should not hide a real opportunity between two other books.
       const freshPositive = findArbitrage(events, { minimumEdgePercent: 0, bankroll, freshOnly: true, now: now() });
       const opportunities = freshPositive.filter(item => item.edgePercent >= minimumEdgePercent && freshOpportunity(item, now()));
-      const scanRecord = { scannedAt: now().toISOString(), window, sports, eventCount: events.length,
+      const scanRecord = { scannedAt: now().toISOString(), window, sports, intervalMinutes, eventCount: events.length,
         positiveCount: positive.length, aboveThresholdCount: aboveThreshold.length,
         freshPositiveCount: freshPositive.length,
         opportunityCount: opportunities.length, minimumEdgePercent, bookmakerCount: bookmakers.length,

@@ -399,6 +399,7 @@ async function startArbitragePaperTest() {
     bookmakers: arbitrageBookmakers(process.env.ARBITRAGE_BOOKMAKERS),
     sports: arbitrageSports(process.env.ARBITRAGE_SPORTS),
     windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '07:00-18:00').split(',').map(value => value.trim()).filter(Boolean),
+    intervalMinutes: Number(process.env.ARBITRAGE_SCAN_INTERVAL_MINUTES || 5),
     memberPostingEnabled: process.env.ARBITRAGE_MEMBER_POSTING_ENABLED === 'true',
     isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId)
   });
