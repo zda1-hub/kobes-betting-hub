@@ -148,7 +148,7 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname === "/health") {
     return json({ service: "bettinghub-publisher", status: "ready", xConnected: await hasXConnection(env), freePickReady: hasFreePickStore(env) });
   }
-  if (url.pathname === "/api/email/subscribe" && request.method === "POST") return subscribeEmail(request, env);
+  if (url.pathname === "/api/email/subscribe" && request.method === "POST") return subscribeEmail(request, env, ctx);
   if (url.pathname === "/api/admin/email-stats" && request.method === "GET") return emailStats(request, env);
   if (url.pathname === "/api/email/unsubscribe" && request.method === "GET") return unsubscribeEmail(url, env);
   if (url.pathname === "/api/free-pick/gate" && request.method === "GET") return getFreePickGate(request, env);
@@ -181,7 +181,7 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname === "/api/vip-preview/current" && request.method === "PUT") return putVipPreview(request, env);
   if (url.pathname === "/media/free-pick/current" && request.method === "GET") return getCurrentFreePickImage(request, env);
   if (url.pathname.startsWith("/media/free-pick/story/") && request.method === "GET") return getFreePickStory(request, env);
-  if (url.pathname === "/api/free-pick/publish" && request.method === "POST") return publishFreePick(request, env);
+  if (url.pathname === "/api/free-pick/publish" && request.method === "POST") return publishFreePick(request, env, ctx);
   return new Response("Not found", { status: 404 });
 }
 
@@ -243,7 +243,7 @@ function leadCors(request) {
   return { "access-control-allow-origin": origin, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "Content-Type", vary: "Origin" };
 }
 
-async function subscribeEmail(request, env) {
+async function subscribeEmail(request, env, ctx) {
   const headers = leadCors(request);
   if (!headers) return json({ error: "This form is only available on the Hub website." }, 403);
   if (Number(request.headers.get("content-length") || 0) > 4096) return json({ error: "Request is too large." }, 413, headers);
@@ -260,31 +260,45 @@ async function subscribeEmail(request, env) {
   if (env.FREE_PICK_KV && await env.FREE_PICK_KV.get(rateKey)) return json({ error: "Please wait before trying again." }, 429, headers);
   if (env.FREE_PICK_KV) await env.FREE_PICK_KV.put(rateKey, "1", { expirationTtl: 60 });
   await ensureEmailSubscribers(env);
-  const existing = await env.DB.prepare("SELECT subscribed, welcome_status FROM email_subscribers WHERE email = ?").bind(email).first();
+  const pick = await todaysFreePick(env, new URL(request.url).origin);
+  const existing = await env.DB.prepare("SELECT subscribed, unsubscribe_token, welcome_status FROM email_subscribers WHERE email = ?").bind(email).first();
   const now = new Date().toISOString();
   if (!existing) {
-    await env.DB.prepare("INSERT INTO email_subscribers (email, unsubscribe_token, consent_at) VALUES (?, ?, ?)")
-      .bind(email, randomBase64Url(32), now).run();
+    await env.DB.prepare("INSERT INTO email_subscribers (email, unsubscribe_token, consent_at, welcome_status) VALUES (?, ?, ?, ?)")
+      .bind(email, randomBase64Url(32), now, pick ? 'sent' : 'pending').run();
   } else if (!existing.subscribed) {
-    await env.DB.prepare("UPDATE email_subscribers SET subscribed = 1, consent_at = ?, welcome_status = 'pending' WHERE email = ?")
-      .bind(now, email).run();
+    await env.DB.prepare("UPDATE email_subscribers SET subscribed = 1, consent_at = ?, welcome_status = ? WHERE email = ?")
+      .bind(now, pick ? 'sent' : 'pending', email).run();
+  } else if (pick) {
+    await env.DB.prepare("UPDATE email_subscribers SET welcome_status = 'sent' WHERE email = ? AND welcome_status = 'pending'").bind(email).run();
   }
   await env.DB.prepare(`INSERT INTO email_subscriber_tags (email, tag, source, created_at)
     VALUES (?, 'free-pick-subscriber', ?, ?) ON CONFLICT(email, tag) DO UPDATE SET source=excluded.source`)
     .bind(email, source, now).run();
-  try { await deliverPendingLeadEmails(env, email); } catch { /* The scheduled retry keeps the welcome queued. */ }
-  return json({ ok: true, message: "You're on the list. Check your inbox for a welcome email." }, 200, headers);
+  if (pick) {
+    const token = existing?.unsubscribe_token || (await env.DB.prepare('SELECT unsubscribe_token FROM email_subscribers WHERE email = ?').bind(email).first()).unsubscribe_token;
+    const id = await sha256Hex(`${email}:${pick.publishedDate}`);
+    await env.DB.prepare(`INSERT OR IGNORE INTO free_pick_email_outbox (id, email, pick_json, unsubscribe_token, created_at)
+      VALUES (?, ?, ?, ?, ?)`).bind(id, email, JSON.stringify(pick), token, now).run();
+    if (ctx?.waitUntil) ctx.waitUntil(deliverPendingFreePickEmails(env, id));
+  } else {
+    try { await deliverPendingLeadEmails(env, email); } catch { /* The scheduled retry keeps the welcome queued. */ }
+  }
+  return json({ ok: true, message: pick ? "You're on the list. Check your inbox for today's free pick." : "You're on the list. Check your inbox for a welcome email." }, 200, headers);
 }
 
 async function sendLeadWelcome(env, row) {
   if (!env.RESEND_API_KEY) throw new Error("Email sender is not configured");
   const unsubscribeUrl = `https://bettinghub-publisher.kobedirwin.workers.dev/api/email/unsubscribe?token=${encodeURIComponent(row.unsubscribe_token)}`;
+  const freePickSignup = Boolean(row.free_pick_subscriber);
   const body = {
     from: "Kobe's Betting Hub <support@kobesbettinghub.com>",
     to: [row.email],
     reply_to: "support@kobesbettinghub.com",
-    subject: "You're on the Kobe's Betting Hub list",
-    text: `Thanks for joining the Kobe's Betting Hub email list. See today's free pick at https://kobesbettinghub.com/free-pick and explore the membership at https://kobesbettinghub.com/join. Picks and results vary; no outcome is guaranteed. For people of legal betting age where permitted. Reply to this email if you need help.\n\nUnsubscribe: ${unsubscribeUrl}`
+    subject: freePickSignup ? "You're on the free-pick list" : "You're on the Kobe's Betting Hub list",
+    text: freePickSignup
+      ? `You're on the Kobe's Betting Hub free-pick list. No free pick is posted today; we'll email the next one when it's published.\n\nWant the full VIP slate and writeups now? See the current plans: https://kobesbettinghub.com/join\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
+      : `Thanks for joining the Kobe's Betting Hub email list. See free picks at https://kobesbettinghub.com/free-pick and current VIP plans at https://kobesbettinghub.com/join. Picks vary and no outcome is guaranteed. 21+ where permitted.\n\nUnsubscribe: ${unsubscribeUrl}`
   };
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -301,8 +315,8 @@ async function deliverPendingLeadEmails(env, onlyEmail = null) {
   if (!env.RESEND_API_KEY) return;
   await ensureEmailSubscribers(env);
   const query = onlyEmail
-    ? env.DB.prepare("SELECT email, unsubscribe_token, consent_at FROM email_subscribers WHERE email = ? AND subscribed = 1 AND welcome_status = 'pending' LIMIT 1").bind(onlyEmail)
-    : env.DB.prepare("SELECT email, unsubscribe_token, consent_at FROM email_subscribers WHERE subscribed = 1 AND welcome_status = 'pending' ORDER BY consent_at LIMIT 10");
+    ? env.DB.prepare("SELECT s.email, s.unsubscribe_token, s.consent_at, EXISTS(SELECT 1 FROM email_subscriber_tags t WHERE t.email = s.email AND t.tag = 'free-pick-subscriber') AS free_pick_subscriber FROM email_subscribers s WHERE s.email = ? AND s.subscribed = 1 AND s.welcome_status = 'pending' LIMIT 1").bind(onlyEmail)
+    : env.DB.prepare("SELECT s.email, s.unsubscribe_token, s.consent_at, EXISTS(SELECT 1 FROM email_subscriber_tags t WHERE t.email = s.email AND t.tag = 'free-pick-subscriber') AS free_pick_subscriber FROM email_subscribers s WHERE s.subscribed = 1 AND s.welcome_status = 'pending' ORDER BY s.consent_at LIMIT 10");
   const { results } = await query.all();
   for (const row of results) {
     try { await sendLeadWelcome(env, row); } catch (error) { console.error("Lead welcome delivery deferred", error?.message); }
@@ -389,10 +403,12 @@ async function unlockFreePick(request, env, ctx) {
     .bind(email, source, firstName || null, now).run();
   if (pick) {
     const token = existing?.unsubscribe_token || (await env.DB.prepare('SELECT unsubscribe_token FROM email_subscribers WHERE email = ?').bind(email).first()).unsubscribe_token;
-    const id = await sha256Hex(`${email}:${pick.pickId || pick.publishedDate}:${pick.websitePublishedAt || ''}`);
+    const id = await sha256Hex(`${email}:${pick.publishedDate}`);
     await env.DB.prepare(`INSERT OR IGNORE INTO free_pick_email_outbox (id, email, pick_json, unsubscribe_token, created_at)
       VALUES (?, ?, ?, ?, ?)`).bind(id, email, JSON.stringify(pick), token, now).run();
     if (ctx?.waitUntil) ctx.waitUntil(deliverPendingFreePickEmails(env, id));
+  } else if (ctx?.waitUntil) {
+    ctx.waitUntil(deliverPendingLeadEmails(env, email));
   }
   await env.DB.prepare('INSERT INTO free_pick_unlock_events (id, source, has_pick, occurred_at) VALUES (?, ?, ?, ?)')
     .bind(crypto.randomUUID(), source, pick ? 1 : 0, now).run();
@@ -413,6 +429,11 @@ async function deliverPendingFreePickEmails(env, onlyId = null) {
     const claim = await env.DB.prepare("UPDATE free_pick_email_outbox SET status = 'sending', attempts = attempts + 1 WHERE id = ? AND status = 'pending'").bind(row.id).run();
     if (!claim.meta?.changes) continue;
     try {
+      const subscriber = await env.DB.prepare('SELECT subscribed FROM email_subscribers WHERE email = ?').bind(row.email).first();
+      if (!subscriber?.subscribed) {
+        await env.DB.prepare("UPDATE free_pick_email_outbox SET status = 'skipped' WHERE id = ?").bind(row.id).run();
+        continue;
+      }
       const pick = JSON.parse(row.pick_json);
       const details = pick.details || {};
       const unsubscribeUrl = `https://bettinghub-publisher.kobedirwin.workers.dev/api/email/unsubscribe?token=${encodeURIComponent(row.unsubscribe_token)}`;
@@ -422,10 +443,8 @@ async function deliverPendingFreePickEmails(env, onlyId = null) {
         [details.line, details.odds ? `(${details.odds})` : '', details.units ? `${details.units}u` : ''].filter(Boolean).join(' '),
         [details.sport, details.event].filter(Boolean).join(' · '), '',
         details.reason || '',
-        pick.caption || '',
         pick.imageUrl ? `View the approved pick card: ${pick.imageUrl}` : '', '',
-        'See the Hub: https://kobesbettinghub.com/free-pick',
-        'VIP membership: https://kobesbettinghub.com/join', '',
+        'Want the full VIP slate and writeups? Join here: https://kobesbettinghub.com/join', '',
         'Picks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.', '',
         `Unsubscribe: ${unsubscribeUrl}`,
       ];
@@ -793,7 +812,7 @@ async function listRecentPosts(request, env) {
 
 // Staff uses this endpoint once with the final daily image. The stored image is
 // then served to the public Free Pick page and attached to the corresponding X Post.
-async function publishFreePick(request, env) {
+async function publishFreePick(request, env, ctx) {
   // Keep website publication isolated from the broader queue credential. The
   // legacy queue secret remains accepted so existing operators do not break
   // during the credential split.
@@ -859,6 +878,12 @@ async function publishFreePick(request, env) {
   const pick = { publishedDate, caption, details, pickId, xQueueId, objectKey, storyObjectKey, updatedAt: new Date().toISOString(), xStatus: image && xEnabled ? "pending" : "not_requested" };
   await writeFreePick(pick, env);
   await putFreePickObject(env, `${FREE_PICK_BY_DATE_PREFIX}${publishedDate}.json`, JSON.stringify(pick), "application/json; charset=UTF-8", "no-store");
+  if (publishedDate === phoenixDate()) {
+    await env.FREE_PICK_KV?.put(FREE_PICK_DAY_STATE_KEY, JSON.stringify({ date: publishedDate, status: 'published' }));
+    const emailTask = queuePublishedFreePickEmails(env, pick, new URL(request.url).origin);
+    if (ctx?.waitUntil) ctx.waitUntil(emailTask);
+    else await emailTask;
+  }
   if (!image) return json({ ...publicFreePick(pick, new URL(request.url).origin), xPosted: false, message: "Text-only Free Pick published to the website." }, 201);
   if (!xEnabled) return json({ ...publicFreePick(pick, new URL(request.url).origin), xPosted: false, message: "Image Free Pick published to the website; X is disabled in this environment." }, 201);
   try {
@@ -876,6 +901,31 @@ async function publishFreePick(request, env) {
     console.error("Free Pick site update succeeded but X publish did not", { publishedDate, message: pick.xError });
     return json({ ...publicFreePick(pick, new URL(request.url).origin), xPosted: false, message: "The Free Pick page is live, but X needs attention before the post can be published." }, 202);
   }
+}
+
+async function queuePublishedFreePickEmails(env, pick, origin) {
+  if (!env.DB || !await freePickGateEnabled(env)) return;
+  await ensureEmailSubscribers(env);
+  const publicPick = publicFreePick(pick, origin);
+  const pickJson = JSON.stringify(publicPick);
+  let afterEmail = '';
+  for (;;) {
+    const { results } = await env.DB.prepare(`SELECT s.email, s.unsubscribe_token FROM email_subscribers s
+      JOIN email_subscriber_tags t ON t.email = s.email AND t.tag = 'free-pick-subscriber'
+      WHERE s.subscribed = 1 AND s.email > ? ORDER BY s.email LIMIT 100`).bind(afterEmail).all();
+    if (!results.length) break;
+    const now = new Date().toISOString();
+    const inserts = [];
+    for (const row of results) {
+      inserts.push(env.DB.prepare(`INSERT OR IGNORE INTO free_pick_email_outbox
+        (id, email, pick_json, unsubscribe_token, created_at) VALUES (?, ?, ?, ?, ?)`)
+        .bind(await sha256Hex(`${row.email}:${pick.publishedDate}`), row.email, pickJson, row.unsubscribe_token, now));
+    }
+    await env.DB.batch(inserts);
+    afterEmail = results[results.length - 1].email;
+    if (results.length < 100) break;
+  }
+  await deliverPendingFreePickEmails(env);
 }
 
 async function getCurrentFreePick(request, env) {
