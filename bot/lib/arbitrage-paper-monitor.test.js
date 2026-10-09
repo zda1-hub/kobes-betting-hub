@@ -108,6 +108,25 @@ test('supports a continuous 8 AM to 6 PM Arizona monitoring range', () => {
   assert.equal(activeWindow(new Date('2026-09-24T01:00:00Z'), ['08:00-18:00']), null);
 });
 
+test('one-minute cadence scans again after one minute and never earlier', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
+  let current = new Date('2026-09-23T18:00:00Z');
+  let requests = 0;
+  const monitor = createArbitragePaperMonitor({ apiKey: 'test',
+    reviewChannel: { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' }, send: async () => {} },
+    stateFile: path.join(root, 'state.json'), intervalMinutes: 1,
+    fetchImpl: async () => { requests += 1; return new Response('[]', { status: 200 }); },
+    now: () => current, windows: ['08:00-15:00'] });
+  try {
+    await monitor.start();
+    current = new Date('2026-09-23T18:00:59Z');
+    assert.equal((await monitor.scan()).status, 'TOO_SOON');
+    current = new Date('2026-09-23T18:01:00Z');
+    assert.equal((await monitor.scan()).status, 'SCANNED');
+    assert.equal(requests, 2);
+  } finally { await monitor.stop(); }
+});
+
 test('stale source quotes do not create arbitrage approval cards', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
   const stale = structuredClone(event);
@@ -136,7 +155,7 @@ test('successful routine scans log their time, window, counts and feed quota', a
   await monitor.stop();
   assert.equal(logs.length, 1);
   assert.deepEqual(JSON.parse(logs[0].replace(/^Arbitrage scan: /, '')), {
-    scannedAt: '2026-09-23T18:00:00.000Z', window: '08:00-15:00', sports: ['upcoming'], eventCount: 0,
+    scannedAt: '2026-09-23T18:00:00.000Z', window: '08:00-15:00', sports: ['upcoming'], intervalMinutes: 5, eventCount: 0,
     positiveCount: 0, aboveThresholdCount: 0, freshPositiveCount: 0, opportunityCount: 0,
     minimumEdgePercent: 2, bookmakerCount: 9, coveredBookmakers: [], remaining: '99', used: '1'
   });
