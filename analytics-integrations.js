@@ -20,7 +20,7 @@
     document.head.append(script);
     if (!gtm) {
       gtag('js', new Date());
-      if (ga4) gtag('config', ga4, { send_page_view: false });
+      if (ga4) gtag('config', ga4);
       if (ads) gtag('config', ads);
     }
   };
