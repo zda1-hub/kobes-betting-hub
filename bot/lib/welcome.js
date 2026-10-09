@@ -16,6 +16,7 @@ function buildWelcomeDm(env = process.env) {
       `Today’s free picks: ${channel(env.FREE_PICK_CHANNEL_ID, '#free-picks')}. Read the reasoning and check the tracked results.`,
       `Talk with the community: ${channel(env.COMMUNITY_CHANNEL_ID, '#community-chat')}.`,
       `Want the full picks and tools? ${channel(env.JOIN_VIP_CHANNEL_ID, '#join-vip')} or ${JOIN_URL}.`,
+      'VIP also includes reviewed betting arbitrage alerts with both sides, quoted odds, and a calculated stake split. Check the live prices before betting.',
       '21+ where permitted. Wager responsibly; no result is guaranteed.'
     ].join('\n\n'));
 }
