@@ -8,7 +8,8 @@
   const purchaseLabel = valid(config.purchaseLabel, /^[A-Za-z0-9_-]+$/) ? config.purchaseLabel : '';
   let started = false;
   window.dataLayer = window.dataLayer || [];
-  const gtag = (...args) => window.dataLayer.push(args);
+  function gtag() { window.dataLayer.push(arguments); }
+  window.gtag = gtag;
   gtag('consent', 'default', { analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
   const start = () => {
     if (started || !window.KBHConsent?.allowed() || (!gtm && !ga4 && !ads)) return;
