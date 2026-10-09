@@ -32,3 +32,10 @@ The owner asked to complete the Google Analytics setup steps shown in the email.
 
 - After the standard page-view release, Tag Assistant still found the tag but showed no hits and “Consent not configured.” GA4's web stream continued to show no data received in 48 hours; the Internal Traffic filter was in Testing state rather than Active.
 - `analytics-integrations.js` now declares the canonical global `gtag()` function and queues its native `arguments` object on `dataLayer`; `scripts/prepare-public-site.mjs` refreshes the cache key. This replaces the prior private rest-parameter arrow function. The existing deny-by-default and explicit opt-in remain.
+
+## Verified release
+
+- PR #201 merged as `acfdc40`. The explicit public build used `KBH_GA4_ID=G-264TY91ZCT` and deployed Cloudflare Worker version `67c765b4-f932-4dcb-8815-d2c1f553ac1f`.
+- On the live custom domain, Google Tag Assistant connected to `G-264TY91ZCT`, recorded Consent Default and Consent Update, and listed a Page View hit plus two `section_view` hits.
+- GA4 Realtime for property `a411393679p558205832` then displayed one active user, one page view, and `page_view`, `session_start`, and `section_view` events. This confirms current web data collection. Historical data from before the fix is not recovered.
+- The Analytics setup checklist may update later. Google Ads linking and audiences are separate setup steps and were not changed. The visual design, checkout, and first-party dashboard remain unchanged. State: published and verified.
