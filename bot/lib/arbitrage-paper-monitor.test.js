@@ -35,6 +35,18 @@ test('finds a two-book arbitrage and produces a balanced $1,000 example', () => 
   assert.match(alertDescription(opportunity), /AWAITING KOBE APPROVAL/);
 });
 
+test('finds a cross-book edge when one book has the highest price on both sides', () => {
+  const oneEvent = structuredClone(event);
+  oneEvent.bookmakers = [
+    { key: 'fanduel', title: 'FanDuel', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.2 }, { name: 'Home', price: 2.2 }] }] },
+    { key: 'draftkings', title: 'DraftKings', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.05 }, { name: 'Home', price: 2.05 }] }] }
+  ];
+  const [opportunity] = findArbitrage([oneEvent], { minimumEdgePercent: 1 });
+  assert.ok(opportunity);
+  assert.notEqual(opportunity.legs[0].book, opportunity.legs[1].book);
+  assert.ok(opportunity.edgePercent > 1);
+});
+
 test('uses the market quote timestamp when the bookmaker timestamp is stale', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
   const current = structuredClone(event);
