@@ -26,3 +26,8 @@ Cloudflare D1 showed four subscriber addresses: three clearly identifiable busin
 
 ## Follow-up refinement
 The homepage email form now sends the current pick instead of a separate welcome when one is live. The pick email omits the duplicate social caption and uses one VIP link. Delivery rechecks subscription status immediately before sending. A test covers the homepage path; the focused suite now has 19 passing tests.
+
+## Publication follow-up — October 8, 2026 (MST)
+- Merged as GitHub PR #194 at commit `65480cc` from the latest `origin/main` base.
+- Deployed the production `bettinghub-publisher` Worker with Wrangler; live version `0b2efc4c-7b52-4e28-a487-5a4874d7d4f1` is at 100% in the deployment listing.
+- No existing subscriber was sent an old pick during deployment. Delivery of the next pick remains dependent on an authorized current-day free-pick publication.
