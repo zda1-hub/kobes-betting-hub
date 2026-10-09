@@ -18,3 +18,11 @@ The owner asked to add the concise betting arbitrage explanation and worked exam
 - On this release branch from current `origin/main`, `node --check bot/index.js`, the focused arbitrage monitor and public preparation tests (22 passed), the explicit public build (84 entries), and `git diff --check` passed.
 - Two unrelated older bento tests still expect preexisting `.html` links and extensionless filesystem paths, while the current public builder intentionally rewrites links to clean routes. Those failures are not caused by this change.
 - Release status: prepared; live publication and receipt to be appended after deployment.
+
+## Live release receipt
+
+- GitHub PR #196 merged to `main` as `5e5c445547c0ee20d3ce5090657d7b4648fc36f3`.
+- Render background worker deployment `dep-db46ra1bgiqc738l6ehg` reached live. Its `ARBITRAGE_WINDOWS_ARIZONA` setting was updated to `07:00-18:00`.
+- The existing Kobe Bot post in `#start-here` (`1555365075894927412`) was edited in place and visibly reads “betting arbitrage alerts.” No new post was created.
+- Cloudflare Worker `kobes-betting-hub` deployed version `a12cf8de-7d5f-47aa-848f-1d6fa61f19a7` from the merged public whitelist build. A request to the custom domain confirmed `BETTING ARBITRAGE`, `See an example`, and `$190.48` on the homepage and the matching `$190.48` and `$9.52` figures on the guide.
+- State: published October 8, 2026 MST. No remaining release blocker.
