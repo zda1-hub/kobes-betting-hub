@@ -10,4 +10,6 @@ Verification: 19 focused monitor tests passed, including a new same-best-book ca
 
 Limits: the scanner currently covers head-to-head markets for four sports and the configured US books. It cannot create opportunities absent from those quotes. Adding spreads, totals, other sports, or more frequent provider calls consumes more of the 20,000 monthly credits and needs a quota budget and coverage check. Quotes must be recent and positive at approval; both sportsbooks can change odds or reject a wager. No profit is guaranteed.
 
-Status: local change pending publication.
+Release: PR #204 merged as `be1a7ef` and Render deployment `dep-db4kef142hec73dm7dg0` reached live. A post-deploy scan at 12:59 PM MST covered the same four sports and 115 events, with no scan error; no qualifying edge was present in that scan. The new cross-book case was verified by the focused test, not inferred from that live scan.
+
+Follow-up: at the owner's request, `FREE_RECAP_CHANNEL_ID` was set to an empty value in the live Render worker. Deployment `dep-db4kfgaj9qps73ct9kkg` reached live. This stops new posts to the free-pick recap channel because `publishDueFreeResults` returns when that channel is unset. It does not stop the free pick, website results, or separate private recap approvals.
