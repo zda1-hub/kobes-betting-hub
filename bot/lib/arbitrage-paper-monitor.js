@@ -58,18 +58,29 @@ function findArbitrage(events, { minimumEdgePercent = 2, bankroll = 1000, freshO
       for (const outcome of market?.outcomes || []) {
         const price = decimal(outcome.price);
         if (!price) continue;
-        const prior = prices.get(outcome.name);
         // The bookmaker timestamp is deprecated by The Odds API. Use the
         // market quote's timestamp so an older bookmaker value does not hide
         // an otherwise current head-to-head price.
         const updatedAt = market.last_update || book.last_update || null;
         if (freshOnly && !freshQuote(updatedAt, now)) continue;
-        if (!prior || price > prior.price) prices.set(outcome.name, { name: outcome.name, price, book: book.key, bookName: book.title, updatedAt });
+        if (!prices.has(outcome.name)) prices.set(outcome.name, []);
+        prices.get(outcome.name).push({ name: outcome.name, price, book: book.key, bookName: book.title, updatedAt });
       }
     }
-    const sides = [...prices.values()];
-    if (sides.length !== 2 || sides[0].book === sides[1].book) continue;
-    const implied = sides.reduce((sum, side) => sum + 1 / side.price, 0);
+    // The top prices on both sides can come from the same book. Search the
+    // remaining cross-book combinations instead of dropping the event.
+    if (prices.size !== 2) continue;
+    const [first, second] = [...prices.values()];
+    let sides = null;
+    let implied = Infinity;
+    for (const left of first) {
+      for (const right of second) {
+        if (left.book === right.book) continue;
+        const candidate = 1 / left.price + 1 / right.price;
+        if (candidate < implied) { implied = candidate; sides = [left, right]; }
+      }
+    }
+    if (!sides) continue;
     if (implied >= 1) continue;
     const edgePercent = (1 / implied - 1) * 100;
     if (edgePercent < minimumEdgePercent) continue;
@@ -288,7 +299,7 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
       timer = setInterval(() => {
         if (quotaExhausted) { clearInterval(timer); timer = null; return; }
         void scan().catch(error => console.error('Arbitrage paper scan needs attention:', error.message));
-      }, 60000);
+      }, 10000);
       timer.unref();
       return first;
     },
