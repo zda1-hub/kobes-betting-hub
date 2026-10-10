@@ -32,10 +32,10 @@ const setupWins = track => {
   new ResizeObserver(measure).observe(rail);measure();
   const animate = now => { if(last && !manual && !reduced.matches && !hovered && !document.hidden && pointer===undefined){const bounds=rail.getBoundingClientRect();if(bounds.top<innerHeight&&bounds.bottom>0){position+=Math.min(now-last,50)*.065;normalize(position);}}last=now;requestAnimationFrame(animate); };requestAnimationFrame(animate);
 };
-const verifiedResultsTrack = document.querySelector('[data-verified-results-track]');
+const verifiedResultsTrack = document.querySelector('[data-verified-results-track]') || document.querySelector('[data-wins-track]');
 if (verifiedResultsTrack) {
-  const winsOnly = verifiedResultsTrack.hasAttribute('data-wins-only');
-  if (!verifiedResultsTrack.hasAttribute('data-wins-only')) {
+  const winsOnly = verifiedResultsTrack.hasAttribute('data-wins-only') || verifiedResultsTrack.hasAttribute('data-wins-track');
+  if (!winsOnly) {
   const rail = verifiedResultsTrack.parentElement;
   rail.addEventListener('keydown', event => { if (['ArrowLeft','ArrowRight'].includes(event.key)) { event.preventDefault(); rail.scrollLeft += (event.key === 'ArrowRight' ? 1 : -1) * rail.clientWidth * .7; } });
   let startX = 0;
@@ -103,7 +103,7 @@ if (verifiedResultsTrack) {
         return card;
       };
       verifiedResultsTrack.replaceChildren(...results.map(makeResultCard));
-      if (results.length && winsOnly) setupWins(verifiedResultsTrack);
+      if (results.length && winsOnly && !verifiedResultsTrack.hasAttribute('data-wins-track')) setupWins(verifiedResultsTrack);
       if (!results.length) verifiedResultsTrack.textContent = "No recent verified wins are available.";
       const winsTrack = document.querySelector("[data-wins-track]");
       if (winsTrack) {

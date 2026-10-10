@@ -7,3 +7,5 @@ Changed: index.html consolidates the historical title and short qualification in
 Published Cloudflare version: 91d401b2-c20c-4505-b816-9ff5a41bd23b. Whitelist build succeeded. Live AX confirms title, single box, qualification and retained winning-play controls/link.
 
 Figma: https://www.figma.com/design/zLXgddkjvj38VlgQiajJsK?node-id=1-2. Editable card frame 856×539.8 with seven text layers and editable orange/black auto-layout frames. Limitation: SF Pro text renders blank in MCP screenshots despite characters and dimensions being present; subsequent correction blocked by Starter-plan MCP call limit. Not visually accepted. Editable SVG fallback saved in primary outputs/membership-card-concepts-2026-10-10/orange-kbh-editable.svg. Website membership card remains the existing approved raster.
+
+Follow-up: removal of the legacy hidden track exposed a feed initialization dependency. home-results.js now initializes directly from the visible winning-picks track when the legacy track is absent, preserving feed loading without the removed box.
