@@ -91,3 +91,20 @@ a,a span,a svg,.tile-link,.tile-link span{text-decoration:none!important}
 .site-menu{transition:opacity .35s ease,transform .5s cubic-bezier(.22,1.25,.36,1),visibility .35s}
 button,.button,.header-join,.pick-arrow{transition:transform .45s cubic-bezier(.22,1.25,.36,1),box-shadow .3s ease!important}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* Containment and intrinsic wins sizing — October 10. */
+.bento,.tile,.plan-card{min-width:0;overflow-wrap:anywhere}
+.approach-tile .tile-kicker{display:flex;align-items:start;justify-content:space-between;gap:8px;min-width:0;padding-right:0}
+.approach-tile .tile-kicker>span{position:static!important;flex:0 0 auto;transform:none!important;line-height:1.5}
+.lower-bento{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+.lower-bento>.wins-tile{overflow:hidden;padding:var(--hub-inset)!important}
+.wins-tile .tile-heading{padding:0!important;gap:8px;align-items:start}.wins-tile .tile-heading>a{flex:none}
+.wins-tile .tile-heading h2{overflow-wrap:normal}
+.wins-tile .verified-results-track{padding:0;gap:16px;align-items:start}
+.wins-tile .verified-result-card{flex:0 0 auto;width:max-content!important;max-width:min(360px,calc(100vw - 80px))!important;min-width:0!important;min-height:0!important;height:auto!important;padding:16px!important;border-radius:8px;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.wins-tile .verified-result-card>*{margin:0!important;max-width:100%;overflow-wrap:anywhere}
+.wins-tile .verified-result-card strong{white-space:normal}
+.wins-tile .rail-controls{padding:16px 0 0!important}.wins-tile>.tile-link{margin:16px 0 0!important}
+.landing-record{padding:var(--hub-inset)!important}.landing-record>p,.landing-record>.tile-link{margin:0 0 16px!important;padding:0!important}.landing-record>.historical-heading strong{font-size:16px!important;font-weight:600!important}.landing-record .record-note{margin-bottom:0!important}
+.referral-promo-banner{width:min(100% - var(--gutter)*2,320px);min-height:0;padding:0;margin:0 auto 24px;background:none!important;box-shadow:none!important;border-radius:0;animation:none!important;gap:8px}
+.referral-promo-banner img{display:block;width:100%;height:auto;object-fit:contain;box-shadow:0 4px 10px #0002}.referral-promo-banner span{color:var(--ink);text-align:center}

@@ -23,3 +23,5 @@ These user instructions supersede earlier typography/spacing guidance and remain
 - No play/pause button in the top ticker. Honor reduced-motion preferences. Arrows must have no text underline.
 
 - October 10 follow-up: neighboring collapsed bento cards align in height; use smooth spring-like disclosure motion. Highlight verified wins with a clear win badge. No gallery play/pause controls; manual browsing interrupts motion, which resumes after four seconds idle. Respect reduced-motion settings and pause while dragging/hovering or viewing an image.
+
+- October 10 containment rule: every icon/arrow/control must remain within its parent’s padded bounds at 320px, 390px and desktop widths. Use min-width:0, flexible layout and explicit intrinsic sizing; never accept overflow or fix it by hiding actionable content. Verify rendered bounds before publication. Result cards size to their content plus symmetric padding, with a responsive maximum; do not impose equal widths or trailing whitespace.

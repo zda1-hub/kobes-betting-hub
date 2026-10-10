@@ -1,0 +1,10 @@
+# Containment, compact wins and referral bill — October 10, 2026 MST
+
+Requested: contain approach arrow; variable content-width win cards; narrower wins tile; compact historical65% heading; remove header attribution; bill-image referral button; persistent global containment rule.
+Files: site.css, site.js, index.html, public root/guide stylesheet references/header caption removals, assets/referral/twenty-dollar.png and SOURCE.txt, project AGENTS.md and user-global /Users/z/.codex/AGENTS.md.
+Before: arrow could leave orange card; fixed wide wins cards; wins column1.4vsapproach.6; oversized separate percentage; header caption; green referral banner.
+After: arrow participates in flex layout with fixed intrinsic space and padding. Lower bento equal columns; result cards max-content with responsive cap and symmetric16px padding, variable widths. Bold “KOBE’S HISTORICAL 65% WIN RATE,” regular “Write-up play tracker,” results link; factual historical-source caveat retained. Header caption removed. Referral bill image remains link to same program, with explicit eligible-referral caption/accessibility label.
+Asset: high-resolution public-domain US20-front image from https://commons.wikimedia.org/wiki/File:US20-front.jpg , converted1000px PNG, full bill ratio retained, one-sided. Source recorded.
+Verification:6public/build checks pass. Local rendered bounds320/390/1280: approach arrow remains17/17/25px inside card right edge; no horizontal document overflow. Live bill naturalWidth1000, header caption absent, win cards show distinct measured widths; live screenshot primary outputs/audit-2026-10-10/compact-wins-live.png. Browser viewport restored.
+Published site Worker e7f40b7d-d63c-473f-8893-9539dc8e13ba; explicit whitelist and backend unchanged.
+Limitations: horizontal rail intentionally shows partial neighboring cards; user can browse full contents. Historical65% remains user-reported, not an independently verified current result statistic. Production payment/referral contracts preserved.

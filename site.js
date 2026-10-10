@@ -32,7 +32,7 @@
   referralBanner.className = 'referral-promo-banner';
   referralBanner.href = new URL('refer.html', document.currentScript?.src || location.href).href;
   referralBanner.setAttribute('aria-label', 'Earn $20 for each eligible paid referral. Get your referral link.');
-  referralBanner.innerHTML = '<strong>Wanna make extra money?</strong><span>$20 for each eligible new member who joins the HUB! <b aria-hidden="true">→</b></span>';
+  referralBanner.innerHTML = '<img src="/assets/referral/twenty-dollar.png" alt="Twenty-dollar bill — earn $20 per eligible paid referral" width="1000" height="421"><span>Earn $20 per eligible paid referral →</span>';
   const landingIntro = document.querySelector('.home-page .landing-intro');
   if (landingIntro) landingIntro.after(referralBanner);
   else document.querySelector('.site-ticker')?.after(referralBanner);
