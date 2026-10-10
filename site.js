@@ -42,7 +42,7 @@
     memberCard.innerHTML = '<img src="/assets/membership/orange-kbh-monthly.png" alt="Orange KBH VIP membership card — $32.99/month" width="1580" height="1000"><span>$32.99/month until canceled. View membership →</span>';
     landingIntro.after(memberCard, referralBanner);
   }
-  else document.querySelector('.site-ticker')?.after(referralBanner);
+  else document.querySelector('main')?.prepend(referralBanner);
   const checkoutState = new URLSearchParams(location.search).has('checkout');
   let prompted = false;
   let exitDialog;
