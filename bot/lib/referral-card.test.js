@@ -7,10 +7,10 @@ const config = {
   dashboard_url: 'https://example.com/refer.html'
 };
 
-test('builds a simple $10 referral card without copying another server’s commission terms', () => {
+test('builds a simple $20 referral card without copying another server’s commission terms', () => {
   const payload = referralCardPayload(config);
   const text = JSON.stringify(payload);
-  assert.match(text, /\$10 cash/);
+  assert.match(text, /\$20 cash/);
   assert.match(text, /first \$32\.99 membership payment/);
   assert.match(text, /seven-day review/);
   assert.match(text, /Self-referrals/);

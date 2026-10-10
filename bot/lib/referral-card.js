@@ -14,7 +14,7 @@ function referralCardPayload(config) {
     embeds: [{
       color: 0xFF7900,
       title: '💸 Member Referral Program',
-      description: '**REFER. THEY JOIN. YOU EARN.**\n\nShare your personal Hub link. After a new member completes their first $32.99 membership payment, the referral enters a seven-day review. Each eligible referral earns **$10 cash**.',
+      description: '**REFER. THEY JOIN. YOU EARN.**\n\nShare your personal Hub link. After a new member completes their first $32.99 membership payment, the referral enters a seven-day review. Each eligible referral earns **$20 cash**.',
       fields: [
         { name: '1 · GET YOUR LINK', value: 'Connect your Discord account and copy your personal referral link.' },
         { name: '2 · SHARE IT', value: 'Your friend must be a new member and join through that exact link.' },

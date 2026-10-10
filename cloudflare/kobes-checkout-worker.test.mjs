@@ -401,8 +401,8 @@ test('checkout worker exposes a scheduled membership reconciliation handler', ()
   assert.equal(typeof worker.scheduled, 'function');
 });
 
-test('new referral rewards are configured for ten dollars', () => {
-  assert.equal(workerTest.REFERRAL_REWARD_CENTS, 1000);
+test('new referral rewards are configured for twenty dollars', () => {
+  assert.equal(workerTest.REFERRAL_REWARD_CENTS, 2000);
 });
 
 test('cash payouts use the amount stored on each immutable reward', () => {
@@ -560,38 +560,15 @@ test('Discord OAuth state is signed, scoped, and rejects tampering', async () =>
   assert.equal(new URL(workerTest.discordAuthorizationUrl(state, oauthEnv, 'referral')).searchParams.get('scope'), 'identify email');
 });
 
-test('first-month-back checkout charges $19.99 now and renews on the $32.99 monthly price', async (t) => {
+test('retired first-month pricing rejects new checkout without contacting Stripe', async (t) => {
   const originalFetch = globalThis.fetch;
-  const originalNow = Date.now;
-  t.after(() => { globalThis.fetch = originalFetch; Date.now = originalNow; });
-  Date.now = () => Date.parse('2026-09-23T12:00:00Z');
-  const calls = [];
-  globalThis.fetch = async (url, options = {}) => {
-    const target = new URL(url);
-    calls.push({ path: target.pathname, method: options.method || 'GET', body: String(options.body || '') });
-    if (target.pathname.endsWith('/coupons/kbh_first_month_back_2026_09_22')) {
-      return Response.json({ error: { message: 'No such coupon' } }, { status: 404 });
-    }
-    if (target.pathname.endsWith('/coupons')) {
-      return Response.json({ id: 'kbh_first_month_back_2026_09_22', amount_off: 1300, currency: 'usd', duration: 'once', valid: true });
-    }
-    if (target.pathname.endsWith('/checkout/sessions')) return Response.json({ url: 'https://checkout.stripe.test/promo' });
-    throw new Error(`Unexpected request: ${target}`);
-  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => { throw new Error('Retired offer contacted Stripe'); };
   const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ offer: 'first_month_back' }),
+    method: 'POST', body: JSON.stringify({ offer: 'first_month_back' }),
   }), { STRIPE_SECRET_KEY: 'sk_test_local_only', STRIPE_MONTHLY_PRICE_ID: 'price_monthly' });
-  assert.equal(response.status, 200);
-  const coupon = new URLSearchParams(calls.find(call => call.path.endsWith('/coupons') && call.method === 'POST').body);
-  assert.equal(coupon.get('amount_off'), '1300');
-  assert.equal(coupon.get('currency'), 'usd');
-  assert.equal(coupon.get('duration'), 'once');
-  const checkout = new URLSearchParams(calls.find(call => call.path.endsWith('/checkout/sessions')).body);
-  assert.equal(checkout.get('line_items[0][price]'), 'price_monthly');
-  assert.equal(checkout.get('discounts[0][coupon]'), 'kbh_first_month_back_2026_09_22');
-  assert.equal(checkout.get('metadata[offer]'), 'first_month_back');
-  assert.equal(checkout.has('subscription_data[trial_period_days]'), false);
-  assert.equal(checkout.has('line_items[1][price]'), false);
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /ended/);
 });
 
 test('standard monthly checkout charges the configured monthly price without a trial or promotion', async (t) => {
@@ -614,56 +591,12 @@ test('standard monthly checkout charges the configured monthly price without a t
   assert.equal(checkout.has('discounts[0][coupon]'), false);
 });
 
-test('first-20 deal is limited to Wednesday through Sunday MST, $5 once, and 20 redemptions', async (t) => {
-  assert.equal(workerTest.first20Active(Date.parse('2026-10-14T06:59:59Z')), false);
-  assert.equal(workerTest.first20Active(Date.parse('2026-10-14T07:00:00Z')), true);
-  assert.equal(workerTest.first20Active(Date.parse('2026-10-19T06:59:59Z')), true);
-  assert.equal(workerTest.first20Active(Date.parse('2026-10-19T07:00:00Z')), false);
-  const originalFetch = globalThis.fetch;
-  const originalNow = Date.now;
-  t.after(() => { globalThis.fetch = originalFetch; Date.now = originalNow; });
-  Date.now = () => Date.parse('2026-10-15T12:00:00Z');
-  const calls = [];
-  globalThis.fetch = async (url, options = {}) => {
-    const target = new URL(url);
-    calls.push({ path: target.pathname, method: options.method || 'GET', body: String(options.body || '') });
-    if (target.pathname.endsWith('/coupons/kbh_first20_20261014')) return Response.json({ error: { message: 'No such coupon' } }, { status: 404 });
-    if (target.pathname.endsWith('/coupons')) return Response.json({ id: 'kbh_first20_20261014', amount_off: 2799,
-      currency: 'usd', duration: 'once', max_redemptions: 20, redeem_by: Date.parse('2026-10-19T07:00:00Z') / 1000 - 1, valid: true });
-    if (target.pathname.endsWith('/checkout/sessions')) return Response.json({ url: 'https://checkout.stripe.test/first20' });
-    throw new Error(`Unexpected request: ${target}`);
-  };
+test('retired introductory offers and the first-20 deal are closed', async () => {
+  assert.equal(workerTest.firstMonthBackActive(Date.parse('2026-10-10T12:00:00Z')), false);
   const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
     method: 'POST', body: JSON.stringify({ offer: 'first_month_back', deal: 'first20' }),
-  }), { STRIPE_SECRET_KEY: 'sk_test_local_only', STRIPE_MONTHLY_PRICE_ID: 'price_monthly' });
-  assert.equal(response.status, 200);
-  const coupon = new URLSearchParams(calls.find(call => call.path.endsWith('/coupons') && call.method === 'POST').body);
-  assert.equal(coupon.get('amount_off'), '2799');
-  assert.equal(coupon.get('max_redemptions'), '20');
-  assert.equal(coupon.get('redeem_by'), String(Date.parse('2026-10-19T07:00:00Z') / 1000 - 1));
-  const checkout = new URLSearchParams(calls.find(call => call.path.endsWith('/checkout/sessions')).body);
-  assert.equal(checkout.get('discounts[0][coupon]'), 'kbh_first20_20261014');
-  assert.equal(checkout.get('metadata[promotion]'), 'first20');
-  assert.equal(checkout.has('subscription_data[trial_period_days]'), false);
-  Date.now = () => Date.parse('2026-10-19T07:00:00Z');
-  const closed = await worker.fetch(new Request('https://worker.test/create-checkout', {
-    method: 'POST', body: JSON.stringify({ offer: 'first_month_back', deal: 'first20' }),
-  }), { STRIPE_SECRET_KEY: 'sk_test_local_only', STRIPE_MONTHLY_PRICE_ID: 'price_monthly' });
-  assert.equal(closed.status, 400);
-});
-
-test('first-month-back offer remains available through October 22 Arizona time', async (t) => {
-  assert.equal(workerTest.firstMonthBackActive(Date.parse('2026-09-22T07:00:00Z')), true);
-  assert.equal(workerTest.firstMonthBackActive(Date.parse('2026-10-23T06:59:59Z')), true);
-  assert.equal(workerTest.firstMonthBackActive(Date.parse('2026-10-23T07:00:00Z')), false);
-  const originalNow = Date.now;
-  t.after(() => { Date.now = originalNow; });
-  Date.now = () => Date.parse('2026-10-23T07:00:00Z');
-  const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
-    method: 'POST', body: JSON.stringify({ offer: 'first_month_back' }),
   }), {});
   assert.equal(response.status, 400);
-  assert.match((await response.json()).error, /ended/);
 });
 
 test('creator first-month offer earns ten dollars after a $19.99 paid invoice and seven-day hold', async (t) => {
@@ -769,6 +702,51 @@ test('member first-month referral qualifies on the $19.99 payment and matching m
     { message: 'PAYMENT_NO_LONGER_QUALIFIES' });
 });
 
+test('member monthly referral qualifies on the $32.99 payment and matching member identity', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const patches = [];
+  globalThis.fetch = async (input, options = {}) => {
+    const path = new URL(input).pathname;
+    if (path.endsWith('/subscriptions/sub_member_monthly')) return Response.json({
+      metadata: { offer: 'monthly', referral_code: 'KBH-ABCDEF1234', referrer_discord_user_id: 'discord_referrer' },
+      items: { data: [{ price: { id: 'price_monthly' } }] },
+    });
+    if (path.endsWith('/referral_rewards') && options.method === 'PATCH') {
+      patches.push(JSON.parse(options.body));
+      return Response.json([{ id: 'reward_member_monthly', status: 'HOLDING' }]);
+    }
+    if (path.endsWith('/referral_rewards')) return Response.json([{
+      id: 'reward_member_monthly', status: 'PENDING_PAYMENT', referred_stripe_customer_id: 'cus_member', first_paid_invoice_id: null,
+    }]);
+    if (path.endsWith('/api_call_events') || path.endsWith('/referral_events')) return new Response(null, { status: 204 });
+    if (path.endsWith('/invoices/in_member_monthly')) return Response.json({
+      id: 'in_member_monthly', status: 'paid', currency: 'usd', amount_paid: 3299,
+      customer: 'cus_member', subscription: 'sub_member_monthly', charge: 'ch_member',
+    });
+    if (path.endsWith('/charges/ch_member')) return Response.json({
+      paid: true, captured: true, status: 'succeeded', currency: 'usd', amount_captured: 3299,
+      customer: 'cus_member', refunded: false, amount_refunded: 0,
+      payment_method_details: { card: { fingerprint: 'fingerprint_member' } },
+    });
+    if (path.endsWith('/refunds')) return Response.json({ data: [], has_more: false });
+    throw new Error(`Unexpected request: ${options.method || 'GET'} ${path}`);
+  };
+  const env = { STRIPE_SECRET_KEY: 'sk_test', STRIPE_MONTHLY_PRICE_ID: 'price_monthly',
+    SUPABASE_URL: 'https://project.supabase.test', SUPABASE_SECRET_KEY: 'sb_secret' };
+  const result = await workerTest.processReferralInvoicePaid(env, {
+    id: 'in_member_monthly', currency: 'usd', amount_paid: 3299, customer: 'cus_member',
+    subscription: 'sub_member_monthly', created: 1790186400,
+  }, 'evt_member_monthly');
+  assert.equal(result, 'REFERRAL_HOLD_STARTED');
+  assert.equal(patches[0].status, 'HOLDING');
+  const reward = { referrer_discord_user_id: 'discord_referrer', referral_code: 'KBH-ABCDEF1234',
+    referred_subscription_id: 'sub_member_monthly', first_paid_invoice_id: 'in_member_monthly', referred_stripe_customer_id: 'cus_member' };
+  assert.equal((await workerTest.qualifyingReferralCharge(env, reward)).chargeId, 'ch_member');
+  await assert.rejects(workerTest.qualifyingReferralCharge(env, { ...reward, referrer_discord_user_id: 'other_member' }),
+    { message: 'PAYMENT_NO_LONGER_QUALIFIES' });
+});
+
 test('checkout offer composition matches the published intro pricing without charging in the test', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
@@ -840,7 +818,7 @@ test('longer plans select server-owned recurring prices with no trial or starter
   assert.equal(requests.length, 2);
 });
 
-test('referral checkout is locked to the two-day monthly offer and records the stable Discord referrer ID', async (t) => {
+test('referral checkout charges monthly without a trial and records the stable Discord referrer ID', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
   const stripeRequests = [];
@@ -860,7 +838,7 @@ test('referral checkout is locked to the two-day monthly offer and records the s
   const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Checkout-Request-Id': 'f054a06e-a74b-439f-a56d-b0be5f6cc613' },
-    body: JSON.stringify({ offer: 'referral_trial', referral_code: 'KBH-ABCDEF1234' }),
+    body: JSON.stringify({ offer: 'monthly', referral_code: 'KBH-ABCDEF1234' }),
   }), {
     STRIPE_SECRET_KEY: 'sk_test_local_only',
     STRIPE_MONTHLY_PRICE_ID: 'price_monthly',
@@ -872,8 +850,8 @@ test('referral checkout is locked to the two-day monthly offer and records the s
   const checkout = new URLSearchParams(stripeRequests[0].body);
   assert.equal(checkout.get('line_items[0][price]'), 'price_monthly');
   assert.equal(checkout.has('line_items[1][price]'), false);
-  assert.equal(checkout.get('subscription_data[trial_period_days]'), '2');
-  assert.equal(checkout.get('metadata[offer]'), 'referral_trial');
+  assert.equal(checkout.has('subscription_data[trial_period_days]'), false);
+  assert.equal(checkout.get('metadata[offer]'), 'monthly');
   assert.equal(checkout.get('metadata[referral_code]'), 'KBH-ABCDEF1234');
   assert.equal(checkout.get('subscription_data[metadata][referrer_discord_user_id]'), 'discord_referrer');
 });
@@ -915,7 +893,7 @@ test('creator invitation cannot be created without the operations secret', async
   assert.equal(response.status, 401);
 });
 
-test('creator attribution records an email-owned ten-dollar reward exactly once', async (t) => {
+test('creator attribution records an email-owned twenty-dollar reward exactly once', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
   const writes = [];
@@ -939,7 +917,7 @@ test('creator attribution records an email-owned ten-dollar reward exactly once'
     customerId: 'cus_referred', subscriptionId: 'sub_referred' });
   assert.equal(reward.creator_profile_id, 'a7000000-0000-4000-8000-000000000001');
   assert.equal(writes[0].referrer_discord_user_id, null);
-  assert.equal(writes[0].reward_amount_cents, 1000);
+  assert.equal(writes[0].reward_amount_cents, 2000);
   assert.equal(writes.length, 1);
 });
 

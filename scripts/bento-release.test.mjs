@@ -45,7 +45,7 @@ test('built shared navigation and local assets resolve on redesigned public rout
 test('production offers retain checkout, configuration and post-payment handoff contracts', async () => {
   for (const file of ['join.html','membership.html']) {
     const html = await read(file);
-    for (const offer of ['first_month_back','starter','six_month','annual']) assert.match(html, new RegExp(`data-checkout="${offer}"`));
+    for (const offer of ['monthly','starter','six_month','annual']) assert.match(html, new RegExp(`data-checkout="${offer}"`));
     for (const hook of ['data-membership-sales','data-membership-confirmation','data-discord-connect','data-connection-title','data-connection-message','data-checkout-message']) assert.ok(html.includes(hook), `${file}: ${hook}`);
     assert.equal((html.match(/window\.__KBH_MEMBERSHIP_CONFIG__/g) || []).length, 1);
     assert.match(html, /"environment":"production"/);
@@ -75,7 +75,7 @@ test('production email form supplies age, consent and honeypot to the existing h
 test('landing wins retain full-record links and proof retains unique inline reviews', async () => {
   const home = await read('index.html');
   assert.match(home, /65% <span>historical win rate<\/span>/); assert.match(home, /data-wins-track/);
-  assert.match(home, /href="\/?results(?:\.html)?"[^>]*>See all tracked picks/);
+  assert.match(home, /href="\/?results(?:\.html)?"[^>]*>See winning plays/);
   const proof = await read('proof.html');
   assert.match(proof, /data-verified-results-track/);
   assert.match(proof, /archive/i);
@@ -122,8 +122,8 @@ test('homepage highlights only wins, uses the overall live count and the supplie
   const home = await read('index.html');
   const compactCard = home.match(/<section class="bento verified-results-tile landing-record"[\s\S]*?<\/section>/)?.[0];
   assert.match(compactCard || '', /65% <span>historical win rate<\/span>/);
-  assert.match(compactCard || '', /Kobe-reported estimate; complete historical records are unavailable/);
-  assert.match(compactCard || '', /See tracked picks/);
+  assert.match(compactCard || '', /Kobe-reported historical estimate; complete supporting records are unavailable/);
+  assert.match(compactCard || '', /See winning plays/);
   assert.doesNotMatch(compactCard || '', /data-home-record/);
   assert.match(compactCard || '', /class="verified-results-rail" hidden aria-hidden="true"/);
   assert.doesNotMatch(compactCard || '', /data-wins-motion/);
