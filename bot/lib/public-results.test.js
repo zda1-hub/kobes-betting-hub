@@ -16,6 +16,14 @@ test('public results include every verified published outcome and keep pending s
   assert.equal(snapshot.pending, 1);
   assert.equal(snapshot.settled, 4);
   assert.deepEqual(snapshot.recent.map((item) => item.result).sort(), ['L', 'P', 'V', 'W']);
+  assert.deepEqual(snapshot.wins.map((item) => item.selection), ['Pick 1']);
+});
+
+test('the public winning plays list is not limited to the recent fifty settled picks', () => {
+  const rows = Array.from({ length: 60 }, (_, index) => row(String(index + 100), 'W'));
+  const snapshot = buildPublicResults(rows, '2026-09-24');
+  assert.equal(snapshot.recent.length, 50);
+  assert.equal(snapshot.wins.length, 60);
 });
 
 test('tracking start uses the earliest published pick, including pending, rather than the recent window', () => {

@@ -30,10 +30,12 @@ function buildPublicResults(rows, today, now = new Date()) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today || '')) throw new Error('Expected an operating date.');
   const published = rows.filter((row) => isPublishedRow(row) && /^\d{4}-\d{2}-\d{2}$/.test(row.operating_date || ''));
   const settled = published.filter(verified);
-  const recent = [...settled].sort((a, b) =>
+  const ordered = [...settled].sort((a, b) =>
     String(b.operating_date).localeCompare(String(a.operating_date))
     || String(b.published_at).localeCompare(String(a.published_at))
-  ).slice(0, 50).map(publicResult);
+  );
+  const recent = ordered.slice(0, 50).map(publicResult);
+  const wins = ordered.filter((row) => resultFor(row) === 'W').map(publicResult);
   return {
     generatedAt: now.toISOString(),
     operatingDate: today,
@@ -43,6 +45,7 @@ function buildPublicResults(rows, today, now = new Date()) {
     pending: published.filter((row) => !verified(row)).length,
     settled: settled.length,
     recent,
+    wins,
   };
 }
 

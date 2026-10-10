@@ -1044,14 +1044,17 @@ function normalizedPublicResults(input) {
   if (input.trackingSince != null && (!validDate(input.trackingSince) || input.trackingSince > input.operatingDate)) return null;
   const recent = input.recent.map(item);
   if (recent.some((value) => !value)) return null;
-  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, settled, recent, trackingSince: input.trackingSince || null };
+  if (input.wins != null && (!Array.isArray(input.wins) || input.wins.length > 5000)) return null;
+  const wins = input.wins == null ? null : input.wins.map(item);
+  if (wins && wins.some((value) => !value || value.result !== 'W')) return null;
+  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, settled, recent, ...(wins && { wins }), trackingSince: input.trackingSince || null };
 }
 
 async function putPublicResults(request, env) {
   if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({ error: 'Unauthorized' }, 401);
   if (!hasFreePickStore(env)) return json({ error: 'Results storage is unavailable' }, 503);
   const raw = await request.text();
-  if (raw.length > 50000) return json({ error: 'Results snapshot is too large' }, 413);
+  if (raw.length > 2000000) return json({ error: 'Results snapshot is too large' }, 413);
   let input;
   try { input = JSON.parse(raw); } catch { return json({ error: 'Invalid JSON' }, 400); }
   const snapshot = normalizedPublicResults(input);
