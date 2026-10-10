@@ -7,3 +7,7 @@ Affected file: `scripts/prepare-public-site.mjs`. For production builds, use the
 Before: a production build without the optional environment variable emitted `ga4:""`, so the marketing pages could not send GA4 data. After: the public build emits the site's ID by default. Verification and publication status are appended below.
 
 Limitation: this restores prospective collection. It cannot backfill prior sessions or prove today's channel mix. The first-party analytics funnel remains separate.
+
+## Release verification
+
+Merged via PR #210 (commit `c6b8718`). Public build prepared 84 whitelisted entries for production; `git diff --check` passed. Published site Worker version `122f618b-71cc-4e62-83d3-89c4dd4755df`. The live Workers URL returned `ga4:"G-264TY91ZCT"` on both the homepage and join page. New data still depends on visitor consent and GA4 processing time; older missing sessions cannot be recovered.
