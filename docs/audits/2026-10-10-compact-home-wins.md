@@ -20,3 +20,9 @@ The user clarified that 65% refers to Kobe’s broader historical write-up plays
 ## Copy follow-up
 
 The public card disclosure was shortened to state that the linked ledger shows tracked published picks; the nearby recent-wins link now says “See all tracked picks.” This follows the user’s request to avoid listing win/loss counts on the homepage while retaining access to complete outcomes on the results page. Status: local pending verification.
+
+## Copy follow-up publication
+
+- PR #218 merged to GitHub main as `93842cf`.
+- Rebuilt the 85-entry public whitelist and deployed Cloudflare Worker site version `50ab1760-d8e9-415c-8305-189d67e1beee`.
+- Verified the custom-domain homepage contains the 65% Kobe-reported label and tracked-picks link without win/loss wording in the card. Eight focused release checks passed. Status: published.
