@@ -108,3 +108,12 @@ button,.button,.header-join,.pick-arrow{transition:transform .45s cubic-bezier(.
 .landing-record{padding:var(--hub-inset)!important}.landing-record>p,.landing-record>.tile-link{margin:0 0 16px!important;padding:0!important}.landing-record>.historical-heading strong{font-size:16px!important;font-weight:600!important}.landing-record .record-note{margin-bottom:0!important}
 .referral-promo-banner{width:min(100% - var(--gutter)*2,320px);min-height:0;padding:0;margin:0 auto 24px;background:none!important;box-shadow:none!important;border-radius:0;animation:none!important;gap:8px}
 .referral-promo-banner img{display:block;width:100%;height:auto;object-fit:contain;box-shadow:0 4px 10px #0002}.referral-promo-banner span{color:var(--ink);text-align:center}
+
+/* Referral emphasis and exact paired-card insets — October 10. */
+.referral-promo-banner{width:calc(100% - var(--gutter)*2);max-width:var(--page-width);margin-left:auto;margin-right:auto;gap:16px}
+.referral-promo-banner span{font-size:var(--hub-heading)!important;font-weight:600!important;line-height:1.25;text-align:center}
+.home-grid>.membership-tile{padding:var(--hub-inset)!important;justify-content:flex-start!important;gap:8px!important}
+.home-grid>.pick-tile{padding:0!important}
+.home-grid>.pick-tile>summary{padding:var(--hub-inset)!important;align-items:flex-start!important;justify-content:space-between}
+.home-grid>.pick-tile>summary>span{gap:8px!important}
+main>.referral-promo-banner{width:100%}
