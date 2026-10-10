@@ -123,3 +123,15 @@ main>.referral-promo-banner{width:100%}
 
 /* Header is always the first, topmost site surface. */
 body>.site-header{top:0!important;margin-top:0!important}body>.site-ticker{position:relative!important;top:auto!important}
+
+/* Shared controls: intrinsic labels and identical centered icon circles. */
+.site-header .menu-toggle,.site-header .social-icon{box-sizing:border-box!important;display:grid!important;place-items:center!important;padding:0!important;border:1px solid #00000025!important;border-radius:50%!important;background:#f5f5f5!important;box-shadow:0 4px 8px #00000030!important;line-height:0!important;flex:none}
+.site-header .menu-toggle svg,.site-header .social-icon svg{display:block!important;width:20px!important;height:20px!important;margin:0!important;transform:none!important}
+.button{box-sizing:border-box;max-width:100%;height:auto;min-width:0;min-height:40px;line-height:1.5;padding:8px 16px;gap:8px;justify-content:center}
+main>.referral-promo-banner{grid-column:1/-1;min-width:0}
+
+/* Interior-page promotion is a compact row above page-specific layouts. */
+body:not(.home-page) main>.referral-promo-banner{display:flex;flex-direction:row;align-items:center;justify-content:center;width:100%;margin:0;gap:24px}
+body:not(.home-page) main>.referral-promo-banner img{width:min(32%,240px);flex:none;height:auto}
+body:not(.home-page) main>.referral-promo-banner span{text-align:left;min-width:0;max-width:520px}
+@media(max-width:600px){body:not(.home-page) main>.referral-promo-banner{gap:16px}body:not(.home-page) main>.referral-promo-banner img{width:32%}}

@@ -39,7 +39,7 @@
     memberCard.className = 'membership-card-promo';
     memberCard.href = '/join';
     memberCard.setAttribute('aria-label', 'Kobe’s Betting Hub VIP membership — $32.99 per month until canceled. View plans.');
-    memberCard.innerHTML = '<img src="/assets/membership/orange-kbh-monthly.png" alt="Orange KBH VIP membership card — $32.99/month" width="1580" height="1000"><span>$32.99/month until canceled. View membership →</span>';
+    memberCard.innerHTML = '<img src="/assets/membership/kbh-vip-user-master.png" alt="Orange KBH VIP membership card — $32.99/month" width="4200" height="2448"><span>$32.99/month until canceled. View membership →</span>';
     landingIntro.after(memberCard, referralBanner);
   }
   else document.querySelector('main')?.prepend(referralBanner);

@@ -27,3 +27,5 @@ These user instructions supersede earlier typography/spacing guidance and remain
 - October 10 containment rule: every icon/arrow/control must remain within its parent’s padded bounds at 320px, 390px and desktop widths. Use min-width:0, flexible layout and explicit intrinsic sizing; never accept overflow or fix it by hiding actionable content. Verify rendered bounds before publication. Result cards size to their content plus symmetric padding, with a responsive maximum; do not impose equal widths or trailing whitespace.
 
 - The shared header must be the first visible surface on every website page, pinned at top: 0. Tickers, promotions, membership cards, and referral banners must appear below it. Audit built HTML order and live positioning before publication.
+
+- For future visual UI changes, apply the interface-fit-review skill at /Users/z/.codex/skills/interface-fit-review/SKILL.md. Controls must fit their rendered text plus symmetric padding; icons share centered geometry and shadows. Check 320px, 390px and desktop rendered layouts before publishing.
