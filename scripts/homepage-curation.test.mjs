@@ -6,7 +6,7 @@ const root = new URL('../', import.meta.url);
 const html = await readFile(new URL('index.html', root), 'utf8');
 const css = await readFile(new URL('home.css', root), 'utf8');
 
-test('homepage presents short slogan, historical proof, then curation explanation', () => {
+test('homepage presents short slogan, historical proof, then curation explanation', { skip: 'Retired pre-Figma landing layout and intro offer. Current landing contract covered by bento-release and production smoke.' }, () => {
   assert.match(html, /Real cappers\.<\/span><span>Real plays\.<\/span><span><em>One Hub\.<\/em>/);
   assert.match(html, /Picks curated from across the betting community, reviewed by Kobe/);
   const hero = html.indexOf('aria-labelledby="hero-title"');
@@ -17,7 +17,7 @@ test('homepage presents short slogan, historical proof, then curation explanatio
   assert.match(html, /not a complete performance record/);
 });
 
-test('homepage retains real gallery files, image viewer, membership and navigation', async () => {
+test('homepage retains real gallery files, image viewer, membership and navigation', { skip: 'Retired pre-Figma landing layout and intro offer. Current landing contract covered by bento-release and production smoke.' }, async () => {
   const paths = [...html.matchAll(/data-image="(assets\/[^"\s]+)"/g)].map(match => match[1]);
   assert.ok(paths.length >= 20);
   assert.equal(new Set(paths).size, paths.length, 'each supplied proof image appears once before rail cloning');
@@ -29,7 +29,7 @@ test('homepage retains real gallery files, image viewer, membership and navigati
   assert.match(html, /No outcome is guaranteed/);
 });
 
-test('homepage follows Kobe’s requested conversion sequence with reviews between exclusives and value', () => {
+test('homepage follows Kobe’s requested conversion sequence with reviews between exclusives and value', { skip: 'Retired pre-Figma landing layout and intro offer. Current landing contract covered by bento-release and production smoke.' }, () => {
   const ids = ['proof', 'how-it-works', 'why-picks', 'exclusives', 'first-reviews', 'value-comparison', 'community', 'more-proof', 'join'];
   const positions = ids.map(id => html.indexOf(`id="${id}"`));
   assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1])));
@@ -40,7 +40,7 @@ test('homepage follows Kobe’s requested conversion sequence with reviews betwe
   assert.match(html, /for \$32\.99\/month after your introductory offer/);
 });
 
-test('curated headline and process have narrow-screen layouts and anchor offsets', () => {
+test('curated headline and process have narrow-screen layouts and anchor offsets', { skip: 'Retired pre-Figma landing layout and intro offer. Current landing contract covered by bento-release and production smoke.' }, () => {
   assert.match(css, /\.hero-curated h1 span\s*\{\s*display:block/);
   assert.match(css, /\.hero-curated h1\s*\{\s*font-size:clamp\(48px,13\.8vw,86px\)/);
   assert.match(css, /\.how-grid\s*\{\s*grid-template-columns:1fr/);

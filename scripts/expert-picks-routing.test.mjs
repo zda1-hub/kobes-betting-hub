@@ -11,8 +11,11 @@ test('terms-only approvals expose and enforce expert-picks as their sole destina
     readFile(new URL('bot/lib/telegram-reader.js', root), 'utf8'),
     readFile(new URL('scripts/import-manual-exclusives.mjs', root), 'utf8'),
   ]);
-  assert.match(index, /configuredTermsOnly \? expertPicksChannelId/);
-  assert.match(collector, /EXPERT_PICKS_CHANNEL_ID \|\| process\.env\.PUBLISH_CHANNEL_ID/);
+  assert.match(index, /approvedTextChannel\(paidChannelIdForPacket\(publicationPacket\)\)/);
+  const routing = await readFile(new URL('bot/lib/approval-routing.js', root), 'utf8');
+  assert.match(routing, /terms_only/);
+  assert.match(routing, /env\.EXPERT_PICKS_CHANNEL_ID \|\| env\.PUBLISH_CHANNEL_ID/);
+  assert.match(collector, /paidChannelIdForPacket\(packet\)/);
   for (const source of [collector, telegram, manualImport]) {
     assert.match(source, /#expert-picks/);
     assert.doesNotMatch(source, /Post to #exclusives/);

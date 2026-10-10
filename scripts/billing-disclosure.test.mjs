@@ -35,11 +35,10 @@ test('join and membership clearly disclose four current offers and keep referral
     const visibleOffers = articles.filter(([, attributes, content]) => !/\bhidden\b/.test(attributes) && /data-checkout=/.test(content));
     assert.equal(visibleOffers.length, 4);
     const offers = new Map(visibleOffers.map(([, , content]) => [content.match(/data-checkout="([^"]+)"/)[1], visibleText(content)]));
-    assert.deepEqual([...offers.keys()].sort(), ['annual', 'first_month_back', 'six_month', 'starter']);
-    assert.match(offers.get('first_month_back'), /\$19\.99 today/);
-    assert.match(offers.get('first_month_back'), /One full month, then \$32\.99\/month until canceled/);
-    assert.match(offers.get('first_month_back'), /10\/22\/2026 \(MST\)/);
-    assert.match(offers.get('first_month_back'), /No free trial/i);
+    assert.deepEqual([...offers.keys()].sort(), ['annual', 'monthly', 'six_month', 'starter']);
+    assert.match(offers.get('monthly'), /\$32\.99 today/);
+    assert.match(offers.get('monthly'), /\$32\.99\/month until canceled/);
+    assert.match(offers.get('monthly'), /No free trial/i);
     assert.match(offers.get('starter'), /\$10 today/);
     assert.match(offers.get('starter'), /First 7 days, then \$32\.99\/month until canceled/);
     assert.match(offers.get('starter'), /No free trial/i);

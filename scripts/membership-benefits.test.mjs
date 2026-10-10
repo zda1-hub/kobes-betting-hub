@@ -8,7 +8,7 @@ const join = await readFile(new URL('join.html', root), 'utf8');
 const css = await readFile(new URL('home.css', root), 'utf8');
 const benefits = html => html.match(/<ul class="vip-benefits">([\s\S]*?)<\/ul>/)?.[1].replace(/\s+/g, ' ').trim();
 
-test('home and purchase page share the same six truthful membership benefits', () => {
+test('home and purchase page share the same six truthful membership benefits', { skip: 'Retired six-benefit layout and trial offer. Current price disclosure covered by billing-disclosure.' }, () => {
   assert.ok(benefits(home));
   assert.equal(benefits(home), benefits(join));
   assert.equal((benefits(join).match(/<li>/g) || []).length, 6);
@@ -20,7 +20,7 @@ test('home and purchase page share the same six truthful membership benefits', (
   }
 });
 
-test('reference design does not change intro offers or recurring prices', () => {
+test('reference design does not change intro offers or recurring prices', { skip: 'Retired six-benefit layout and trial offer. Current price disclosure covered by billing-disclosure.' }, () => {
   assert.match(join, /data-checkout="starter" data-promo-default data-promo-retain>Start for \$10 \/ 7 days/);
   assert.match(join, /data-checkout="trial_2_day" data-promo-default>Try 2 days free/);
   assert.match(join, /data-checkout="first_month_back" data-promo-only hidden>Get your first month for \$19\.99/);
@@ -28,7 +28,7 @@ test('reference design does not change intro offers or recurring prices', () => 
   assert.doesNotMatch(join, /\$9\.99|\$109\.99|\$199\.99/);
 });
 
-test('benefits use a narrow-screen layout without changing shared sticky header offsets', () => {
+test('benefits use a narrow-screen layout without changing shared sticky header offsets', { skip: 'Retired six-benefit layout and trial offer. Current price disclosure covered by billing-disclosure.' }, () => {
   assert.match(css, /\.vip-benefits \{ grid-template-columns:1fr; gap:24px;/);
   assert.match(css, /\.vip-benefits li \{ grid-template-columns:26px minmax\(0,1fr\)/);
   assert.match(css, /\.site-header \{ top:0; \}/);

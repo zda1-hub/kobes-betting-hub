@@ -69,16 +69,8 @@
     if (headline && !revealedPick) headline.textContent = 'No free pick today. VIP members get Kobe-reviewed picks, writeups, Discord, and arb alerts.';
     const clock = nodes.vip.querySelector('[data-free-pick-countdown]');
     const offer = nodes.vip.querySelector('p');
-    const deadline = Date.parse('2026-10-23T00:00:00-07:00');
-    const update = () => {
-      const remaining = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
-      if (!remaining) { offer.textContent = 'See current membership options and renewal terms.'; return false; }
-      if (clock) clock.textContent = `Offer ends in ${Math.floor(remaining / 86400)}d ${String(Math.floor(remaining % 86400 / 3600)).padStart(2, '0')}h ${String(Math.floor(remaining % 3600 / 60)).padStart(2, '0')}m ${String(remaining % 60).padStart(2, '0')}s.`;
-      return true;
-    };
-    if (update()) {
-      const timer = setInterval(() => { if (!update()) clearInterval(timer); }, 1000);
-    }
+    if (offer) offer.textContent = '$32.99 today, then $32.99/month until canceled. No free trial.';
+    if (clock) clock.remove();
   };
   nodes.vip?.querySelector('[data-free-pick-vip-link]')?.addEventListener('click', () => track('cta_click'));
   nodes.noPickCta?.querySelector('a')?.addEventListener('click', () => track('cta_click'));

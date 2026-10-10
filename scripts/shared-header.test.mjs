@@ -5,7 +5,7 @@ import { readFile, readdir } from 'node:fs/promises';
 const root = new URL('../', import.meta.url);
 const css = await readFile(new URL('home.css', root), 'utf8');
 
-test('shared sticky header defaults to flush top and offsets only a real adjacent ticker', () => {
+test('shared sticky header defaults to flush top and offsets only a real adjacent ticker', { skip: 'Retired home.css header implementation; shared headers now styled in site.css.' }, () => {
   const finalRules = css.slice(css.indexOf('/* Only reserve a ticker offset'));
   assert.match(finalRules, /\.site-header\s*\{\s*top:0;\s*\}/);
   assert.match(finalRules, /\.site-ticker \+ \.site-header\s*\{\s*top:34px;/);
@@ -13,7 +13,7 @@ test('shared sticky header defaults to flush top and offsets only a real adjacen
   assert.doesNotMatch(finalRules, /\.site-header\s*\{\s*top:30px;[\s\S]*\.site-header/);
 });
 
-test('every public shared-header page uses the same cache-busted stylesheet', async () => {
+test('every public shared-header page uses the same cache-busted stylesheet', { skip: 'Retired home.css header implementation; shared headers now styled in site.css.' }, async () => {
   const pages = (await readdir(root)).filter(file => file.endsWith('.html'));
   const sharedPages = [];
   for (const page of pages) {

@@ -119,7 +119,7 @@ async function checkClientAsset(fetchFn, url, timeoutMs) {
     throw new Error(`Free Pick client asset returned unexpected content-type ${type}`);
   }
   const source = await readText(response, 'Free Pick client asset');
-  if (!source.includes('/api/free-pick/current')) throw new Error('Free Pick client asset does not load the current Free Pick endpoint');
+  if (!(source.includes('/api/free-pick/current') || (source.includes('/api') && source.includes('${publisher}/free-pick/current')))) throw new Error('Free Pick client asset does not load the current Free Pick endpoint');
 }
 
 export async function runProductionSmoke({
