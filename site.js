@@ -34,7 +34,14 @@
   referralBanner.setAttribute('aria-label', 'Earn $20 for each eligible paid referral. Get your referral link.');
   referralBanner.innerHTML = '<img src="/assets/referral/twenty-dollar.png" alt="Twenty-dollar bill — earn $20 per eligible paid referral" width="1000" height="421"><span>Earn $20 per eligible paid referral →</span>';
   const landingIntro = document.querySelector('.home-page .landing-intro');
-  if (landingIntro) landingIntro.after(referralBanner);
+  if (landingIntro) {
+    const memberCard = document.createElement('a');
+    memberCard.className = 'membership-card-promo';
+    memberCard.href = '/join';
+    memberCard.setAttribute('aria-label', 'Kobe’s Betting Hub VIP membership — $32.99 per month until canceled. View plans.');
+    memberCard.innerHTML = '<img src="/assets/membership/orange-kbh-monthly.png" alt="Orange KBH VIP membership card — $32.99/month" width="1580" height="1000"><span>$32.99/month until canceled. View membership →</span>';
+    landingIntro.after(memberCard, referralBanner);
+  }
   else document.querySelector('.site-ticker')?.after(referralBanner);
   const checkoutState = new URLSearchParams(location.search).has('checkout');
   let prompted = false;
