@@ -28,6 +28,7 @@ const publicFiles = [
   'gallery.css',
   'membership-design.css',
   'join-pricing-hierarchy.css',
+  'landing-continuity.css',
   'mobile-polish.css',
   'subsite-bento.css',
   'lineup-bento.css',

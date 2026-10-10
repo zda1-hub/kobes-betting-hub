@@ -44,7 +44,7 @@ const RETENTION_USED_METADATA_KEY = 'kbh_retention_offer_used';
 const RETENTION_COUPON_METADATA_KEY = 'kbh_retention_offer_coupon';
 const RETENTION_50_COUPON_METADATA_KEY = 'kbh_retention_offer_50_coupon';
 const RETENTION_75_COUPON_METADATA_KEY = 'kbh_retention_offer_75_coupon';
-const MEMBERSHIP_OFFERS = new Set(['starter', 'trial_2_day', 'referral_trial', 'first_month_back', 'six_month', 'annual']);
+const MEMBERSHIP_OFFERS = new Set(['starter', 'trial_2_day', 'referral_trial', 'first_month_back', 'monthly', 'six_month', 'annual']);
 const FIRST_MONTH_BACK_START = Date.parse('2026-09-22T07:00:00Z');
 const FIRST_MONTH_BACK_END = Date.parse('2026-10-23T07:00:00Z');
 const FIRST_MONTH_BACK_COUPON_ID = 'kbh_first_month_back_2026_09_22';
@@ -1835,7 +1835,7 @@ async function createAssociatedCheckout(env, association, publicToken, discordUs
     values['metadata[promotion]'] = 'first20';
     values['subscription_data[metadata][promotion]'] = 'first20';
   }
-  if (!longTerm && association.offer !== 'first_month_back') {
+  if (!longTerm && association.offer !== 'first_month_back' && association.offer !== 'monthly') {
     values['subscription_data[trial_period_days]'] = association.offer === 'starter' ? 7 : 2;
     values['subscription_data[trial_settings][end_behavior][missing_payment_method]'] = 'cancel';
   }
@@ -1913,7 +1913,7 @@ async function createCheckout(request, env, origin) {
     values['metadata[promotion]'] = 'first20';
     values['subscription_data[metadata][promotion]'] = 'first20';
   }
-  if (!longTerm && data.offer !== 'first_month_back') {
+  if (!longTerm && data.offer !== 'first_month_back' && data.offer !== 'monthly') {
     values['subscription_data[trial_period_days]'] = data.offer === 'starter' ? 7 : 2;
     values['subscription_data[trial_settings][end_behavior][missing_payment_method]'] = 'cancel';
   }
@@ -2347,6 +2347,7 @@ function memberWelcomeMessage(session, subscription, env) {
   const plans = {
     starter: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — $10 first 7 days'],
     first_month_back: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, session.metadata?.promotion === 'first20' ? 'Monthly membership — $5 first month' : 'Monthly membership — $19.99 first month'],
+    monthly: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — $32.99 per month'],
     trial_2_day: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — 2 days free'],
     referral_trial: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — 2 days free'],
     six_month: [env.STRIPE_SIX_MONTH_PRICE_ID, 13499, 6, '6-month membership'],
@@ -3342,7 +3343,7 @@ async function adminAnalytics(request, env, origin) {
     conversion: { funnel, offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), unattributedPayments: rangedEvents.filter(item => item.event_name === 'payment_completed' && !sessionById.has(item.session_id)).length, purchaseConversionRate: rangedSessions.length ? measuredCount('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: countEvents('payment_completed') ? countEvents('vip_activated') / countEvents('payment_completed') : 0 },
     engagement: engagementSummary(rangedEvents), interactions: interactionSummary(rangedEvents, rangedSessions),
     revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPaymentSummary.attemptCount, failedInvoices: failedPaymentSummary.invoiceCount, affectedCustomers: failedPaymentSummary.affectedCustomers, openFailedInvoices: failedPaymentSummary.openInvoices, recoveredFailedInvoices: failedPaymentSummary.recoveredInvoices, introRevenueCents: invoiceWithinRange.filter(item => [1000, 1999].includes(item.amountPaid)).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
-    membership: { active: eligible.length, intro: eligible.filter(item => item.offer === 'starter').length, monthly: eligible.filter(item => ['trial_2_day','referral_trial','first_month_back'].includes(item.offer)).length, sixMonth: eligible.filter(item => item.offer === 'six_month').length, annual: eligible.filter(item => item.offer === 'annual').length, newMembers: countEvents('payment_completed'), renewals: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason === 'subscription_cycle').length, scheduledCancellations: eligible.filter(item => item.cancel_at_period_end || item.cancel_at).length, actualCancellations: canceled.filter(item => range.includes(item.updated_at)).length, duplicateGroups, duplicateCount: duplicateGroups.length, highRiskDuplicateCount: duplicateGroups.filter(item => item.risk === 'high').length, members },
+    membership: { active: eligible.length, intro: eligible.filter(item => item.offer === 'starter').length, monthly: eligible.filter(item => ['trial_2_day','referral_trial','first_month_back','monthly'].includes(item.offer)).length, sixMonth: eligible.filter(item => item.offer === 'six_month').length, annual: eligible.filter(item => item.offer === 'annual').length, newMembers: countEvents('payment_completed'), renewals: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason === 'subscription_cycle').length, scheduledCancellations: eligible.filter(item => item.cancel_at_period_end || item.cancel_at).length, actualCancellations: canceled.filter(item => range.includes(item.updated_at)).length, duplicateGroups, duplicateCount: duplicateGroups.length, highRiskDuplicateCount: duplicateGroups.filter(item => item.risk === 'high').length, members },
     discord: { paidWithoutVip: paidWithoutVipDetails.length, roleCheckUnavailable: roleCheckUnavailableDetails.length, vipActive: activeIds.size, pending: (associations || []).filter(item => item.status === 'VIP_PENDING').length, failed: (associations || []).filter(item => item.status === 'VIP_FAILED').length, recovered: (associations || []).filter(item => item.status === 'VIP_ACTIVE' && Number(item.activation_attempts || 0) > 1).length, paidDiscordMissing: paidWithoutVipDetails.filter(item => !item.discordConnected).length, vipWithoutEntitlement, joins: discordJoinSummary(rangedEvents), details: [...paidWithoutVipDetails, ...roleCheckUnavailableDetails] },
     referrals: { visits: countEvents('referral_visit') + rangedSessions.filter(item => item.first_touch?.first_source === 'referral' || item.first_touch?.referral_identifier).length, referredPurchases: rangedReferrals.length, pending: referralStatus('PENDING_PAYMENT') + referralStatus('HOLDING'), qualified: rangedReferrals.filter(item => ['READY','PAYOUT_SENT'].includes(item.status)).length, paidCashCents: rangedReferrals.filter(item => item.status === 'PAYOUT_SENT').reduce((sum, item) => sum + Number(item.reward_amount_cents || 0), 0), links: referralLinks, leaderboard: [...leaderboardMap.values()].map(item => ({ ...item, conversionRate: item.successfulReferrals + item.pendingReferrals ? item.successfulReferrals / (item.successfulReferrals + item.pendingReferrals) : 0 })).sort((a,b)=>b.successfulReferrals-a.successfulReferrals) },
     retention: {

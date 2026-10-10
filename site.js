@@ -34,7 +34,7 @@
   const joinUrl = new URL('join.html#offer', document.currentScript?.src || location.href).href;
   const checkoutResult = new URLSearchParams(location.search).has('checkout');
   const firstMonthCard = document.querySelector('.first-month:not(.offer-choice-referral)');
-  const firstMonthButton = firstMonthCard?.querySelector('[data-checkout="first_month_back"]');
+  const primaryMembershipButtons = document.querySelectorAll('[data-primary-membership-checkout], .first-month:not(.offer-choice-referral) [data-checkout="first_month_back"]');
   let banner;
   let modal;
   let timer;
@@ -45,16 +45,26 @@
     modal?.remove();
     clearInterval(timer);
     if (firstMonthCard) {
-      firstMonthCard.querySelector('.plan-note').textContent = 'This first-month promotion ended October 22, 2026 (MST).';
-      if (firstMonthButton) {
-        firstMonthButton.disabled = true;
-        firstMonthButton.textContent = 'Offer ended';
-      }
+      firstMonthCard.querySelector('h2').textContent = 'Monthly Membership';
+      firstMonthCard.querySelector('.mock-price').innerHTML = '<span class="offer-attention">$32.99</span><small> today</small>';
+      firstMonthCard.querySelector('p:not(.mock-price)').textContent = '$32.99/month until canceled.';
+      firstMonthCard.querySelector('.plan-note').textContent = 'Standard monthly rate. No free trial.';
     }
+    primaryMembershipButtons.forEach((button) => {
+      button.dataset.checkout = 'monthly';
+      button.textContent = button.classList.contains('vip-join-button') ? 'Join now · $32.99/month' : 'Join for $32.99';
+    });
+    const vipTerms = document.querySelector('[data-primary-membership-terms]');
+    if (vipTerms) vipTerms.textContent = '$32.99 today, then $32.99/month until canceled. No free trial.';
+    document.querySelectorAll('[data-free-pick-vip] p').forEach(copy => {
+      copy.textContent = '$32.99/month until canceled. No free trial.';
+    });
     const landingOffer = document.querySelector('.membership-tile');
     if (landingOffer) {
-      landingOffer.querySelector('strong').textContent = 'Explore VIP membership';
-      landingOffer.querySelectorAll('span').forEach(node => node.remove());
+      landingOffer.querySelector('strong').textContent = '$32.99 HUB VIP Membership';
+      const spans = landingOffer.querySelectorAll('span');
+      if (spans[0]) spans[0].textContent = '$32.99/month until canceled';
+      if (spans[1]) spans[1].remove();
     }
   };
   if (!checkoutResult && remaining() > 0 && document.querySelector('.site-header')) {
@@ -62,8 +72,10 @@
     banner.className = 'october-offer-banner';
     banner.href = joinUrl;
     banner.setAttribute('aria-label', 'October first-month offer. View membership options.');
-    banner.innerHTML = '<span class="october-offer-copy"><strong>OCTOBER OFFER</strong> $19.99 first month through Oct 22, then $32.99/month until canceled</span><span class="october-offer-clock" aria-label="Time remaining"></span>';
-    document.querySelector('.site-ticker')?.after(banner);
+    banner.innerHTML = '<span class="october-offer-copy"><strong>OCTOBER OFFER</strong> $19.99 first month through Oct 22</span><span class="october-offer-clock" aria-label="Time remaining"></span>';
+    const landingIntro = document.querySelector('.home-page .landing-intro');
+    if (landingIntro) landingIntro.after(banner);
+    else document.querySelector('.site-ticker')?.after(banner);
     if (!banner.isConnected) document.body.prepend(banner);
     const clock = banner.querySelector('.october-offer-clock');
     const renderClock = () => {

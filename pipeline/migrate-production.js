@@ -56,6 +56,11 @@ const APPROVED_MIGRATIONS = [
     version: '017_payment_recovery_reminders',
     sha256: 'b426742ea7c588d50d766d2560e191f3093105a6dac9c908044772e5e39afabe',
   },
+  {
+    name: '018_standard_monthly_offer.sql',
+    version: '018_standard_monthly_offer',
+    sha256: 'c32d03cc8b8fbec54fd4a4642686f64c5171865ec0c9f3ab508e006692b20877',
+  },
 ];
 const PROTECTED_TABLES = [
   'source_posts',
