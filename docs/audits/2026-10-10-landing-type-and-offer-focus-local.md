@@ -142,3 +142,10 @@ Release state and limitation: Local preview and source only; neither the public 
 - Verification: Checked the local expanded mobile card after the CSS override.
 - Unresolved limitations: None known.
 - Release state: Local preview; publication pending.
+
+## Release preparation — October 10, 2026
+
+- The standard monthly schema migration was added to the production migrator's fixed allowlist with its exact SHA-256 hash. This allows the existing guarded GitHub workflow to apply it before the Worker and site deploys.
+- The release was rebased onto current `origin/main` in a separate worktree, retaining the current first-20 promotion, GA4, email, referral, portal, and Discord checkout integrations.
+- The targeted public/build/billing tests passed 87/87; checkout and migration tests passed 74/74. The public bundle contains 85 explicit entries and the production checkout origin. The local mobile screenshot confirmed the Discord mark is centered in its circle.
+- Release state: GitHub PR #212 open; production migration, Worker, and site remain pending at this point.
