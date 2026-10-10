@@ -4,7 +4,7 @@ const formatDate = value => new Intl.DateTimeFormat('en-US', {month:'short',day:
 function winningRow(item) {
   const row = document.createElement('article'); row.className = 'result-row';
   const day = document.createElement('span'); day.textContent = formatDate(item.date);
-  const badge = document.createElement('b'); badge.className = 'result-badge win'; badge.textContent = '✓ W'; badge.setAttribute('aria-label','Win');
+  const badge = document.createElement('b'); badge.className = 'result-badge win'; badge.textContent = '✓ WIN'; badge.setAttribute('aria-label','Win');
   const selection = document.createElement('strong'); selection.textContent = item.selection;
   const details = document.createElement('small');
   details.textContent = [item.sport || 'Sport not confirmed', item.source, item.line, item.odds && `(${item.odds})`].filter(Boolean).join(' · ');
