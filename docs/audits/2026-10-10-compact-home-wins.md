@@ -9,3 +9,10 @@ Verification: inspected the live publisher `/api/results` payload on October 10 
 ## Follow-up: historical write-up estimate
 
 The user clarified that 65% refers to Kobe’s broader historical write-up plays, for which complete records are unavailable. The homepage card now shows “65% historical win rate” as a **Kobe-reported estimate**, with an immediate disclosure that complete historical records are unavailable and that the linked verified ledger is a separate, narrower dataset including losses. The visible homepage rail remains removed. Affected files: `index.html`, `landing-continuity.css`, and the homepage release test. This claim is not independently verified; if a documented write-up cohort becomes available, replace the estimate with its measured rate. Status: local pending release confirmation.
+
+## Publication confirmation
+
+- PR #216 merged to GitHub main as `ef4f02d`.
+- Built the 85-entry public whitelist from that commit and deployed only the public site to Cloudflare Worker version `9e225191-0385-4b6a-8b66-23cda81758de`.
+- Verified `https://kobesbettinghub.com/` returned HTTP 200 and contained the 65% Kobe-reported historical estimate, the disclosure, and the tracked-picks link. The workers.dev endpoint also showed the update with a cache-busting query parameter.
+- Eight focused public release checks passed. No checkout Worker, Render bot, billing, or access rules changed in this release.
