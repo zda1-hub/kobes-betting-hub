@@ -13,3 +13,5 @@ Skill: /Users/z/.codex/skills/interface-fit-review/SKILL.md, validated with bund
 Status: published website changes. Card is the user-supplied raster export; Figma layered master is unchanged.
 
 Production follow-up: Cloudflare version 347667fb-2591-4eb4-ad18-051c991be4cf. Live desktop row cards both 741.18px high; CTA remains 152.96×40 with 120.96×24 content. New homepage card is loaded from the new asset with natural size 4200×2448, and byte hash matches supplied export. Current homepage viewport had zero document overflow.
+
+Live CTA check: click opened https://kobesbettinghub.com/join with the membership pricing page and Choose your VIP membership heading. The temporary static localhost server lacked extensionless routing; production routing was verified directly.
