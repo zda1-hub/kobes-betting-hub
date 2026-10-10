@@ -77,3 +77,7 @@
 .extras-page .result-badge.loss {background:#ad5248}
 .extras-page .results-note {font-size:12px;color:#686b60;margin:20px 0 0}
 @media(max-width:700px) {.extras-page .results-metrics {grid-template-columns:1fr}.extras-page .results-metrics article {padding:18px}.extras-page .result-row {grid-template-columns:75px 34px minmax(0,1fr);gap:10px}}
+
+.extras-page .historical-results-rate{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;font-weight:600;margin:0 0 18px}
+.extras-page .historical-results-rate strong{font-size:clamp(38px,6vw,64px);line-height:1;color:#1b9b4a}
+.extras-page .historical-results-rate small{flex-basis:100%;font-size:12px;font-weight:400;color:#686b60}

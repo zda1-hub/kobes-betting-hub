@@ -38,7 +38,7 @@ const STRIPE_API = 'https://api.stripe.com/v1';
 const STRIPE_API_V2 = 'https://api.stripe.com/v2';
 const STRIPE_V2_VERSION = '2026-08-26.preview';
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing']);
-const REFERRAL_REWARD_CENTS = 1000;
+const REFERRAL_REWARD_CENTS = 2000;
 const REFERRAL_HOLD_DAYS = 7;
 const RETENTION_USED_METADATA_KEY = 'kbh_retention_offer_used';
 const RETENTION_COUPON_METADATA_KEY = 'kbh_retention_offer_coupon';
@@ -48,7 +48,7 @@ const MEMBERSHIP_OFFERS = new Set(['starter', 'trial_2_day', 'referral_trial', '
 const FIRST_MONTH_BACK_START = Date.parse('2026-09-22T07:00:00Z');
 const FIRST_MONTH_BACK_END = Date.parse('2026-10-23T07:00:00Z');
 const FIRST_MONTH_BACK_COUPON_ID = 'kbh_first_month_back_2026_09_22';
-const firstMonthBackActive = (now = Date.now()) => now >= FIRST_MONTH_BACK_START && now < FIRST_MONTH_BACK_END;
+const firstMonthBackActive = () => false;
 const FIRST20_START = Date.parse('2026-10-14T07:00:00Z');
 const FIRST20_END = Date.parse('2026-10-19T07:00:00Z');
 const FIRST20_COUPON_ID = 'kbh_first20_20261014';
@@ -1790,7 +1790,7 @@ async function prepareCheckout(request, env, origin) {
   const referralCode = String(data.referral_code || '').toUpperCase();
   if (first20 && referralCode) return json({ error: 'This limited offer cannot be combined with a referral offer.' }, 400, origin);
   let referralOwner = null;
-  if (data.offer === 'referral_trial' || (data.offer === 'first_month_back' && referralCode)) {
+  if (data.offer === 'referral_trial' || (['first_month_back', 'monthly'].includes(data.offer) && referralCode)) {
     referralOwner = await referralOwnerForCode(env, referralCode);
     if (!referralOwner) return json({ error: 'That referral link is not currently eligible for this offer.' }, 400, origin);
   }
@@ -1887,7 +1887,7 @@ async function createCheckout(request, env, origin) {
   }
 
   let referralOwner = null;
-  if (data.offer === 'referral_trial' || (data.offer === 'first_month_back' && data.referral_code)) {
+  if (data.offer === 'referral_trial' || (['first_month_back', 'monthly'].includes(data.offer) && data.referral_code)) {
     const referralCode = String(data.referral_code || '').toUpperCase();
     if (!supabaseReady(env)) return json({ error: 'That referral link is invalid or expired.' }, 400, origin);
     referralOwner = await referralOwnerForCode(env, referralCode);
@@ -1963,7 +1963,7 @@ async function processReferralInvoicePaid(env, invoice, eventId) {
   const referredFirstMonth = metadata.offer === 'first_month_back' && Boolean(metadata.creator_profile_id || metadata.referrer_discord_user_id);
   const memberOrCreatorTrial = metadata.offer === 'referral_trial';
   const minimumPaid = referredFirstMonth ? 1999 : 3299;
-  if ((!referredFirstMonth && !memberOrCreatorTrial) || Number(invoice?.amount_paid || 0) < minimumPaid
+  if ((!referredFirstMonth && !memberOrCreatorTrial && metadata.offer !== 'monthly') || Number(invoice?.amount_paid || 0) < minimumPaid
       || !metadata.referral_code || !(metadata.referrer_discord_user_id || metadata.creator_profile_id)) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
   if (stripeId(subscription.items?.data?.[0]?.price) !== env.STRIPE_MONTHLY_PRICE_ID) return 'INVOICE_NOT_REFERRAL_QUALIFIED';
   let reward = await referralRewardForSubscription(env, subscriptionId);
@@ -2094,11 +2094,14 @@ async function qualifyingReferralCharge(env, reward) {
   let minimumPaid = 3299;
   if (reward.creator_profile_id || reward.referrer_discord_user_id) {
     const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(reward.referred_subscription_id)}`);
+    const matchingOwner = (reward.creator_profile_id && subscription.metadata?.creator_profile_id === reward.creator_profile_id)
+      || (reward.referrer_discord_user_id && subscription.metadata?.referrer_discord_user_id === reward.referrer_discord_user_id);
+    if (!matchingOwner || subscription.metadata?.referral_code !== reward.referral_code
+        || stripeId(subscription.items?.data?.[0]?.price) !== env.STRIPE_MONTHLY_PRICE_ID) {
+      throw referralSafetyFailure('PAYMENT_NO_LONGER_QUALIFIES', 'VOID');
+    }
     if (subscription.metadata?.offer === 'first_month_back'
-        && ((reward.creator_profile_id && subscription.metadata?.creator_profile_id === reward.creator_profile_id)
-          || (reward.referrer_discord_user_id && subscription.metadata?.referrer_discord_user_id === reward.referrer_discord_user_id))
-        && subscription.metadata?.referral_code === reward.referral_code
-        && stripeId(subscription.items?.data?.[0]?.price) === env.STRIPE_MONTHLY_PRICE_ID) minimumPaid = 1999;
+        && matchingOwner) minimumPaid = 1999;
   }
   const invoice = await stripeGet(env, `/invoices/${encodeURIComponent(reward.first_paid_invoice_id)}`);
   if (invoice.status !== 'paid' || invoice.currency !== 'usd' || Number(invoice.amount_paid) < minimumPaid
