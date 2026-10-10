@@ -36,4 +36,43 @@
   const landingIntro = document.querySelector('.home-page .landing-intro');
   if (landingIntro) landingIntro.after(referralBanner);
   else document.querySelector('.site-ticker')?.after(referralBanner);
+  const checkoutState = new URLSearchParams(location.search).has('checkout');
+  let prompted = false;
+  let exitDialog;
+  const closeExitDialog = () => {
+    if (!exitDialog) return;
+    exitDialog.remove();
+    exitDialog = null;
+    document.removeEventListener('keydown', onExitEscape);
+  };
+  const onExitEscape = event => { if (event.key === 'Escape') closeExitDialog(); };
+  const showExitDialog = () => {
+    if (prompted || checkoutState || !document.querySelector('.site-header')) return;
+    try {
+      if (sessionStorage.getItem('kbh.referral.exit.prompted')) return;
+      sessionStorage.setItem('kbh.referral.exit.prompted', '1');
+    } catch { /* One prompt per page load if storage is unavailable. */ }
+    prompted = true;
+    const joinUrl = new URL('join.html', referralBanner.href).href;
+    exitDialog = document.createElement('div');
+    exitDialog.className = 'october-offer-overlay';
+    exitDialog.innerHTML = `<section class="october-offer-dialog bento" role="dialog" aria-modal="true" aria-labelledby="exit-referral-title"><button class="october-offer-close" type="button" aria-label="Close message">×</button><h2 id="exit-referral-title">Take a look before you go.</h2><p>VIP is $32.99/month. With each eligible referral, you can make $20. How much money do you want to make?</p><p class="exit-referral-terms">Rewards follow the first paid month, a seven-day hold, and verification.</p><a class="button" href="${joinUrl}">See membership options →</a><a class="exit-referral-link" href="${referralBanner.href}">Get your referral link →</a></section>`;
+    document.body.append(exitDialog);
+    exitDialog.querySelector('button').addEventListener('click', closeExitDialog);
+    exitDialog.addEventListener('click', event => { if (event.target === exitDialog) closeExitDialog(); });
+    document.addEventListener('keydown', onExitEscape);
+    exitDialog.querySelector('button').focus();
+  };
+  document.addEventListener('mouseout', event => {
+    if (!event.relatedTarget && event.clientY <= 8 && matchMedia('(pointer: fine)').matches) showExitDialog();
+  });
+  let highWater = 0;
+  let lastScroll = { y: scrollY, time: performance.now() };
+  addEventListener('scroll', () => {
+    if (!matchMedia('(pointer: coarse)').matches || prompted) return;
+    const now = performance.now();
+    highWater = Math.max(highWater, scrollY);
+    if (highWater > 900 && lastScroll.y - scrollY > 320 && now - lastScroll.time < 600) showExitDialog();
+    if (now - lastScroll.time > 600 || scrollY >= lastScroll.y) lastScroll = { y: scrollY, time: now };
+  }, { passive: true });
 })();
