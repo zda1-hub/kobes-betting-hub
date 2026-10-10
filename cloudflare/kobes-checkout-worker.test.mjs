@@ -1537,3 +1537,29 @@ test('billing exception webhooks durably block entitlement while failed payments
   assert.equal(membershipEvents.filter((event) => event.event_type === 'MEMBERSHIP_ENTITLEMENT_BLOCKED').length, 2);
   assert.equal(membershipEvents.filter((event) => event.event_type === 'MEMBERSHIP_PAYMENT_FAILED').length, 2);
 });
+
+test('legacy VIP referrals keep the same eligibility through login, session and link validation; blocked access stays blocked', async () => {
+  const originalFetch=globalThis.fetch;
+  const env={SUPABASE_URL:'https://db.test',SUPABASE_SECRET_KEY:'test-key',DISCORD_BOT_TOKEN:'test-token',DISCORD_GUILD_ID:'guild',DISCORD_MEMBER_ROLE_ID:'vip'};
+  let blocked=false, role=true, memberReads=0;
+  globalThis.fetch=async (url,options={})=>{
+    const target=new URL(url);
+    if(target.hostname==='discord.com'){memberReads++;return Response.json({roles:role?['vip']:[]});}
+    if(target.pathname.endsWith('/api_call_events'))return new Response(null,{status:204});
+    if(target.pathname.endsWith('/membership_customers'))return Response.json(blocked?[{current_subscription_id:'sub_blocked'}]:[]);
+    if(target.pathname.endsWith('/membership_subscriptions'))return Response.json(target.searchParams.get('entitlement_blocked')==='is.false'?[]:[{entitlement_blocked:true}]);
+    if(target.pathname.endsWith('/referral_auth_sessions'))return Response.json([{discord_user_id:'legacy'}]);
+    if(target.pathname.endsWith('/referral_profiles'))return Response.json([{discord_user_id:'legacy',referral_code:'KBH-ABCDEF1234'}]);
+    throw new Error('Unexpected request '+target.pathname);
+  };
+  try {
+    assert.equal(await workerTest.activeReferralAccessForDiscord(env,'legacy'),true);
+    assert.equal((await workerTest.readReferralAuthSession(env,'test-session')).discord_user_id,'legacy');
+    assert.equal((await workerTest.referralOwnerForCode(env,'KBH-ABCDEF1234')).kind,'member');
+    role=false;assert.equal(await workerTest.referralOwnerForCode(env,'KBH-ABCDEF1234'),null);
+    await assert.rejects(workerTest.readReferralAuthSession(env,'test-session'),/Current Betting Hub VIP access/);
+    blocked=true;role=true;const before=memberReads;
+    assert.equal(await workerTest.activeReferralAccessForDiscord(env,'legacy'),false);
+    assert.equal(memberReads,before,'blocked paid entitlement must not fall back to a stale VIP role');
+  } finally {globalThis.fetch=originalFetch;}
+});

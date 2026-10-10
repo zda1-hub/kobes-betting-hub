@@ -10,7 +10,7 @@ const setupWins = track => {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let manual = reduced.matches, hovered = false, last = 0, loop = 0, position = 0, pointer, startX, startScroll;
   let resumeTimer;
-  const pause = () => { manual = true; clearTimeout(resumeTimer); resumeTimer = setTimeout(() => { if(pointer!==undefined){pause();return;} manual = reduced.matches; position=rail.scrollLeft;last=0; },4000); };
+  const pause = () => { manual = true; clearTimeout(resumeTimer); resumeTimer = setTimeout(() => { if(pointer!==undefined || controls.contains(document.activeElement)){pause();return;} manual = reduced.matches; position=rail.scrollLeft;last=0; },4000); };
   const measure = () => { loop = track.children[originals.length * 2].offsetLeft - track.children[originals.length].offsetLeft; position = loop; rail.scrollLeft = position; };
   // Preserve fractional animation progress even when the browser rounds scrollLeft.
   const normalize = (value = rail.scrollLeft) => { if (!loop) return; if(value < loop) value += loop; if(value >= loop*2) value -= loop; rail.scrollLeft = value; position = value; };
@@ -18,14 +18,15 @@ const setupWins = track => {
   controls.querySelector('[data-wins-previous]').addEventListener('click', () => browse(-1));
   controls.querySelector('[data-wins-next]').addEventListener('click', () => browse(1));
   rail.addEventListener('mouseenter', () => hovered = true);
-  rail.addEventListener('mouseleave', () => hovered = false);
-  rail.addEventListener('focusin', pause);
+  rail.addEventListener('mouseleave', () => { hovered = false; pause(); });
+  controls.addEventListener('focusin', pause);
+  controls.addEventListener('focusout', pause);
   for (const type of ['touchstart','touchmove','touchend']) rail.addEventListener(type, pause, {passive:true});
-  rail.addEventListener('wheel', event => { pause(); event.preventDefault(); rail.scrollLeft += Math.abs(event.deltaX)>Math.abs(event.deltaY)?event.deltaX:event.deltaY; normalize(); }, {passive:false});
+  rail.addEventListener('wheel', event => { pause(); if(!event.shiftKey && Math.abs(event.deltaY)>=Math.abs(event.deltaX))return; event.preventDefault(); rail.scrollLeft += event.shiftKey?event.deltaY:event.deltaX; normalize(); }, {passive:false});
   rail.addEventListener('keydown', event => { if(['ArrowLeft','ArrowRight'].includes(event.key)){event.preventDefault();browse(event.key==='ArrowRight'?1:-1);} });
   rail.addEventListener('pointerdown', event => { pause(); if(event.pointerType==='touch'||event.button!==0) return;pointer=event.pointerId; startX=event.clientX;startScroll=rail.scrollLeft;rail.setPointerCapture(pointer); });
   rail.addEventListener('pointermove', event => { if(pointer!==event.pointerId) return;event.preventDefault();rail.scrollLeft=startScroll-(event.clientX-startX); });
-  const finish = event => { if(pointer!==event.pointerId) return;pointer=undefined;if(rail.hasPointerCapture(event.pointerId))rail.releasePointerCapture(event.pointerId);normalize(); };
+  const finish = event => { if(pointer!==event.pointerId) return;pointer=undefined;if(rail.hasPointerCapture(event.pointerId))rail.releasePointerCapture(event.pointerId);normalize(); pause(); };
   rail.addEventListener('pointerup', finish);rail.addEventListener('pointercancel', finish);
   rail.addEventListener('scroll', () => { if(manual && pointer===undefined)normalize(); }, {passive:true});
   reduced.addEventListener('change', pause);
@@ -34,7 +35,7 @@ const setupWins = track => {
 };
 const verifiedResultsTrack = document.querySelector('[data-verified-results-track]') || document.querySelector('[data-wins-track]');
 if (verifiedResultsTrack) {
-  const winsOnly = verifiedResultsTrack.hasAttribute('data-wins-only') || verifiedResultsTrack.hasAttribute('data-wins-track');
+  const winsOnly = true;
   if (!winsOnly) {
   const rail = verifiedResultsTrack.parentElement;
   rail.addEventListener('keydown', event => { if (['ArrowLeft','ArrowRight'].includes(event.key)) { event.preventDefault(); rail.scrollLeft += (event.key === 'ArrowRight' ? 1 : -1) * rail.clientWidth * .7; } });
@@ -59,9 +60,9 @@ if (verifiedResultsTrack) {
     if (rail.hasPointerCapture(event.pointerId)) rail.releasePointerCapture(event.pointerId);
   });
   rail.addEventListener('wheel', (event) => {
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    if (!event.shiftKey && Math.abs(event.deltaY) >= Math.abs(event.deltaX)) return;
     event.preventDefault();
-    rail.scrollLeft += event.deltaY;
+    rail.scrollLeft += event.shiftKey ? event.deltaY : event.deltaX;
   }, { passive: false });
   }
   fetch((['localhost','127.0.0.1','::1'].includes(location.hostname) ? '/preview-api/results' : 'https://bettinghub-publisher.kobedirwin.workers.dev/api/results'), { cache: 'no-store' })
@@ -80,7 +81,7 @@ if (verifiedResultsTrack) {
         const date = new Date(`${snapshot.trackingSince}T12:00:00Z`);
         if (Number.isFinite(date.getTime())) since.textContent = `Since ${date.toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric', timeZone:'UTC' })}. Updates automatically as published picks are verified.`;
       }
-      const settled = Array.isArray(snapshot.recent) ? snapshot.recent.filter(item => ['W','L','P','V'].includes(item.result)) : [];
+      const settled = Array.isArray(snapshot.recent) ? snapshot.recent.filter(item => item.result === 'W').map(KBHResultMetadata.publicMetadata) : [];
       const wins = settled.filter(item => item.result === 'W').slice(0, 16);
       const results = winsOnly ? wins : settled.slice(0, 16);
       if (!results.length && !winsOnly) throw new Error('No settled results available');

@@ -1,0 +1,96 @@
+/* October 10 approved audit: project scale, intrinsic controls and accessible states. */
+:root{--hub-body:16px;--hub-heading:24px;--hub-secondary:14px;--hub-inset:24px;--hub-gap:16px;--hub-ease:cubic-bezier(.22,1,.36,1)}
+body{font-family:var(--hub-font);font-size:var(--hub-body);line-height:1.5}
+body:not(.home-page) main h1{font-size:32px!important;line-height:1.15!important}
+main p,main li,main input,main select,main summary,main .button{font-size:16px}
+main small,.record-note,.results-updated,.results-note,.plan-note,.page-disclaimer,.directory-footnote{font-size:var(--hub-secondary)!important;line-height:1.5}
+[hidden]{display:none!important}
+button,.button,.header-join{box-sizing:border-box;min-height:44px!important;height:auto!important;max-width:100%;width:fit-content;white-space:normal;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px!important;line-height:1.5!important;flex-shrink:0}
+.button>span{min-width:0}.button svg,.button [aria-hidden]{flex:none}
+.site-header{padding-top:4px!important;padding-bottom:8px!important;border:0!important}
+.site-header .header-top{padding:0!important;min-height:64px!important}
+.site-header .brand img{height:64px!important;width:176px!important}
+.site-header .header-bottom{margin-top:0!important;padding-top:0!important;border:0!important;grid-template-columns:minmax(0,1fr) 44px auto!important}
+.site-header .menu-toggle,.site-header .social-icon{width:44px!important;height:44px!important;min-height:44px!important;padding:0!important;flex:none}
+.site-header .header-join{justify-self:start;color:#111!important;padding:10px 16px!important}
+.site-header .header-social{gap:8px!important}
+.site-menu{left:var(--gutter);right:auto;max-width:calc(100% - var(--gutter)*2);max-height:calc(100dvh - 140px);overflow-y:auto;transition:opacity .25s var(--hub-ease),transform .25s var(--hub-ease),visibility .25s}
+.site-menu a{font-size:16px!important;min-height:44px;display:flex;align-items:center}
+.menu-social-link{display:none!important}
+.skip-link{position:fixed;left:16px;top:8px;z-index:1000;transform:translateY(-150%);padding:12px 16px;background:#111;color:#fff;border-radius:12px;text-decoration:none}
+.skip-link:focus{transform:none}
+:focus-visible{outline:3px solid #171717!important;outline-offset:4px!important}
+.pick-tile :focus-visible,.hub-black :focus-visible,.directory-cta :focus-visible{outline-color:#ff943e!important}
+main p a:not(.button),main li a:not(.button),.text-link{ text-decoration:underline!important;text-underline-offset:3px }
+main a [aria-hidden],.tile-link,.header-join,.referral-promo-banner,.membership-card-promo{text-decoration:none!important}
+.home-page .landing-intro a,.home-page .landing-intro a *{text-decoration:none!important}
+.home-page main>.membership-card-promo,.home-page main>.referral-promo-banner{max-width:560px;margin:0 auto 24px;width:100%}
+.membership-card-promo img{filter:drop-shadow(0 4px 8px #0003)}
+.referral-promo-banner span{font-size:24px!important;font-weight:600!important}
+.home-grid>.membership-tile{background:#2c63bb!important;color:#fff!important}
+.home-grid>.membership-tile,.home-grid>.pick-tile:not([open]){min-height:168px!important}
+.wins-tile .tile-heading>div{min-width:0;flex:1}
+.wins-tile .tile-heading h2{overflow-wrap:anywhere}
+.wins-tile .tile-heading>a{width:32px;min-height:32px;display:grid;place-items:center;line-height:1;flex:none}
+.wins-tile .historical-heading{margin-bottom:8px!important;overflow-wrap:anywhere}
+.wins-tile .tile-heading .record-note{margin-bottom:16px!important;color:#51514c}
+.wins-tile .rail-arrow{width:44px!important;height:44px!important;padding:0!important;border-radius:50%!important}
+.home-page .lower-bento{align-items:start}
+.lineup-bento .directory-intro{align-self:start!important;min-height:0!important}
+.lineup-bento .directory-intro>.button{margin-top:16px!important;color:#111!important}
+.lineup-bento .directory-table-scroll{max-height:none!important;overflow:visible!important}
+.lineup-bento .capper-table tbody{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.lineup-bento .capper-table tr[hidden]{display:none!important}
+.lineup-bento .directory-list,.lineup-bento .directory-intro{padding:var(--hub-inset)!important}
+.lineup-bento .directory-more{margin-top:16px;background:#fff;color:#111;border-radius:24px;box-shadow:0 4px 8px #0003}
+.lineup-bento input{width:100%;min-width:0;font-size:16px!important}
+.membership-design .featured-offer{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.membership-design .featured-offer .mock-plan{min-height:0!important;gap:12px;padding:var(--hub-inset)!important}
+.membership-design .featured-offer .mock-plan h2{font-size:24px!important;margin:0!important}
+.membership-design .featured-offer .mock-plan>p{margin:0!important;color:#111!important}
+.membership-design .first-month,.membership-design .one-year,.membership-design .six-months{color:#111!important}
+.membership-design .mock-plan .mock-price{color:inherit!important;font-size:32px!important;white-space:normal}
+.membership-design .mock-plan .mock-price small{font-size:14px!important}
+.membership-design .secondary-plan-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.membership-design .mock-plan .button{margin-top:12px!important;font-size:16px!important;color:#111!important}
+.membership-design .six-months .button,.membership-design .one-year .button{color:#fff!important}
+.membership-design .membership-vip .vip-main-tools{list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:0;margin:20px 0}
+.membership-design .membership-vip .vip-main-tools li{margin:0!important;padding:16px;background:#ffffffb3;border-radius:12px}
+.membership-design .membership-vip li strong,.membership-design .membership-vip li span{display:block}
+.membership-design .membership-vip li span{font-size:16px!important;line-height:1.5;margin-top:8px}
+.membership-design .membership-vip .vip-extras{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:16px;margin-top:16px}
+.membership-design .membership-vip .included-lead{text-align:center}
+.membership-design .vip-join-button,.membership-design .membership-manage .button,.membership-design .membership-share .button{color:#111!important}
+.hub-blue,.hub-blue p{color:#111!important}
+.results-shell{max-width:100%;margin-bottom:24px}
+.results-summary{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:16px}
+.results-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:16px 0}
+.results-filters label{display:flex;flex-direction:column;gap:8px;min-width:0}
+.results-filters select,.results-filters input{width:100%;min-width:0;padding:10px 12px;border:1px solid #aaa;border-radius:12px;background:#fff;color:#111;min-height:44px}
+.result-row{grid-template-columns:110px 44px minmax(0,1fr);gap:16px}
+.result-row small{grid-column:3;white-space:normal;overflow-wrap:anywhere}
+.result-badge{border-radius:8px;background:#147a3d!important;color:#fff}
+.results-more{margin-top:20px;background:#111;color:#fff;border-radius:24px}
+.results-count{margin:16px 0 0}
+.account-page,.manage-page,.partner-page{padding-top:24px!important}
+.partner-page{color:#171717}.partner-page .partner-intro{margin-bottom:24px}.partner-page .cards,.partner-page .identity,.partner-page .money>div{grid-template-columns:repeat(2,minmax(0,1fr))}.partner-page .cards article,.partner-page .identity>div,.partner-page .money,.partner-page .details,.partner-page .link{background:#fff;border:1px solid #ddd;border-radius:16px;color:#171717}.partner-page [data-status]{color:#51514c}.partner-page button{background:#fff;color:#111;border:1px solid #ccc;border-radius:24px}.partner-page button.active{background:#ff7900}.partner-page code,.partner-page .money p{background:#f2f2f2;color:#171717}.partner-page .money strong{color:#171717}.partner-page nav{flex-wrap:wrap}
+@media(max-width:600px){:root{--hub-inset:16px}.home-page .lower-bento{grid-template-columns:minmax(0,1fr)!important}.home-page .approach-tile{gap:8px;min-height:0!important}.home-page .approach-tile h2 br,.home-page .approach-tile p br{display:none}.home-page .approach-tile h2,.home-page .approach-tile p{margin:0!important}.home-page .approach-tile .tile-link{margin-top:8px!important}.membership-design .featured-offer,.membership-design .secondary-plan-grid,.membership-design .membership-vip .vip-main-tools{grid-template-columns:minmax(0,1fr)!important}.membership-design .membership-vip .vip-extras{grid-template-columns:1fr!important}.results-filters{grid-template-columns:1fr}.result-row{grid-template-columns:80px 38px minmax(0,1fr);gap:12px}.lineup-bento .capper-table tbody{grid-template-columns:1fr!important}.site-header .header-top{min-height:56px!important}.site-header .brand img{height:56px!important;width:154px!important}}
+@media(max-width:380px){.site-header .header-bottom{grid-template-columns:minmax(0,1fr) 44px!important}.site-header .header-social{display:none!important}.menu-social-link{display:flex!important}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto!important}.site-menu{transition:none}}
+/* Labels set the control width; long text wraps inside the same symmetric insets. */
+.membership-design .mock-plan .button,.membership-design .vip-join-button,.membership-design .membership-manage .button,.membership-design .membership-share .button,.lineup-bento .button{width:fit-content!important;max-width:100%!important;white-space:normal!important;min-width:0!important;overflow-wrap:anywhere}
+/* Keep legacy component fonts from reintroducing competing type systems. */
+body *{font-family:var(--hub-font)!important}
+main p,main li,main label,main input,main select,main summary,main .button,main .tile-link,main .directory-count,main .capper-table th,main .capper-table td{font-size:16px!important}
+.site-header .header-join{font-size:16px!important}
+main small,.result-row>span,.record-note,.results-updated,.results-note,.plan-note,.page-disclaimer,.directory-footnote,.checkout-preview-status,footer,footer *{font-size:14px!important;line-height:1.5!important}
+.mock-price .offer-attention{font-size:32px!important}.mock-price small{font-size:14px!important}
+/* The logo has no hidden image padding or legacy clip mask. */
+.site-header .brand img{width:64px!important;height:64px!important;padding:0!important;clip-path:none!important;object-position:center!important}
+@media(max-width:600px){.site-header .brand img{width:56px!important;height:56px!important}}
+.wins-tile .verified-result-card strong{font-size:16px!important;line-height:1.5!important}
+.wins-tile .wins-rail{min-height:0!important;height:auto!important;padding-bottom:0!important}
+.wins-tile .verified-results-track{min-height:0!important}
+.lineup-bento .directory-cta .button{color:#111!important}
+.subsite-layout .hub-blue,.subsite-layout .hub-blue p,.hub-blue,.hub-blue p{color:#080808!important}
+.membership-share .share-subtitle{color:#ffaf69!important}

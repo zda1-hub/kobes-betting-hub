@@ -31,3 +31,15 @@ test('tracking start uses the earliest published pick, including pending, rather
   assert.equal(snapshot.trackingSince, '2026-09-10');
   assert.equal(buildPublicResults([], '2026-10-04').trackingSince, null);
 });
+
+test('public metadata validates unambiguous mismatches and holds ambiguous sports without changing wins or source terms', () => {
+  const items=[row('1','W',{selection:'Buccaneers +8.5',sport:'MLB',source_name:'Source A'}),row('2','W',{selection:'Dodgers ML -150',sport:'NCAAF'}),row('3','W',{selection:'Iowa State +10.5 2U',sport:'NHL'})];
+  const result=buildPublicResults(items,'2026-09-24');
+  assert.equal(result.wins.find(i=>i.id==='1').sport,'Football');
+  assert.equal(result.wins.find(i=>i.id==='1').source,'Source A');
+  assert.equal(result.wins.find(i=>i.id==='2').sport,'Baseball');
+  assert.equal(result.wins.find(i=>i.id==='3').sport,'');
+  assert.equal(result.wins.find(i=>i.id==='3').sportStatus,'needs_review');
+  assert.equal(result.overall.wins,3);assert.equal(items[0].sport,'MLB');
+  assert.deepEqual(result.wins.map(i=>i.selection).sort(),items.map(i=>i.selection).sort());
+});

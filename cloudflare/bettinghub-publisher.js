@@ -1,3 +1,4 @@
+import resultMetadata from '../result-metadata.js';
 const CALLBACK_PATH = "/auth/x/callback";
 const START_PATH = "/auth/x/start";
 const TOKEN_ENDPOINT = "https://api.x.com/2/oauth2/token";
@@ -1047,7 +1048,7 @@ function normalizedPublicResults(input) {
   const item = (value) => {
     if (!value || !validDate(value.date) || typeof value.selection !== 'string' || !value.selection.trim()) return null;
     if (!['W', 'L', 'P', 'V'].includes(value.result)) return null;
-    return { id: String(value.id || '').slice(0, 90), date: value.date, sport: String(value.sport || '').slice(0, 40), selection: value.selection.slice(0, 180), line: String(value.line || '').slice(0, 80), odds: String(value.odds || '').slice(0, 24), result: value.result };
+    return resultMetadata.publicMetadata({ source: String(value.source || '').slice(0, 120), sportStatus: value.sportStatus === 'needs_review' ? 'needs_review' : 'source', id: String(value.id || '').slice(0, 90), date: value.date, sport: String(value.sport || '').slice(0, 40), selection: value.selection.slice(0, 180), line: String(value.line || '').slice(0, 80), odds: String(value.odds || '').slice(0, 24), result: value.result });
   };
   if (!input || !validDate(input.operatingDate) || !Number.isFinite(Date.parse(input.generatedAt || ''))) return null;
   const overall = record(input.overall), today = record(input.today), pending = count(input.pending), settled = count(input.settled);

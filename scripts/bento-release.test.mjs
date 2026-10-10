@@ -72,9 +72,9 @@ test('production email form supplies age, consent and honeypot to the existing h
   assert.match(source, /legalAge/); assert.match(source, /consent/);
 });
 
-test('landing wins retain full-record links and proof retains unique inline reviews', async () => {
+test('landing wins retain their qualified historical estimate and proof retains unique inline reviews', async () => {
   const home = await read('index.html');
-  assert.match(home, /65% <span>historical win rate<\/span>/); assert.match(home, /data-wins-track/);
+  assert.match(home, /KOBE’S HISTORICAL 65% WIN RATE/); assert.match(home, /data-wins-track/);
   assert.match(home, /href="\/?results(?:\.html)?"[^>]*>See winning plays/);
   const proof = await read('proof.html');
   assert.match(proof, /data-verified-results-track/);
@@ -86,7 +86,7 @@ test('landing wins retain full-record links and proof retains unique inline revi
   assert.equal(new Set(hashes).size, hashes.length);
 });
 
-test('public results rendering includes losses and excludes unresolved outcomes', async () => {
+test('public highlights render verified wins and exclude all other outcomes', async () => {
   const track = { hasAttribute() { return false; }, parentElement: { addEventListener() {} }, replaceChildren(...cards) { this.cards = cards; } };
   const summary = {};
   const document = {
@@ -96,16 +96,16 @@ test('public results rendering includes losses and excludes unresolved outcomes'
   const recent = ['W','L','P','V','PENDING'].map(result => ({ result, selection: `selection-${result}`, date:'2026-10-04' }));
   let requested;
   vm.runInNewContext(await read('home-results.js'), {
-    document, location:{hostname:'kobesbettinghub.com'}, fetch: async url => {
+    KBHResultMetadata:{publicMetadata:item=>item}, document, location:{hostname:'kobesbettinghub.com'}, fetch: async url => {
       requested = url;
       return { ok:true, json:async()=>({overall:{wins:1,losses:1,pushes:1,voids:1},recent}) };
     },
   });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(requested, 'https://bettinghub-publisher.kobedirwin.workers.dev/api/results');
-  assert.equal(track.cards.length, 4);
-  assert.deepEqual(track.cards.map(card=>card.children[1].textContent), ['Win','Loss','Push','Void']);
-  assert.match(summary.textContent, /1 wins · 1 losses · 1 pushes · 1 voids/);
+  assert.equal(track.cards.length, 1);
+  assert.deepEqual(track.cards.map(card=>card.children[1].textContent), ['✓ WIN']);
+  assert.match(summary.textContent, /1 tracked wins and counting/);
 });
 
 test('homepage highlights only wins, uses the overall live count and the supplied tracking date', async () => {
@@ -113,20 +113,17 @@ test('homepage highlights only wins, uses the overall live count and the supplie
   const summary = {}, since = {};
   const document = { querySelector(selector){return {'[data-verified-results-track]':track,'[data-home-record]':summary,'[data-tracking-since]':since}[selector] || null;}, createElement(tag){return {tag,children:[],append(...children){this.children.push(...children);}};} };
   const recent = [...Array(20).fill({result:'L'}), {result:'W', selection:'Verified winner', date:'2026-10-04'}, {result:'PENDING'}];
-  vm.runInNewContext(await read('home-results.js'), {document,location:{hostname:'kobesbettinghub.com'},fetch:async()=>({ok:true,json:async()=>({overall:{wins:323,losses:299,pushes:11,voids:0},trackingSince:'2026-09-10',recent})})});
+  vm.runInNewContext(await read('home-results.js'), {KBHResultMetadata:{publicMetadata:item=>item},document,location:{hostname:'kobesbettinghub.com'},fetch:async()=>({ok:true,json:async()=>({overall:{wins:323,losses:299,pushes:11,voids:0},trackingSince:'2026-09-10',recent})})});
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(track.cards.length,1);
-  assert.equal(track.cards[0].children[1].textContent,'Win');
+  assert.equal(track.cards[0].children[1].textContent,'✓ WIN');
   assert.equal(summary.textContent,'323 tracked wins and counting');
   assert.match(since.textContent,/Since September 10, 2026/);
   const home = await read('index.html');
-  const compactCard = home.match(/<section class="bento verified-results-tile landing-record"[\s\S]*?<\/section>/)?.[0];
-  assert.match(compactCard || '', /65% <span>historical win rate<\/span>/);
-  assert.match(compactCard || '', /Kobe-reported historical estimate; complete supporting records are unavailable/);
-  assert.match(compactCard || '', /See winning plays/);
-  assert.doesNotMatch(compactCard || '', /data-home-record/);
-  assert.match(compactCard || '', /class="verified-results-rail" hidden aria-hidden="true"/);
-  assert.doesNotMatch(compactCard || '', /data-wins-motion/);
+  assert.match(home, /KOBE’S HISTORICAL 65% WIN RATE/);
+  assert.match(home, /Kobe-reported estimate; complete historical supporting records are unavailable/);
+  assert.match(home, /See winning plays/);
+  assert.doesNotMatch(home, /data-wins-motion/);
 });
 
 test('legal and portal artifacts retain current approved operator and secure access', async () => {
@@ -144,41 +141,23 @@ test('legal and portal artifacts retain current approved operator and secure acc
   assert.equal(portal, await read('managemembership.html'));
 });
 
-test('wins motion survives integer scroll rounding and explicit Play works with reduced motion', async () => {
+test('wins motion respects reduced motion, focus, manual browsing and four-second idle', async () => {
   const source = await read('home-results.js');
-  for (const reduce of [false, true]) {
-    const frames = [], listeners = {}, buttons = {};
-    for (const name of ['motion','previous','next']) buttons[name] = { addEventListener(type, fn) { this[type] = fn; } };
-    let scroll = 0;
-    const rail = {
-      get scrollLeft() { return scroll; }, set scrollLeft(value) { scroll = Math.floor(value); },
-      closest() { return { querySelector(selector) { return buttons[selector.match(/wins-(\w+)/)[1]]; } }; },
-      addEventListener(type, fn) { listeners[type] = fn; },
-      getBoundingClientRect() { return { top:20, bottom:200 }; },
-    };
-    const track = { parentElement:rail, children:[], hasAttribute(){return true;},
-      replaceChildren(...cards){this.children=cards;this.layout();},
-      prepend(...cards){this.children.unshift(...cards);this.layout();},
-      append(...cards){this.children.push(...cards);this.layout();},
-      layout(){this.children.forEach((card,i)=>card.offsetLeft=i*262);},
-    };
-    const create = () => ({ children:[], append(...nodes){this.children.push(...nodes);}, setAttribute(){}, cloneNode(){return create();},getBoundingClientRect(){return {width:250};} });
-    const document = {hidden:false,querySelector(selector){return selector==='[data-verified-results-track]'?track:null;},createElement:create};
-    vm.runInNewContext(source, {document, location:{hostname:'kobesbettinghub.com'},
-      fetch:async()=>({ok:true,json:async()=>({recent:[{result:'W',selection:'A'},{result:'W',selection:'B'}]})}),
-      matchMedia:()=>({matches:reduce,addEventListener(){}}),ResizeObserver:class{observe(){}},
-      requestAnimationFrame:fn=>frames.push(fn),innerHeight:844,
-    });
+  for (const reduce of [false,true]) {
+    const frames=[], listeners={}, controlsListeners={}, buttons={}, timers=[];
+    for(const name of ['previous','next']) buttons[name]={addEventListener(type,fn){this[type]=fn;}};
+    let focused=false,scroll=0;
+    const controls={contains(){return focused;},addEventListener(type,fn){controlsListeners[type]=fn;},querySelector(selector){return buttons[selector.match(/wins-(\w+)/)[1]];}};
+    const rail={get scrollLeft(){return scroll;},set scrollLeft(value){scroll=Math.floor(value);},closest(){return controls;},addEventListener(type,fn){listeners[type]=fn;},getBoundingClientRect(){return {top:20,bottom:200};}};
+    const track={parentElement:rail,children:[],hasAttribute(name){return name==='data-wins-only';},replaceChildren(...cards){this.children=cards;this.layout();},prepend(...cards){this.children.unshift(...cards);this.layout();},append(...cards){this.children.push(...cards);this.layout();},layout(){this.children.forEach((card,i)=>card.offsetLeft=i*262);}};
+    const create=()=>({children:[],append(...nodes){this.children.push(...nodes);},setAttribute(){},cloneNode(){return create();},getBoundingClientRect(){return {width:250};}});
+    const document={hidden:false,activeElement:{},querySelector(selector){return selector==='[data-verified-results-track]'?track:null;},querySelectorAll(){return [];},createElement:create};
+    vm.runInNewContext(source,{KBHResultMetadata:{publicMetadata:item=>item},document,location:{hostname:'kobesbettinghub.com'},fetch:async()=>({ok:true,json:async()=>({recent:[{result:'W',selection:'A'},{result:'W',selection:'B'}]})}),matchMedia:()=>({matches:reduce,addEventListener(){}}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>frames.push(fn),setTimeout(fn,delay){assert.equal(delay,4000);timers.push(fn);},clearTimeout(){},innerHeight:844});
     await new Promise(resolve=>setImmediate(resolve));
-    const tick = start => {for(let time=start;time<start+800;time+=8)frames.shift()(time);};
-    const initial=scroll; tick(8);
-    if(reduce){assert.equal(scroll,initial);assert.equal(buttons.motion.textContent,'Play slideshow');buttons.motion.click();tick(808);}
-    assert.ok(scroll>initial+40, `motion advances at 125Hz with integer scroll rounding (reduced=${reduce})`);
-    listeners.wheel({deltaX:0,deltaY:25,preventDefault(){}});
-    const stopped=scroll; tick(1608); assert.equal(scroll,stopped);
-    assert.equal(buttons.motion.textContent,'Play slideshow');
-    buttons.motion.click();tick(2408);assert.ok(scroll>stopped+40);
-    listeners.touchstart();const touched=scroll;tick(3208);assert.equal(scroll,touched);
-    assert.equal(buttons.motion.textContent,'Play slideshow');
+    const tick=start=>{for(let time=start;time<start+800;time+=8)frames.shift()(time);};
+    const initial=scroll;tick(8);if(reduce)assert.equal(scroll,initial);else assert.ok(scroll>initial+40);
+    let prevented=false;listeners.wheel({deltaX:0,deltaY:25,preventDefault(){prevented=true;}});assert.equal(prevented,false);
+    focused=true;controlsListeners.focusin();timers.at(-1)();const stopped=scroll;tick(808);assert.equal(scroll,stopped);
+    focused=false;controlsListeners.focusout();timers.at(-1)();tick(1608);if(reduce)assert.equal(scroll,stopped);else assert.ok(scroll>stopped+40);
   }
 });

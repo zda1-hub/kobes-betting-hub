@@ -41,18 +41,16 @@ test('homepage, public manifest and sitemap expose the exclusive directory', { s
   assert.match(sitemap, /https:\/\/kobesbettinghub.com\/exclusives/);
 });
 
-test('directory search matches spaced names, reports empty state and resets all rows', async () => {
-  const handlers = {}, input = { value: '', addEventListener: (name, fn) => { handlers[name] = fn; } };
-  const rows = ['BankrollBill', 'Teddy Covers'].map(name => ({ hidden: false, querySelector: () => ({ textContent: name }) }));
-  const count = {}, empty = {}, menu = { classList: { remove() {}, toggle() { return true; } }, querySelectorAll: () => [] };
-  const toggle = { addEventListener() {}, setAttribute() {} };
-  const document = {
-    getElementById: id => ({ 'capper-search': input, 'directory-count': count, 'directory-empty': empty })[id],
-    querySelector: selector => selector === '[data-menu]' ? menu : toggle,
-    querySelectorAll: () => rows, addEventListener() {}
-  };
-  vm.runInNewContext(await readFile(new URL('exclusives.js', root), 'utf8'), { document });
-  input.value = 'bankroll bill'; handlers.input(); assert.deepEqual(rows.map(r => r.hidden), [false, true]); assert.equal(count.textContent, '1 expert source shown');
-  input.value = 'unknown'; handlers.input(); assert.equal(empty.hidden, false); assert.equal(count.textContent, '0 expert sources shown');
-  input.value = ''; handlers.input(); assert.deepEqual(rows.map(r => r.hidden), [false, false]); assert.equal(empty.hidden, true);
+test('directory search covers the whole roster, paginates and recovers from no matches', async () => {
+  const handlers={}, input={value:'',addEventListener(name,fn){handlers[name]=fn;}};
+  const names=['BankrollBill','Teddy Covers',...Array.from({length:18},(_,i)=>`Source ${i}`)];
+  const rows=names.map(name=>({hidden:false,querySelector:()=>({textContent:name})}));
+  const count={},empty={},more={addEventListener(name,fn){this[name]=fn;}};
+  const document={getElementById:id=>({'capper-search':input,'directory-count':count,'directory-empty':empty})[id],querySelector:()=>({after(){}}),querySelectorAll:()=>rows,createElement:()=>more};
+  vm.runInNewContext(await readFile(new URL('exclusives.js',root),'utf8'),{document});
+  assert.equal(rows.filter(r=>!r.hidden).length,12);assert.equal(more.hidden,false);
+  more.click();assert.equal(rows.filter(r=>!r.hidden).length,20);assert.equal(more.hidden,true);
+  input.value='bankroll bill';handlers.input();assert.equal(count.textContent,'1 of 1 expert source shown');
+  input.value='unknown';handlers.input();assert.equal(empty.hidden,false);assert.equal(count.textContent,'0 of 0 expert sources shown');
+  input.value='';handlers.input();assert.equal(rows.filter(r=>!r.hidden).length,12);assert.equal(empty.hidden,true);
 });

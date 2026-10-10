@@ -1,5 +1,6 @@
 const { isPublishedRow } = require('./recap');
 const { resultFor } = require('./pick-log');
+const { publicMetadata } = require('../../result-metadata');
 const { verified } = require('./free-pick-results');
 
 function counts(rows) {
@@ -15,7 +16,8 @@ function counts(rows) {
 }
 
 function publicResult(row) {
-  return {
+  return publicMetadata({
+    source: String(row.source_name || '').slice(0, 120),
     id: String(row.pick_id || '').slice(0, 90),
     date: row.operating_date,
     sport: String(row.sport || row.league || '').slice(0, 40),
@@ -23,7 +25,7 @@ function publicResult(row) {
     line: String(row.published_line || '').slice(0, 80),
     odds: String(row.published_odds_american || '').slice(0, 24),
     result: resultFor(row),
-  };
+  });
 }
 
 function buildPublicResults(rows, today, now = new Date()) {

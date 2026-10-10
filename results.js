@@ -1,48 +1,42 @@
 const RESULTS_URL = ['localhost', '127.0.0.1', '::1'].includes(location.hostname)
-  ? '/preview-api/results'
-  : 'https://bettinghub-publisher.kobedirwin.workers.dev/api/results';
-
-const formatDate = value => new Intl.DateTimeFormat('en-US', {
-  month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Phoenix',
-}).format(new Date(`${value}T12:00:00-07:00`));
-
+  ? '/preview-api/results' : 'https://bettinghub-publisher.kobedirwin.workers.dev/api/results';
+const formatDate = value => new Intl.DateTimeFormat('en-US', {month:'short',day:'numeric',year:'numeric',timeZone:'America/Phoenix'}).format(new Date(`${value}T12:00:00-07:00`));
 function winningRow(item) {
-  const row = document.createElement('article');
-  row.className = 'result-row';
-  const day = document.createElement('span');
-  day.textContent = formatDate(item.date);
-  const badge = document.createElement('b');
-  badge.className = 'result-badge win';
-  badge.textContent = 'W';
-  const selection = document.createElement('strong');
-  selection.textContent = item.selection;
+  const row = document.createElement('article'); row.className = 'result-row';
+  const day = document.createElement('span'); day.textContent = formatDate(item.date);
+  const badge = document.createElement('b'); badge.className = 'result-badge win'; badge.textContent = '✓ W'; badge.setAttribute('aria-label','Win');
+  const selection = document.createElement('strong'); selection.textContent = item.selection;
   const details = document.createElement('small');
-  const terms = [item.line, item.odds && `(${item.odds})`].filter(Boolean).join(' ');
-  details.textContent = [item.sport, terms, 'Win'].filter(Boolean).join(' · ');
-  row.append(day, badge, selection, details);
-  return row;
+  details.textContent = [item.sport || 'Sport not confirmed', item.source, item.line, item.odds && `(${item.odds})`].filter(Boolean).join(' · ');
+  row.append(day, badge, selection, details); return row;
 }
-
 async function loadResults() {
-  const loading = document.querySelector('[data-loading]');
-  const shell = document.querySelector('[data-results]');
+  const loading = document.querySelector('[data-loading]'), shell = document.querySelector('[data-results]');
   try {
-    const response = await fetch(RESULTS_URL, { cache: 'no-store' });
+    const response = await fetch(RESULTS_URL, {cache:'no-store'});
     if (!response.ok) throw new Error(`Results service returned ${response.status}`);
     const data = await response.json();
-    const wins = (Array.isArray(data.wins) ? data.wins : data.recent || [])
-      .filter(item => item.result === 'W');
-    document.querySelector('[data-updated]').textContent = `Last verified sync: ${new Date(data.generatedAt).toLocaleString('en-US', { timeZone: 'America/Phoenix' })} MST`;
+    const wins = (Array.isArray(data.wins) ? data.wins : data.recent || []).filter(item => item.result === 'W').map(KBHResultMetadata.publicMetadata);
+    document.querySelector('[data-updated]').textContent = `Last verified sync: ${new Date(data.generatedAt).toLocaleString('en-US',{timeZone:'America/Phoenix'})} MST`;
+    const total = document.querySelector('[data-win-count]'); if(total) total.textContent = `${wins.length} verified wins`;
     const list = document.querySelector('[data-list]');
-    list.replaceChildren(...wins.map(winningRow));
-    if (!wins.length) list.textContent = 'No verified winning plays are available yet.';
-    loading.hidden = true;
-    shell.hidden = false;
-  } catch (error) {
-    loading.classList.add('results-error');
-    loading.innerHTML = '<strong>Winning plays are temporarily unavailable.</strong><p>Please check back shortly.</p>';
-    console.warn(error);
-  }
+    const filters = document.createElement('form'); filters.className = 'results-filters'; filters.setAttribute('aria-label','Filter winning picks');
+    filters.innerHTML = '<label>Sport<select name="sport"><option value="">All sports</option></select></label><label>Date<input type="date" name="date"></label><label>Find a play or source<input name="search" type="search" placeholder="Team, player or source"></label>';
+    for(const sport of [...new Set(wins.map(item => item.sport || 'Sport not confirmed'))].sort()) { const option = document.createElement('option'); option.value = option.textContent = sport; filters.elements.sport.append(option); }
+    filters.addEventListener('submit',event=>event.preventDefault()); list.before(filters);
+    const count = document.createElement('p'); count.className = 'results-count'; count.setAttribute('role','status');
+    const more = document.createElement('button'); more.type='button'; more.className='button results-more'; more.textContent='Show more wins'; list.after(count,more);
+    let limit=30;
+    const render = () => {
+      const {sport,date,search}=filters.elements;
+      const matching = wins.filter(item=>(!sport.value || (item.sport || 'Sport not confirmed')===sport.value) && (!date.value || item.date===date.value) && (!search.value || `${item.selection} ${item.source || ''}`.toLowerCase().includes(search.value.toLowerCase().trim())));
+      const shown=matching.slice(0,limit); list.replaceChildren(...shown.map(winningRow));
+      if(!matching.length) list.textContent='No verified wins match these filters.';
+      count.textContent=`${shown.length} of ${matching.length} matching wins shown. ${wins.length} verified wins available.`;
+      more.hidden=matching.length<=limit;
+    };
+    filters.addEventListener('input',()=>{limit=30;render();}); more.addEventListener('click',()=>{limit+=30;render();});
+    render(); loading.hidden=true; shell.hidden=false;
+  } catch(error) { loading.classList.add('results-error'); loading.innerHTML='<strong>Winning plays are temporarily unavailable.</strong><p>Please check back shortly.</p>'; console.warn(error); }
 }
-
 loadResults();

@@ -426,6 +426,8 @@ function memberHasConfiguredVipRole(member, env) {
 
 async function activeReferralAccessForDiscord(env, discordUserId) {
   if (await activeMembershipForDiscord(env, discordUserId)) return true;
+  const customer = await membershipCustomerForDiscord(env, discordUserId);
+  if (customer?.current_subscription_id && await membershipEntitlementBlock(env, customer.current_subscription_id)) return false;
   if (!env.DISCORD_BOT_TOKEN || !env.DISCORD_GUILD_ID || !env.DISCORD_MEMBER_ROLE_ID) return false;
   try {
     const member = await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${discordUserId}`, {
@@ -468,7 +470,7 @@ async function referralOwnerForCode(env, referralCode) {
   }
   if (!/^KBH-[A-Z0-9]{10}$/.test(referralCode)) return null;
   const member = await referralProfileForCode(env, referralCode);
-  return member && await activeMembershipForDiscord(env, member.discord_user_id)
+  return member && await activeReferralAccessForDiscord(env, member.discord_user_id)
     ? { kind: 'member', profile: member } : null;
 }
 
@@ -945,7 +947,7 @@ async function readReferralAuthSession(env, token) {
   const rows = await supabase(env, `referral_auth_sessions?token_hash=eq.${encodeURIComponent(tokenHash)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=discord_user_id,contact_email,display_name&limit=1`);
   const session = rows?.[0];
   if (!session) throw new Error('That referral session expired. Reconnect Discord to continue.');
-  if (!await activeMembershipForDiscord(env, session.discord_user_id)) throw new Error('An active membership is required for referral payouts.');
+  if (!await activeReferralAccessForDiscord(env, session.discord_user_id)) throw new Error('Current Betting Hub VIP access is required for referral payouts.');
   return session;
 }
 
@@ -3640,4 +3642,7 @@ export const __test = {
   readDiscordState,
   verifyStripeSignature,
   memberHasConfiguredVipRole,
+  activeReferralAccessForDiscord,
+  readReferralAuthSession,
+  referralOwnerForCode,
 };

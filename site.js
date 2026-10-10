@@ -1,4 +1,8 @@
 (() => {
+  const pageName = location.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
+  const promote = !['/refer','/support','/terms','/privacy','/responsible-gambling','/cancel','/managemembership','/welcome','/member','/partner','/creator','/404','/admin-analytics'].includes(pageName);
+  const main = document.querySelector('main');
+  if (main) { main.id ||= 'main-content'; const skip = document.createElement('a'); skip.className='skip-link'; skip.href='#'+main.id; skip.textContent='Skip to content'; document.body.prepend(skip); }
   const localPreview = ['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) || location.protocol === 'file:';
   document.querySelectorAll('[data-year], #year').forEach(node => node.textContent = new Date().getFullYear());
   const tickerToggle = document.querySelector('[data-ticker-toggle]');
@@ -16,6 +20,7 @@
     const open = menu.classList.toggle('is-open');
     toggle.setAttribute('aria-expanded', String(open));
   });
+  document.querySelectorAll('.header-social a').forEach(link => { const copy=link.cloneNode(true); copy.className='menu-social-link'; copy.textContent=link.getAttribute('aria-label'); menu?.append(copy); });
   menu?.querySelectorAll('a').forEach(link => link.addEventListener('click', closeMenu));
   document.addEventListener('click', event => { if (!event.target.closest('[data-header]')) closeMenu(); });
   document.addEventListener('keydown', event => {
@@ -32,29 +37,36 @@
   referralBanner.className = 'referral-promo-banner';
   referralBanner.href = new URL('refer.html', document.currentScript?.src || location.href).href;
   referralBanner.setAttribute('aria-label', 'Earn $20 for each eligible paid referral. Get your referral link.');
-  referralBanner.innerHTML = '<img src="/assets/referral/twenty-dollar.png" alt="Twenty-dollar bill — earn $20 per eligible paid referral" width="1000" height="421"><span>Earn $20 per eligible paid referral →</span>';
+  referralBanner.innerHTML = '<img src="/assets/referral/twenty-dollar-480.webp" srcset="/assets/referral/twenty-dollar-480.webp 480w, /assets/referral/twenty-dollar-960.webp 960w" sizes="(max-width:600px) calc(100vw - 32px), 560px" loading="lazy" decoding="async" alt="Twenty-dollar bill — earn $20 per eligible paid referral" width="1000" height="421"><span>Earn $20 per eligible paid referral →</span>';
   const landingIntro = document.querySelector('.home-page .landing-intro');
   if (landingIntro) {
     const memberCard = document.createElement('a');
     memberCard.className = 'membership-card-promo';
     memberCard.href = '/join';
     memberCard.setAttribute('aria-label', 'Kobe’s Betting Hub VIP membership — $32.99 per month until canceled. View plans.');
-    memberCard.innerHTML = '<img src="/assets/membership/kbh-vip-user-master.png" alt="Orange KBH VIP membership card — $32.99/month" width="4200" height="2448"><span>$32.99/month until canceled. View membership →</span>';
+    memberCard.innerHTML = '<img src="/assets/membership/kbh-vip-user-master-560.webp" srcset="/assets/membership/kbh-vip-user-master-560.webp 560w, /assets/membership/kbh-vip-user-master-1120.webp 1120w" sizes="(max-width:600px) calc(100vw - 32px), 560px" decoding="async" alt="Orange KBH VIP membership card — $32.99/month" width="4200" height="2448"><span>$32.99/month until canceled. View membership →</span>';
     landingIntro.after(memberCard, referralBanner);
   }
-  else document.querySelector('main')?.prepend(referralBanner);
+  else if (promote) document.querySelector('main')?.prepend(referralBanner);
   const checkoutState = new URLSearchParams(location.search).has('checkout');
   let prompted = false;
-  let exitDialog;
+  let exitDialog, exitOpener;
+  const exitInert = new Map();
   const closeExitDialog = () => {
     if (!exitDialog) return;
+    for (const [node, wasInert] of exitInert) node.inert = wasInert;
+    exitInert.clear();
     exitDialog.remove();
+    exitOpener?.focus({preventScroll:true});
     exitDialog = null;
     document.removeEventListener('keydown', onExitEscape);
   };
-  const onExitEscape = event => { if (event.key === 'Escape') closeExitDialog(); };
+  const onExitEscape = event => {
+    if(event.key==='Escape') { event.preventDefault(); closeExitDialog(); }
+    if(event.key==='Tab' && exitDialog) { const focusable=[...exitDialog.querySelectorAll('button,a[href]')]; const first=focusable[0], last=focusable.at(-1); if(event.shiftKey && document.activeElement===first){event.preventDefault();last.focus();} else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first.focus();} }
+  };
   const showExitDialog = () => {
-    if (prompted || checkoutState || !document.querySelector('.site-header')) return;
+    if (!promote || prompted || checkoutState || !document.querySelector('.site-header')) return;
     try {
       if (sessionStorage.getItem('kbh.referral.exit.prompted')) return;
       sessionStorage.setItem('kbh.referral.exit.prompted', '1');
@@ -64,12 +76,15 @@
     exitDialog = document.createElement('div');
     exitDialog.className = 'october-offer-overlay';
     exitDialog.innerHTML = `<section class="october-offer-dialog bento" role="dialog" aria-modal="true" aria-labelledby="exit-referral-title"><button class="october-offer-close" type="button" aria-label="Close message">×</button><h2 id="exit-referral-title">Take a look before you go.</h2><p>VIP is $32.99/month. With each eligible referral, you can make $20. How much money do you want to make?</p><p class="exit-referral-terms">Rewards follow the first paid month, a seven-day hold, and verification.</p><a class="button" href="${joinUrl}">See membership options →</a><a class="exit-referral-link" href="${referralBanner.href}">Get your referral link →</a></section>`;
+    exitOpener = document.activeElement;
+    for (const node of document.body.children) { if(node.tagName==='SCRIPT')continue; exitInert.set(node,node.inert); node.inert=true; }
     document.body.append(exitDialog);
     exitDialog.querySelector('button').addEventListener('click', closeExitDialog);
     exitDialog.addEventListener('click', event => { if (event.target === exitDialog) closeExitDialog(); });
     document.addEventListener('keydown', onExitEscape);
     exitDialog.querySelector('button').focus();
   };
+  if (localPreview && new URLSearchParams(location.search).get('preview_exit') === '1') showExitDialog();
   document.addEventListener('mouseout', event => {
     if (!event.relatedTarget && event.clientY <= 8 && matchMedia('(pointer: fine)').matches) showExitDialog();
   });
@@ -97,7 +112,7 @@ document.querySelectorAll('details').forEach(details => {
     details.style.height = ''; details.style.overflow = 'hidden';
     details.open = true;
     const to = expanded ? details.getBoundingClientRect().height : summary.getBoundingClientRect().height;
-    animation = details.animate([{height:`${from}px`},{height:`${to}px`}], {duration:460,easing:'cubic-bezier(.22,1.12,.36,1)'});
+    animation = details.animate([{height:`${from}px`},{height:`${to}px`}], {duration:expanded?400:350,easing:'cubic-bezier(.22,1,.36,1)'});
     animation.onfinish = () => { details.open = expanded; details.style.height = ''; details.style.overflow = ''; animation = null; };
   });
 });

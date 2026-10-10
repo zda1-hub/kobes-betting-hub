@@ -63,7 +63,7 @@
     const next = document.createElement('button'); next.type = 'button'; next.className = 'rail-arrow'; next.textContent = '→'; next.setAttribute('aria-label', 'Next image');
     navigation.append(previous, next); controls.append(hint, navigation); rail.after(controls);
     let resumeTimer;
-    const setManual = value => { manual = value; clearTimeout(resumeTimer); if(value) resumeTimer=setTimeout(()=>{if(dragging || pointerId!==undefined){setManual(true);return;}manual=false;position=rail.scrollLeft;lastFrame=0;},4000); };
+    const setManual = value => { manual = value; clearTimeout(resumeTimer); if(value) resumeTimer=setTimeout(()=>{if(dragging || pointerId!==undefined || (rail.contains(document.activeElement) || controls.contains(document.activeElement))){setManual(true);return;}manual=false;position=rail.scrollLeft;lastFrame=0;},4000); };
     const sizeImages = () => {
       const compact = !!rail.closest('.lower-bento');
       const phone = window.innerWidth <= 600;
@@ -110,13 +110,17 @@
     next.addEventListener('click', () => browseImage(1));
     for (const type of ['touchstart','touchmove','touchend']) rail.addEventListener(type, () => setManual(true), {passive:true});
     rail.addEventListener('mouseenter', () => { hovered = true; });
-    rail.addEventListener('mouseleave', () => { hovered = false; });
+    rail.addEventListener('mouseleave', () => { hovered = false; setManual(true); });
     rail.addEventListener('focusin', () => setManual(true));
+    rail.addEventListener('focusout', () => setManual(true));
+    controls.addEventListener('focusin', () => setManual(true));
+    controls.addEventListener('focusout', () => setManual(true));
     rail.addEventListener('touchstart', () => setManual(true), { passive: true });
     rail.addEventListener('wheel', event => {
       setManual(true);
+      if (!event.shiftKey && Math.abs(event.deltaY) >= Math.abs(event.deltaX)) return;
       event.preventDefault();
-      rail.scrollLeft += Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      rail.scrollLeft += event.shiftKey ? event.deltaY : event.deltaX;
       normalize();
     }, { passive: false });
     rail.addEventListener('keydown', event => {
@@ -142,7 +146,7 @@
       suppressClick = dragging; dragging = false; pointerId = undefined;
       rail.classList.remove('is-dragging');
       if (rail.hasPointerCapture(event.pointerId)) rail.releasePointerCapture(event.pointerId);
-      normalize();
+      normalize(); setManual(true);
       setTimeout(() => { suppressClick = false; }, 0);
     };
     window.addEventListener('pointerup', finish);

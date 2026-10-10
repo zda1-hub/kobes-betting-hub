@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 
 const source = await fs.readFile(new URL('./bettinghub-publisher.js', import.meta.url), 'utf8');
-const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const { default: worker } = await import('./bettinghub-publisher.js');
 const env = {
   FREE_PICK_X_QUEUE_SECRET: 'dedicated-x-test-key',
   QUEUE_INGEST_SECRET: 'operator-test-key',

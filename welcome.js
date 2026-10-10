@@ -42,11 +42,15 @@ async function check() {
     }
     if (data.paymentConfirmed) { title.textContent = 'Payment confirmed ✅'; message.textContent = 'Activating your VIP access…'; }
     if (++checks < 12) setTimeout(check, 2500); else { retry.hidden = !data.retryAvailable; support.hidden = false; }
-  } catch (error) { status.textContent = error.message; support.hidden = false; }
+  } catch (error) { title.textContent = 'Unable to confirm this activation link'; message.textContent = 'This link is missing, expired, or temporarily unavailable. If you already paid, do not purchase again. Contact support using your checkout email.'; status.textContent = error.message; payment.textContent = 'Payment: Not verified by this link'; discord.textContent = 'Discord: Not verified by this link'; vip.textContent = 'VIP: Not verified by this link'; retry.hidden = true; openDiscord.hidden = true; vipStartGuide.hidden = true; support.hidden = false; }
 }
 retry.addEventListener('click', async () => {
   retry.disabled = true; status.textContent = 'Rechecking your Stripe entitlement and Discord role…';
-  const response = await fetch(`${config.workerOrigin}/onboarding/retry`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) });
-  const data = await response.json(); status.textContent = response.ok ? 'VIP activation completed.' : data.error; retry.disabled = false; checks = 0; check();
+  try {
+    const response = await fetch(`${config.workerOrigin}/onboarding/retry`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) });
+    const data = await response.json(); status.textContent = response.ok ? 'Rechecking VIP activation…' : data.error;
+    checks = 0; if (state) await check();
+  } catch { status.textContent = 'Unable to reconnect. Please try again or contact support.'; support.hidden = false; }
+  finally { retry.disabled = false; }
 });
-check();
+if (state) check(); else { title.textContent = 'An activation link is required'; message.textContent = 'Open the private activation link from your checkout. If you already paid, do not purchase again.'; payment.textContent = 'Payment: Not verified by this link'; discord.textContent = 'Discord: Not verified by this link'; vip.textContent = 'VIP: Not verified by this link'; support.hidden = false; }

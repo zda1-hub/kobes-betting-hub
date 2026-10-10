@@ -1,11 +1,20 @@
 (() => {
- const input = document.getElementById('capper-search');
+  const input = document.getElementById('capper-search');
   const rows = [...document.querySelectorAll('[data-capper-row]')];
   const normalize = value => value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
-  input.addEventListener('input', () => {
-    const search = normalize(input.value); let count = 0;
-    for (const row of rows) { row.hidden = !normalize(row.querySelector('th').textContent).includes(search); if (!row.hidden) count += 1; }
-    document.getElementById('directory-count').textContent = `${count} expert source${count === 1 ? '' : 's'} shown`;
-    document.getElementById('directory-empty').hidden = count !== 0;
-  });
+  let limit = 12;
+  const more = document.createElement('button');
+  more.type = 'button'; more.className = 'button directory-more'; more.textContent = 'Show more sources';
+  document.querySelector('.directory-table-scroll').after(more);
+  const render = () => {
+    const matches = rows.filter(row => normalize(row.querySelector('th').textContent).includes(normalize(input.value)));
+    const visible = new Set(matches.slice(0, limit));
+    rows.forEach(row => row.hidden = !visible.has(row));
+    document.getElementById('directory-count').textContent = `${visible.size} of ${matches.length} expert source${matches.length === 1 ? '' : 's'} shown`;
+    document.getElementById('directory-empty').hidden = matches.length !== 0;
+    more.hidden = matches.length <= limit;
+  };
+  input.addEventListener('input', () => { limit = 12; render(); });
+  more.addEventListener('click', () => { limit += 12; render(); });
+  render();
 })();

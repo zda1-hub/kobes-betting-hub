@@ -9,7 +9,7 @@ os.chdir(Path(__file__).resolve().parent.parent)
 class Preview(SimpleHTTPRequestHandler):
     def do_GET(self):
         path=urlsplit(self.path).path
-        feeds={'/preview-api/free-pick/current':'/api/free-pick/current','/preview-api/results':'/api/results'}
+        feeds={'/preview-api/free-pick/gate':'/api/free-pick/gate','/preview-api/free-pick/current':'/api/free-pick/current','/preview-api/results':'/api/results'}
         if path in feeds:
             try:
                 result=subprocess.run(['curl','-sS','--max-time','15','-w','\n%{http_code}','https://bettinghub-publisher.kobedirwin.workers.dev'+feeds[path]],capture_output=True,check=True)

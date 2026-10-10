@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 
 const source = await fs.readFile(new URL('./bettinghub-publisher.js', import.meta.url), 'utf8');
-const workerModule = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const workerModule = await import('./bettinghub-publisher.js');
 const worker = workerModule.default;
 const workerTest = workerModule.__test;
 
