@@ -49,6 +49,36 @@ const FIRST_MONTH_BACK_START = Date.parse('2026-09-22T07:00:00Z');
 const FIRST_MONTH_BACK_END = Date.parse('2026-10-23T07:00:00Z');
 const FIRST_MONTH_BACK_COUPON_ID = 'kbh_first_month_back_2026_09_22';
 const firstMonthBackActive = (now = Date.now()) => now >= FIRST_MONTH_BACK_START && now < FIRST_MONTH_BACK_END;
+const FIRST20_START = Date.parse('2026-10-14T07:00:00Z');
+const FIRST20_END = Date.parse('2026-10-19T07:00:00Z');
+const FIRST20_COUPON_ID = 'kbh_first20_20261014';
+const first20Active = (now = Date.now()) => now >= FIRST20_START && now < FIRST20_END;
+
+async function first20Coupon(env) {
+  let coupon;
+  try {
+    coupon = await stripeGet(env, `/coupons/${FIRST20_COUPON_ID}`);
+  } catch (error) {
+    if (!/No such coupon/i.test(String(error.message))) throw error;
+    try {
+      coupon = await stripe(env, '/coupons', {
+        id: FIRST20_COUPON_ID, amount_off: 2799, currency: 'usd', duration: 'once',
+        max_redemptions: 20, redeem_by: Math.floor(FIRST20_END / 1000) - 1,
+        name: '$5 first month for the first 20 members — then $32.99/month',
+      }, { idempotencyKey: FIRST20_COUPON_ID });
+    } catch (createError) {
+      if (!/already exists/i.test(String(createError.message))) throw createError;
+      coupon = await stripeGet(env, `/coupons/${FIRST20_COUPON_ID}`);
+    }
+  }
+  if (coupon?.id !== FIRST20_COUPON_ID || coupon.amount_off !== 2799 || coupon.currency !== 'usd'
+      || coupon.duration !== 'once' || coupon.max_redemptions !== 20
+      || coupon.redeem_by !== Math.floor(FIRST20_END / 1000) - 1 || coupon.valid === false
+      || Number(coupon.times_redeemed || 0) >= 20) {
+    throw new Error('The limited $5 offer is unavailable or has filled. Please choose a current plan.');
+  }
+  return coupon.id;
+}
 
 async function firstMonthBackCoupon(env) {
   let coupon;
@@ -1755,7 +1785,10 @@ async function prepareCheckout(request, env, origin) {
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
   if (!MEMBERSHIP_OFFERS.has(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
   if (data.offer === 'first_month_back' && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
+  const first20 = data.offer === 'first_month_back' && data.deal === 'first20';
+  if (first20 && !first20Active()) return json({ error: 'The limited $5 offer is not open.' }, 400, origin);
   const referralCode = String(data.referral_code || '').toUpperCase();
+  if (first20 && referralCode) return json({ error: 'This limited offer cannot be combined with a referral offer.' }, 400, origin);
   let referralOwner = null;
   if (data.offer === 'referral_trial' || (data.offer === 'first_month_back' && referralCode)) {
     referralOwner = await referralOwnerForCode(env, referralCode);
@@ -1769,7 +1802,7 @@ async function prepareCheckout(request, env, origin) {
     body: {
       public_token_hash: await sha256Text(token), offer: data.offer,
       referral_code: referralOwner ? referralCode : null,
-      analytics_session_id: sessionId, attribution: cleanAttribution(data.attribution),
+      analytics_session_id: sessionId, attribution: { ...cleanAttribution(data.attribution), ...(first20 ? { promotion: 'first20' } : {}) },
       expires_at: new Date(Date.now() + CHECKOUT_ASSOCIATION_TTL_MS).toISOString(),
     },
   });
@@ -1782,6 +1815,8 @@ async function prepareCheckout(request, env, origin) {
 
 async function createAssociatedCheckout(env, association, publicToken, discordUserId) {
   if (association.offer === 'first_month_back' && !firstMonthBackActive()) throw new Error('The first-month offer has ended. Please choose a current plan.');
+  const first20 = association.offer === 'first_month_back' && association.attribution?.promotion === 'first20';
+  if (first20 && !first20Active()) throw new Error('The limited $5 offer has ended. Please choose a current plan.');
   const longTerm = ['six_month', 'annual'].includes(association.offer);
   const priceId = association.offer === 'six_month' ? env.STRIPE_SIX_MONTH_PRICE_ID
     : association.offer === 'annual' ? env.STRIPE_ANNUAL_PRICE_ID : env.STRIPE_MONTHLY_PRICE_ID;
@@ -1796,6 +1831,10 @@ async function createAssociatedCheckout(env, association, publicToken, discordUs
     'subscription_data[metadata][offer]': association.offer,
     'subscription_data[metadata][checkout_association_id]': association.id,
   };
+  if (first20) {
+    values['metadata[promotion]'] = 'first20';
+    values['subscription_data[metadata][promotion]'] = 'first20';
+  }
   if (!longTerm && association.offer !== 'first_month_back') {
     values['subscription_data[trial_period_days]'] = association.offer === 'starter' ? 7 : 2;
     values['subscription_data[trial_settings][end_behavior][missing_payment_method]'] = 'cancel';
@@ -1817,7 +1856,7 @@ async function createAssociatedCheckout(env, association, publicToken, discordUs
     values['line_items[1][price]'] = env.STRIPE_STARTER_PRICE_ID;
     values['line_items[1][quantity]'] = 1;
   }
-  if (association.offer === 'first_month_back') values['discounts[0][coupon]'] = await firstMonthBackCoupon(env);
+  if (association.offer === 'first_month_back') values['discounts[0][coupon]'] = first20 ? await first20Coupon(env) : await firstMonthBackCoupon(env);
   const checkout = await stripe(env, '/checkout/sessions', values, { idempotencyKey: `precheckout-${association.id}`, clientRequestId: association.id });
   await updateCheckoutAssociation(env, association.id, { stripe_checkout_session_id: checkout.id, status: 'CHECKOUT_STARTED' }, ['DISCORD_VERIFIED']);
   await recordAnalyticsEvent(env, {
@@ -1832,6 +1871,9 @@ async function createCheckout(request, env, origin) {
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
   if (!MEMBERSHIP_OFFERS.has(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
   if (data.offer === 'first_month_back' && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
+  const first20 = data.offer === 'first_month_back' && data.deal === 'first20';
+  if (first20 && !first20Active()) return json({ error: 'The limited $5 offer is not open.' }, 400, origin);
+  if (first20 && data.referral_code) return json({ error: 'This limited offer cannot be combined with a referral offer.' }, 400, origin);
   const longTerm = ['six_month', 'annual'].includes(data.offer);
   const priceId = data.offer === 'six_month' ? env.STRIPE_SIX_MONTH_PRICE_ID
     : data.offer === 'annual' ? env.STRIPE_ANNUAL_PRICE_ID : env.STRIPE_MONTHLY_PRICE_ID;
@@ -1867,6 +1909,10 @@ async function createCheckout(request, env, origin) {
     'metadata[offer]': data.offer,
     'subscription_data[metadata][offer]': data.offer,
   };
+  if (first20) {
+    values['metadata[promotion]'] = 'first20';
+    values['subscription_data[metadata][promotion]'] = 'first20';
+  }
   if (!longTerm && data.offer !== 'first_month_back') {
     values['subscription_data[trial_period_days]'] = data.offer === 'starter' ? 7 : 2;
     values['subscription_data[trial_settings][end_behavior][missing_payment_method]'] = 'cancel';
@@ -1887,7 +1933,7 @@ async function createCheckout(request, env, origin) {
     values['line_items[1][quantity]'] = 1;
   }
   if (data.offer === 'first_month_back') {
-    try { values['discounts[0][coupon]'] = await firstMonthBackCoupon(env); }
+    try { values['discounts[0][coupon]'] = first20 ? await first20Coupon(env) : await firstMonthBackCoupon(env); }
     catch (error) { return json({ error: error.message }, 503, origin); }
   }
   try {
@@ -2300,7 +2346,7 @@ function memberWelcomeMessage(session, subscription, env) {
   if (offer !== subscription.metadata?.offer) return null;
   const plans = {
     starter: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — $10 first 7 days'],
-    first_month_back: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — $19.99 first month'],
+    first_month_back: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, session.metadata?.promotion === 'first20' ? 'Monthly membership — $5 first month' : 'Monthly membership — $19.99 first month'],
     trial_2_day: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — 2 days free'],
     referral_trial: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — 2 days free'],
     six_month: [env.STRIPE_SIX_MONTH_PRICE_ID, 13499, 6, '6-month membership'],
@@ -3546,6 +3592,7 @@ export const __test = {
   dashboardReportingData,
   summarizeFailedPayments,
   firstMonthBackActive,
+  first20Active,
   analyticsRange,
   partitionVipRoleChecks,
   roleCheckFromGuildList,

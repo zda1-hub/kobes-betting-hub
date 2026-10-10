@@ -78,6 +78,15 @@ if (checkoutSession) {
 }
 const requestedReferralCode = (new URLSearchParams(window.location.search).get('ref') || '').toUpperCase();
 const referralCode = /^(KBH|KBC)-[A-Z0-9]{10}$/.test(requestedReferralCode) ? requestedReferralCode : '';
+const first20Window = Date.now() >= Date.parse('2026-10-14T07:00:00Z') && Date.now() < Date.parse('2026-10-19T07:00:00Z');
+const first20Link = new URLSearchParams(window.location.search).get('deal') === 'first20';
+const first20Card = document.querySelector('[data-first20-card]');
+if (first20Card && first20Link && first20Window && !referralCode) {
+  first20Card.hidden = false;
+  const standardFeatured = first20Card.parentElement?.querySelector('.offer-choice.first-month:not([data-first20-card]):not([data-referral-card])');
+  if (standardFeatured) standardFeatured.hidden = true;
+  setCheckoutMessage('Limited offer: $5 today for the first month for the first 20 redemptions, then $32.99/month until canceled. No free trial.');
+}
 
 if (referralCode && !checkoutState) {
   const referralGrid = document.querySelector('.offer-card-grid');
@@ -157,13 +166,16 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
   button.textContent = 'Connecting Discord…';
   setCheckoutMessage('Step 1 of 2: connect the Discord account you want to use for Kobe’s VIP. No VIP access is granted until Stripe confirms your eligible payment.');
   const offer = button.dataset.checkout;
-  const requestId = checkoutRequestId(offer);
+  const deal = button.dataset.deal === 'first20' ? 'first20' : '';
+  const requestKey = deal ? `${offer}:${deal}` : offer;
+  const requestId = checkoutRequestId(requestKey);
   try {
     const response = await fetch(checkoutEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Checkout-Request-Id': requestId },
       body: JSON.stringify({
         offer,
+        ...(deal ? { deal } : {}),
         ...(['referral_trial','first_month_back'].includes(offer) && referralCode ? { referral_code: referralCode } : {}),
         analytics_session_id: window.KBHConsent?.allowed() ? window.KBHAnalytics?.sessionId || null : null,
         attribution: window.KBHConsent?.allowed() ? window.KBHAnalytics?.attribution || {} : {},
@@ -171,7 +183,7 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
     });
     const result = await response.json();
     if (!response.ok || !result.url) {
-      if (response.status >= 400 && response.status < 500) clearCheckoutRequestId(offer);
+      if (response.status >= 400 && response.status < 500) clearCheckoutRequestId(requestKey);
       throw new Error(result.error || 'Unable to open checkout right now.');
     }
     const redirectUrl = new URL(result.url);
@@ -181,7 +193,7 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
     // The confirmed preparation starts the Discord-first checkout journey.
     // This intent event does not report a purchase or grant membership access.
     try { window.KBHMeta?.trackCheckout(offer, requestId); } catch { /* Advertising must never block checkout. */ }
-    clearCheckoutRequestId(offer);
+    clearCheckoutRequestId(requestKey);
     window.location.assign(result.url);
   } catch (error) {
     buttons.forEach((item) => { item.disabled = false; });
