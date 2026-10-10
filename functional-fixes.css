@@ -1,0 +1,15 @@
+/* Behavior support only. Visual design restored from e63caa1. */
+[hidden]{display:none!important}
+.skip-link{position:fixed;left:16px;top:8px;z-index:1000;transform:translateY(-150%);padding:12px 16px;background:#111;color:#fff;text-decoration:none}
+.skip-link:focus{transform:none}
+.menu-social-link{display:none!important}
+.site-menu{max-height:calc(100dvh - 180px);overflow-y:auto}
+.results-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:16px 0}
+.results-filters label{display:flex;flex-direction:column;gap:8px;min-width:0}
+.results-filters select,.results-filters input{width:100%;min-width:0;min-height:44px;padding:10px 12px;border:1px solid #dfdfd3;border-radius:8px;background:#fff;color:#171717}
+.extras-page .result-row{grid-template-columns:100px max-content minmax(0,1fr)}
+.extras-page .result-row small{grid-column:3;overflow-wrap:anywhere}
+.extras-page .result-badge{display:inline-flex;justify-content:center;align-items:center;width:auto;height:auto;min-height:34px;padding:6px 10px;white-space:nowrap}
+.results-more,.directory-more{margin-top:16px}
+.results-count{margin-top:16px}
+@media(max-width:600px){.results-filters{grid-template-columns:minmax(0,1fr)}.extras-page .result-row{grid-template-columns:64px max-content minmax(0,1fr);gap:12px}}

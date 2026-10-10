@@ -16,6 +16,6 @@ test('missing welcome credential cannot report checking, a confirmed payment or 
 test('help destination and account headers use current public navigation',async()=>{
  assert.doesNotMatch(await read('support.html'),/discord\.gg\/sB9vzGz2xj\//);
  for(const file of ['welcome.html','member.html','partner.html','creator.html']){
-   const html=await read(file);assert.match(html,/<body><header class="site-header" data-header>/);assert.match(html,/audit-polish\.css/);
+   const html=await read(file);assert.match(html,/<body><header class="site-header" data-header>/);assert.match(html,/functional-fixes\.css/);
  }
 });

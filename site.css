@@ -63,8 +63,7 @@ main.article-shell{width:calc(100% - var(--gutter)*2);max-width:var(--page-width
 
 /* Persistent October 10 typography and spacing system. */
 :root{--hub-font:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;--hub-body:16px;--hub-heading:24px;--hub-space:8px;--hub-inset:24px}
-body{font-family:var(--hub-font);font-size:var(--hub-body);font-weight:400;letter-spacing:normal}
-.home-page .landing-intro,.home-page .landing-intro *{font-family:var(--hub-font)!important;font-size:16px!important;font-weight:400!important;letter-spacing:normal!important}.home-page .landing-intro strong,.home-page .landing-intro b{font-weight:600!important}
+body,body *{font-family:var(--hub-font)!important;font-size:var(--hub-body)!important;font-weight:400!important;letter-spacing:normal!important}
 h1,h2,h3,h4,h5,h6,h1 *,h2 *,h3 *,h4 *,h5 *,h6 *,.plan-price strong,.mock-price,.tile-price strong,.member-price strong{font-size:var(--hub-heading)!important;font-weight:600!important;line-height:1.25!important}
 strong,b,button,.button,.header-join{font-weight:600!important}
 p,li{line-height:1.5}

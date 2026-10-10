@@ -23,7 +23,7 @@ const publicFiles = [
   'proof.html',
   'approach.html',
   'site.css',
-  'audit-polish.css',
+  'functional-fixes.css',
   'site.js',
   'extras.css',
   'gallery.css',
