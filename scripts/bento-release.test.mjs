@@ -74,7 +74,7 @@ test('production email form supplies age, consent and honeypot to the existing h
 
 test('landing wins retain full-record links and proof retains unique inline reviews', async () => {
   const home = await read('index.html');
-  assert.match(home, /data-home-record/); assert.match(home, /data-wins-track/);
+  assert.match(home, /65% <span>historical win rate<\/span>/); assert.match(home, /data-wins-track/);
   assert.match(home, /href="\/?results(?:\.html)?"[^>]*>Full record, including losses/);
   const proof = await read('proof.html');
   assert.match(proof, /data-verified-results-track/);
@@ -119,7 +119,14 @@ test('homepage highlights only wins, uses the overall live count and the supplie
   assert.equal(track.cards[0].children[1].textContent,'Win');
   assert.equal(summary.textContent,'323 tracked wins and counting');
   assert.match(since.textContent,/Since September 10, 2026/);
-  assert.match(await read('index.html'),/Winning highlights only/);
+  const home = await read('index.html');
+  const compactCard = home.match(/<section class="bento verified-results-tile landing-record"[\s\S]*?<\/section>/)?.[0];
+  assert.match(compactCard || '', /65% <span>historical win rate<\/span>/);
+  assert.match(compactCard || '', /Kobe-reported estimate; complete historical records are unavailable/);
+  assert.match(compactCard || '', /See tracked picks/);
+  assert.doesNotMatch(compactCard || '', /data-home-record/);
+  assert.match(compactCard || '', /class="verified-results-rail" hidden aria-hidden="true"/);
+  assert.doesNotMatch(compactCard || '', /data-wins-motion/);
 });
 
 test('legal and portal artifacts retain current approved operator and secure access', async () => {

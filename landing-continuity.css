@@ -77,3 +77,5 @@
 .home-page .landing-intro .intro-community{display:inline-block;white-space:nowrap}
 .home-page .landing-intro .intro-discord-icon{width:27px;height:27px;margin-left:3px}
 .home-page .landing-intro .intro-discord-icon svg{width:18px;height:18px}
+.home-page .landing-record .historical-rate { font-size: clamp(2.3rem, 5vw, 4rem); font-weight: 800; line-height: 1.05; margin-bottom: 8px; }
+.home-page .landing-record .historical-rate span { display: block; font-size: clamp(.95rem, 1.7vw, 1.25rem); font-weight: 600; margin-top: 7px; }
