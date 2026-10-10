@@ -16,3 +16,7 @@ The user clarified that 65% refers to Kobe’s broader historical write-up plays
 - Built the 85-entry public whitelist from that commit and deployed only the public site to Cloudflare Worker version `9e225191-0385-4b6a-8b66-23cda81758de`.
 - Verified `https://kobesbettinghub.com/` returned HTTP 200 and contained the 65% Kobe-reported historical estimate, the disclosure, and the tracked-picks link. The workers.dev endpoint also showed the update with a cache-busting query parameter.
 - Eight focused public release checks passed. No checkout Worker, Render bot, billing, or access rules changed in this release.
+
+## Copy follow-up
+
+The public card disclosure was shortened to state that the linked ledger shows tracked published picks; the nearby recent-wins link now says “See all tracked picks.” This follows the user’s request to avoid listing win/loss counts on the homepage while retaining access to complete outcomes on the results page. Status: local pending verification.
