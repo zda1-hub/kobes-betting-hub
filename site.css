@@ -118,3 +118,5 @@ button,.button,.header-join,.pick-arrow{transition:transform .45s cubic-bezier(.
 .home-grid>.pick-tile>summary>span{gap:8px!important}
 main>.referral-promo-banner{width:100%}
 .membership-card-promo{display:flex;flex-direction:column;gap:8px;width:100%;margin:0 0 24px;text-decoration:none;text-align:center}.membership-card-promo img{display:block;width:100%;height:auto;object-fit:contain}.membership-card-promo span{font-size:16px!important;font-weight:400!important}
+
+.wins-tile .historical-heading{font-size:16px!important;font-weight:600!important;color:var(--ink,#171717);line-height:1.4}.wins-tile .record-note{margin:0;font-size:16px!important;line-height:1.5}
