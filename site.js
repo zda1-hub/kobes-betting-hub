@@ -76,3 +76,21 @@
     if (now - lastScroll.time > 600 || scrollY >= lastScroll.y) lastScroll = { y: scrollY, time: now };
   }, { passive: true });
 })();
+
+// Animate disclosure height in both directions without a closing snap.
+document.querySelectorAll('details').forEach(details => {
+  const summary = details.querySelector(':scope > summary');
+  if (!summary) return;
+  let animation, expanded = details.open;
+  summary.addEventListener('click', event => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    event.preventDefault();
+    const from = details.getBoundingClientRect().height;
+    animation?.cancel(); expanded = !expanded;
+    details.style.height = ''; details.style.overflow = 'hidden';
+    details.open = true;
+    const to = expanded ? details.getBoundingClientRect().height : summary.getBoundingClientRect().height;
+    animation = details.animate([{height:`${from}px`},{height:`${to}px`}], {duration:460,easing:'cubic-bezier(.22,1.12,.36,1)'});
+    animation.onfinish = () => { details.open = expanded; details.style.height = ''; details.style.overflow = ''; animation = null; };
+  });
+});

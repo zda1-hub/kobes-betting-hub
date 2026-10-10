@@ -61,9 +61,9 @@
     const navigation = document.createElement('div'); navigation.className = 'rail-navigation';
     const previous = document.createElement('button'); previous.type = 'button'; previous.className = 'rail-arrow'; previous.textContent = '←'; previous.setAttribute('aria-label', 'Previous image');
     const next = document.createElement('button'); next.type = 'button'; next.className = 'rail-arrow'; next.textContent = '→'; next.setAttribute('aria-label', 'Next image');
-    const resume = document.createElement('button'); resume.type = 'button'; resume.className = 'rail-resume'; resume.textContent = 'Pause motion';
-    navigation.append(previous, resume, next); controls.append(hint, navigation); rail.after(controls);
-    const setManual = value => { manual = value; resume.textContent = manual || reducedMotion.matches ? 'Play slideshow' : 'Pause motion'; };
+    navigation.append(previous, next); controls.append(hint, navigation); rail.after(controls);
+    let resumeTimer;
+    const setManual = value => { manual = value; clearTimeout(resumeTimer); if(value) resumeTimer=setTimeout(()=>{if(dragging || pointerId!==undefined){setManual(true);return;}manual=false;position=rail.scrollLeft;lastFrame=0;},4000); };
     const sizeImages = () => {
       const compact = !!rail.closest('.lower-bento');
       const phone = window.innerWidth <= 600;
@@ -108,10 +108,7 @@
     };
     previous.addEventListener('click', () => browseImage(-1));
     next.addEventListener('click', () => browseImage(1));
-    resume.addEventListener('click', () => {
-      if (reducedMotion.matches) { hint.textContent = 'Motion is disabled by your device preference'; return; }
-      setManual(!manual);
-    });
+    for (const type of ['touchstart','touchmove','touchend']) rail.addEventListener(type, () => setManual(true), {passive:true});
     rail.addEventListener('mouseenter', () => { hovered = true; });
     rail.addEventListener('mouseleave', () => { hovered = false; });
     rail.addEventListener('focusin', () => setManual(true));

@@ -21,3 +21,5 @@ These user instructions supersede earlier typography/spacing guidance and remain
 - Header controls remain in one row at every supported width. Reduce icons rather than stack or stagger controls. Header surface remains opaque and edge-to-edge.
 - Center “What’s included” headings and membership-management card contents.
 - No play/pause button in the top ticker. Honor reduced-motion preferences. Arrows must have no text underline.
+
+- October 10 follow-up: neighboring collapsed bento cards align in height; use smooth spring-like disclosure motion. Highlight verified wins with a clear win badge. No gallery play/pause controls; manual browsing interrupts motion, which resumes after four seconds idle. Respect reduced-motion settings and pause while dragging/hovering or viewing an image.

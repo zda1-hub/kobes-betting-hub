@@ -82,3 +82,12 @@ a,a span,a svg,.tile-link,.tile-link span{text-decoration:none!important}
 @media(max-width:600px){:root{--hub-inset:16px}.membership-vip ul{grid-template-columns:1fr!important;gap:16px!important}.membership-vip .vip-main-tools li{margin-bottom:16px}.site-header>.header-bottom{width:calc(100% - 32px)}}
 @media(prefers-reduced-motion:reduce){.site-ticker-track{animation:none!important}}
 .tile .tile,.bento .bento,.bento .plan-card,.membership-vip .button,.membership-manage .button{border-radius:max(8px,calc(24px - var(--hub-inset)))!important}
+
+/* Bento continuity and motion; persistent typography tokens still apply. */
+.home-grid>.membership-tile,.home-grid>.pick-tile{align-self:stretch!important;height:auto!important;min-height:0!important}
+.home-grid>.pick-tile:not([open]){display:flex;flex-direction:column}.home-grid>.pick-tile:not([open])>summary{flex:1;min-height:0!important;height:100%;padding:var(--hub-inset)!important}
+.verified-result-badge.result-w{display:inline-flex;align-items:center;padding:8px 16px;border-radius:8px;background:#147a3d!important;color:white!important;font-weight:600!important}
+.verified-result-card:has(.result-w){border:1px solid #147a3d40;border-left:4px solid #147a3d}
+.site-menu{transition:opacity .35s ease,transform .5s cubic-bezier(.22,1.25,.36,1),visibility .35s}
+button,.button,.header-join,.pick-arrow{transition:transform .45s cubic-bezier(.22,1.25,.36,1),box-shadow .3s ease!important}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}

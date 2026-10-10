@@ -1,8 +1,7 @@
 (() => {
 const setupWins = track => {
   const rail = track.parentElement, controls = rail.closest?.('section') || rail.parentElement;
-  const motion = controls?.querySelector('[data-wins-motion]');
-  if (!motion) return;
+  if (!controls?.querySelector('[data-wins-previous]') || !track.children.length || rail.hidden) return;
   const originals = [...track.children];
   for (const side of ['before','after']) {
     const copies = originals.map(card => { const clone = card.cloneNode(true); clone.setAttribute('aria-hidden','true'); return clone; });
@@ -10,19 +9,18 @@ const setupWins = track => {
   }
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let manual = reduced.matches, hovered = false, last = 0, loop = 0, position = 0, pointer, startX, startScroll;
-  const pause = () => { manual = true; motion.textContent = 'Play slideshow'; };
+  let resumeTimer;
+  const pause = () => { manual = true; clearTimeout(resumeTimer); resumeTimer = setTimeout(() => { if(pointer!==undefined){pause();return;} manual = reduced.matches; position=rail.scrollLeft;last=0; },4000); };
   const measure = () => { loop = track.children[originals.length * 2].offsetLeft - track.children[originals.length].offsetLeft; position = loop; rail.scrollLeft = position; };
   // Preserve fractional animation progress even when the browser rounds scrollLeft.
   const normalize = (value = rail.scrollLeft) => { if (!loop) return; if(value < loop) value += loop; if(value >= loop*2) value -= loop; rail.scrollLeft = value; position = value; };
   const browse = direction => { pause(); const origin = track.children[0].offsetLeft; const offsets = [...track.children].map(card => card.offsetLeft - origin); const current = rail.scrollLeft; const target = direction > 0 ? offsets.find(offset => offset > current + 2) : offsets.filter(offset => offset < current - 2).at(-1); rail.scrollLeft = target ?? current + direction * (originals[0].getBoundingClientRect().width + 12); normalize(); };
   controls.querySelector('[data-wins-previous]').addEventListener('click', () => browse(-1));
   controls.querySelector('[data-wins-next]').addEventListener('click', () => browse(1));
-  motion.textContent = manual ? 'Play slideshow' : 'Pause motion';
-  motion.addEventListener('click', () => { manual = !manual; position = rail.scrollLeft; last = 0; motion.textContent = manual ? 'Play slideshow' : 'Pause motion'; });
   rail.addEventListener('mouseenter', () => hovered = true);
   rail.addEventListener('mouseleave', () => hovered = false);
   rail.addEventListener('focusin', pause);
-  rail.addEventListener('touchstart', pause, {passive:true});
+  for (const type of ['touchstart','touchmove','touchend']) rail.addEventListener(type, pause, {passive:true});
   rail.addEventListener('wheel', event => { pause(); event.preventDefault(); rail.scrollLeft += Math.abs(event.deltaX)>Math.abs(event.deltaY)?event.deltaX:event.deltaY; normalize(); }, {passive:false});
   rail.addEventListener('keydown', event => { if(['ArrowLeft','ArrowRight'].includes(event.key)){event.preventDefault();browse(event.key==='ArrowRight'?1:-1);} });
   rail.addEventListener('pointerdown', event => { pause(); if(event.pointerType==='touch'||event.button!==0) return;pointer=event.pointerId; startX=event.clientX;startScroll=rail.scrollLeft;rail.setPointerCapture(pointer); });
@@ -32,7 +30,7 @@ const setupWins = track => {
   rail.addEventListener('scroll', () => { if(manual && pointer===undefined)normalize(); }, {passive:true});
   reduced.addEventListener('change', pause);
   new ResizeObserver(measure).observe(rail);measure();
-  const animate = now => { if(last && !manual && !hovered && !document.hidden && pointer===undefined){const bounds=rail.getBoundingClientRect();if(bounds.top<innerHeight&&bounds.bottom>0){position+=Math.min(now-last,50)*.065;normalize(position);}}last=now;requestAnimationFrame(animate); };requestAnimationFrame(animate);
+  const animate = now => { if(last && !manual && !reduced.matches && !hovered && !document.hidden && pointer===undefined){const bounds=rail.getBoundingClientRect();if(bounds.top<innerHeight&&bounds.bottom>0){position+=Math.min(now-last,50)*.065;normalize(position);}}last=now;requestAnimationFrame(animate); };requestAnimationFrame(animate);
 };
 const verifiedResultsTrack = document.querySelector('[data-verified-results-track]');
 if (verifiedResultsTrack) {
@@ -95,7 +93,7 @@ if (verifiedResultsTrack) {
         meta.textContent = `${item.date} · ${item.sport || 'Published pick'}`;
         const badge = document.createElement('b');
         badge.className = `verified-result-badge result-${item.result.toLowerCase()}`;
-        badge.textContent = labels[item.result];
+        badge.textContent = item.result === 'W' ? '✓ WIN' : labels[item.result];
         const selection = document.createElement('strong');
         selection.textContent = item.selection;
         const terms = document.createElement('small');
