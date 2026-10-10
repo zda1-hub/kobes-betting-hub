@@ -1,73 +1,63 @@
-/* The actual KBH artwork remains the anchor. Scope every change to this scene. */
-.membership-scene{position:relative;min-width:0;scroll-margin-top:200px}
+/* Membership-only composition; preserve the supplied KBH artwork. */
+.membership-scene{position:relative;min-width:0;--scene-action:var(--hub-action,#2459a8);--scene-orange:#ff690b;--scene-smooth:cubic-bezier(.22,1,.36,1)}
 .membership-scene[data-open="false"]{display:contents}
 .membership-scene[data-open="false"]>.referral-promo-banner{width:100%;grid-column:1/-1;min-width:0}
-.membership-scene[data-open="true"]>.membership-card-promo{width:75%;margin:0 auto 20px;pointer-events:none}
+.membership-scene[data-open="true"]{padding-top:36px}
+.membership-scene[data-open="true"]>.membership-card-promo{width:75%;margin:0 auto 28px;pointer-events:none}
 .membership-scene[data-open="true"]>.membership-card-promo>span{display:none}
 .membership-scene .membership-card-promo img{transform-origin:top left}
 .membership-scene[data-open="true"]>.referral-promo-banner{position:absolute;left:50%;transform:translateX(-50%);pointer-events:none;z-index:0}
-.membership-scene .scene-panel{position:relative;width:75%;margin:0 auto 48px;z-index:1}
-.membership-scene .scene-nav{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:20px}
-.membership-scene .scene-back{display:inline-flex;align-items:center;min-height:44px;text-decoration:none;color:#171717;white-space:nowrap}
-.membership-scene .scene-note{font-size:12px!important;letter-spacing:.04em!important;text-align:right;color:#646464}
-.membership-scene .scene-monthly{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px 20px;padding:24px;background:#111;color:#fff;border:1px solid #ff690b;border-radius:20px;box-shadow:0 5px 12px #0002}
-.membership-scene .scene-monthly h1{color:#ff690b;font-size:24px!important;margin:0 0 8px}
-.membership-scene .scene-monthly p{margin:0}
-.membership-scene .scene-monthly strong{font-size:24px!important}
-.membership-scene .scene-monthly .scene-terms{grid-column:1/-1;color:#bbb;font-size:13px!important;line-height:1.5}
-.membership-scene .button{display:inline-flex;justify-content:center;align-items:center;gap:8px;box-sizing:border-box;max-width:100%;width:fit-content;min-width:0;min-height:44px;height:auto;padding:12px 18px!important;border:0;border-radius:14px;background:#3ca1fa;color:#fff;font-size:16px!important;line-height:1.4;white-space:normal;text-decoration:none;box-shadow:0 3px 7px #0003;cursor:pointer}
-.membership-scene .button:disabled{opacity:.65;cursor:wait}
-.membership-scene .scene-tools{margin:20px 0 12px;text-align:center;font-weight:600!important;color:#171717}
-.membership-scene .scene-status{min-height:24px;margin:0 0 28px;text-align:center;color:#666;font-size:14px!important}
+.membership-scene .scene-panel{position:relative;width:75%;margin:0 auto 40px;text-align:center;z-index:1}
+.membership-scene .scene-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.membership-scene .button{display:inline-flex;justify-content:center;align-items:center;gap:8px;box-sizing:border-box;max-width:100%;width:fit-content;min-width:0;min-height:44px;height:auto;padding:12px 24px!important;border:0;border-radius:14px;background:var(--scene-action);color:#fff;font-size:16px!important;line-height:1.4;white-space:normal;text-decoration:none;box-shadow:0 3px 7px #0003;cursor:pointer}
+.membership-scene .button:hover{background:#1b4788}
+.membership-scene button:disabled{opacity:.65;cursor:wait}
+.membership-scene .scene-monthly{display:flex;flex-direction:column;align-items:center;gap:10px;margin:0;padding:0;border:0;background:none;box-shadow:none;color:#171717}
+.membership-scene .scene-promise{margin:0;font-size:16px!important;line-height:1.5}
+.membership-scene .scene-monthly .scene-primary{min-width:190px}
+.membership-scene .scene-terms{margin:0;font-size:14px!important;line-height:1.5;color:#666}
+.membership-scene .scene-support{display:grid;gap:6px;margin:20px auto 28px;max-width:660px}
+.membership-scene .scene-tools{margin:0;font-weight:600!important;color:#171717;font-size:16px!important;line-height:1.5}
+.membership-scene .scene-status{min-height:21px;margin:0;color:#666;font-size:14px!important;line-height:1.5}
 .membership-scene .scene-other>h2{font-size:20px!important;margin:0 0 16px}
-.membership-scene .scene-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
-.membership-scene .scene-plan{display:flex;flex-direction:column;align-items:flex-start;min-width:0;padding:20px;border-radius:20px;border:1px solid #111;background:#ff690b;color:#111;box-shadow:0 4px 10px #0002}
-.membership-scene .scene-plan-top{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px}
-.membership-scene .scene-plan-top h3{font-size:16px!important;margin:0}
-.membership-scene .scene-plan-top>span{font-size:12px!important;font-weight:600!important}
-.membership-scene .scene-price{font-size:28px!important;font-weight:600!important;line-height:1.2;margin:22px 0 8px}
-.membership-scene .scene-plan>p:not(.scene-price){font-size:14px!important;line-height:1.5;margin:0 0 20px;flex:1}
-.membership-scene .scene-plan .button{background:#111;color:#fff;padding:10px 12px!important;font-size:14px!important}
-.membership-scene .scene-starter{background:#111;color:#ff690b;border-color:#ff690b}
-.membership-scene .scene-starter>p:not(.scene-price){color:#fff}
-.membership-scene .scene-starter .button{background:#3ca1fa}
-.membership-scene .scene-terms{font-size:13px!important;line-height:1.5;color:#666}
-.membership-scene .scene-included{margin:28px 0 24px;border-top:1px solid #ccc;border-bottom:1px solid #ccc}
-.membership-scene .scene-included summary{display:flex;justify-content:space-between;align-items:center;gap:16px;min-height:56px;list-style:none;font-weight:600!important;cursor:pointer}
-.membership-scene .scene-included summary::-webkit-details-marker{display:none}
-.membership-scene .scene-included summary span{font-size:24px!important}
-.membership-scene .scene-included>div{padding-bottom:20px}
+.membership-scene .scene-plan-toggle{position:relative;isolation:isolate;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));box-sizing:border-box;width:min(100%,280px);margin:0 auto 20px;padding:4px;background:#e7e7e7;border:1px solid #bdbdbd;border-radius:16px}
+.membership-scene .scene-toggle-thumb{position:absolute;z-index:-1;left:4px;top:4px;bottom:4px;width:calc((100% - 8px)/2);border-radius:11px;background:#111;box-shadow:0 2px 4px #0002;transition:transform 250ms var(--scene-smooth)}
+.membership-scene .scene-plan-toggle[data-selected="annual"] .scene-toggle-thumb{transform:translateX(100%)}
+.membership-scene .scene-plan-toggle button{min-width:0;min-height:44px;box-sizing:border-box;padding:8px 12px;border:0;border-radius:11px;background:transparent;color:#333;font-size:14px!important;line-height:1.4;cursor:pointer;box-shadow:none}
+.membership-scene .scene-plan-toggle button[aria-pressed="true"]{color:#fff}
+.membership-scene .scene-plan-toggle button:hover{transform:none}
+.membership-scene .scene-plan{display:flex;flex-direction:column;box-sizing:border-box;width:min(100%,430px);aspect-ratio:4200/2448;min-width:0;margin:0 auto;border-radius:20px;border:1px solid #111;background:var(--scene-orange);color:#111;box-shadow:0 4px 10px #0002}
+.membership-scene .scene-plan-face{display:flex;flex:1;flex-direction:column;justify-content:center;gap:8px;box-sizing:border-box;padding:24px}
+.membership-scene .scene-plan h3{margin:0;font-size:16px!important}
+.membership-scene .scene-price{margin:0;font-size:32px!important;font-weight:600!important;line-height:1.2}
+.membership-scene .scene-renewal{margin:0;font-size:14px!important;line-height:1.5}
+.membership-scene .scene-plan-actions{box-sizing:border-box;padding:16px 24px;background:#111;border-radius:0 0 18px 18px}
+.membership-scene .scene-short-stay{max-width:430px;margin:16px auto 0}
+.membership-scene .scene-short-stay summary{display:flex;justify-content:center;align-items:center;min-height:44px;padding:0 12px;list-style:none;color:#666;font-size:14px!important;cursor:pointer;text-decoration:underline;text-underline-offset:4px}
+.membership-scene summary::-webkit-details-marker{display:none}
+.membership-scene .scene-starter{padding:16px;border:1px solid #ccc;border-radius:14px}
+.membership-scene .scene-starter p{margin:0 0 16px;font-size:14px!important;line-height:1.5}
+.membership-scene .scene-renewal-note{margin:12px 0 24px;color:#666;font-size:13px!important;line-height:1.5}
+.membership-scene .scene-included{margin:0 auto 24px;max-width:660px;border-top:1px solid #ccc;border-bottom:1px solid #ccc}
+.membership-scene .scene-included summary{position:relative;display:flex;justify-content:center;align-items:center;box-sizing:border-box;gap:16px;min-height:56px;padding:16px 44px;list-style:none;font-weight:600!important;cursor:pointer}
+.membership-scene .scene-included summary span{position:absolute;right:16px;font-size:24px!important}
+.membership-scene .scene-included>div{padding:0 16px 16px}
+.membership-scene .scene-included p{font-size:14px!important;line-height:1.6}
+.membership-scene .scene-footer{max-width:660px;margin:0 auto}
 .membership-scene .scene-footer a{color:inherit;text-underline-offset:3px}
-.membership-scene .scene-footer p{font-size:13px!important;line-height:1.5;color:#666;margin:16px 0 0}
-.membership-scene :focus-visible{outline:3px solid #ff690b;outline-offset:4px}
+.membership-scene .scene-footer p{font-size:13px!important;line-height:1.6;color:#666;margin:16px 0 0}
+.membership-scene .scene-management{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:24px}
+.membership-scene .scene-management p{margin:0;font-size:14px!important}
+.membership-scene .scene-management .scene-manage{background:#111;color:#fff;box-shadow:0 3px 7px #0002}
+.membership-scene :focus-visible{outline:3px solid var(--scene-orange);outline-offset:4px}
 .membership-scene h1:focus{outline:none}
-.membership-scene .scene-confirmation{padding:24px;border:1px solid #ff690b;border-radius:20px;background:#111;color:#fff}
-.membership-scene .scene-confirmation h2{color:#ff690b}
-.membership-scene .scene-confirmation>a{margin-right:16px}
-body[data-membership-route] main{padding-top:24px}
+.membership-scene .scene-confirmation{padding:24px;border:1px solid var(--scene-orange);border-radius:20px;background:#111;color:#fff}
+.membership-scene .scene-confirmation h2{color:var(--scene-orange)}
+.membership-scene .scene-confirmation>a{margin:8px}
+body[data-membership-route] main{padding-top:0}
 body[data-membership-route] main>.referral-promo-banner{display:none}
-@media(max-width:900px){.membership-scene .scene-panel{width:100%}.membership-scene .scene-options{grid-template-columns:repeat(2,minmax(0,1fr))}.membership-scene .scene-starter{grid-column:1/-1}.membership-scene .scene-nav{margin-bottom:16px}.membership-scene .scene-note{font-size:11px!important}}
-@media(max-width:600px){.membership-scene .scene-monthly{grid-template-columns:minmax(0,1fr);padding:20px}.membership-scene .scene-monthly .button{width:100%}.membership-scene .scene-options{grid-template-columns:minmax(0,1fr)}.membership-scene .scene-plan{padding:20px}.membership-scene .scene-starter{grid-column:auto}.membership-scene .scene-plan .button{align-self:flex-start}.membership-scene .scene-plan>p:not(.scene-price){margin-bottom:16px}.membership-scene .scene-price{margin-top:16px}.membership-scene .scene-note{max-width:125px}.membership-scene .scene-tools{font-size:14px!important}.membership-scene .scene-back{font-size:14px!important}}
+@media(max-width:900px){.membership-scene .scene-panel{width:100%}}
+@media(max-width:600px){.membership-scene[data-open="true"]{padding-top:28px}.membership-scene .scene-support{margin-top:18px;gap:4px}.membership-scene .scene-tools{font-size:14px!important}.membership-scene .scene-plan-face{padding:20px}.membership-scene .scene-plan-actions{padding:16px 20px}}
 @media(prefers-reduced-motion:reduce){.membership-scene *{animation:none!important;transition:none!important}.membership-scene{scroll-behavior:auto}}
 
-.membership-scene .scene-price small{font-size:13px!important;font-weight:400!important}
-
-/* Longer plans echo the orange face and black lower edge of the wallet card. */
-.membership-scene .scene-plan:not(.scene-starter){padding:0;aspect-ratio:4200/2448}
-.membership-scene .scene-plan:not(.scene-starter) .scene-plan-top{width:auto;align-self:stretch;margin:20px 20px 0}
-.membership-scene .scene-plan:not(.scene-starter) .scene-price{margin:16px 20px 8px}
-.membership-scene .scene-plan:not(.scene-starter)>p:not(.scene-price){margin:0 20px 16px;flex:none}
-.membership-scene .scene-plan-actions{width:100%;box-sizing:border-box;margin-top:auto;padding:16px 20px;background:#111;border-radius:0 0 18px 18px}
-.membership-scene .scene-plan-actions .button{background:#3ca1fa}
-.membership-scene .scene-starter{grid-column:1/-1;display:grid;grid-template-columns:1fr auto;gap:8px 24px;align-items:center}
-.membership-scene .scene-starter .scene-plan-top{grid-column:1/-1}
-.membership-scene .scene-starter .scene-price{margin:8px 0 0}
-.membership-scene .scene-starter>p:not(.scene-price){margin:0;grid-column:1;grid-row:3}
-.membership-scene .scene-starter .button{grid-column:2;grid-row:2/4}
-@media(max-width:600px){.membership-scene .scene-starter{display:flex;gap:0;align-items:flex-start}.membership-scene .scene-starter .scene-price{margin:16px 0 8px}.membership-scene .scene-starter>p:not(.scene-price){margin:0 0 16px}}
-
-.membership-scene .scene-monthly .scene-primary{align-self:center}
-
-.membership-scene .scene-included summary{position:relative;justify-content:center;box-sizing:border-box;padding:16px 44px}
-.membership-scene .scene-included summary span{position:absolute;right:16px}
-.membership-scene .scene-footer>a{text-decoration:none}
+@media(max-width:360px){.site-header .header-join[data-membership-return]{font-size:14px!important}}

@@ -35,3 +35,7 @@ Evidence lives in `/Users/z/Documents/ChatGPT/Kobe's Betting Hub/outputs/audit-2
 Published to the existing Cloudflare site using only `wrangler.site.jsonc` and the whitelist. Latest version: `672762ca-745c-4be8-9065-4b235dd5466d` (supersedes first scene release `0df66af7-cde8-4f25-a526-f03bbd73fe93`). Latest base was `ab0b00a`; verified GitHub main matched it before this change. Unrelated dirty audit/image work was preserved and excluded.
 
 This verifies the presentation and real monthly checkout handoff, not a newly paid subscription or post-payment VIP activation. Six-month/annual/starter handlers passed automated contracts and preserve the same existing payment engine; no paid purchases were performed. Rendering was tested in the in-app WebKit browser, not on a separate physical phone or every browser engine.
+
+## Follow-up: consolidation
+
+The user's subsequent spacing and consolidation direction is implemented and published in [the membership consolidation audit](2026-10-10-membership-consolidation.md). It replaces the visible duplicate monthly block and two longer-plan cards with centered monthly copy and one toggle-driven poster, moves Back into the shared header, and verifies the live annual Stripe handoff.

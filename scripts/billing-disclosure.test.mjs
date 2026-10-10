@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import vm from 'node:vm';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -27,7 +28,7 @@ function dataAttributeText(html, attribute) {
   return visibleText(match[2]);
 }
 
-test('join and membership clearly disclose four current offers and keep referral choices private', async () => {
+test('membership discloses current billing with one duration-selectable card and private referral choices', async () => {
   const source = await readRepositoryFile('membership-scene.js');
   const scene = source.match(/panel\.innerHTML=`([\s\S]*?)`;/)[1];
   const pages = await Promise.all(['index.html', 'join.html', 'membership.html'].map(readRepositoryFile));
@@ -36,26 +37,31 @@ test('join and membership clearly disclose four current offers and keep referral
   assert.match(source, /!arrival\.has\('checkout'\).*scene-other'\)\.hidden=true/);
   assert.match(source, /KBH\|KBC/);
   assert.match(source, /A-Z0-9.*10/);
+  const longer = vm.runInNewContext('('+source.match(/const longerOffers=(\{[\s\S]*?\n  \});/)[1]+')');
+  assert.equal(longer.six_month.price, '$134.99');
+  assert.match(longer.six_month.period, /every 6 months/);
+  assert.equal(longer.annual.price, '$194.99');
+  assert.match(longer.annual.period, /yearly/);
+  assert.match(source, /longerCheckout\.dataset\.checkout=offer/);
+  assert.match(scene, /data-longer-plan="six_month"/);
+  assert.match(scene, /data-longer-plan="annual"/);
   const compositions = pages.map(page => page + scene);
   assert.equal(dataAttributeText(compositions[0], 'data-checkout-message'), dataAttributeText(compositions[1], 'data-checkout-message'));
   for (const html of compositions) {
     const articles = [...html.matchAll(/<article\b([^>]*)>([\s\S]*?)<\/article>/gi)];
-    const visibleOffers = articles.filter(([, attributes, content]) => !/\bhidden\b/.test(attributes) && /data-checkout=/.test(content));
-    assert.equal(visibleOffers.length, 4);
-    const offers = new Map(visibleOffers.map(([, , content]) => [content.match(/data-checkout="([^"]+)"/)[1], visibleText(content)]));
-    assert.deepEqual([...offers.keys()].sort(), ['annual', 'monthly', 'six_month', 'starter']);
-    assert.match(offers.get('monthly'), /\$32\.99 today/);
-    assert.match(offers.get('monthly'), /\$32\.99\/month until canceled/);
-    assert.match(offers.get('monthly'), /No free trial/i);
+    const checkoutOffers = articles.filter(([, , content]) => /data-checkout=/.test(content));
+    assert.equal(checkoutOffers.length, 3, 'monthly, one longer-term card and the disclosed paid seven-day option');
+    const offers = new Map(checkoutOffers.map(([, , content]) => [content.match(/data-checkout="([^"]+)"/)[1], visibleText(content)]));
+    assert.deepEqual([...offers.keys()].sort(), ['monthly', 'six_month', 'starter']);
+    assert.match(offers.get('monthly'), /Cancel Anytime, No Commitment/);
+    assert.match(offers.get('monthly'), /\$32\.99 billed monthly/);
     assert.match(offers.get('starter'), /\$10 today/);
     assert.match(offers.get('starter'), /First 7 days, then \$32\.99\/month until canceled/);
     assert.match(offers.get('starter'), /No free trial/i);
-    assert.match(offers.get('six_month'), /\$134\.99 today/);
-    assert.match(offers.get('six_month'), /Then \$134\.99 \/ 6 months until canceled/);
-    assert.match(offers.get('annual'), /\$194\.99 today/);
-    assert.match(offers.get('annual'), /Then \$194\.99\/year until canceled/);
+    assert.match(offers.get('six_month'), /\$134\.99/);
+    assert.match(offers.get('six_month'), /Billed every 6 months/);
     assert.match(visibleText(scene), /All plans renew automatically\. No free trial/);
-    assert.doesNotMatch(visibleOffers.map(([, , content]) => visibleText(content)).join(' '), /2 days free|two.day trial/i);
+    assert.doesNotMatch(visibleText(scene), /2 days free|two.day trial/i);
     const text = visibleText(html);
     assert.match(text, /Cancel before renewal/);
     assert.match(text, /access continues through your paid-through date/);

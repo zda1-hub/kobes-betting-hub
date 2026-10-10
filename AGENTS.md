@@ -41,3 +41,8 @@ The user rejected the visual changes in dbb2fb2/42e292f as corporate and visuall
 ## Membership continuity — October 10, 2026
 
 The user explicitly requests an inline homepage membership scene instead of navigating to pricing or opening a modal. Keep the actual orange KBH member-card artwork as the anchor; shrink it to 75% of its homepage width, slide the referral bill downward/out, and introduce matching orange/black plan cards with smooth native motion. Monthly $32.99 is the primary choice; six-month, annual and paid seven-day offers remain secondary. Keep Back/browser history, keyboard, reduced motion and existing Discord/Stripe/referral/attribution contracts working. Direct /join and /membership arrivals use the same presentation. Scope this change to membership; preserve the restored shared header, homepage composition and unrelated pages.
+
+
+### Membership consolidation follow-up — October 10, 2026
+
+The latest user request supersedes the initial pricing scene: use the header action as Back to the Hub while membership is open; no second Back link or membership slogan underneath. Give the supplied card breathing room below the ticker. Monthly is centered with “Cancel Anytime, No Commitment.” above its action and one “$32.99 billed monthly.” line below; remove the redundant title/price panel. Center the longer-run heading and use one orange/black poster controlled by a six-month/one-year segmented toggle. Selection must update displayed billing and the real checkout offer together. Keep supporting copy tightly grouped, renewal copy centered, and the membership-management action clearly styled. The user requests a darker blue action tone; preserve unrelated artwork, page composition and functional integrations.

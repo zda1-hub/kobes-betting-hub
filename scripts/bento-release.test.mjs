@@ -47,7 +47,9 @@ test('production offers retain checkout, configuration and post-payment handoff 
     const html = await read(file);
     const scene = await read('membership-scene.js');
     assert.match(html, /src="membership-scene\.js/);
-    for (const offer of ['monthly','starter','six_month','annual']) assert.match(scene, new RegExp(`data-checkout="${offer}"`));
+    for (const offer of ['monthly','starter','six_month']) assert.match(scene, new RegExp(`data-checkout="${offer}"`));
+    assert.match(scene, /data-longer-plan="annual"/);
+    assert.match(scene, /longerCheckout\.dataset\.checkout=offer/);
     for (const hook of ['data-membership-sales','data-membership-confirmation','data-discord-connect','data-connection-title','data-connection-message','data-checkout-message']) assert.ok(scene.includes(hook), `${file}: ${hook}`);
     assert.equal((html.match(/window\.__KBH_MEMBERSHIP_CONFIG__/g) || []).length, 1);
     assert.match(html, /"environment":"production"/);

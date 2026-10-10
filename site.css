@@ -135,3 +135,7 @@ body:not(.home-page) main>.referral-promo-banner{display:flex;flex-direction:row
 body:not(.home-page) main>.referral-promo-banner img{width:min(32%,240px);flex:none;height:auto}
 body:not(.home-page) main>.referral-promo-banner span{text-align:left;min-width:0;max-width:520px}
 @media(max-width:600px){body:not(.home-page) main>.referral-promo-banner{gap:16px}body:not(.home-page) main>.referral-promo-banner img{width:32%}}
+
+/* October 10: darker action tone, requested with the membership consolidation. */
+:root{--hub-action:#2459a8}
+.site-header .header-join{background:var(--hub-action)!important}
