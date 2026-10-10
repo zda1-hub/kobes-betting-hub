@@ -11,3 +11,13 @@ After: standard monthly checkout is $32.99 immediately and renews at $32.99/mont
 Verification: 76 focused checkout, site-release, and Discord referral-card tests passed. The explicit public build has 83 entries and contains no $19.99 copy or $10 referral promise. Local browser checks confirmed the homepage, standard membership, referral membership, and tracker copy. Production verification is pending. The $20 payout still depends on the existing Stripe recipient verification and fraud checks.
 
 Status: local pending publication.
+
+## Publication confirmation
+
+- PR #222 merged to GitHub main as `6c7b4f5`.
+- Published checkout Worker version `4efb566a-d055-4f94-8cd5-aa6e4f269a00` and public-site Worker version `c80428b0-bc27-4e6b-af43-c26ac9199def` from the merged commit. Render bot auto-deployed that commit and reached live status.
+- Live checks: `/`, `/join`, `/refer`, `/results`, the checkout health endpoint, and the site scripts returned HTTP 200. Public pages contained no $19.99 copy. The homepage showed the $32.99 card, the referral link, and the Kobe-reported 65% historical estimate; the results subsite used the requested Write-up play tracker title. A new `first_month_back` checkout prepare request returned HTTP 400 with “offer ended.”
+- Discord limitation: the current Render bot log says it cannot update the existing referral information card because it lacks View Channel, Send Messages, Embed Links, or Read Message History in that referral channel. The new $20 card copy is deployed in bot code, but the Discord message itself is not confirmed updated. The site and checkout changes are published.
+- The broad repository test run had 481 passes and 36 failures, largely missing local dependencies or older assertions about the retired offer. The 76 focused checkout, site-release, and referral-card tests passed.
+
+Status: published, with Discord referral-card permission blocker noted above.
