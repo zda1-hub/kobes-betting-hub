@@ -75,7 +75,7 @@ test('production email form supplies age, consent and honeypot to the existing h
 test('landing wins retain full-record links and proof retains unique inline reviews', async () => {
   const home = await read('index.html');
   assert.match(home, /65% <span>historical win rate<\/span>/); assert.match(home, /data-wins-track/);
-  assert.match(home, /href="\/?results(?:\.html)?"[^>]*>Full record, including losses/);
+  assert.match(home, /href="\/?results(?:\.html)?"[^>]*>See all tracked picks/);
   const proof = await read('proof.html');
   assert.match(proof, /data-verified-results-track/);
   assert.match(proof, /archive/i);
