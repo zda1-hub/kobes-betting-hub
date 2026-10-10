@@ -188,7 +188,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
   // funnel has one consistent session identity without third-party trackers.
   const trackingConfig = membershipConfig.environment === 'production' ? {
     gtm: /^GTM-[A-Z0-9]+$/.test(env.KBH_GTM_ID || '') ? env.KBH_GTM_ID : '',
-    ga4: /^G-[A-Z0-9]+$/.test(env.KBH_GA4_ID || '') ? env.KBH_GA4_ID : '',
+    ga4: /^G-[A-Z0-9]+$/.test(env.KBH_GA4_ID || '') ? env.KBH_GA4_ID : 'G-264TY91ZCT',
     googleAds: /^AW-[0-9]+$/.test(env.KBH_GOOGLE_ADS_ID || '') ? env.KBH_GOOGLE_ADS_ID : '',
     leadLabel: /^[A-Za-z0-9_-]+$/.test(env.KBH_GOOGLE_ADS_LEAD_LABEL || '') ? env.KBH_GOOGLE_ADS_LEAD_LABEL : '',
     purchaseLabel: /^[A-Za-z0-9_-]+$/.test(env.KBH_GOOGLE_ADS_PURCHASE_LABEL || '') ? env.KBH_GOOGLE_ADS_PURCHASE_LABEL : '',
