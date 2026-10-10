@@ -13,7 +13,7 @@ const packet = {
 };
 
 test('formats the approved free pick as a compact X post', () => {
-  assert.equal(buildFreePickXPost(packet), 'TODAY’S FREE PICK\n\nArizona Diamondbacks ML -115\n\n❤️ 10 likes and we’ll post another Kobe-approved free pick.\nFull writeup → kobesbettinghub.com/free-pick?utm_source=kobe_x\nLegal age where you live. Bet responsibly.');
+  assert.equal(buildFreePickXPost(packet), 'TODAY’S FREE PICK\n\nArizona Diamondbacks ML -115\n\n❤️ 10 likes and we’ll post another free pick.\nFull writeup → kobesbettinghub.com/free-pick?utm_source=kobe_x\nLegal age where you live. Bet responsibly.');
   assert.match(freePickXPostId(packet.pick_id), /^free-x-[a-f0-9]{40}$/);
 });
 
