@@ -20,3 +20,6 @@
 
 .membership-design .first-month .new-member-badge{display:inline-block;align-self:center;margin:0 0 3px;padding:5px 10px;border-radius:999px;background:#fff;color:#0074ce;font:700 10px/1.2 Arial,sans-serif;box-shadow:0 2px 6px #00000022;letter-spacing:.02em}
 @media(max-width:600px){.membership-design .first-month .new-member-badge{font-size:8px;padding:4px 7px}}
+
+/* VIP breakdown: retain the existing card and type treatment. */
+.membership-vip h3{font-size:18px;margin:24px 0 12px}.membership-vip .vip-main-tools{display:block;padding-left:22px;margin:0}.membership-vip .vip-main-tools li{margin:0 0 14px;padding-left:4px;line-height:1.5}.membership-vip .vip-main-tools li span{display:block;margin-top:4px}
