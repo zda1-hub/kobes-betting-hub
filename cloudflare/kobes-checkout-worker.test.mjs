@@ -594,6 +594,26 @@ test('first-month-back checkout charges $19.99 now and renews on the $32.99 mont
   assert.equal(checkout.has('line_items[1][price]'), false);
 });
 
+test('standard monthly checkout charges the configured monthly price without a trial or promotion', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let checkout;
+  globalThis.fetch = async (url, options = {}) => {
+    const target = new URL(url);
+    if (!target.pathname.endsWith('/checkout/sessions')) throw new Error(`Unexpected request: ${target}`);
+    checkout = new URLSearchParams(String(options.body || ''));
+    return Response.json({ url: 'https://checkout.stripe.test/monthly' });
+  };
+  const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ offer: 'monthly' }),
+  }), { STRIPE_SECRET_KEY: 'sk_test_local_only', STRIPE_MONTHLY_PRICE_ID: 'price_monthly' });
+  assert.equal(response.status, 200);
+  assert.equal(checkout.get('line_items[0][price]'), 'price_monthly');
+  assert.equal(checkout.get('metadata[offer]'), 'monthly');
+  assert.equal(checkout.has('subscription_data[trial_period_days]'), false);
+  assert.equal(checkout.has('discounts[0][coupon]'), false);
+});
+
 test('first-20 deal is limited to Wednesday through Sunday MST, $5 once, and 20 redemptions', async (t) => {
   assert.equal(workerTest.first20Active(Date.parse('2026-10-14T06:59:59Z')), false);
   assert.equal(workerTest.first20Active(Date.parse('2026-10-14T07:00:00Z')), true);

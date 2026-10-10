@@ -33,7 +33,9 @@ test('built shared navigation and local assets resolve on redesigned public rout
     assert.match(html, /href="(?:\.\.\/)?site\.css/, file);
     for (const [, target] of html.matchAll(/\b(?:href|src)="([^"]+)"/g)) {
       if (/^(?:[a-z]+:|\/\/|#)/i.test(target)) continue;
-      const url = new URL(target.startsWith('/') ? target.slice(1) : target, target.startsWith('/') ? built : new URL(file, built));
+      const pathname = target.split(/[?#]/)[0];
+      const localTarget = pathname === '/' ? 'index.html' : pathname === '/guides' ? 'guides/index.html' : target.startsWith('/') && !path.extname(pathname) ? `${pathname.slice(1)}.html${target.slice(pathname.length)}` : target.startsWith('/') ? target.slice(1) : target;
+      const url = new URL(localTarget, target.startsWith('/') ? built : new URL(file, built));
       url.search = ''; url.hash = '';
       await access(url);
     }
@@ -73,7 +75,7 @@ test('production email form supplies age, consent and honeypot to the existing h
 test('landing wins retain full-record links and proof retains unique inline reviews', async () => {
   const home = await read('index.html');
   assert.match(home, /data-home-record/); assert.match(home, /data-wins-track/);
-  assert.match(home, /href="results\.html"[^>]*>Full record, including losses/);
+  assert.match(home, /href="\/?results(?:\.html)?"[^>]*>Full record, including losses/);
   const proof = await read('proof.html');
   assert.match(proof, /data-verified-results-track/);
   assert.match(proof, /archive/i);
@@ -115,7 +117,7 @@ test('homepage highlights only wins, uses the overall live count and the supplie
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(track.cards.length,1);
   assert.equal(track.cards[0].children[1].textContent,'Win');
-  assert.equal(summary.textContent,'323 tracked wins');
+  assert.equal(summary.textContent,'323 tracked wins and counting');
   assert.match(since.textContent,/Since September 10, 2026/);
   assert.match(await read('index.html'),/Winning highlights only/);
 });

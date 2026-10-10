@@ -26,7 +26,7 @@
     fbq('init', pixelId); fbq('track', 'PageView');
   }
   const sent = new Set();
-  const offers = new Set(['starter', 'trial_2_day', 'referral_trial', 'first_month_back', 'six_month', 'annual']);
+  const offers = new Set(['starter', 'trial_2_day', 'referral_trial', 'first_month_back', 'monthly', 'six_month', 'annual']);
   window.KBHMeta = Object.freeze({
     trackLead(formId) {
       if (!window.KBHConsent?.allowed() || !/^[a-z][a-z0-9_]{2,79}$/.test(formId || '')) return false;

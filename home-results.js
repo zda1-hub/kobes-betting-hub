@@ -75,7 +75,7 @@ if (verifiedResultsTrack) {
       const summary = document.querySelector('[data-home-record]');
       const record = snapshot.overall;
       if (summary && record && ['wins','losses','pushes','voids'].every(key => Number.isFinite(record[key]))) {
-        summary.textContent = winsOnly ? `${record.wins} tracked wins` : `${record.wins} wins · ${record.losses} losses · ${record.pushes} pushes · ${record.voids} voids`;
+        summary.textContent = winsOnly ? `${record.wins} tracked wins and counting` : `${record.wins} wins · ${record.losses} losses · ${record.pushes} pushes · ${record.voids} voids`;
       }
       const since = document.querySelector('[data-tracking-since]');
       if (since && /^\d{4}-\d{2}-\d{2}$/.test(snapshot.trackingSince || '')) {
