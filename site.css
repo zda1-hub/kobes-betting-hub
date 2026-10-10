@@ -60,3 +60,25 @@ main.article-shell{width:calc(100% - var(--gutter)*2);max-width:var(--page-width
 /* October 10: the sticky header covers the viewport; controls retain page gutters. */
 .site-header{width:100%;max-width:none;margin-left:0;margin-right:0;background:#f5f5f5;backdrop-filter:none;box-shadow:none;border-radius:0;padding-left:0;padding-right:0}
 .site-header>.header-top,.site-header>.header-bottom{width:calc(100% - var(--gutter)*2);max-width:var(--page-width);margin-left:auto;margin-right:auto}
+
+/* Persistent October 10 typography and spacing system. */
+:root{--hub-font:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;--hub-body:16px;--hub-heading:24px;--hub-space:8px;--hub-inset:24px}
+body,body *{font-family:var(--hub-font)!important;font-size:var(--hub-body)!important;font-weight:400!important;letter-spacing:normal!important}
+h1,h2,h3,h4,h5,h6,h1 *,h2 *,h3 *,h4 *,h5 *,h6 *,.plan-price strong,.mock-price,.tile-price strong,.member-price strong{font-size:var(--hub-heading)!important;font-weight:600!important;line-height:1.25!important}
+strong,b,button,.button,.header-join{font-weight:600!important}
+p,li{line-height:1.5}
+.tile,.bento,.plan-card,.mock-plan,.membership-vip,.membership-share,.membership-manage,.included-card{padding:var(--hub-inset)!important;border-radius:24px}
+.membership-vip h2,.included-card h2{text-align:center;margin:0 0 16px!important}
+.membership-manage{display:flex!important;flex-direction:column;align-items:center;text-align:center;gap:16px!important}
+.membership-manage h2,.membership-manage p{margin:0!important}.membership-manage .button{margin:0!important;max-width:100%;white-space:normal}
+a,a span,a svg,.tile-link,.tile-link span{text-decoration:none!important}
+.site-header .header-bottom{display:grid!important;grid-template-columns:minmax(0,1fr) 32px auto!important;gap:8px!important;align-items:center}
+.site-header .header-join{grid-column:1!important;grid-row:1!important;min-width:0!important;min-height:40px!important;height:auto!important;padding:8px 12px!important;white-space:nowrap}
+.site-header .menu-toggle{grid-column:2!important;grid-row:1!important}
+.site-header .header-social{grid-column:3!important;grid-row:1!important;gap:4px!important}
+.site-header .menu-toggle,.site-header .social-icon{width:32px!important;height:32px!important;padding:6px!important}
+.site-header .menu-toggle svg,.site-header .social-icon svg{width:20px!important;height:20px!important}
+.site-ticker{font-family:var(--hub-font)!important}.site-ticker-track span{font-size:16px!important}
+@media(max-width:600px){:root{--hub-inset:16px}.membership-vip ul{grid-template-columns:1fr!important;gap:16px!important}.membership-vip .vip-main-tools li{margin-bottom:16px}.site-header>.header-bottom{width:calc(100% - 32px)}}
+@media(prefers-reduced-motion:reduce){.site-ticker-track{animation:none!important}}
+.tile .tile,.bento .bento,.bento .plan-card,.membership-vip .button,.membership-manage .button{border-radius:max(8px,calc(24px - var(--hub-inset)))!important}
