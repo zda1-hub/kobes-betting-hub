@@ -20,22 +20,16 @@ async function loadResults() {
     document.querySelector('[data-updated]').textContent = `Last verified sync: ${new Date(data.generatedAt).toLocaleString('en-US',{timeZone:'America/Phoenix'})} MST`;
     const total = document.querySelector('[data-win-count]'); if(total) total.textContent = `${wins.length} verified wins`;
     const list = document.querySelector('[data-list]');
-    const filters = document.createElement('form'); filters.className = 'results-filters'; filters.setAttribute('aria-label','Filter winning picks');
-    filters.innerHTML = '<label>Sport<select name="sport"><option value="">All sports</option></select></label><label>Date<input type="date" name="date"></label><label>Find a play or source<input name="search" type="search" placeholder="Team, player or source"></label>';
-    for(const sport of [...new Set(wins.map(item => item.sport || 'Sport not confirmed'))].sort()) { const option = document.createElement('option'); option.value = option.textContent = sport; filters.elements.sport.append(option); }
-    filters.addEventListener('submit',event=>event.preventDefault()); list.before(filters);
     const count = document.createElement('p'); count.className = 'results-count'; count.setAttribute('role','status');
     const more = document.createElement('button'); more.type='button'; more.className='button results-more'; more.textContent='Show more wins'; list.after(count,more);
     let limit=30;
     const render = () => {
-      const {sport,date,search}=filters.elements;
-      const matching = wins.filter(item=>(!sport.value || (item.sport || 'Sport not confirmed')===sport.value) && (!date.value || item.date===date.value) && (!search.value || `${item.selection} ${item.source || ''}`.toLowerCase().includes(search.value.toLowerCase().trim())));
-      const shown=matching.slice(0,limit); list.replaceChildren(...shown.map(winningRow));
-      if(!matching.length) list.textContent='No verified wins match these filters.';
-      count.textContent=`${shown.length} of ${matching.length} matching wins shown. ${wins.length} verified wins available.`;
-      more.hidden=matching.length<=limit;
+      const shown=wins.slice(0,limit); list.replaceChildren(...shown.map(winningRow));
+      if(!wins.length) list.textContent='Verified winning plays will appear here after their results are checked.';
+      count.textContent=`${shown.length} of ${wins.length} verified wins shown.`;
+      more.hidden=wins.length<=limit;
     };
-    filters.addEventListener('input',()=>{limit=30;render();}); more.addEventListener('click',()=>{limit+=30;render();});
+    more.addEventListener('click',()=>{limit+=30;render();});
     render(); loading.hidden=true; shell.hidden=false;
   } catch(error) { loading.classList.add('results-error'); loading.innerHTML='<strong>Winning plays are temporarily unavailable.</strong><p>Please check back shortly.</p>'; console.warn(error); }
 }

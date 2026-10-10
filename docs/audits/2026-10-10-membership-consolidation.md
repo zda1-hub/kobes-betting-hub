@@ -36,3 +36,8 @@ Screenshots: `/Users/z/Documents/ChatGPT/Kobe's Betting Hub/outputs/audit-2026-1
 Published to the existing Cloudflare public-site worker: version `5c15b93d-b600-4428-9aea-57d136af7fcb`, based on latest GitHub main `0acd2f79d18b3b010bc84d2feb10f9d3bb7abbc3`. Backend code and unrelated dirty audit/image work are excluded. The Git commit carrying this audit records the matching source revision.
 
 This verifies visible presentation, interactions, offer contracts and live annual checkout handoff. It does not claim a new paid membership or post-payment VIP activation. Tested in the in-app WebKit browser, not a separate physical phone or every browser engine.
+
+
+## Follow-up — October 10, 2026
+
+The user requested a larger destination card, smoother matched geometry, shared public-page continuity and a compact mobile header. See [view continuity and motion audit](2026-10-10-view-continuity-motion.md) for the subsequent implementation and verification; this supersedes the earlier card-shrink direction.

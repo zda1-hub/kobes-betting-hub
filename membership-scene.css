@@ -1,9 +1,16 @@
 /* Membership-only composition; preserve the supplied KBH artwork. */
 .membership-scene{position:relative;min-width:0;--scene-action:var(--hub-action,#2459a8);--scene-orange:#ff690b;--scene-smooth:cubic-bezier(.22,1,.36,1)}
-.membership-scene[data-open="false"]{display:contents}
+.membership-scene[data-open="false"]{display:block}
+.membership-scene[data-open="false"]>.membership-card-promo{width:72.23%;margin:0 auto 24px}
+.membership-scene[data-open="false"]>.membership-card-promo>span{display:none}
+.membership-card-flight{position:fixed;left:0;top:0;z-index:45;max-width:none!important;pointer-events:none;transform-origin:0 0;will-change:transform;object-fit:contain}
+.membership-bill-flight{position:fixed;z-index:44;pointer-events:none;text-decoration:none;text-align:center;will-change:transform,opacity}
+.membership-bill-flight img{display:block;width:100%;height:auto;box-shadow:0 4px 10px #0002}
+.membership-bill-flight span{display:block;margin-top:16px;font-size:24px!important;font-weight:600!important;line-height:1.25}
+body:has(.membership-scene[data-phase="opening"]) .site-ticker-track,body:has(.membership-scene[data-phase="closing"]) .site-ticker-track{animation-play-state:paused}
 .membership-scene[data-open="false"]>.referral-promo-banner{width:100%;grid-column:1/-1;min-width:0}
 .membership-scene[data-open="true"]{padding-top:36px}
-.membership-scene[data-open="true"]>.membership-card-promo{width:75%;margin:0 auto 28px;pointer-events:none}
+.membership-scene[data-open="true"]>.membership-card-promo{width:85%;max-width:980px;margin:0 auto 28px;pointer-events:none}
 .membership-scene[data-open="true"]>.membership-card-promo>span{display:none}
 .membership-scene .membership-card-promo img{transform-origin:top left}
 .membership-scene[data-open="true"]>.referral-promo-banner{position:absolute;left:50%;transform:translateX(-50%);pointer-events:none;z-index:0}

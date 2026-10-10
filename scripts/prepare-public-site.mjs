@@ -24,6 +24,7 @@ const publicFiles = [
   'approach.html',
   'site.css',
   'functional-fixes.css',
+  'view-continuity.css',
   'membership-scene.css',
   'membership-scene.js',
   'site.js',

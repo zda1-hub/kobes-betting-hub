@@ -30,18 +30,39 @@
   const referral=(arrival.get('ref') || '').toUpperCase();
   if(/^(KBH|KBC)-[A-Z0-9]{10}$/.test(referral) && !arrival.has('checkout')) panel.querySelector('.scene-other').hidden=true;
   const image=card.querySelector('img');
+  image?.decode?.().catch(()=>{});
   const controls=[...document.querySelectorAll('a[href]')].filter(a=>{try{const url=new URL(a.href,location.href);return url.origin===location.origin&&url.hash!=='#main-content'&&/^\/(join|membership)(\.html)?$/.test(url.pathname);}catch{return false;}});
   const headerJoin=document.querySelector('.header-join');
   const headerLabel=headerJoin?.textContent,headerHref=headerJoin?.getAttribute('href');
-  const originalHidden=new Map(); let opened=false,opener=null,revision=0;
+  const originalHidden=new Map(); let opened=false,opener=null,revision=0,homeScroll=0,cardFlight;
+  const originalRestoration=history.scrollRestoration;
   const animations=new Set();
   const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
   const animate=(el,frames,options={})=>{
     if(!el || reduced())return Promise.resolve();
-    const a=el.animate(frames,{duration:520,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards',...options});animations.add(a);
+    const a=el.animate(frames,{duration:400,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards',...options});animations.add(a);
     return a.finished.catch(()=>{}).finally(()=>animations.delete(a));
   };
-  const cancel=()=>{animations.forEach(a=>a.cancel());animations.clear();};
+  const cancel=()=>{animations.forEach(a=>a.cancel());animations.clear();cardFlight?.remove();cardFlight=null;image.style.visibility='';};
+  // An opt-in local probe records real animation-frame intervals during browser review.
+  const motionProbe=name=>{
+    if(!['localhost','127.0.0.1'].includes(location.hostname)||!arrival.has('motionAudit'))return ()=>{};
+    let last,frames=[],active=true;
+    const tick=time=>{if(!active)return;if(last!==undefined)frames.push(time-last);last=time;requestAnimationFrame(tick);};
+    requestAnimationFrame(tick);
+    return ()=>{active=false;const sorted=[...frames].sort((a,b)=>a-b);scene.setAttribute('data-motion-'+name,JSON.stringify({frames:frames.length,max:Math.max(0,...frames),p95:sorted[Math.floor(sorted.length*.95)]||0,over25:frames.filter(n=>n>25).length}));};
+  };
+  const flyCard=(from,to,duration)=>{
+    if(reduced()||!from.width||!to.width)return Promise.resolve();
+    const flight=image.cloneNode(false);flight.removeAttribute('srcset');flight.removeAttribute('sizes');flight.src=image.currentSrc||image.src;
+    flight.alt='';flight.setAttribute('aria-hidden','true');flight.className='membership-card-flight';
+    Object.assign(flight.style,{width:from.width+'px',height:from.height+'px'});
+    document.body.append(flight);cardFlight=flight;image.style.visibility='hidden';
+    const visible=from.bottom>0&&from.top<innerHeight;
+    return animate(flight,[{transform:`translate(${from.left}px,${from.top}px) scale(1)`,opacity:visible?1:0},{transform:`translate(${to.left}px,${to.top}px) scale(${to.width/from.width})`,opacity:1}],{duration}).then(()=>{
+      if(cardFlight===flight){image.style.visibility='';flight.remove();cardFlight=null;}
+    });
+  };
   const updateTriggers=()=>{
     controls.forEach(a=>{a.setAttribute('aria-controls',scene.id);a.setAttribute('aria-expanded',String(opened));});
     if(headerJoin){headerJoin.toggleAttribute('data-membership-return',opened);headerJoin.textContent=opened?'Back to the Hub':headerLabel;headerJoin.setAttribute('href',opened?'/':headerHref);}
@@ -71,35 +92,43 @@
   const restoreHome=()=>{for(const [child,hidden] of originalHidden)child.hidden=hidden;originalHidden.clear();};
   const align=()=>{
     const top=scene.getBoundingClientRect().top+scrollY-document.querySelector('.site-header').getBoundingClientRect().height-16;
-    window.scrollTo({top:Math.max(0,top),behavior:reduced()?'auto':'smooth'});
+    // Resolve scroll before measuring the destination; never scroll underneath a moving card.
+    window.scrollTo({top:Math.max(0,top),behavior:'instant'});
   };
   const open=async(trigger,push=true)=>{
-    if(opened){align();return;}
-    opened=true;opener=trigger;const current=++revision;cancel();scene.dataset.phase='opening';
-    const before=image.getBoundingClientRect();
+    if(opened)return;
+    const before=(cardFlight||image).getBoundingClientRect();
     const billBefore=bill&&!bill.hidden?bill.getBoundingClientRect():null;
+    if(scene.dataset.open!=='true')homeScroll=scrollY;
+    opened=true;opener=trigger||opener;const current=++revision;cancel();const finishProbe=motionProbe('open');scene.dataset.phase='opening';
+    history.scrollRestoration='manual';
     hideHome();panel.hidden=false;scene.dataset.open='true';card.removeAttribute('href');card.setAttribute('tabindex','-1');updateTriggers();
     if(home&&push)history.pushState({...history.state,kbhMembership:true},'',location.href);
-    if(billBefore){bill.style.top=(billBefore.top-scene.getBoundingClientRect().top)+'px';bill.style.width=billBefore.width+'px';}
-    const after=image.getBoundingClientRect();
-    const cardMotion=animate(image,[{transform:`translate(${before.left-after.left}px,${before.top-after.top}px) scale(${before.width/after.width})`},{transform:'none'}],{duration:640});
-    if(billBefore)animate(bill,[{opacity:1,transform:'translate(-50%,0)'},{opacity:0,transform:'translate(-50%,90px)'}],{duration:320}).then(()=>{if(current===revision&&opened)bill.hidden=true;});
-    animate(panel,[{opacity:0,transform:'translateY(28px)'},{opacity:1,transform:'translateY(0)'}],{delay:150});
-    const planMotions=[...panel.querySelectorAll('.scene-plan')].map((p,i)=>animate(p,[{opacity:0,transform:'translateY(52px) rotate(1deg)'},{opacity:1,transform:'translateY(0) rotate(0)'}],{delay:220+i*65,duration:560}));
-    panel.querySelector('h1').focus({preventScroll:true});align();
-    await Promise.all([cardMotion,...planMotions]);if(current===revision&&opened)scene.dataset.phase='open';
+    if(bill)bill.hidden=true;
+    align();const after=image.getBoundingClientRect();
+    const motions=[flyCard(before,after,400),animate(panel,[{opacity:0,transform:'translateY(8px)'},{opacity:1,transform:'none'}],{duration:300})];
+    if(billBefore&&!reduced()){
+      const exit=bill.cloneNode(true);exit.className='membership-bill-flight';exit.hidden=false;exit.setAttribute('aria-hidden','true');exit.removeAttribute('href');
+      Object.assign(exit.style,{left:billBefore.left+'px',top:billBefore.top+'px',width:billBefore.width+'px'});document.body.append(exit);
+      motions.push(animate(exit,[{opacity:1,transform:'none'},{opacity:0,transform:'translateY(24px)'}],{duration:200}).then(()=>exit.remove()));
+    }
+    panel.querySelector('h1').focus({preventScroll:true});
+    await Promise.all(motions);finishProbe();if(current===revision&&opened)scene.dataset.phase='open';
   };
   const close=async()=>{
     if(!home||!opened)return;
-    opened=false;const current=++revision;cancel();scene.dataset.phase='closing';
-    await animate(panel,[{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY(24px)'}],{duration:230});
-    if(current!==revision||opened)return;
-    const before=image.getBoundingClientRect();panel.hidden=true;scene.dataset.open='false';scene.dataset.phase='restoring';restoreHome();
-    const returnMotions=[];
-    card.href='/join';card.removeAttribute('tabindex');if(bill){bill.hidden=false;bill.style.top='';bill.style.width='';returnMotions.push(animate(bill,[{opacity:0,transform:'translateY(50px)'},{opacity:1,transform:'translateY(0)'}],{duration:480}));}
-    updateTriggers();const after=image.getBoundingClientRect();returnMotions.push(animate(image,[{transform:`translate(${before.left-after.left}px,${before.top-after.top}px) scale(${before.width/after.width})`},{transform:'none'}]));
+    const before=(cardFlight||image).getBoundingClientRect();
+    opened=false;const current=++revision;cancel();const finishProbe=motionProbe('close');scene.dataset.phase='closing';
+    // Restore the destination in one batch; the fixed card bridges the geometry change.
+    panel.hidden=true;scene.dataset.open='false';restoreHome();card.href='/join';card.removeAttribute('tabindex');
+    if(bill)bill.hidden=false;
+    updateTriggers();window.scrollTo({top:homeScroll,behavior:'instant'});
+    const after=image.getBoundingClientRect();
+    const motions=[flyCard(before,after,300)];
+    for(const child of main.children){if(child===scene||child.hidden)continue;motions.push(animate(child,[{opacity:0},{opacity:1}],{duration:180}));}
+    if(bill)motions.push(animate(bill,[{opacity:0,transform:'translateY(8px)'},{opacity:1,transform:'none'}],{duration:250}));
     opener?.focus({preventScroll:true});
-    await Promise.all(returnMotions);if(current===revision&&!opened)scene.dataset.phase='closed';
+    await Promise.all(motions);finishProbe();if(current===revision&&!opened){scene.dataset.phase='closed';history.scrollRestoration=originalRestoration;}
   };
   document.addEventListener('click',event=>{
       const a=event.target.closest('a[href]');if(!a||!controls.includes(a)||a.closest('.october-offer-overlay')||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
