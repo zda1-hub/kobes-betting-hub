@@ -21,3 +21,7 @@ Status: local pending publication.
 - The broad repository test run had 481 passes and 36 failures, largely missing local dependencies or older assertions about the retired offer. The 76 focused checkout, site-release, and referral-card tests passed.
 
 Status: published, with Discord referral-card permission blocker noted above.
+
+## Tracker spacing follow-up
+
+Requested change: remove the orange eyebrow above the Write-up play tracker and move the remaining content up. Affected files: `results.html`, `extras.css`. Before: a duplicate label and its spacing appeared above the title. After: the label is gone, the tracker section has tighter top padding, and the title begins without extra top margin. The results-page navigation label also matches the tracker title. Verification and publication status are recorded below.

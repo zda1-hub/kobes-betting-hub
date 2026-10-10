@@ -81,3 +81,8 @@
 .extras-page .historical-results-rate{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;font-weight:600;margin:0 0 18px}
 .extras-page .historical-results-rate strong{font-size:clamp(38px,6vw,64px);line-height:1;color:#1b9b4a}
 .extras-page .historical-results-rate small{flex-basis:100%;font-size:12px;font-weight:400;color:#686b60}
+
+/* Keep the tracker title close to the shared header after removing its eyebrow. */
+.extras-page.tracker-page{padding-top:18px}
+.extras-page.tracker-page .subpage-header h1{margin-top:0}
+@media(max-width:600px){.extras-page.tracker-page{padding-top:10px}}
