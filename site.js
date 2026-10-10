@@ -66,7 +66,7 @@
     if(event.key==='Tab' && exitDialog) { const focusable=[...exitDialog.querySelectorAll('button,a[href]')]; const first=focusable[0], last=focusable.at(-1); if(event.shiftKey && document.activeElement===first){event.preventDefault();last.focus();} else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first.focus();} }
   };
   const showExitDialog = () => {
-    if (!promote || prompted || checkoutState || !document.querySelector('.site-header')) return;
+    if (document.querySelector('.membership-scene[data-open="true"]') || !promote || prompted || checkoutState || !document.querySelector('.site-header')) return;
     try {
       if (sessionStorage.getItem('kbh.referral.exit.prompted')) return;
       sessionStorage.setItem('kbh.referral.exit.prompted', '1');

@@ -28,9 +28,17 @@ function dataAttributeText(html, attribute) {
 }
 
 test('join and membership clearly disclose four current offers and keep referral choices private', async () => {
-  const pages = await Promise.all(['join.html', 'membership.html'].map(readRepositoryFile));
-  assert.equal(dataAttributeText(pages[0], 'data-checkout-message'), dataAttributeText(pages[1], 'data-checkout-message'));
-  for (const html of pages) {
+  const source = await readRepositoryFile('membership-scene.js');
+  const scene = source.match(/panel\.innerHTML=`([\s\S]*?)`;/)[1];
+  const pages = await Promise.all(['index.html', 'join.html', 'membership.html'].map(readRepositoryFile));
+  for (const page of pages) assert.match(page, /src="membership-scene\.js/);
+  assert.match(source, /arrival\.get\('ref'\)/);
+  assert.match(source, /!arrival\.has\('checkout'\).*scene-other'\)\.hidden=true/);
+  assert.match(source, /KBH\|KBC/);
+  assert.match(source, /A-Z0-9.*10/);
+  const compositions = pages.map(page => page + scene);
+  assert.equal(dataAttributeText(compositions[0], 'data-checkout-message'), dataAttributeText(compositions[1], 'data-checkout-message'));
+  for (const html of compositions) {
     const articles = [...html.matchAll(/<article\b([^>]*)>([\s\S]*?)<\/article>/gi)];
     const visibleOffers = articles.filter(([, attributes, content]) => !/\bhidden\b/.test(attributes) && /data-checkout=/.test(content));
     assert.equal(visibleOffers.length, 4);
@@ -46,17 +54,12 @@ test('join and membership clearly disclose four current offers and keep referral
     assert.match(offers.get('six_month'), /Then \$134\.99 \/ 6 months until canceled/);
     assert.match(offers.get('annual'), /\$194\.99 today/);
     assert.match(offers.get('annual'), /Then \$194\.99\/year until canceled/);
-    assert.match(offers.get('six_month'), /Save \$62\.95 vs\. six \$32\.99 monthly payments/);
-    assert.match(offers.get('annual'), /Save \$200\.89 vs\. twelve \$32\.99 monthly payments/);
-    for (const offer of ['six_month', 'annual']) assert.match(offers.get(offer), /No trial/);
-    const referral = articles.find(([, attributes]) => /data-referral-card/.test(attributes));
-    assert.ok(referral); assert.match(referral[1], /\bhidden\b/);
-    assert.match(referral[2], /data-referral-button/);
+    assert.match(visibleText(scene), /All plans renew automatically\. No free trial/);
     assert.doesNotMatch(visibleOffers.map(([, , content]) => visibleText(content)).join(' '), /2 days free|two.day trial/i);
     const text = visibleText(html);
-    assert.match(text, /Cancel before the next renewal/);
-    assert.match(text, /access continues through the paid-through date/);
-    assert.match(text, /non-refundable except where required by law, card-network rules, or a written Hub exception/);
+    assert.match(text, /Cancel before renewal/);
+    assert.match(text, /access continues through your paid-through date/);
+    assert.match(text, /non-refundable except where required by law, card-network rules or a written Hub exception/);
     assert.match(html, /href="cancel\.html"/);
   }
 });

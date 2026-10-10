@@ -6,7 +6,7 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const outputRoot = path.join(projectRoot, '.public-site');
 export const productionMembershipWorkerOrigin = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
 
-const membershipConfigFiles = ['join.html', 'membership.html', 'cancel.html', 'welcome.html', 'admin-analytics.html', 'member.html', 'partner.html'];
+const membershipConfigFiles = ['index.html', 'join.html', 'membership.html', 'cancel.html', 'welcome.html', 'admin-analytics.html', 'member.html', 'partner.html'];
 const membershipConfigPattern = /window\.__KBH_MEMBERSHIP_CONFIG__ = Object\.freeze\(\{[^\n]*\}\);/g;
 
 const guideFiles = [
@@ -24,6 +24,8 @@ const publicFiles = [
   'approach.html',
   'site.css',
   'functional-fixes.css',
+  'membership-scene.css',
+  'membership-scene.js',
   'site.js',
   'extras.css',
   'gallery.css',

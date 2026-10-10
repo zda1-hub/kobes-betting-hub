@@ -45,8 +45,10 @@ test('built shared navigation and local assets resolve on redesigned public rout
 test('production offers retain checkout, configuration and post-payment handoff contracts', async () => {
   for (const file of ['join.html','membership.html']) {
     const html = await read(file);
-    for (const offer of ['monthly','starter','six_month','annual']) assert.match(html, new RegExp(`data-checkout="${offer}"`));
-    for (const hook of ['data-membership-sales','data-membership-confirmation','data-discord-connect','data-connection-title','data-connection-message','data-checkout-message']) assert.ok(html.includes(hook), `${file}: ${hook}`);
+    const scene = await read('membership-scene.js');
+    assert.match(html, /src="membership-scene\.js/);
+    for (const offer of ['monthly','starter','six_month','annual']) assert.match(scene, new RegExp(`data-checkout="${offer}"`));
+    for (const hook of ['data-membership-sales','data-membership-confirmation','data-discord-connect','data-connection-title','data-connection-message','data-checkout-message']) assert.ok(scene.includes(hook), `${file}: ${hook}`);
     assert.equal((html.match(/window\.__KBH_MEMBERSHIP_CONFIG__/g) || []).length, 1);
     assert.match(html, /"environment":"production"/);
     assert.match(html, /https:\/\/kobes-betting-hub-checkout\.kobedirwin\.workers\.dev/);

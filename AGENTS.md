@@ -36,3 +36,8 @@ The October 10 follow-up revokes the fixed SF Pro-only, two-size/two-weight and 
 ## Rejected audit redesign — October 10, 2026
 
 The user rejected the visual changes in dbb2fb2/42e292f as corporate and visually unacceptable. Restore the public design from e63caa1 (the state following a23fdc3), including white CTA text, header/logo scale, colored pricing cards, original composition and supplied artwork. Retain functional/performance fixes and wins-only behavior. Audit approval is not permission to replace the approved visual identity with a global CSS reset. Geometry/accessibility checks are necessary but do not prove aesthetic fit; compare populated before/after screens at equal viewport and scale. Future repairs should target the defect within the existing component, with no global typography, palette, header-size or density redesign unless explicitly requested.
+
+
+## Membership continuity — October 10, 2026
+
+The user explicitly requests an inline homepage membership scene instead of navigating to pricing or opening a modal. Keep the actual orange KBH member-card artwork as the anchor; shrink it to 75% of its homepage width, slide the referral bill downward/out, and introduce matching orange/black plan cards with smooth native motion. Monthly $32.99 is the primary choice; six-month, annual and paid seven-day offers remain secondary. Keep Back/browser history, keyboard, reduced motion and existing Discord/Stripe/referral/attribution contracts working. Direct /join and /membership arrivals use the same presentation. Scope this change to membership; preserve the restored shared header, homepage composition and unrelated pages.
