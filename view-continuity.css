@@ -118,3 +118,46 @@
 @media(prefers-reduced-transparency:reduce){.site-header .site-menu,.october-offer-dialog{background:#f7f7f7;backdrop-filter:none;-webkit-backdrop-filter:none}.image-dialog{background:#111;backdrop-filter:none;-webkit-backdrop-filter:none}.arbitrage-mini{background:#111;backdrop-filter:none;-webkit-backdrop-filter:none}}
 
 .hub-interior .results-shell{border-radius:28px;padding:var(--hub-panel-inset)!important}
+
+/* Compact historical metric and naturally equal-height winning cards. */
+.wins-tile .historical-heading{display:block!important;margin:0 0 12px!important}
+.wins-tile .historical-heading strong{display:block;font-size:16px!important;line-height:1.25}
+.wins-tile .historical-rate-number{font-size:clamp(32px,4vw,44px)!important;line-height:1;font-weight:600!important;letter-spacing:-.03em}
+.wins-tile .historical-qualifier{display:block;margin-top:6px;font-size:12px!important;font-weight:400!important;line-height:1.4;color:#626262}
+.wins-tile .verified-results-track{align-items:stretch}
+.hub-interior .historical-results-rate{gap:4px 10px;margin-bottom:12px!important}
+.hub-interior .historical-results-rate strong{font-size:clamp(38px,5vw,56px)!important;line-height:1}
+.hub-interior .historical-results-rate small{line-height:1.4;margin-top:2px}
+.hub-interior .results-summary .record-note{font-size:13px!important;line-height:1.4;margin:6px 0 0}
+/* Freeze only the changing bento surfaces; header stays above their motion. */
+.home-grid:has([data-pick-disclosure]){overflow-anchor:none}
+html[data-pick-transition]{--pick-duration:320ms}
+html[data-pick-transition="close"]{--pick-duration:250ms}
+html[data-pick-transition] .site-header{view-transition-name:free-board-header}
+html[data-pick-transition] .home-grid>.pick-tile{view-transition-name:free-board}
+html[data-pick-transition] .home-grid>.membership-tile{view-transition-name:free-board-membership}
+html[data-pick-transition] .home-grid>.lower-bento{view-transition-name:free-board-content}
+html[data-pick-transition] .home-grid>.email-tile:not([hidden]){view-transition-name:free-board-email}
+html[data-pick-transition] .site-ticker-track{animation-play-state:paused}
+html[data-pick-transition]::view-transition{pointer-events:none}
+html[data-pick-transition]::view-transition-group(root),html[data-pick-transition]::view-transition-new(root){animation:none}
+html[data-pick-transition]::view-transition-old(root){display:none}
+html[data-pick-transition]::view-transition-group(free-board-header){z-index:100;animation:none}
+html[data-pick-transition]::view-transition-old(free-board-header){display:none}
+html[data-pick-transition]::view-transition-new(free-board-header){animation:none}
+html[data-pick-transition]::view-transition-group(free-board),html[data-pick-transition]::view-transition-group(free-board-membership),html[data-pick-transition]::view-transition-group(free-board-content),html[data-pick-transition]::view-transition-group(free-board-email){animation-duration:var(--pick-duration);animation-timing-function:cubic-bezier(.22,1,.36,1)}
+html[data-pick-transition]::view-transition-old(free-board),html[data-pick-transition]::view-transition-new(free-board){animation-duration:180ms;animation-timing-function:ease-out;mix-blend-mode:normal}
+@media(prefers-reduced-motion:reduce){html::view-transition-group(*),html::view-transition-old(*),html::view-transition-new(*){animation:none!important}}
+
+.wins-tile .tile-heading>div{min-width:0}
+.wins-tile .historical-rate-number{display:block;white-space:nowrap;overflow-wrap:normal}
+.wins-tile .historical-heading strong>span:last-child{display:block;margin-top:6px;font-size:14px!important;line-height:1.35;overflow-wrap:normal}
+.wins-tile .historical-qualifier{overflow-wrap:normal}
+.home-grid>.pick-tile>summary{gap:12px}
+.home-grid>.pick-tile>summary>span:first-child{min-width:0;flex:1}
+.pick-tile .pick-chevron{display:grid;place-items:center;align-self:center;flex:0 0 36px;width:36px;height:36px;border:1px solid #ffffff38;border-radius:50%;background:#ffffff0d;color:#fff}
+.pick-tile .pick-chevron svg{display:block;width:18px;height:18px;transition:transform 250ms cubic-bezier(.22,1,.36,1)}
+.pick-tile[open] .pick-chevron svg{transform:rotate(180deg)}
+
+@media(max-width:700px){.home-grid>.pick-tile:not([open])>summary{flex-direction:column;align-items:stretch!important}.home-grid>.pick-tile:not([open])>summary>span:first-child{width:100%}.home-grid>.pick-tile:not([open]) .pick-chevron{align-self:flex-end}}
+@media(prefers-reduced-motion:reduce){.pick-tile .pick-chevron svg{transition:none}}

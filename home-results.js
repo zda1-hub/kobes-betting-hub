@@ -31,7 +31,7 @@ const setupWins = track => {
   rail.addEventListener('scroll', () => { if(manual && pointer===undefined)normalize(); }, {passive:true});
   reduced.addEventListener('change', pause);
   new ResizeObserver(measure).observe(rail);measure();
-  const animate = now => { if(last && !manual && !reduced.matches && !hovered && !document.hidden && pointer===undefined){const bounds=rail.getBoundingClientRect();if(bounds.top<innerHeight&&bounds.bottom>0){position+=Math.min(now-last,50)*.065;normalize(position);}}last=now;requestAnimationFrame(animate); };requestAnimationFrame(animate);
+  const animate = now => { if(last && !manual && !reduced.matches && !hovered && !document.hidden && !document.documentElement?.hasAttribute?.('data-pick-transition') && pointer===undefined){const bounds=rail.getBoundingClientRect();if(bounds.top<innerHeight&&bounds.bottom>0){position+=Math.min(now-last,50)*.065;normalize(position);}}last=now;requestAnimationFrame(animate); };requestAnimationFrame(animate);
 };
 const verifiedResultsTrack = document.querySelector('[data-verified-results-track]') || document.querySelector('[data-wins-track]');
 if (verifiedResultsTrack) {

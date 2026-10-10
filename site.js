@@ -100,7 +100,7 @@
 })();
 
 // Animate disclosure height in both directions without a closing snap.
-document.querySelectorAll('details').forEach(details => {
+document.querySelectorAll('details:not([data-pick-disclosure])').forEach(details => {
   const summary = details.querySelector(':scope > summary');
   if (!summary) return;
   let animation, expanded = details.open;
@@ -116,3 +116,49 @@ document.querySelectorAll('details').forEach(details => {
     animation.onfinish = () => { details.open = expanded; details.style.height = ''; details.style.overflow = ''; animation = null; };
   });
 });
+
+// Free Board changes grid span as well as height. Commit that layout once and
+// let snapshots bridge the old/new geometry instead of animating live reflow.
+(() => {
+  const card = document.querySelector('[data-pick-disclosure]');
+  if (!card) return;
+  const summary = card.querySelector(':scope > summary');
+  const root = document.documentElement;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const localAudit = ['localhost','127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('motionAudit');
+  let transition, revision=0, target=card.open, motions=[];
+  const probe = () => {
+    if (!localAudit) return () => {};
+    let last, active=true, frames=[];
+    const tick = time => {if(!active)return;if(last!==undefined)frames.push(time-last);last=time;requestAnimationFrame(tick);};
+    requestAnimationFrame(tick);
+    return () => {active=false;card.setAttribute('data-pick-motion',JSON.stringify({frames:frames.length,max:Math.max(0,...frames),over25:frames.filter(n=>n>25).length}));};
+  };
+  summary.addEventListener('click', event => {
+    event.preventDefault();target=!target;const current=++revision;
+    transition?.skipTransition();motions.forEach(a=>a.cancel());motions=[];
+    const finishProbe=probe();card.dataset.pickPhase=target?'opening':'closing';
+    const settle = () => {finishProbe();if(current!==revision)return;delete root.dataset.pickTransition;card.dataset.pickPhase=target?'open':'closed';transition=null;};
+    const update = () => {if(current===revision)card.open=target;};
+    if(reduced.matches){update();settle();return;}
+    if(document.startViewTransition){
+      root.dataset.pickTransition=target?'open':'close';
+      card.dataset.pickMotionMode='snapshots';
+      transition=document.startViewTransition(update);
+      transition.ready.then(()=>{delete card.dataset.pickTransitionError;},error=>{card.dataset.pickTransitionError=error.message;});
+      transition.finished.then(settle,settle);
+      return;
+    }
+    // Older engines keep the same working details control, with short fades
+    // and compositor movement of surrounding cards rather than blocked height.
+    card.dataset.pickMotionMode='fallback';
+    const siblings=[...card.parentElement.children].filter(e=>e!==card&&!e.hidden);
+    const before=siblings.map(e=>e.getBoundingClientRect());
+    update();
+    motions=[card.animate([{opacity:.4},{opacity:1}],{duration:250,easing:'cubic-bezier(.22,1,.36,1)'})];
+    siblings.forEach((e,i)=>{const after=e.getBoundingClientRect(),dx=before[i].left-after.left,dy=before[i].top-after.top;if(dx||dy)motions.push(e.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:'none'}],{duration:250,easing:'cubic-bezier(.22,1,.36,1)'}));});
+    Promise.all(motions.map(a=>a.finished.catch(()=>{}))).then(settle);
+  });
+  document.addEventListener('click',event=>{if(event.target.closest('a[href]'))transition?.skipTransition();});
+  reduced.addEventListener('change',()=>{if(reduced.matches){transition?.skipTransition();motions.forEach(a=>a.cancel());}});
+})();

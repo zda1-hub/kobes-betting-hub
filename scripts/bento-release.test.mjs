@@ -125,7 +125,8 @@ test('homepage highlights only wins, uses the overall live count and the supplie
   assert.match(since.textContent,/Since September 10, 2026/);
   const home = await read('index.html');
   assert.match(home, /KOBE’S HISTORICAL 65% WIN RATE/);
-  assert.match(home, /Kobe-reported (?:historical )?estimate; complete (?:historical )?supporting records are unavailable/);
+  assert.match(home, /class="historical-qualifier">Kobe-reported historical estimate<\/small>/);
+  assert.doesNotMatch(home, /complete (?:historical )?(?:supporting )?records are unavailable/);
   assert.match(home, /See winning plays/);
   assert.doesNotMatch(home, /data-wins-motion/);
 });
