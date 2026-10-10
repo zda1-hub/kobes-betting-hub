@@ -416,6 +416,27 @@ async function unlockFreePick(request, env, ctx) {
   return json({ ok: true, hasPick: Boolean(pick), pick, message: pick ? 'Unlocked. We’re sending the same pick to your email.' : 'You’re on the list. There is no free pick today.' }, 200, headers);
 }
 
+function freePickEmailLines(pick, unsubscribeUrl) {
+  const details = pick.details || {};
+  let selection = String(details.selection || details.pick || 'Approved free pick').trim();
+  const line = String(details.line || '').trim();
+  if (line && !selection.includes(line)) selection += ` ${line}`;
+  const extra = [details.odds ? `(${details.odds})` : '', details.units ? `${details.units}u` : ''].filter(Boolean).join(' ');
+  const reasons = String(details.reason || '').split(/\s*[•●]\s*|\r?\n+/)
+    .map(point => point.replace(/^\s*(?:\d+[.)]\s+|[-–]\s+)/, '').trim()).filter(Boolean);
+  return [
+    `Today's free pick — ${pick.publishedDate} (MST)`, '',
+    selection,
+    [details.sport, details.event].filter(Boolean).join(' - '),
+    ...(extra ? [extra] : []), '',
+    ...reasons.map((point, index) => `${index + 1}. ${point}`), '',
+    ...(pick.imageUrl ? [`View the approved pick card: ${pick.imageUrl}`, ''] : []),
+    'Want the full VIP slate and writeups? Join here: https://kobesbettinghub.com/join', '',
+    'Picks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.', '',
+    `Unsubscribe: ${unsubscribeUrl}`,
+  ];
+}
+
 async function deliverPendingFreePickEmails(env, onlyId = null) {
   if (!env.RESEND_API_KEY || !env.DB) return;
   await ensureEmailSubscribers(env);
@@ -437,17 +458,7 @@ async function deliverPendingFreePickEmails(env, onlyId = null) {
       const pick = JSON.parse(row.pick_json);
       const details = pick.details || {};
       const unsubscribeUrl = `https://bettinghub-publisher.kobedirwin.workers.dev/api/email/unsubscribe?token=${encodeURIComponent(row.unsubscribe_token)}`;
-      const lines = [
-        `Today's free pick — ${pick.publishedDate} (MST)`, '',
-        details.selection || details.pick || 'Approved free pick',
-        [details.line, details.odds ? `(${details.odds})` : '', details.units ? `${details.units}u` : ''].filter(Boolean).join(' '),
-        [details.sport, details.event].filter(Boolean).join(' · '), '',
-        details.reason || '',
-        pick.imageUrl ? `View the approved pick card: ${pick.imageUrl}` : '', '',
-        'Want the full VIP slate and writeups? Join here: https://kobesbettinghub.com/join', '',
-        'Picks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.', '',
-        `Unsubscribe: ${unsubscribeUrl}`,
-      ];
+      const lines = freePickEmailLines(pick, unsubscribeUrl);
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `kbh-free-pick-${row.id}` },
@@ -1480,6 +1491,7 @@ function html(message, status = 200) {
 }
 
 export const __test = {
+  freePickEmailLines,
   auditedXFetch,
   redactedResponseShape,
   xPostPayload,

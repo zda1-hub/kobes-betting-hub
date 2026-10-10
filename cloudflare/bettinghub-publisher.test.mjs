@@ -566,3 +566,15 @@ test('every X media, post, refresh, and exchange call is routed through the audi
   assert.equal((source.match(/auditedXFetch\(env, TOKEN_ENDPOINT/g) || []).length, 2);
   assert.equal(/\bfetch\((?:MEDIA_UPLOAD_ENDPOINT|CREATE_POST_ENDPOINT|TOKEN_ENDPOINT)/.test(source), false);
 });
+
+test('free-pick email numbers approved points and avoids repeating the line', () => {
+  const lines = workerTest.freePickEmailLines({publishedDate:'2026-10-10',details:{selection:'Utah -15.5',line:'-15.5',sport:'College Football',event:'Kansas @ Utah',reason:'Utah is 4-0 • They are averaging 43 points • Backing Utah ✅'}}, 'https://example.com/unsubscribe');
+  assert.equal(lines.filter(line => line.includes('-15.5')).length, 1);
+  assert.ok(lines.includes('College Football - Kansas @ Utah'));
+  assert.ok(lines.includes('1. Utah is 4-0'));
+  assert.ok(lines.includes('3. Backing Utah ✅'));
+  assert.ok(lines.some(line => line.includes('/join')));
+  assert.ok(lines.some(line => line.includes('Wager responsibly')));
+  assert.equal(lines.at(-1), 'Unsubscribe: https://example.com/unsubscribe');
+  assert.ok(workerTest.freePickEmailLines({details:{selection:'Utah',line:'-15.5',reason:'1. First point\n2. Second point'}}, 'link').includes('2. Second point'));
+});
