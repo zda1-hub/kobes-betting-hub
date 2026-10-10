@@ -54,3 +54,5 @@ main.article-shell{width:calc(100% - var(--gutter)*2);max-width:var(--page-width
 @keyframes referralGlow{from{background:#147b3d;box-shadow:-4px 4px 9px #00000040}to{background:#27b356;box-shadow:0 0 0 3px #8fe3a680,-4px 4px 12px #00000040}}
 @media(prefers-reduced-motion:reduce){.referral-promo-banner{animation:none}}
 @media(max-width:600px){.referral-promo-banner{min-height:54px;padding:8px 12px}.referral-promo-banner strong{font-size:14px}.referral-promo-banner span{font-size:11px}}
+
+.october-offer-dialog .exit-referral-terms{font-size:11px;color:#626262}.october-offer-dialog .exit-referral-link{display:inline-block;margin:14px 0 0 14px;font:700 12px/1.4 Manrope,Arial,sans-serif;color:#167a3f}.october-offer-dialog .exit-referral-link:hover{text-decoration:underline}
