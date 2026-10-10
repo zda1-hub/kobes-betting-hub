@@ -7,7 +7,7 @@ function winningRow(item) {
   const badge = document.createElement('b'); badge.className = 'result-badge win'; badge.textContent = '✓ WIN'; badge.setAttribute('aria-label','Win');
   const selection = document.createElement('strong'); selection.textContent = item.selection;
   const details = document.createElement('small');
-  details.textContent = [item.sport || 'Sport not confirmed', item.source, item.line, item.odds && `(${item.odds})`].filter(Boolean).join(' · ');
+  details.textContent = [item.sport, item.source, item.line, item.odds && `(${item.odds})`].filter(Boolean).join(' · ');
   row.append(day, badge, selection, details); return row;
 }
 async function loadResults() {

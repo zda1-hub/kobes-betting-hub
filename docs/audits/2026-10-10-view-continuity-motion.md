@@ -51,3 +51,5 @@ Public-only Cloudflare deployment completed October 10, 2026. Version: `4275ae56
 Live browser confirmed the compact header at top 0, full-content-width expanded artwork wider than the term poster, completed Join/Back with no remaining transient layers, glass menu within padded bounds with Instagram/X available, and populated tracker with 30 verified wins, last verified sync, 28px corners and zero filters/overflow. Production smoke: checkout health, publisher health, current Free Pick API, Free Pick page and client asset all pass.
 
 Production origin had a saved 75% browser zoom; live mobile geometry was inspected at approximately 391 CSS px (293 physical viewport px). Exact 320/390/1440 checks were performed on the local origin at 100% zoom. Final 69-state audit was rerun with fresh loads of the final stylesheet version; all pass.
+
+Further user feedback corrected missing sport labels; see [sport-label audit](2026-10-10-result-sport-labels.md).
