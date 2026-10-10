@@ -155,7 +155,7 @@ function activeWindow(now = new Date(), windows = DEFAULT_WINDOWS, durationMinut
   }) || null;
 }
 
-function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel, stateFile, fetchImpl = fetch, now = () => new Date(),
+function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel, archiveChannel, stateFile, fetchImpl = fetch, now = () => new Date(),
   bookmakers = DEFAULT_BOOKS, sports = ['upcoming'], windows = DEFAULT_WINDOWS, intervalMinutes = 5, minimumEdgePercent = 2, bankroll = 1000,
   memberPostingEnabled = false, isApprover = () => false, log = console.log }) {
   if (!Number.isInteger(intervalMinutes) || intervalMinutes < 1 || intervalMinutes > 60) {
@@ -260,6 +260,21 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
         setTimeout(() => void recheck(opportunity, message, 30), 30000).unref();
         setTimeout(() => void recheck(opportunity, message, 60), 60000).unref();
       }
+      if (archiveChannel) {
+        const liveIds = new Set(freshPositive.filter(item => freshOpportunity(item, now())).map(item => item.id));
+        const candidate = Object.values(state.opportunities)
+          .filter(item => item.status === 'PUBLISHED' && item.approvedSnapshot && !item.archivedAt
+            && Date.parse(item.publishedAt) <= now().getTime() - 30 * 60000 && !liveIds.has(item.id))
+          .sort((a, b) => b.approvedSnapshot.edgePercent - a.approvedSnapshot.edgePercent)[0];
+        if (candidate) {
+          const example = candidate.approvedSnapshot;
+          const message = await archiveChannel.send({ allowedMentions: { parse: [] }, embeds: [{ color: 0x65748B,
+            title: 'Past arbitrage example — not live',
+            description: `${alertDescription(example, 'EXPIRED EXAMPLE — DO NOT PLACE THESE BETS')}\n\nThis is a theoretical return if both wagers were accepted at the displayed odds. It is not a verified member profit or settled result. Kobe can post proof of any actual result separately.` }] });
+          candidate.archivedAt = now().toISOString();
+          candidate.archivedMessageId = message.id;
+        }
+      }
       await save();
       log(`Arbitrage scan: ${JSON.stringify(scanRecord)}`);
       return { status: 'SCANNED', eventCount: events.length, opportunityCount: opportunities.length, remaining, used };
@@ -342,6 +357,7 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
         embeds: [{ color: 0xFF7900, title: 'Arbitrage opportunity', description: alertDescription(current, 'KOBE APPROVED — RECHECK ODDS BEFORE PLACING') }]
       });
       record.status = 'PUBLISHED'; record.publishedAt = now().toISOString(); record.publishedMessageId = published.id;
+      record.approvedSnapshot = current;
       await save();
       await message.edit({ embeds: [{ color: 0x2ECC71, title: 'Arbitrage approval', description: alertDescription(current, 'POSTED TO VIP ARBITRAGE') }], components: reviewComponents(id, { disabled: true }) });
       return { status: 'PUBLISHED', messageId: published.id };

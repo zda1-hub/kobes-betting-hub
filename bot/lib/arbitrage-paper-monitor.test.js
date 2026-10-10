@@ -127,6 +127,38 @@ test('one-minute cadence scans again after one minute and never earlier', async 
   } finally { await monitor.stop(); }
 });
 
+test('archives a Kobe-approved example only after its live edge has passed', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
+  let current = new Date('2026-09-23T18:00:00Z');
+  let available = true;
+  const archived = [];
+  const reviewMessage = { id: 'review-card', edit: async () => {} };
+  const monitor = createArbitragePaperMonitor({ apiKey: 'test',
+    reviewChannel: { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' }, send: async () => reviewMessage },
+    destinationChannel: { send: async () => ({ id: 'vip-message' }) },
+    archiveChannel: { send: async payload => { archived.push(payload); return { id: 'archive-message' }; } },
+    stateFile: path.join(root, 'state.json'), memberPostingEnabled: true, isApprover: () => true,
+    fetchImpl: async () => new Response(JSON.stringify(available ? [event] : []), { status: 200 }),
+    now: () => current, windows: ['08:00-15:00'] });
+  try {
+    await monitor.start();
+    await monitor.decide({ customId: 'arbitrage-review:approve:game-1:h2h', userId: 'owner',
+      guildId: 'guild', channelId: 'review', message: reviewMessage });
+    current = new Date('2026-09-23T18:29:00Z');
+    available = false;
+    await monitor.scan();
+    assert.equal(archived.length, 0);
+    current = new Date('2026-09-23T18:35:00Z');
+    await monitor.scan();
+    assert.equal(archived.length, 1);
+    assert.match(archived[0].embeds[0].description, /theoretical return/);
+    assert.match(archived[0].embeds[0].description, /not a verified member profit/);
+    current = new Date('2026-09-23T18:41:00Z');
+    await monitor.scan();
+    assert.equal(archived.length, 1);
+  } finally { await monitor.stop(); }
+});
+
 test('stale source quotes do not create arbitrage approval cards', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
   const stale = structuredClone(event);

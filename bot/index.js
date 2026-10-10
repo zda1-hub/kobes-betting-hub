@@ -389,10 +389,18 @@ async function startArbitragePaperTest() {
   if (process.env.ARBITRAGE_PAPER_TEST_ENABLED !== 'true') return;
   if (!process.env.ODDS_API_KEY) throw new Error('ODDS_API_KEY is required for the private arbitrage paper test.');
   const { reviewChannel, destinationChannel } = await ensureArbitrageChannels();
+  const archiveChannelId = String(process.env.ARBITRAGE_PUBLIC_ARCHIVE_CHANNEL_ID || '').trim();
+  if (archiveChannelId) allowedChannelIds.add(archiveChannelId);
+  const archiveChannel = archiveChannelId ? await approvedTextChannel(archiveChannelId) : null;
+  if (archiveChannel && archiveChannel.guildId !== reviewChannel.guildId) throw new Error('Arbitrage archive must be in the same Discord server.');
+  if (archiveChannel && archiveChannel.permissionOverwrites.cache.get(archiveChannel.guildId)?.deny.has(PermissionFlagsBits.ViewChannel)) {
+    throw new Error('Arbitrage archive must be visible to free members.');
+  }
   arbitragePaperMonitor = createArbitragePaperMonitor({
     apiKey: process.env.ODDS_API_KEY,
     reviewChannel,
     destinationChannel,
+    archiveChannel,
     stateFile: path.join(path.dirname(pickLogPath()), 'arbitrage-paper-test.json'),
     bankroll: Number(process.env.ARBITRAGE_EXAMPLE_BANKROLL || 1000),
     minimumEdgePercent: Number(process.env.ARBITRAGE_MIN_EDGE_PERCENT || 2),
