@@ -132,3 +132,13 @@ Release state and limitation: Local preview and source only; neither the public 
 - Verification: Checked local markup, link destination, and responsive card styling.
 - Unresolved limitations: Discord access and whether a free pick is posted there are controlled outside the site.
 - Release state: Local preview; publication pending.
+
+## Discord icon alignment — October 10, 2026
+
+- Requested change: Center the small Discord mark inside its circular background.
+- Affected file: `landing-continuity.css`.
+- Before: A generic free-pick image margin pushed the icon below the circle.
+- After: The icon resets that margin and its image dimensions within the circular link.
+- Verification: Checked the local expanded mobile card after the CSS override.
+- Unresolved limitations: None known.
+- Release state: Local preview; publication pending.
