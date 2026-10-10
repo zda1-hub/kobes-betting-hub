@@ -67,7 +67,7 @@
 .extras-page .results-metrics span {font-size:12px;font-weight:700}
 .extras-page .results-metrics strong {font-size:40px;letter-spacing:-.05em;line-height:1.1}
 .extras-page .results-metrics small {font-size:11px;color:#65685d;line-height:1.6}
-.extras-page .results-list {margin-top:24px;max-height:520px;overflow:auto;overscroll-behavior:contain}
+.extras-page .results-list {margin-top:24px}
 .extras-page .result-row {display:grid;grid-template-columns:100px 40px minmax(0,1fr);gap:16px;align-items:center;padding:18px 4px;border-bottom:1px solid #dfdfd3}
 .extras-page .result-row span {font-size:11px;font-family:'DM Mono',monospace}
 .extras-page .result-row strong {font-size:14px}
