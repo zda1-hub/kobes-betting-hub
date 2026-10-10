@@ -149,3 +149,11 @@ Release state and limitation: Local preview and source only; neither the public 
 - The release was rebased onto current `origin/main` in a separate worktree, retaining the current first-20 promotion, GA4, email, referral, portal, and Discord checkout integrations.
 - The targeted public/build/billing tests passed 87/87; checkout and migration tests passed 74/74. The public bundle contains 85 explicit entries and the production checkout origin. The local mobile screenshot confirmed the Discord mark is centered in its circle.
 - Release state: GitHub PR #212 open; production migration, Worker, and site remain pending at this point.
+
+## Published release verification — October 10, 2026
+
+- GitHub: PR #212 merged to `main` as `cdd1ccdba3cf9f1063a40fb3689c11e025956109`. The release was based on the latest GitHub source and excluded unrelated local files and the preview screenshot.
+- Database: GitHub Actions run `38067966660` applied the exact pinned migration `018_standard_monthly_offer.sql` to the production Supabase project before the Worker release.
+- Checkout Worker: Cloudflare deployment version `b63ceaea-ddd2-427c-9aaf-bd1fcca0d2b4`; production `/health` returned this version and HTTP 200. No live checkout or payment was attempted.
+- Public site: Cloudflare deployment version `a760cfa7-93e6-422c-bd67-65591ae5710e`, built from the 85-entry explicit public whitelist. The custom-domain homepage and membership page returned HTTP 200 and included the new copy, benefits navigation, the current first-20 card, and the free Discord option. The live stylesheet contained the icon-centering fix. The live browser showed the mark centered inside the circle and the Discord link present even when no free pick was posted.
+- Release state: Published to GitHub and Cloudflare. The October $19.99 offer remains active through October 22 MST, with $32.99/month renewal stated on membership. The standard monthly checkout path after expiry was verified by local tests, not a live payment.
