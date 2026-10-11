@@ -45,9 +45,11 @@
     } else if (nodes.textCard) {
       const details = pick.details || {};
       nodes.selection.textContent = details.selection || details.pick || 'Approved free play';
-      nodes.line.textContent = [details.line, details.odds ? `(${details.odds})` : '', details.units ? `${details.units}u` : ''].filter(Boolean).join(' ');
+      nodes.line.textContent = [details.line && !nodes.selection.textContent.includes(details.line) ? details.line : '', details.odds ? `(${details.odds})` : '', details.units ? `${details.units}u` : ''].filter(Boolean).join(' ');
       nodes.event.textContent = [details.sport, details.event].filter(Boolean).join(' • ');
-      nodes.reason.textContent = details.reason || 'Published from the approved Discord pick.';
+      const points = (details.reason || 'Published from the approved Discord pick.').split(/\s*[•\n]\s*/).map(point=>point.trim()).filter(Boolean);
+      nodes.reason.replaceChildren(...points.map(point=>{const li=document.createElement('li');li.textContent=point;return li;}));
+      nodes.line.hidden = !nodes.line.textContent;
       nodes.textCard.hidden = false;
     }
     if (nodes.placeholder) nodes.placeholder.hidden = true;
@@ -92,7 +94,7 @@
       const response = await fetch(`${publisher}/free-pick/gate`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Gate status unavailable');
       const gate = await response.json();
-      if (!gate.enabled) { await loadLegacy(); return; }
+      if (!gate.enabled) { document.querySelector('[data-free-pick-legacy-cta]')?.removeAttribute('hidden'); await loadLegacy(); return; }
       document.querySelector('[data-free-pick-legacy-cta]')?.setAttribute('hidden', '');
       document.querySelector('[data-free-pick-legacy-signup]')?.setAttribute('hidden', '');
       hidePick();
@@ -132,15 +134,18 @@
       });
       const result = await response.json();
       if (!response.ok || !result.ok) throw new Error(result.error || 'Please try again.');
-      track('submit_success');
-      window.KBHAnalytics?.track('generate_lead', `${page === 'home' ? 'home' : 'free_pick'}_free_pick_gate`, 'free_pick');
-      window.KBHMeta?.trackLead(`${page === 'home' ? 'home' : 'free_pick'}_free_pick_gate`);
       nodes.form.hidden = true;
       const revealedPick = Boolean(result.hasPick && renderPick(result.pick));
       if (revealedPick) track('pick_revealed');
       else showNoPick();
       showVip(revealedPick);
-      if (nodes.caption) nodes.caption.textContent = revealedPick ? 'Unlocked. Check your email for a copy.' : 'You’re on the list. There is no free pick today.';
+      if (nodes.caption) nodes.caption.textContent = revealedPick ? (preview && result.preview ? 'Local test: pick revealed. No email was sent.' : 'Unlocked here. We’re sending a copy to your email.') : 'You’re on the list. There is no free pick today.';
+      document.querySelector('[data-free-pick-card]')?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});
+      try {
+      track('submit_success');
+      window.KBHAnalytics?.track('generate_lead', `${page === 'home' ? 'home' : 'free_pick'}_free_pick_gate`, 'free_pick');
+      window.KBHMeta?.trackLead(`${page === 'home' ? 'home' : 'free_pick'}_free_pick_gate`);
+      } catch (error) { console.warn('Optional lead tracking failed.', error); }
     } catch (error) {
       status.textContent = error instanceof TypeError ? 'We couldn’t connect to the email service. Please try again.' : (error.message || 'We couldn’t unlock the pick. Please try again.');
     } finally { button.disabled = false; }

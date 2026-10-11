@@ -81,8 +81,9 @@ test('landing wins retain their qualified historical estimate and proof retains 
   assert.match(home, /KOBE’S HISTORICAL 65% WIN RATE/); assert.match(home, /data-wins-track/);
   assert.match(home, /href="\/?results(?:\.html)?"[^>]*>See winning plays/);
   const proof = await read('proof.html');
-  assert.match(proof, /data-verified-results-track/);
-  assert.match(proof, /archive/i);
+  assert.doesNotMatch(proof, /data-verified-results-track/);
+  assert.match(proof, /Historical member slips/);
+  assert.equal((proof.match(/class="media-card slideshow-card slip-card"/g)||[]).length,4);
   const reviewTags = [...proof.matchAll(/<figure\b[^>]*class="[^"]*review-card[^>]*data-image="([^"]+)"/g)];
   assert.equal(reviewTags.length, 15);
   assert.doesNotMatch(proof, /<button\b[^>]*class="[^"]*review-card/);

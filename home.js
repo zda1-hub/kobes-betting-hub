@@ -66,17 +66,19 @@
     const setManual = value => { manual = value; clearTimeout(resumeTimer); if(value) resumeTimer=setTimeout(()=>{if(dragging || pointerId!==undefined || (rail.contains(document.activeElement) || controls.contains(document.activeElement))){setManual(true);return;}manual=false;position=rail.scrollLeft;lastFrame=0;},4000); };
     const sizeImages = () => {
       const compact = !!rail.closest('.lower-bento');
-      const phone = window.innerWidth <= 600;
+      const phone = window.innerWidth <= (compact ? 600 : 700);
       [...track.children].forEach(card => {
         const image = card.querySelector('img');
         if (!image?.naturalWidth || !image.naturalHeight) return;
         const ratio = image.naturalWidth / image.naturalHeight;
         const slip = card.classList.contains('slip-card');
-        const maxHeight = compact ? (phone ? 210 : 280) : slip ? (phone ? 340 : 420) : (phone ? 260 : 320);
-        const targetWidth = compact ? rail.clientWidth - 24 : (phone ? 320 : 420);
-        const width = Math.max(1, Math.min(rail.clientWidth - 24, targetWidth, maxHeight * ratio));
-        card.style.setProperty('--gallery-width', `${width}px`);
-        card.style.setProperty('--gallery-height', `${width / ratio}px`);
+        if (!slip) {
+          // Equal card heights; widths follow the artwork without shrinking text.
+          const height = compact ? (phone ? 240 : 280) : (phone ? 280 : 320);
+          card.style.setProperty('--gallery-width', `${(height - 32) * ratio + 32}px`);
+          card.style.setProperty('--gallery-height', `${height}px`);
+        }
+
       });
     };
     const measure = () => {
