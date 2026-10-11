@@ -13,3 +13,9 @@ Verification: 104 relevant attribution/consent/dashboard/worker tests passed; fo
 Limits: actual production showed three tracked sessions for Today MST. User-reported 16 Meta clicks still needs exact Ads Manager metric/date range/destination. No evidence yet establishes which clicks failed to become sessions. Meta ad counts are not connected through API. Consent remains required, existing date filters/integrations remain intact.
 
 Release status: local verified; publication receipts to be appended after deployment.
+
+## Publication and live verification
+
+Code commit 01e2a92 pushed to origin/main from latest 089e72e base. Checkout worker production version 4251fc3e-871f-4d09-a7a8-b89863a56269; public-site version 17d7e385-a66e-413f-8c7a-4f37accc9597. Public build used the explicit whitelist; creator contact files/local fixture/evidence were not published. Unrelated workspace changes were left untouched.
+
+Signed-in live dashboard refreshed at 1:25 PM MST: “Tracked site sessions” displays three, traffic explanation and Ads Manager action render, Meta option generates https://kobesbettinghub.com/join?utm_source=meta&utm_medium=paid_social&utm_campaign=membership_launch. Existing untagged/unknown sessions remain other/direct; no fabricated historical Meta traffic. Browser console errors absent. Production screenshot retained locally. No checkout, payout, invitation or email action executed by this repair.
