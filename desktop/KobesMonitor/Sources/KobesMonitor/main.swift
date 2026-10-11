@@ -32,7 +32,7 @@ final class DashboardController: NSObject, WKNavigationDelegate {
         top.state = .active
 
         let icon = NSImageView(image: NSImage(systemSymbolName: "chart.line.uptrend.xyaxis.circle.fill", accessibilityDescription: "Kobe's Monitor")!)
-        icon.contentTintColor = NSColor.systemYellow
+        icon.contentTintColor = NSColor.systemOrange
         icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
 
         let title = NSTextField(labelWithString: "Kobe’s Betting Hub")
@@ -63,7 +63,7 @@ final class DashboardController: NSObject, WKNavigationDelegate {
             top.topAnchor.constraint(equalTo: root.topAnchor), top.heightAnchor.constraint(equalToConstant: 68),
             webView.leadingAnchor.constraint(equalTo: root.leadingAnchor), webView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             webView.topAnchor.constraint(equalTo: top.bottomAnchor), webView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            icon.leadingAnchor.constraint(equalTo: top.leadingAnchor, constant: 18), icon.centerYAnchor.constraint(equalTo: top.centerYAnchor), icon.widthAnchor.constraint(equalToConstant: 32), icon.heightAnchor.constraint(equalToConstant: 32),
+            icon.leadingAnchor.constraint(equalTo: top.leadingAnchor, constant: 88), icon.centerYAnchor.constraint(equalTo: top.centerYAnchor), icon.widthAnchor.constraint(equalToConstant: 32), icon.heightAnchor.constraint(equalToConstant: 32),
             title.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 10), title.topAnchor.constraint(equalTo: top.topAnchor, constant: 13),
             subtitle.leadingAnchor.constraint(equalTo: title.leadingAnchor), subtitle.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 1),
             statusLabel.leadingAnchor.constraint(greaterThanOrEqualTo: subtitle.trailingAnchor, constant: 20), statusLabel.centerYAnchor.constraint(equalTo: top.centerYAnchor),
