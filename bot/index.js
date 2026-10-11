@@ -1,3 +1,4 @@
+const { emailFreePickGraphic } = require('./lib/free-pick-social-email');
 require('dotenv').config();
 
 const fs = require('node:fs/promises');
@@ -668,11 +669,7 @@ const freePickDelivery = createFreePickDelivery({
     const message = await channel.messages.fetch(ref[3]);
     return message.author.id === row.published_by;
   },
-  notify: async (row, site) => queueRecapNotification({
-    id: `free-pick-social-${row.pick_id}`,
-    subject: `Kobe's Betting Hub — Instagram Story ready (${row.operating_date})`,
-    body: `The approved Free Pick social package is ready.\n\nInstagram Story JPEG (1080×1920): ${site.storyUrl}\nApproved Discord post: ${row.post_reference}\n\nThe Instagram publisher checks approved current-day Free Picks automatically when the official account is connected. Check the delivery status before treating the Story as posted; avoid posting a duplicate manually.`
-  })
+  notify: async (row, _site, packet) => emailFreePickGraphic(row, packet)
 });
 
 function startFreePickDelivery() {

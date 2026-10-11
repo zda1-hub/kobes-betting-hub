@@ -457,6 +457,7 @@ test('isolated staging health does not require an X binding or OAuth table', asy
     status: 'ready',
     xConnected: false,
     freePickReady: true,
+    socialEmailReady: false,
   });
 });
 
@@ -577,4 +578,31 @@ test('free-pick email numbers approved points and avoids repeating the line', ()
   assert.ok(lines.some(line => line.includes('Wager responsibly')));
   assert.equal(lines.at(-1), 'Unsubscribe: https://example.com/unsubscribe');
   assert.ok(workerTest.freePickEmailLines({details:{selection:'Utah',line:'-15.5',reason:'1. First point\n2. Second point'}}, 'link').includes('2. Second point'));
+});
+
+test('Kobe social email sends inline approved JPEG once and preserves existing public pick', async t=>{
+ const date=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Phoenix',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const pick={pickId:'approved-social-1',publishedDate:date,caption:'approved',objectKey:null,storyObjectKey:'existing.jpg',details:{selection:'DeVaughn Vele Over 3.5 receptions',odds:'-125',reason:'Approved fact'}};
+ const env={DB:memoryD1(),FREE_PICK_KV:memoryKv(),FREE_PICK_SITE_PUBLISH_SECRET:'fixture-secret',RESEND_API_KEY:'fixture-key',RECAP_NOTIFICATION_RECIPIENT:'kobedirwin@gmail.com'};
+ t.after(()=>env.DB.close());await env.FREE_PICK_KV.put('free-picks/current.json',JSON.stringify(pick));
+ let sends=0;const old=globalThis.fetch;t.after(()=>globalThis.fetch=old);
+ globalThis.fetch=async(url,init)=>{assert.equal(url,'https://api.resend.com/emails');sends++;
+  const body=JSON.parse(init.body);assert.deepEqual(body.to,['kobedirwin@gmail.com']);assert.match(body.html,/cid:kbh-free-pick/);assert.equal(body.attachments[0].content_id,'kbh-free-pick');assert.match(body.text,/DeVaughn Vele/);assert.match(init.headers['Idempotency-Key'],/approved-social-1/);
+  return new Response(JSON.stringify({id:'provider-receipt'}),{status:200});};
+ const make=(id=pick.pickId,odds='-125')=>{const form=new FormData();form.set('pickId',id);form.set('selection',pick.details.selection);form.set('odds',odds);form.set('discordUrl','https://discord.com/channels/1/2/3');form.set('card',new Blob([Uint8Array.from([255,216,255,1])],{type:'image/jpeg'}),'card.jpg');return new Request('https://publisher.test/api/free-pick/social-email',{method:'POST',headers:{authorization:'Bearer fixture-secret'},body:form});};
+ assert.equal((await worker.fetch(make('wrong-id'),env)).status,409);assert.equal((await worker.fetch(make(pick.pickId,'-155'),env)).status,409);assert.equal(sends,0);
+ const first=await worker.fetch(make(),env);assert.equal(first.status,201);assert.equal((await first.json()).status,'sent');
+ assert.equal((await worker.fetch(make(),env)).status,200);assert.equal(sends,1);
+ assert.deepEqual(JSON.parse(await env.FREE_PICK_KV.get('free-picks/current.json')),pick);
+});
+test('social email uncertainty reuses same provider key and stops before its 24-hour expiry',async t=>{
+ const {dispatchSocialEmails,ensureSocialEmailTable}=await import('./free-pick-social-email.js');
+ const env={DB:memoryD1(),RESEND_API_KEY:'fixture-key',RECAP_NOTIFICATION_RECIPIENT:'kobedirwin@gmail.com'};t.after(()=>env.DB.close());await ensureSocialEmailTable(env);
+ const pick={publishedDate:'2026-10-11',details:{selection:'Approved play',odds:'+350',reason:'Approved fact'}};
+ await env.DB.prepare('INSERT INTO free_pick_social_emails (pick_id,object_key,pick_json,discord_url,created_at) VALUES (?,?,?,?,?)').bind('retry-1','image',JSON.stringify(pick),'https://discord.com/channels/1/2/3',new Date().toISOString()).run();
+ let calls=0;const keys=[],old=globalThis.fetch;t.after(()=>globalThis.fetch=old);globalThis.fetch=async(_url,init)=>{calls++;keys.push(init.headers['Idempotency-Key']);throw Error('response lost');};
+ const helpers={getFreePickObject:async()=>({body:new Uint8Array([255,216,255]).buffer}),base64FromArrayBuffer:()=>'/9j/'};
+ await dispatchSocialEmails(env,helpers);await dispatchSocialEmails(env,helpers);assert.equal(calls,2);assert.equal(keys[0],keys[1]);
+ await env.DB.prepare('UPDATE free_pick_social_emails SET first_attempt_at=?').bind(new Date(Date.now()-24*3600000).toISOString()).run();
+ await dispatchSocialEmails(env,helpers);assert.equal(calls,2);assert.equal((await env.DB.prepare('SELECT status FROM free_pick_social_emails').first()).status,'held');
 });

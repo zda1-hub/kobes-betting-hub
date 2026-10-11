@@ -59,3 +59,11 @@ test('receipt already queued is left to Publisher cron without a new POST', asyn
   const { delivery, calls } = await setup(t, { readX: async () => ({ status: 'approved' }) });
   await delivery.run(); assert.equal(calls.filter(c => c[0] === 'x').length, 0);
 });
+test('emails the approved packet without requiring a Story asset and checkpoints once',async t=>{
+ let emails=0;const {delivery,options}=await setup(t,{notify:async(r,site,p)=>{assert.equal(p.pick_id,row.pick_id);emails++;}});
+ await delivery.run();await createFreePickDelivery(options).run();assert.equal(emails,1);
+});
+test('failed graphic email retries without reposting website or X',async t=>{
+ let emails=0;const {delivery,calls}=await setup(t,{notify:async()=>{if(++emails===1)throw Error('offline');}});
+ await delivery.run();await delivery.run();assert.equal(emails,2);assert.equal(calls.length,2);
+});

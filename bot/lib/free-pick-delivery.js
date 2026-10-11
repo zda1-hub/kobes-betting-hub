@@ -89,8 +89,8 @@ function createFreePickDelivery({ root, readRows, loadPacket, verifyPost, paused
           }
           await saveDelivery(root, state);
         }
-        if (!state.notified && state.site?.storyUrl) {
-          await notify(row, state.site);
+        if (!state.notified && ['published', 'already_published'].includes(state.site?.status)) {
+          await notify(row, state.site, packet);
           state.notified = true;
         }
         state.complete = ['published', 'already_published', 'superseded'].includes(state.site?.status)

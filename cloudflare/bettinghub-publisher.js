@@ -1,3 +1,4 @@
+import { enqueueSocialEmail, dispatchSocialEmails } from './free-pick-social-email.js';
 import resultMetadata from '../result-metadata.js';
 const CALLBACK_PATH = "/auth/x/callback";
 const START_PATH = "/auth/x/start";
@@ -135,7 +136,7 @@ export default {
   },
 
   scheduled(controller, env, ctx) {
-    ctx.waitUntil(Promise.all([dispatchDuePosts(controller.scheduledTime, env), deliverPendingLeadEmails(env), deliverPendingFreePickEmails(env)]));
+    ctx.waitUntil(Promise.all([dispatchDuePosts(controller.scheduledTime, env), deliverPendingLeadEmails(env), deliverPendingFreePickEmails(env), dispatchSocialEmails(env, socialEmailHelpers())]));
   },
 };
 
@@ -147,7 +148,7 @@ async function handleRequest(request, env, ctx) {
   }
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request) });
   if (url.pathname === "/health") {
-    return json({ service: "bettinghub-publisher", status: "ready", xConnected: await hasXConnection(env), freePickReady: hasFreePickStore(env) });
+    return json({ service: "bettinghub-publisher", status: "ready", xConnected: await hasXConnection(env), freePickReady: hasFreePickStore(env), socialEmailReady: Boolean(env.RESEND_API_KEY && env.RECAP_NOTIFICATION_RECIPIENT === 'kobedirwin@gmail.com') });
   }
   if (url.pathname === "/api/email/subscribe" && request.method === "POST") return subscribeEmail(request, env, ctx);
   if (url.pathname === "/api/admin/email-stats" && request.method === "GET") return emailStats(request, env);
@@ -182,6 +183,7 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname === "/api/vip-preview/current" && request.method === "PUT") return putVipPreview(request, env);
   if (url.pathname === "/media/free-pick/current" && request.method === "GET") return getCurrentFreePickImage(request, env);
   if (url.pathname.startsWith("/media/free-pick/story/") && request.method === "GET") return getFreePickStory(request, env);
+  if (url.pathname === "/api/free-pick/social-email" && request.method === "POST") return enqueueSocialEmail(request, env, socialEmailHelpers());
   if (url.pathname === "/api/free-pick/publish" && request.method === "POST") return publishFreePick(request, env, ctx);
   return new Response("Not found", { status: 404 });
 }
@@ -1137,6 +1139,8 @@ async function readFreePick(env) {
 async function writeFreePick(pick, env) {
   await putFreePickObject(env, FREE_PICK_STATE_KEY, JSON.stringify(pick), "application/json; charset=UTF-8", "no-store");
 }
+
+function socialEmailHelpers() { return { hasBearer, readFreePick, putFreePickObject, getFreePickObject, phoenixDate, json, base64FromArrayBuffer }; }
 
 function hasFreePickStore(env) {
   return Boolean(env.FREE_PICK_MEDIA || env.FREE_PICK_KV);
