@@ -1565,3 +1565,24 @@ test('legacy VIP referrals keep the same eligibility through login, session and 
     assert.equal(memberReads,before,'blocked paid entitlement must not fall back to a stale VIP role');
   } finally {globalThis.fetch=originalFetch;}
 });
+
+
+test('Meta campaign source is normalized by the server and recovered from preserved old tags', () => {
+  for (const tag of ['meta', 'meta_ads', 'Meta Ads', 'meta-paid']) {
+    assert.equal(workerTest.cleanAttribution({first_source:tag}).first_source, 'meta');
+    assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'other',utm_source:tag}}), 'meta');
+  }
+  assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'direct',utm_source:'meta'}}),'direct');
+  assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'x',utm_source:'meta'}}),'x');
+  assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'other',utm_source:'unrecognized'}}),'other');
+  assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'other',fbclid:'not-enough-to-identify-a-campaign'}}),'other');
+  assert.equal(workerTest.attributionSourceForSession(null),'unattributed');
+});
+
+
+test('CTA reporting uses the same recoverable Meta source as the session report', () => {
+  const result=workerTest.interactionSummary([{event_name:'page_view',session_id:'s1',path:'/join',properties:{kind:'interaction',action:'cta_click',target_id:'join_monthly',location:'membership'}}],[{id:'s1',first_touch:{first_source:'other',utm_source:'Meta Ads',first_campaign:'oct_8_2026'}}]);
+  assert.equal(result.ctas[0].source,'meta');
+  assert.equal(result.ctas[0].clicks,1);
+  assert.equal(result.ctas[0].uniqueVisitors,1);
+});

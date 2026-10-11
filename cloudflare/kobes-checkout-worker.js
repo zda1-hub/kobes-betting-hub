@@ -648,7 +648,8 @@ function cleanAttribution(value = {}) {
   const text = (input, maximum = 160) => String(input || '').replace(/[\u0000-\u001f]/g, '').slice(0, maximum);
   const source = input => {
     const raw = text(input).trim().toLowerCase();
-    if (['discord','x','kobe_x','instagram','tiktok','youtube','facebook','google','email','referral','affiliate','direct','other'].includes(raw)) return raw;
+    if (['discord','x','kobe_x','instagram','tiktok','youtube','facebook','meta','google','email','referral','affiliate','direct','other'].includes(raw)) return raw;
+    if (/^meta(?:[ _-]?(?:ads?|paid))?$/.test(raw)) return 'meta';
     if (/discord/.test(raw)) return 'discord';
     if (/^(x|twitter)$/.test(raw) || /(^|\.)x\.com$|twitter\.com|t\.co/.test(raw)) return 'x';
     if (raw === 'ig' || /instagram|(^|\.)ig\.me$/.test(raw)) return 'instagram';
@@ -676,6 +677,19 @@ function cleanAttribution(value = {}) {
     device: text(value.device, 24), browser: text(value.browser, 40),
     landing_path: text(value.landing_path, 300),
   };
+}
+
+function attributionSourceForSession(session) {
+  if (!session) return 'unattributed';
+  const touch = session.first_touch || {};
+  const original = cleanAttribution({ first_source: touch.first_source || touch.utm_source || session.first_referrer_host || 'direct' }).first_source;
+  // Recover an explicitly tagged source misclassified by an older normalizer.
+  // Keep genuine direct/known first touches and never invent missing visits.
+  if (original === 'other' && touch.utm_source) {
+    const tagged = cleanAttribution({ first_source: touch.utm_source }).first_source;
+    if (!['other', 'direct'].includes(tagged)) return tagged;
+  }
+  return original;
 }
 
 function requestAttribution(request, supplied = {}) {
@@ -3044,7 +3058,7 @@ function interactionSummary(events = [], sessions = []) {
   for (const event of interactions) {
     const p = event.properties;
     const touch = sessionById.get(event.session_id)?.first_touch || {};
-    const source = String(touch.first_source || 'direct').slice(0, 40);
+    const source = attributionSourceForSession(sessionById.get(event.session_id) || { first_touch: touch });
     const campaign = String(touch.first_campaign || 'uncategorized').slice(0, 120);
     if (p.action === 'cta_click') {
       const key = `${p.target_id}:${p.location}:${event.path}:${source}:${campaign}`;
@@ -3252,7 +3266,7 @@ async function adminAnalytics(request, env, origin) {
   const sessionById = new Map((sessions || []).map(item => [item.id, item]));
   const associationBySubscription = new Map((associations || []).filter(item => item.stripe_subscription_id).map(item => [item.stripe_subscription_id, item]));
   const normalizedSource = value => cleanAttribution({ first_source: value }).first_source;
-  const firstSourceForSession = session => session ? normalizedSource(session.first_touch?.first_source || session.first_touch?.utm_source || session.first_referrer_host || 'direct') : 'unattributed';
+  const firstSourceForSession = attributionSourceForSession;
   const firstCampaignForSession = session => session ? String(session.first_touch?.first_campaign || session.first_touch?.utm_campaign || 'uncategorized').toLowerCase() : 'unattributed';
   const sessionForSubscription = subscriptionId => sessionById.get(associationBySubscription.get(subscriptionId)?.analytics_session_id);
   const mrrForSubscription = subscription => subscription.offer === 'annual' ? Math.round(19499 / 12) : subscription.offer === 'six_month' ? Math.round(13499 / 6) : 3299;
@@ -3652,6 +3666,7 @@ export const __test = {
   phoenixDayStart,
   recordSubscriptionCancellation,
   cleanAttribution,
+  attributionSourceForSession,
   supabasePages,
   memberWelcomeMessage,
   queueMemberWelcome,

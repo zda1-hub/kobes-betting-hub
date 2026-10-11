@@ -6,12 +6,13 @@
   if (['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) || location.protocol === 'file:') return;
   const workerOrigin = window.__KBH_MEMBERSHIP_CONFIG__?.workerOrigin || 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev';
   const uuid = /^[0-9a-f-]{36}$/i;
-  const allowedSources = new Set(['discord', 'x', 'kobe_x', 'instagram', 'tiktok', 'youtube', 'facebook', 'google', 'email', 'referral', 'affiliate', 'direct', 'other']);
+  const allowedSources = new Set(['discord', 'x', 'kobe_x', 'instagram', 'tiktok', 'youtube', 'facebook', 'meta', 'google', 'email', 'referral', 'affiliate', 'direct', 'other']);
   const clean = (value, limit = 160) => String(value || '').trim().replace(/[\u0000-\u001f]/g, '').slice(0, limit);
   const normalizeSource = (value) => {
     const raw = clean(value).toLowerCase();
     if (!raw) return '';
     if (allowedSources.has(raw)) return raw;
+    if (/^meta(?:[ _-]?(?:ads?|paid))?$/.test(raw)) return 'meta';
     if (/discord/.test(raw)) return 'discord';
     if (/^(x|twitter)$/.test(raw) || /(^|\.)x\.com$|twitter\.com|t\.co/.test(raw)) return 'x';
     if (raw === 'ig' || /instagram|(^|\.)ig\.me$/.test(raw)) return 'instagram';

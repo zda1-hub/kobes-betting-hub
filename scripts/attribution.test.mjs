@@ -97,3 +97,22 @@ test('a returning browser starts a new visit after 30 minutes', () => {
   assert.equal(second.attribution.first_source, 'direct');
   assert.equal(second.attribution.last_source, 'instagram');
 });
+
+
+test('Meta ad source aliases survive join and checkout return without changing the tagged medium', () => {
+  for (const tag of ['meta', 'meta_ads', 'Meta Ads', 'meta-paid']) {
+    const first = visit({ url: 'https://kobesbettinghub.com/join?utm_source='+encodeURIComponent(tag)+'&utm_medium=paid_social&utm_campaign=oct_8_2026' });
+    const returned = visit({ url: 'https://kobesbettinghub.com/welcome', referrer: 'https://checkout.stripe.com/', storage: first.storage });
+    assert.equal(first.attribution.first_source, 'meta');
+    assert.equal(returned.attribution.first_source, 'meta');
+    assert.equal(returned.attribution.last_source, 'meta');
+    assert.equal(returned.attribution.first_medium, 'paid_social');
+    assert.equal(returned.attribution.first_campaign, 'oct_8_2026');
+  }
+});
+
+test('an unknown source or generic paid-social label is not assumed to be Meta', () => {
+  for (const tag of ['somewhere_else', 'paid_social']) {
+    assert.equal(visit({url:'https://kobesbettinghub.com/?utm_source='+tag}).attribution.first_source, 'other');
+  }
+});
