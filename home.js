@@ -12,11 +12,11 @@
     dialogImage.removeAttribute('src');
     opener?.focus({ preventScroll: true });
   };
-  const openImage = card => {
+  const openImage = (card, trigger = card) => {
     if (!dialog) return;
-    opener = card;
+    opener = trigger;
     dialogImage.src = card.dataset.image;
-    dialogImage.alt = card.querySelector('img').alt;
+    dialogImage.alt = card.querySelector('img')?.alt || card.dataset.title;
     document.querySelector('[data-dialog-title]').textContent = card.dataset.title;
     document.querySelector('[data-dialog-caption]').textContent = card.dataset.caption;
     document.querySelector('[data-dialog-kicker]').textContent = 'Kobe’s Betting Hub · Community proof';
@@ -38,8 +38,9 @@
     const track = rail.querySelector('.rail-track');
     const seen = new Set();
     [...track.children].forEach(card => {
-      if (seen.has(card.dataset.image)) card.remove();
-      else seen.add(card.dataset.image);
+      const key = card.dataset.reviewId || card.dataset.image;
+      if (seen.has(key)) card.remove();
+      else seen.add(key);
     });
     const originals = [...track.children];
     if (!originals.length) return;
@@ -133,7 +134,7 @@
     });
     rail.addEventListener('pointerdown', event => {
       setManual(true);
-      if (event.pointerType === 'touch' || event.button !== 0) return;
+      if (event.target.closest('button,a,input,select,textarea') || event.pointerType === 'touch' || event.button !== 0) return;
       pointerId = event.pointerId; startX = event.clientX; startScroll = rail.scrollLeft; dragging = false;
     });
     rail.addEventListener('pointermove', event => {
@@ -156,9 +157,9 @@
     rail.addEventListener('scroll', () => { if (!dragging) normalize(); }, { passive: true });
     rail.addEventListener('click', event => {
       const card = event.target.closest('.media-card');
-      if (card?.classList.contains('review-card')) return;
+      if (card?.classList.contains('review-card') && !event.target.closest('[data-review-source]')) return;
       if (!card || suppressClick) { event.preventDefault(); return; }
-      setManual(true); openImage(card);
+      setManual(true); openImage(card, event.target.closest('[data-review-source]') || card);
     });
     track.querySelectorAll('img').forEach(image => image.addEventListener('load', measure));
     new ResizeObserver(measure).observe(rail);

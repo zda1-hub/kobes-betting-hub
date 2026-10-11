@@ -211,3 +211,20 @@ html[data-pick-transition]::view-transition-old(free-board),html[data-pick-trans
 .hub-interior .free-pick-vip p{color:#626262;line-height:1.5}
 .hub-interior .free-pick-vip .button{justify-self:center}
 @media(max-width:700px){.hub-interior .free-pick-card{scroll-margin-top:80px}.hub-interior .free-pick-vip strong{font-size:16px!important}}
+
+.hub-interior .proof-grid #reviews [data-rail]{container-type:inline-size}
+/* Real member words in one shared, readable review format. */
+.hub-interior .proof-grid [data-rail] .quote-card:nth-child(n){display:flex;flex-direction:column;flex:none;width:var(--quote-width,320px);max-width:calc(100vw - 104px);max-width:calc(100cqw - 24px);height:320px;padding:24px;gap:12px;margin:0;background:#fff;border-radius:20px;box-sizing:border-box}
+.hub-interior .proof-grid .quote-card.quote-short{--quote-width:260px}
+.hub-interior .proof-grid .quote-card.quote-medium{--quote-width:340px}
+.hub-interior .proof-grid .quote-card.quote-long{--quote-width:420px}
+.hub-interior .proof-grid .quote-mark{font-size:44px!important;line-height:.8;font-weight:600;color:#ff6b00;height:28px;flex:none;text-align:left}
+.hub-interior .proof-grid .quote-card blockquote{display:flex;align-items:center;flex:1;min-height:0;margin:0;text-align:left}
+.hub-interior .proof-grid .quote-card blockquote p{margin:0;font-size:18px!important;line-height:1.5;font-weight:400;color:#111;overflow-wrap:anywhere}
+.hub-interior .proof-grid .quote-card figcaption{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;margin:0}
+.hub-interior .proof-grid .quote-card cite{font-size:14px!important;line-height:1.4;font-weight:600;font-style:normal;text-align:left;min-width:0;overflow-wrap:anywhere;color:#626262}
+.hub-interior .proof-grid .review-source{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:8px 12px;flex:none;border:0;border-radius:12px;background:#f1f1f1;color:#111;font:inherit;font-size:12px!important;line-height:1.4;cursor:pointer;touch-action:manipulation}
+.hub-interior .proof-grid .review-source:hover{background:#e6e6e6}
+.hub-interior .proof-grid .review-source:focus-visible{outline:2px solid #2458a6;outline-offset:3px}
+.hub-interior .proof-grid .review-source>span{font-size:16px!important;text-decoration:none}
+@media(max-width:700px){.hub-interior .proof-grid [data-rail] .quote-card:nth-child(n){height:360px;padding:20px;gap:12px}.hub-interior .proof-grid .quote-card blockquote p{font-size:16px!important;line-height:1.5}.hub-interior .proof-grid .quote-card cite{font-size:12px!important}.hub-interior .proof-grid .review-source{padding:8px 10px}}

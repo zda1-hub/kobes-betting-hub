@@ -85,10 +85,13 @@ test('landing wins retain their qualified historical estimate and proof retains 
   assert.match(proof, /Historical member slips/);
   assert.equal((proof.match(/class="media-card slideshow-card slip-card"/g)||[]).length,4);
   const reviewTags = [...proof.matchAll(/<figure\b[^>]*class="[^"]*review-card[^>]*data-image="([^"]+)"/g)];
-  assert.equal(reviewTags.length, 15);
+  assert.equal(reviewTags.length, 14);
   assert.doesNotMatch(proof, /<button\b[^>]*class="[^"]*review-card/);
   const hashes = await Promise.all(reviewTags.map(async ([, file]) => createHash('sha256').update(await readFile(new URL(file, built))).digest('hex')));
-  assert.equal(new Set(hashes).size, hashes.length);
+  assert.equal(new Set(hashes).size, 13);
+  const records=JSON.parse(await readFile(new URL('docs/reviews/2026-10-10-quote-transcriptions.json',repository),'utf8'));
+  assert.equal(new Set(records.map(record=>record.quote)).size,14);
+  assert.equal(new Set(records.map(record=>record.id)).size,14);
 });
 
 test('public highlights render verified wins and exclude all other outcomes', async () => {
