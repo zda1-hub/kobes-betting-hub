@@ -23,3 +23,7 @@ The user asked what happens after a visitor subscribes to free picks and how tha
 - A separate follow-up campaign must first join subscriber records to current trial/paid-member status, suppress unsubscribed or converted recipients, and preserve idempotent delivery. It is a proposal, not an active sequence.
 - Email attribution measures consented site sessions and checkout/payment events; it does not establish that a person read an email. Existing consent behavior is unchanged.
 - Status: local tested change; publication receipt will be appended after release.
+
+## Publication receipt
+
+Published October 11 from the latest GitHub main base `0c3fed8`, change `f15e1e2`. Publisher Cloudflare version: `044a9244-523a-44ea-95e8-320c80f789f0`. Deployment preserved existing variables (`--keep-vars`) and the five-minute scheduled trigger. No additional subscriber email or historical resend was requested by this deployment. The next naturally queued welcome/pick email will carry the new invitation; its provider receipt has not yet been observed.
