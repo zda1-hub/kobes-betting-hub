@@ -100,7 +100,7 @@
 })();
 
 // Animate disclosure height in both directions without a closing snap.
-document.querySelectorAll('details:not([data-pick-disclosure])').forEach(details => {
+document.querySelectorAll('details:not([data-pick-disclosure]):not([data-native-disclosure])').forEach(details => {
   const summary = details.querySelector(':scope > summary');
   if (!summary) return;
   let animation, expanded = details.open;

@@ -12,6 +12,8 @@ const membershipConfigPattern = /window\.__KBH_MEMBERSHIP_CONFIG__ = Object\.fre
 const guideFiles = [
   'guides/index.html',
   'guides/guide.css',
+  'guides/learning.css',
+  'guides/learning.js',
   'guides/how-to-choose-a-sports-betting-discord.html',
   'guides/sports-betting-arbitrage-explained.html',
   'guides/how-to-read-betting-odds-and-line-movement.html',

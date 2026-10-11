@@ -1,0 +1,88 @@
+:root{--learning-motion:350ms;--learning-ease:cubic-bezier(.22,1,.36,1)}
+.subsite-layout.learning-page .guide-cards{align-items:stretch}
+.learning-page .guide-cards>.card:has(.learning-guide[open]),.learning-page .guide-cards>.card:last-child{grid-column:1/-1}
+.learning-page .guide-cards .info-card{transition:transform var(--learning-motion) var(--learning-ease);min-width:0}
+.learning-guide{min-width:0;interpolate-size:allow-keywords}
+.learning-guide>summary{display:flex;flex-direction:column;gap:16px;cursor:pointer;list-style:none;text-align:center}
+.learning-guide>summary::-webkit-details-marker{display:none}
+.learning-page .learning-guide>summary h2,.learning-page .learning-guide>summary p{margin:0}
+.learning-guide>summary:focus-visible{outline:3px solid currentColor;outline-offset:8px;border-radius:8px}
+.learning-read{display:inline-flex;align-items:center;justify-content:center;gap:10px;align-self:center;padding:12px 22px;min-height:44px;max-width:100%;border-radius:14px;background:#111;color:#fff;font-weight:600;box-shadow:0 4px 10px #0002}
+.hub-black .learning-read{background:#ff7900;color:#111}
+.learning-read svg{flex:0 0 20px;width:20px;height:20px;transition:transform var(--learning-motion) var(--learning-ease)}
+.learning-guide[open] .learning-read svg{transform:rotate(180deg)}
+.learning-guide::details-content{block-size:0;overflow:clip;transition:block-size var(--learning-motion) var(--learning-ease),content-visibility var(--learning-motion) allow-discrete}
+.learning-guide[open]::details-content{block-size:auto}
+.learning-reader{margin-top:24px;padding:20px;border-radius:14px;background:#fff;color:#171717;text-align:left;overflow-wrap:anywhere;min-width:0}
+.learning-reader .guide-chapters{display:flex;flex-direction:column;gap:14px}
+.learning-reader .guide-chapter{width:100%;background:#f3f3f3;box-shadow:none!important;border-radius:10px;padding:16px!important;interpolate-size:allow-keywords}
+.learning-reader .guide-chapter::details-content{block-size:0;overflow:clip;transition:block-size var(--learning-motion) var(--learning-ease),content-visibility var(--learning-motion) allow-discrete}
+.learning-reader .guide-chapter[open]::details-content{block-size:auto}
+.learning-reader .article{margin:0;max-width:none}
+.learning-page .learning-reader h2{font-size:20px;margin:24px 0 12px;line-height:1.3}
+.learning-page .learning-reader h3{font-size:18px;margin:20px 0 10px;line-height:1.3}
+.learning-page .learning-reader p,.learning-page .learning-reader li{font-size:15px;line-height:1.65}
+.learning-page .learning-reader :is(p,li,h2,h3,summary,.chapter-content,.callout){color:#171717!important}
+.learning-page .learning-reader .cta :is(p,h2,a){color:#fff!important}
+.learning-reader ul,.learning-reader ol{padding-left:20px}
+.learning-reader .cta{margin-top:20px;padding:20px!important;background:#111;color:#fff;text-align:center}
+.learning-reader .cta a{margin:8px auto!important;background:#2459a8!important;color:#fff!important}
+.learning-page .learning-reader a{position:static;text-decoration:underline}
+.learning-reader a::before{content:none!important}
+.learning-guide-footer{text-align:center;padding-top:18px}
+.learning-page .learning-full{display:inline-block;position:static;color:inherit;text-decoration:none;padding:10px;min-height:44px}
+.learning-full::before{content:none!important}
+.learning-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:12px;width:100%}
+.learning-page .learning-actions>a{display:inline-flex;align-items:center;justify-content:center;max-width:100%;min-height:44px;padding:12px 24px!important;margin:0!important;background:#111!important;color:#fff!important;border-radius:14px;text-decoration:none;font-weight:600;box-shadow:0 4px 10px #0002;transition:transform var(--learning-motion) var(--learning-ease),background var(--learning-motion)!important}
+@media(hover:hover){.learning-actions>a:hover,.learning-read:hover{background:#292929!important;transform:translateY(-2px)}}
+@media(max-width:700px){.learning-reader{padding:16px}.learning-page .learning-guide>summary h2{font-size:20px}.learning-page .learning-guide>summary p{font-size:14px}}
+@media(prefers-reduced-motion:reduce){.learning-page *,.learning-guide::details-content,.learning-reader .guide-chapter::details-content{transition:none!important;animation:none!important}}
+
+:root {
+  --stagger-dur: 500ms;
+  --stagger-distance: 12px;
+  --stagger-stagger: 40ms;
+  --stagger-blur: 3px;
+  --stagger-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Lines start translated down + blurred + invisible; .is-shown
+   on the parent flips them to their resting state. The second
+   line's transition-delay holds it back by --stagger-stagger
+   so the eye lands on the headline first. */
+.t-stagger-line {
+  display: block;
+  opacity: 0;
+  transform: translateY(var(--stagger-distance));
+  filter: blur(var(--stagger-blur));
+  transition:
+    opacity   var(--stagger-dur) var(--stagger-ease),
+    transform var(--stagger-dur) var(--stagger-ease),
+    filter    var(--stagger-dur) var(--stagger-ease);
+  will-change: transform, opacity, filter;
+}
+.t-stagger-line--2 { transition-delay: var(--stagger-stagger); }
+
+.t-stagger.is-shown .t-stagger-line {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+/* Exit decouples from the stagger: same fade for every line,
+   no Y return, no blur — so the disappearance reads as a
+   single quiet fade instead of a reverse reveal. */
+.t-stagger.is-hiding .t-stagger-line {
+  opacity: 0;
+  transform: translateY(0);
+  filter: blur(0);
+  transition:
+    opacity 200ms ease,
+    transform 0s linear,
+    filter 0s linear;
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-stagger-line { transition: none !important; }
+}
+.learning-page{--stagger-blur:0px}
+.learning-page .t-stagger.is-shown .t-stagger-line{will-change:auto}
