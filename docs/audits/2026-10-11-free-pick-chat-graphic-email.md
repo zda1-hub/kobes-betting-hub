@@ -18,3 +18,8 @@ Gmail confirmed the explicitly requested email was sent to Kobe with the inline 
 91 targeted tests passed, including actual Sharp JPEG dimensions, named-player/approved-evidence requirements, absence of accidental leg removal, email failure recovery, recipient restriction, exact-term rejection, duplicate suppression, retention of existing website/Story state, and safe retry limits. Bot syntax passed. Automated provider delivery is verified with mocked transport; today's actual email used Gmail. Public backend deployment is pending; append actual deployment evidence below. No frontend design changes.
 
 Official provider references: https://resend.com/changelog/embed-images-using-cid and https://resend.com/docs/dashboard/emails/idempotency-keys .
+
+## Published follow-up — October 11, 11:40 AM MST
+The backend change was published from the clean trial/odds worktree, code commit `f56316459cc8af30bbf72f29f79f7813914112f8`. Cloudflare publisher version: `da064d61-d35c-4ec1-baeb-d1e17546b74a`. Render deployment `dep-db5tdc15efls73b18fog` reached live at 11:34:57 AM MST; startup logs at 11:35 AM confirm Kobe Bot logged in and current-day approved Free Pick recovery is active. No error matched the startup log check.
+
+Public health reports ready with socialEmailReady true; an unauthenticated request to the new email route returned 401. Existing current-pick, corrected X reference and Instagram Story state remain intact. The real example email has a Gmail SENT receipt as recorded above. Future automated Resend delivery awaits the next actual approved pick; it has not been falsely reported as an additional real delivery today. No creator email was sent.
