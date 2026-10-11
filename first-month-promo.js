@@ -2,7 +2,7 @@
 const firstMonthPromoStart = Date.parse('2026-09-22T07:00:00Z');
 const firstMonthPromoEnd = Date.parse('2026-10-23T07:00:00Z');
 const firstMonthPromoParams = new URLSearchParams(window.location.search);
-const firstMonthPromoActive = Date.now() >= firstMonthPromoStart && Date.now() < firstMonthPromoEnd;
+const firstMonthPromoActive = false; // Retired on October 10; historical purchases keep their terms.
 const isReferralCheckout = /^(KBH|KBC)-[A-Z0-9]{10}$/i.test(firstMonthPromoParams.get('ref') || '');
 
 if (firstMonthPromoActive && !isReferralCheckout && !firstMonthPromoParams.has('checkout')) {

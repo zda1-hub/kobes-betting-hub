@@ -54,7 +54,6 @@ const {
 const { fillMissingEvidence } = require('./lib/espn-pick-research');
 const { createFreePickDelivery } = require('./lib/free-pick-delivery');
 const { manualFreePickRecord } = require('./lib/manual-free-pick');
-const { nearEvenAmericanOdds, assertWriteupOdds } = require('./lib/writeup-odds');
 const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
 const { createTelegramReader } = require('./lib/telegram-reader');
 const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/daily-writeup-board');
@@ -2209,7 +2208,6 @@ async function handleSourceReviewButton(interaction) {
     if (!termsOnly) {
       assertCompleteWriteup(publicationPacket);
       assertApprovalCopyMatches(publicationPacket);
-      if (action === 'paid') assertWriteupOdds(publicationPacket);
     }
     trace('event verification started');
     if (configuredTermsOnly && !exclusiveSourceIsCurrent(publicationPacket)) {
@@ -2387,7 +2385,7 @@ function optionsFrom(interaction) {
     league: interaction.options.getString('league') || '',
     unitsRisked: interaction.options.getNumber('units_risked', true),
     publishedLine: interaction.options.getString('published_line', true),
-    publishedOdds: interaction.options.getInteger('published_odds', true),
+    publishedOdds: interaction.options.getInteger('published_odds') ?? '',
     evidence: interaction.options.getString('evidence', true),
     confidence: interaction.options.getNumber('confidence', true),
     imageUrl: interaction.options.getString('image_url') || undefined,
@@ -3361,9 +3359,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const channel = await destinationFor(interaction, defaultChannelId, pickOptions.sport.toLowerCase());
-    if (/writeups?/i.test(channel.name || '') && !nearEvenAmericanOdds(pickOptions.publishedOdds)) {
-      throw new Error('VIP writeups require actual published odds between -200 and +200. Choose a different play; do not alter its odds.');
-    }
     if (channel.id === freePickChannelId) await enforceDailyFreePickLimit();
     await postAndLogOfficialPick({
       channel,

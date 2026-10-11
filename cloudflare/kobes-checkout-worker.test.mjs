@@ -571,7 +571,7 @@ test('retired first-month pricing rejects new checkout without contacting Stripe
   assert.match((await response.json()).error, /ended/);
 });
 
-test('standard monthly checkout charges the configured monthly price without a trial or promotion', async (t) => {
+test('standard monthly checkout starts a two-day trial on the configured monthly price without a promotion', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
   let checkout;
@@ -587,7 +587,8 @@ test('standard monthly checkout charges the configured monthly price without a t
   assert.equal(response.status, 200);
   assert.equal(checkout.get('line_items[0][price]'), 'price_monthly');
   assert.equal(checkout.get('metadata[offer]'), 'monthly');
-  assert.equal(checkout.has('subscription_data[trial_period_days]'), false);
+  assert.equal(checkout.get('subscription_data[trial_period_days]'), '2');
+  assert.equal(checkout.get('subscription_data[trial_settings][end_behavior][missing_payment_method]'), 'cancel');
   assert.equal(checkout.has('discounts[0][coupon]'), false);
 });
 
@@ -818,7 +819,7 @@ test('longer plans select server-owned recurring prices with no trial or starter
   assert.equal(requests.length, 2);
 });
 
-test('referral checkout charges monthly without a trial and records the stable Discord referrer ID', async (t) => {
+test('referral monthly checkout starts a two-day trial and records the stable Discord referrer ID', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
   const stripeRequests = [];
@@ -850,7 +851,8 @@ test('referral checkout charges monthly without a trial and records the stable D
   const checkout = new URLSearchParams(stripeRequests[0].body);
   assert.equal(checkout.get('line_items[0][price]'), 'price_monthly');
   assert.equal(checkout.has('line_items[1][price]'), false);
-  assert.equal(checkout.has('subscription_data[trial_period_days]'), false);
+  assert.equal(checkout.get('subscription_data[trial_period_days]'), '2');
+  assert.equal(checkout.get('subscription_data[trial_settings][end_behavior][missing_payment_method]'), 'cancel');
   assert.equal(checkout.get('metadata[offer]'), 'monthly');
   assert.equal(checkout.get('metadata[referral_code]'), 'KBH-ABCDEF1234');
   assert.equal(checkout.get('subscription_data[metadata][referrer_discord_user_id]'), 'discord_referrer');

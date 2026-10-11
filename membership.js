@@ -88,7 +88,7 @@ if (referralCode && !checkoutState) {
     if (referralCard) referralCard.hidden = false;
     const referralButton = referralCard?.querySelector('[data-referral-button]');
     if (referralButton) referralButton.dataset.checkout = 'monthly';
-    setCheckoutMessage('Referral link: $32.99 today, then $32.99/month until canceled. No free trial.');
+    setCheckoutMessage('Referral link: 2 days free, then $32.99/month until canceled. Cancel before the trial ends to avoid the first charge.');
   }
 }
 

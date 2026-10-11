@@ -43,8 +43,8 @@
     const memberCard = document.createElement('a');
     memberCard.className = 'membership-card-promo';
     memberCard.href = '/join';
-    memberCard.setAttribute('aria-label', 'Kobe’s Betting Hub VIP membership — $32.99 per month until canceled. View plans.');
-    memberCard.innerHTML = '<img src="/assets/membership/kbh-vip-user-master-560.webp" srcset="/assets/membership/kbh-vip-user-master-560.webp 560w, /assets/membership/kbh-vip-user-master-1120.webp 1120w" sizes="(max-width:600px) calc(100vw - 32px), 560px" decoding="async" alt="Orange KBH VIP membership card — $32.99/month" width="4200" height="2448"><span>$32.99/month until canceled. View membership →</span>';
+    memberCard.setAttribute('aria-label', 'Kobe’s Betting Hub VIP membership — 2 days free, then $32.99 per month until canceled. View plans.');
+    memberCard.innerHTML = '<img src="/assets/membership/kbh-vip-user-master-560.webp" srcset="/assets/membership/kbh-vip-user-master-560.webp 560w, /assets/membership/kbh-vip-user-master-1120.webp 1120w" sizes="(max-width:600px) calc(100vw - 32px), 560px" decoding="async" alt="Orange KBH VIP membership card — $32.99/month" width="4200" height="2448"><span>2 days free, then $32.99/month. View membership →</span>';
     landingIntro.after(memberCard, referralBanner);
   }
   else if (promote) document.querySelector('main')?.prepend(referralBanner);
@@ -75,7 +75,7 @@
     const joinUrl = new URL('join.html', referralBanner.href).href;
     exitDialog = document.createElement('div');
     exitDialog.className = 'october-offer-overlay';
-    exitDialog.innerHTML = `<section class="october-offer-dialog bento" role="dialog" aria-modal="true" aria-labelledby="exit-referral-title"><button class="october-offer-close" type="button" aria-label="Close message">×</button><h2 id="exit-referral-title">Take a look before you go.</h2><p>VIP is $32.99/month. With each eligible referral, you can make $20. How much money do you want to make?</p><p class="exit-referral-terms">Rewards follow the first paid month, a seven-day hold, and verification.</p><a class="button" href="${joinUrl}">See membership options →</a><a class="exit-referral-link" href="${referralBanner.href}">Get your referral link →</a></section>`;
+    exitDialog.innerHTML = `<section class="october-offer-dialog bento" role="dialog" aria-modal="true" aria-labelledby="exit-referral-title"><button class="october-offer-close" type="button" aria-label="Close message">×</button><h2 id="exit-referral-title">Take a look before you go.</h2><p>Try VIP free for 2 days, then $32.99/month until canceled. With each eligible referral, you can make $20. How much money do you want to make?</p><p class="exit-referral-terms">Rewards follow the first paid month, a seven-day hold, and verification.</p><a class="button" href="${joinUrl}">See membership options →</a><a class="exit-referral-link" href="${referralBanner.href}">Get your referral link →</a></section>`;
     exitOpener = document.activeElement;
     for (const node of document.body.children) { if(node.tagName==='SCRIPT')continue; exitInert.set(node,node.inert); node.inert=true; }
     document.body.append(exitDialog);

@@ -54,14 +54,14 @@ test('membership discloses current billing with one duration-selectable card and
     const offers = new Map(checkoutOffers.map(([, , content]) => [content.match(/data-checkout="([^"]+)"/)[1], visibleText(content)]));
     assert.deepEqual([...offers.keys()].sort(), ['monthly', 'six_month', 'starter']);
     assert.match(offers.get('monthly'), /Cancel Anytime, No Commitment/);
-    assert.match(offers.get('monthly'), /\$32\.99 billed monthly/);
+    assert.match(offers.get('monthly'), /2 days free, then \$32\.99 billed monthly until canceled/);
     assert.match(offers.get('starter'), /\$10 today/);
     assert.match(offers.get('starter'), /First 7 days, then \$32\.99\/month until canceled/);
     assert.match(offers.get('starter'), /No free trial/i);
     assert.match(offers.get('six_month'), /\$134\.99/);
     assert.match(offers.get('six_month'), /Billed every 6 months/);
-    assert.match(visibleText(scene), /All plans renew automatically\. No free trial/);
-    assert.doesNotMatch(visibleText(scene), /2 days free|two.day trial/i);
+    assert.match(visibleText(scene), /All plans renew automatically\. Longer plans and the paid starter have no free trial/);
+    assert.match(visibleText(scene), /Cancel before the 2-day trial ends to avoid the first monthly charge/);
     const text = visibleText(html);
     assert.match(text, /Cancel before renewal/);
     assert.match(text, /access continues through your paid-through date/);

@@ -71,7 +71,7 @@
     if (headline && !revealedPick) headline.textContent = 'No free pick today. VIP members get Kobe-reviewed picks, writeups, Discord, and arb alerts.';
     const clock = nodes.vip.querySelector('[data-free-pick-countdown]');
     const offer = nodes.vip.querySelector('p');
-    if (offer) offer.textContent = '$32.99 today, then $32.99/month until canceled. No free trial.';
+    if (offer) offer.textContent = '2 days free, then $32.99/month until canceled. Cancel before the trial ends to avoid the first charge.';
     if (clock) clock.remove();
   };
   nodes.vip?.querySelector('[data-free-pick-vip-link]')?.addEventListener('click', () => track('cta_click'));

@@ -29,18 +29,18 @@ async function check() {
       try { window.KBHMeta?.trackPurchase(data.purchase); } catch { /* Advertising must never block membership confirmation. */ }
       try { window.KBHGoogle?.track('purchase', { transaction_id: data.purchase.eventId, value: data.purchase.value, currency: data.purchase.currency }); } catch { /* Optional measurement. */ }
     }
-    payment.textContent = `Payment: ${data.paymentConfirmed ? 'Confirmed ✅' : 'Waiting'}`;
+    payment.textContent = data.trialActive ? 'Free trial: Active · $0 today' : `Payment: ${data.paymentConfirmed ? 'Confirmed ✅' : 'Waiting'}`;
     discord.textContent = `Discord: ${data.discordConnected ? 'Connected ✅' : 'Waiting'}`;
     vip.textContent = `VIP: ${data.vipActive ? 'Active ✅' : data.state === 'failed' ? 'Needs attention' : 'Activating…'}`;
     if (data.state === 'active') {
-      title.textContent = "You're in ✅"; message.textContent = 'Payment confirmed, Discord connected, and VIP access is active.';
+      title.textContent = "You're in ✅"; message.textContent = data.trialActive ? 'Your 2-day free trial is active and Discord is connected. Then $32.99/month until canceled.' : 'Payment confirmed, Discord connected, and VIP access is active.';
       openDiscord.hidden = false; vipStartGuide.hidden = false; retry.hidden = true; support.hidden = true; return;
     }
     if (data.state === 'failed') {
-      title.textContent = 'Your payment is confirmed.'; message.textContent = 'We had a problem activating Discord, but you do not need to purchase again.';
+      title.textContent = data.trialActive ? 'Your free trial is confirmed.' : 'Your payment is confirmed.'; message.textContent = 'We had a problem activating Discord, but you do not need to purchase again.';
       retry.hidden = !data.retryAvailable; support.hidden = false; return;
     }
-    if (data.paymentConfirmed) { title.textContent = 'Payment confirmed ✅'; message.textContent = 'Activating your VIP access…'; }
+    if (data.trialActive || data.paymentConfirmed) { title.textContent = data.trialActive ? 'Free trial confirmed ✅' : 'Payment confirmed ✅'; message.textContent = 'Activating your VIP access…'; }
     if (++checks < 12) setTimeout(check, 2500); else { retry.hidden = !data.retryAvailable; support.hidden = false; }
   } catch (error) { title.textContent = 'Unable to confirm this activation link'; message.textContent = 'This link is missing, expired, or temporarily unavailable. If you already paid, do not purchase again. Contact support using your checkout email.'; status.textContent = error.message; payment.textContent = 'Payment: Not verified by this link'; discord.textContent = 'Discord: Not verified by this link'; vip.textContent = 'VIP: Not verified by this link'; retry.hidden = true; openDiscord.hidden = true; vipStartGuide.hidden = true; support.hidden = false; }
 }

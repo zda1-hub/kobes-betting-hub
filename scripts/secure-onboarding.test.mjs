@@ -29,7 +29,7 @@ test('new purchase path preserves offer, referral and acquisition attribution', 
 test('abandoned or failed checkout has no activation path', () => {
   assert.match(worker, /session\.status !== 'complete'/);
   assert.match(worker, /Stripe payment is not eligible/);
-  assert.match(worker, /authoritative successful Stripe payment is required before VIP activation/);
+  assert.match(worker, /authoritative successful Stripe payment or verified monthly trial is required before VIP activation/);
 });
 
 test('browser-independent provisioning is driven by the signed Stripe webhook', () => {
@@ -77,4 +77,10 @@ test('welcome is status-only and admin retry calls a server-side entitlement act
 test('access health and funnel schemas contain the required durable states', () => {
   for (const value of ['PENDING_DISCORD','CHECKOUT_STARTED','PAYMENT_CONFIRMED','VIP_PENDING','VIP_ACTIVE','VIP_FAILED']) assert.match(migration, new RegExp(value));
   for (const value of ['offer_selected','discord_verified','checkout_started','payment_completed','vip_activated']) assert.match(migration, new RegExp(value));
+});
+
+test('free-trial confirmation never claims payment or sends a purchase event without a paid receipt', () => {
+  assert.match(worker, /paymentConfirmed: !trialActive/);
+  assert.match(welcome, /Free trial: Active · \$0 today/);
+  assert.match(welcome, /data.paymentConfirmed && data.purchase/);
 });

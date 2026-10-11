@@ -1,7 +1,8 @@
 const year = document.getElementById('year');
 if (year) year.textContent = new Date().getFullYear();
 
-const memberReferralPromoActive = Date.now() >= Date.parse('2026-09-22T07:00:00Z') && Date.now() < Date.parse('2026-10-23T07:00:00Z');
+// Retired first-month offer; preserve past reward records, not new signup copy.
+const memberReferralPromoActive = false;
 if (memberReferralPromoActive) {
   const offerCopy = {
     lead: 'Active members receive $10 for each eligible friend who joins through their link and pays $19.99 for the first month during the offer, after verification and a seven-day hold.',

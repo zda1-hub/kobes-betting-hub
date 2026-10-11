@@ -40,12 +40,6 @@ const pickOptions = (command) => command
     .setDescription('Exact published line, for example OVER 6.5 strikeouts')
     .setRequired(true)
     .setMaxLength(100))
-  .addIntegerOption((option) => option
-    .setName('published_odds')
-    .setDescription('Exact American odds, for example -115 or +120')
-    .setRequired(true)
-    .setMinValue(-10000)
-    .setMaxValue(10000))
   .addStringOption((option) => option
     .setName('evidence')
     .setDescription('4–8 verified points; separate each with a semicolon')
@@ -57,6 +51,10 @@ const pickOptions = (command) => command
     .setRequired(true)
     .setMinValue(0)
     .setMaxValue(10))
+  .addIntegerOption((option) => option
+    .setName('published_odds')
+    .setDescription('Exact source American odds, any price; omit if not provided')
+    .setRequired(false))
   .addStringOption((option) => option
     .setName('league')
     .setDescription('League, such as NFL, NCAAF, MLB, NBA, NHL, or MLS')

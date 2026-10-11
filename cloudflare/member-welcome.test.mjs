@@ -72,3 +72,12 @@ test('welcome claim is atomic; a second claim cannot return the private message'
   assert.equal((await worker.fetch(request(), config)).status, 200);
   assert.equal((await worker.fetch(request(), config)).status, 409);
 });
+test('new monthly trial welcome shows zero today and the recurring price', () => {
+  const { session, subscription } = example('monthly');
+  session.payment_status = 'no_payment_required'; session.amount_total = 0;
+  subscription.status = 'trialing'; subscription.trial_end = Math.floor(Date.now() / 1000) + 172800;
+  const message = api.memberWelcomeMessage(session, subscription, env);
+  assert.match(message.body, /2 days free, then \$32\.99\/month/);
+  assert.match(message.body, /Checkout total: \$0\.00/);
+  assert.match(message.body, /Standard renewal price: \$32\.99 every month/);
+});

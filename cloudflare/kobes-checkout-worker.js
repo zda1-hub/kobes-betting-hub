@@ -1837,7 +1837,7 @@ async function createAssociatedCheckout(env, association, publicToken, discordUs
     values['metadata[promotion]'] = 'first20';
     values['subscription_data[metadata][promotion]'] = 'first20';
   }
-  if (!longTerm && association.offer !== 'first_month_back' && association.offer !== 'monthly') {
+  if (!longTerm && association.offer !== 'first_month_back') {
     values['subscription_data[trial_period_days]'] = association.offer === 'starter' ? 7 : 2;
     values['subscription_data[trial_settings][end_behavior][missing_payment_method]'] = 'cancel';
   }
@@ -1915,7 +1915,7 @@ async function createCheckout(request, env, origin) {
     values['metadata[promotion]'] = 'first20';
     values['subscription_data[metadata][promotion]'] = 'first20';
   }
-  if (!longTerm && data.offer !== 'first_month_back' && data.offer !== 'monthly') {
+  if (!longTerm && data.offer !== 'first_month_back') {
     values['subscription_data[trial_period_days]'] = data.offer === 'starter' ? 7 : 2;
     values['subscription_data[trial_settings][end_behavior][missing_payment_method]'] = 'cancel';
   }
@@ -2352,7 +2352,7 @@ function memberWelcomeMessage(session, subscription, env) {
   const plans = {
     starter: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — $10 first 7 days'],
     first_month_back: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, session.metadata?.promotion === 'first20' ? 'Monthly membership — $5 first month' : 'Monthly membership — $19.99 first month'],
-    monthly: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — $32.99 per month'],
+    monthly: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, subscription.status === 'trialing' ? 'Monthly membership — 2 days free, then $32.99/month' : 'Monthly membership — $32.99 per month'],
     trial_2_day: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — 2 days free'],
     referral_trial: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — 2 days free'],
     six_month: [env.STRIPE_SIX_MONTH_PRICE_ID, 13499, 6, '6-month membership'],
@@ -2618,6 +2618,44 @@ async function deliverMemberEmailsFromDomain(env) {
   return { sent };
 }
 
+function verifiedMonthlyTrial(session, subscription, association, env, now = Date.now() / 1000) {
+  const item = subscription?.items?.data?.[0];
+  const price = item?.price;
+  return ['monthly', 'trial_2_day', 'referral_trial'].includes(association?.offer)
+    && session?.id === association.stripe_checkout_session_id
+    && session.mode === 'subscription' && session.status === 'complete'
+    && session.payment_status === 'no_payment_required' && session.amount_total === 0 && session.currency === 'usd'
+    && session.metadata?.checkout_association_id === association.id && session.metadata?.offer === association.offer
+    && subscription?.metadata?.checkout_association_id === association.id && subscription.metadata?.offer === association.offer
+    && stripeId(session.subscription) === subscription?.id
+    && Boolean(stripeId(session.customer)) && stripeId(session.customer) === stripeId(subscription.customer)
+    && subscription.status === 'trialing'
+    && Number.isFinite(subscription.trial_start) && subscription.trial_start <= now
+    && Number.isFinite(subscription.trial_end) && subscription.trial_end > now
+    && subscription.trial_end - subscription.trial_start === 2 * 86400
+    && subscription.items.data.length === 1 && item.quantity === 1
+    && Boolean(env.STRIPE_MONTHLY_PRICE_ID) && price?.id === env.STRIPE_MONTHLY_PRICE_ID
+    && price.currency === 'usd' && price.unit_amount === 3299
+    && price.recurring?.interval === 'month' && price.recurring.interval_count === 1;
+}
+
+async function recordAssociationPayment(env, association, subscriptionId, customerId) {
+  await recordAnalyticsEvent(env, {
+    eventName: 'payment_completed', sessionId: association.analytics_session_id, offer: association.offer,
+    customerId, subscriptionId, discordUserId: association.discord_user_id,
+    dedupeKey: `payment_completed:${subscriptionId}`,
+  });
+}
+
+async function recordPaidAssociationInvoice(env, association, invoiceId) {
+  const invoice = await stripeGet(env, `/invoices/${encodeURIComponent(invoiceId)}`);
+  if (invoice.status !== 'paid' || !Number.isSafeInteger(invoice.amount_paid) || invoice.amount_paid <= 0
+      || invoice.currency !== 'usd' || invoiceSubscriptionId(invoice) !== association.stripe_subscription_id
+      || stripeId(invoice.customer) !== association.stripe_customer_id) return false;
+  await recordAssociationPayment(env, association, association.stripe_subscription_id, association.stripe_customer_id);
+  return true;
+}
+
 async function activateCheckoutAssociation(env, association, eventId = null) {
   if (!association?.discord_user_id || !association.stripe_checkout_session_id) throw new Error('Verified checkout identity is missing.');
   const session = await stripeGet(env, `/checkout/sessions/${encodeURIComponent(association.stripe_checkout_session_id)}`);
@@ -2630,7 +2668,8 @@ async function activateCheckoutAssociation(env, association, eventId = null) {
     const invoice = await stripeGet(env, `/invoices/${encodeURIComponent(stripeId(subscription.latest_invoice))}`);
     successfulPayment = invoice.status === 'paid' && Number(invoice.amount_paid || 0) > 0;
   }
-  if (!successfulPayment) throw new Error('An authoritative successful Stripe payment is required before VIP activation.');
+  const freeTrial = verifiedMonthlyTrial(session, subscription, association, env);
+  if (!successfulPayment && !freeTrial) throw new Error('An authoritative successful Stripe payment or verified monthly trial is required before VIP activation.');
   const customerId = stripeId(session.customer) || stripeId(subscription.customer);
   const attempts = Number(association.activation_attempts || 0) + 1;
   await updateCheckoutAssociation(env, association.id, {
@@ -2652,13 +2691,9 @@ async function activateCheckoutAssociation(env, association, eventId = null) {
     await recordMembershipEvent(env, {
       eventType: 'VIP_ACTIVATED', actorType: eventId ? 'stripe_webhook' : 'membership_reconciliation', actorId: eventId,
       customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
-      details: { checkout_association_id: association.id, activation_attempt: attempts },
+      details: { checkout_association_id: association.id, activation_attempt: attempts, free_trial: freeTrial },
     });
-    await recordAnalyticsEvent(env, {
-      eventName: 'payment_completed', sessionId: association.analytics_session_id, offer: association.offer,
-      customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
-      dedupeKey: `payment_completed:${subscription.id}`,
-    });
+    if (successfulPayment) await recordAssociationPayment(env, association, subscription.id, customerId);
     await recordAnalyticsEvent(env, {
       eventName: 'vip_activated', sessionId: association.analytics_session_id, offer: association.offer,
       customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
@@ -2675,11 +2710,7 @@ async function activateCheckoutAssociation(env, association, eventId = null) {
       status: attempts >= 3 ? 'VIP_FAILED' : 'VIP_PENDING', last_error_code: code,
       next_retry_at: new Date(Date.now() + delayMinutes * 60 * 1000).toISOString(),
     });
-    await recordAnalyticsEvent(env, {
-      eventName: 'payment_completed', sessionId: association.analytics_session_id, offer: association.offer,
-      customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
-      dedupeKey: `payment_completed:${subscription.id}`,
-    });
+    if (successfulPayment) await recordAssociationPayment(env, association, subscription.id, customerId);
     await recordAnalyticsEvent(env, {
       eventName: 'vip_activation_failed', sessionId: association.analytics_session_id, offer: association.offer,
       customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
@@ -2714,7 +2745,12 @@ async function onboardingStatus(request, env, origin) {
   let purchase = null;
   try { purchase = await verifiedPurchaseReceipt(env, association); }
   catch { console.warn('Verified purchase receipt temporarily unavailable.'); }
-  return json({ state, paymentConfirmed: ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_ACTIVE','VIP_FAILED'].includes(association.status), discordConnected: Boolean(association.discord_user_id), vipActive: association.status === 'VIP_ACTIVE', retryAvailable: ['VIP_PENDING','VIP_FAILED'].includes(association.status), errorCode: association.last_error_code || null, purchase }, 200, origin);
+  let trialActive = false;
+  if (association.stripe_subscription_id && ['monthly','trial_2_day','referral_trial'].includes(association.offer)) {
+    const memberships = await supabase(env, `membership_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(association.stripe_subscription_id)}&select=status,trial_end&limit=1`);
+    trialActive = memberships?.[0]?.status === 'trialing' && Date.parse(memberships[0].trial_end) > Date.now();
+  }
+  return json({ state, trialActive, paymentConfirmed: !trialActive && ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_ACTIVE','VIP_FAILED'].includes(association.status), discordConnected: Boolean(association.discord_user_id), vipActive: association.status === 'VIP_ACTIVE', retryAvailable: ['VIP_PENDING','VIP_FAILED'].includes(association.status), errorCode: association.last_error_code || null, purchase }, 200, origin);
 }
 
 async function retryOnboarding(request, env, origin) {
@@ -3418,6 +3454,12 @@ async function handleWebhook(request, env) {
         const association = rows?.[0];
         if (!association || association.stripe_checkout_session_id !== session.id) throw new Error('Stripe checkout association did not match the verified pending identity.');
         if (association.status === 'VIP_ACTIVE') outcome = 'PAYMENT_CONFIRMED_VIP_ALREADY_ACTIVE';
+        else if (session.payment_status === 'no_payment_required' && session.amount_total === 0
+            && ['monthly', 'trial_2_day', 'referral_trial'].includes(association.offer)) {
+          await activateCheckoutAssociation(env, association, event.id);
+          await queueMemberWelcome(env, event);
+          outcome = 'TRIAL_VIP_ACTIVATED';
+        }
         else if (session.payment_status !== 'paid' || Number(session.amount_total || 0) <= 0) {
           await updateCheckoutAssociation(env, association.id, {
             status: 'CHECKOUT_STARTED', stripe_customer_id: customerId, stripe_subscription_id: subscriptionId,
@@ -3454,9 +3496,10 @@ async function handleWebhook(request, env) {
       await recordBillingEvent(env, event, { eventType: 'invoice_paid', invoiceId: invoice?.id, customerId: stripeId(invoice?.customer), subscriptionId: invoiceSubscriptionId(invoice), amountCents: Number(invoice?.amount_paid), currency: invoice?.currency, billingReason: invoice?.billing_reason });
       const paidSubscriptionId = invoiceSubscriptionId(invoice);
       if (paidSubscriptionId && Number(invoice?.amount_paid || 0) > 0) {
-        const rows = await supabase(env, `membership_checkout_associations?stripe_subscription_id=eq.${encodeURIComponent(paidSubscriptionId)}&status=neq.VIP_ACTIVE&select=*&limit=1`);
+        const rows = await supabase(env, `membership_checkout_associations?stripe_subscription_id=eq.${encodeURIComponent(paidSubscriptionId)}&select=*&limit=1`);
         if (rows?.[0]) {
-          await activateCheckoutAssociation(env, rows[0], event.id);
+          if (rows[0].status !== 'VIP_ACTIVE') await activateCheckoutAssociation(env, rows[0], event.id);
+          await recordPaidAssociationInvoice(env, rows[0], invoice.id);
           await queuePaidAssociationWelcome(env, rows[0], event, invoice);
         }
       }
@@ -3591,6 +3634,10 @@ export default {
 };
 
 export const __test = {
+  verifiedMonthlyTrial,
+  activateCheckoutAssociation,
+  createAssociatedCheckout,
+  recordPaidAssociationInvoice,
   engagementSummary,
   interactionSummary,
   discordJoinSummary,
