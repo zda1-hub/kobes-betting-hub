@@ -168,17 +168,23 @@ function labelMobileTables(){
     }));
   });
 }
+let initialReportOpened=false;
+function openDashboardTarget(id){
+  if(!id)return false;
+  const target=document.getElementById(id);if(!target)return false;
+  const details=target.tagName==='DETAILS'?target:target.closest('details.dashboard-details');
+  if(details)details.open=true;
+  target.scrollIntoView({block:'start',behavior:'instant'});return true;
+}
 function setupDashboardNavigation(){
   document.querySelector('[data-refresh]')?.addEventListener('click',()=>load());
   dashboard.addEventListener('click',event=>{
     const link=event.target.closest?.('a[href^="#"]');if(!link)return;
     const id=link.getAttribute('href').slice(1),target=document.getElementById(id);if(!target)return;
-    const details=target.tagName==='DETAILS'?target:target.closest('details.dashboard-details');
     event.preventDefault();
-    if(details)details.open=true;
     if(link.dataset.openSection){const group=document.getElementById(link.dataset.openSection);if(group)group.open=true;}
     history.replaceState(null,'',`#${id}`);
-    target.scrollIntoView({block:'start',behavior:'instant'});
+    openDashboardTarget(id);
   });
 }
 
@@ -218,6 +224,7 @@ async function load(){
     const data=await response.json();
     if(sequence!==loadSequence)return;
     render(data);renderExecutive(data);renderTarget(data);renderPaymentAndReferralDetails(data);renderOverview(data);labelMobileTables();
+    if(!initialReportOpened){initialReportOpened=true;openDashboardTarget(location.hash.slice(1));}
     const notices=[...(data.dataCompletenessWarnings||[])];
     if(data.reportingExclusions?.customers)notices.push(`${data.reportingExclusions.customers} internal test customers excluded from membership and revenue reports.`);
     const notice=document.querySelector('[data-data-notice]'),warning=document.querySelector('[data-data-warning]');

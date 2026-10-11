@@ -114,3 +114,13 @@ test('report navigation opens the collapsed report before jumping to its member 
  handler({target:{closest:()=>({getAttribute:()=> '#members',dataset:{}})},preventDefault(){order.push('prevent')}});
  assert.deepEqual(order,['prevent','open:true','scroll']);
 });
+
+
+test('social report deep links reveal the parent disclosure and scroll to the requested report',()=>{
+ const h=harness(), details={open:false};let scrolled=false;
+ h.context.document.getElementById=id=>id==='social-tracking'?{tagName:'SECTION',closest:()=>details,scrollIntoView(){scrolled=true}}:null;
+ assert.equal(h.run("openDashboardTarget('social-tracking')"),true);
+ assert.equal(details.open,true);assert.equal(scrolled,true);
+ assert.equal(h.run("openDashboardTarget('missing-report')"),false);
+ assert.equal(h.run("openDashboardTarget('')"),false);
+});
