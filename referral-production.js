@@ -28,6 +28,9 @@ if (/^KBH-[A-Z0-9]{10}$/.test(code) && dashboard && referralInput) {
   const referralUrl = new URL('https://kobesbettinghub.com/join.html');
   referralUrl.searchParams.set('ref', code);
   dashboard.hidden = false;
+  const hero = document.querySelector('[data-referral-hero]');
+  if (hero) hero.hidden = true;
+  document.querySelector('[data-referral-ready-heading]')?.focus({ preventScroll: true });
   referralInput.value = referralUrl.toString();
   if (payoutSetup) payoutSetup.href = auth ? `${workerOrigin}/referrals/onboard?auth=${encodeURIComponent(auth)}` : `${workerOrigin}/referrals/login`;
   if (setup === 'complete' && message) message.textContent = 'Stripe payout setup returned successfully. Stripe may still need to verify your information before cash can be sent.';
@@ -43,7 +46,7 @@ copyButton?.addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(referralInput.value);
     copyButton.textContent = 'Copied';
-    window.setTimeout(() => { copyButton.textContent = 'Copy link'; }, 1800);
+    window.setTimeout(() => { copyButton.textContent = 'Copy my link'; }, 1800);
   } catch {
     referralInput.select();
     document.execCommand('copy');
