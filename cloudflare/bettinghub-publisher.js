@@ -300,8 +300,8 @@ async function sendLeadWelcome(env, row) {
     reply_to: "support@kobesbettinghub.com",
     subject: freePickSignup ? "You're on the free-pick list" : "You're on the Kobe's Betting Hub list",
     text: freePickSignup
-      ? `You're on the Kobe's Betting Hub free-pick list. No free pick is posted today; we'll email the next one when it's published.\n\nWant the full VIP slate and writeups now? See the current plans: https://kobesbettinghub.com/join\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
-      : `Thanks for joining the Kobe's Betting Hub email list. See free picks at https://kobesbettinghub.com/free-pick and current VIP plans at https://kobesbettinghub.com/join. Picks vary and no outcome is guaranteed. 21+ where permitted.\n\nUnsubscribe: ${unsubscribeUrl}`
+      ? `You're on the Kobe's Betting Hub free-pick list. No free pick is posted today; we'll email the next one when it's published.\n\n${vipTrialEmailLines('free_pick_welcome').join('\n')}\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
+      : `Thanks for joining the Kobe's Betting Hub email list. See free picks at https://kobesbettinghub.com/free-pick.\n\n${vipTrialEmailLines('email_welcome').join('\n')}\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
   };
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -419,6 +419,20 @@ async function unlockFreePick(request, env, ctx) {
   return json({ ok: true, hasPick: Boolean(pick), pick, message: pick ? 'Unlocked. We’re sending the same pick to your email.' : 'You’re on the list. There is no free pick today.' }, 200, headers);
 }
 
+function vipTrialEmailLines(campaign) {
+  const url = new URL('https://kobesbettinghub.com/join');
+  url.searchParams.set('utm_source', 'kbh_email');
+  url.searchParams.set('utm_medium', 'email');
+  url.searchParams.set('utm_campaign', campaign);
+  url.searchParams.set('utm_content', 'vip_trial');
+  return [
+    'Want the full VIP board? Try Kobe’s Betting Hub free for 2 days.',
+    'Expert plays, detailed write-ups, Discord access and arbitrage tools in one membership.',
+    `Start your 2-day VIP trial: ${url.href}`,
+    '$0 today, then $32.99/month until canceled. Cancel before the trial ends to avoid the first charge.',
+  ];
+}
+
 function freePickEmailLines(pick, unsubscribeUrl) {
   const details = pick.details || {};
   let selection = String(details.selection || details.pick || 'Approved free pick').trim();
@@ -434,7 +448,7 @@ function freePickEmailLines(pick, unsubscribeUrl) {
     ...(extra ? [extra] : []), '',
     ...reasons.map((point, index) => `${index + 1}. ${point}`), '',
     ...(pick.imageUrl ? [`View the approved pick card: ${pick.imageUrl}`, ''] : []),
-    'Want the full VIP slate and writeups? Join here: https://kobesbettinghub.com/join', '',
+    ...vipTrialEmailLines('daily_free_pick'), '',
     'Picks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.', '',
     `Unsubscribe: ${unsubscribeUrl}`,
   ];

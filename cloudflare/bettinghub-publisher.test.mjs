@@ -237,7 +237,7 @@ test('a no-pick signup receives the next published pick once with a concise VIP 
     await Promise.all(publishTasks);
     assert.equal(sent.length, 2);
     assert.match(sent[1].text, /Team A moneyline/);
-    assert.match(sent[1].text, /Join here: https:\/\/kobesbettinghub.com\/join/);
+    assert.match(sent[1].text, /Start your 2-day VIP trial: https:\/\/kobesbettinghub.com\/join/);
     assert.doesNotMatch(sent[1].text, /See the Hub:/);
     assert.equal((await env.DB.prepare("SELECT status FROM free_pick_email_outbox WHERE email = 'newfan@example.com'").first()).status, 'sent');
     assert.equal((await (await worker.fetch(new Request('https://publisher.test/api/free-pick/gate'), env)).json()).hasPick, true);
@@ -275,7 +275,7 @@ test('homepage email signup receives the current pick instead of a second welcom
     await Promise.all(background);
     assert.equal(sent.length, 1);
     assert.match(sent[0].text, /Team B spread/);
-    assert.match(sent[0].text, /Join here: https:\/\/kobesbettinghub.com\/join/);
+    assert.match(sent[0].text, /Start your 2-day VIP trial: https:\/\/kobesbettinghub.com\/join/);
   } finally {
     globalThis.fetch = originalFetch;
     env.DB.close();
@@ -578,6 +578,21 @@ test('free-pick email numbers approved points and avoids repeating the line', ()
   assert.ok(lines.some(line => line.includes('Wager responsibly')));
   assert.equal(lines.at(-1), 'Unsubscribe: https://example.com/unsubscribe');
   assert.ok(workerTest.freePickEmailLines({details:{selection:'Utah',line:'-15.5',reason:'1. First point\n2. Second point'}}, 'link').includes('2. Second point'));
+});
+
+test('free-pick invitation states trial, renewal and cancellation terms without personal tracking data', () => {
+  const lines = workerTest.freePickEmailLines({ publishedDate: '2026-10-11', details: { selection: 'DeVaughn Vele Over 3.5 receptions', odds: '-125', reason: 'Approved explanation' } }, 'https://example.com/unsubscribe');
+  const body = lines.join('\n');
+  assert.match(body, /DeVaughn Vele Over 3.5 receptions/);
+  assert.match(body, /free for 2 days/);
+  assert.match(body, /\$0 today, then \$32\.99\/month until canceled/);
+  assert.match(body, /Cancel before the trial ends to avoid the first charge/);
+  const url = new URL(lines.find(line => line.startsWith('Start your 2-day VIP trial: ')).split(': ').slice(1).join(': '));
+  assert.equal(url.origin, 'https://kobesbettinghub.com');
+  assert.equal(url.pathname, '/join');
+  assert.deepEqual(Object.fromEntries(url.searchParams), { utm_source: 'kbh_email', utm_medium: 'email', utm_campaign: 'daily_free_pick', utm_content: 'vip_trial' });
+  assert.equal(lines.at(-1), 'Unsubscribe: https://example.com/unsubscribe');
+  assert.match(body, /no outcome is guaranteed/);
 });
 
 test('Kobe social email sends inline approved JPEG once and preserves existing public pick', async t=>{
