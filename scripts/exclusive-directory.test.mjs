@@ -41,16 +41,46 @@ test('homepage, public manifest and sitemap expose the exclusive directory', { s
   assert.match(sitemap, /https:\/\/kobesbettinghub.com\/exclusives/);
 });
 
-test('directory search covers the whole roster, paginates and recovers from no matches', async () => {
-  const handlers={}, input={value:'',addEventListener(name,fn){handlers[name]=fn;}};
+function directoryHarness(reduced = false) {
+  const handlers={}, input={value:'',addEventListener(name,fn){handlers['input:'+name]=fn;}};
   const names=['BankrollBill','Teddy Covers',...Array.from({length:18},(_,i)=>`Source ${i}`)];
   const rows=names.map(name=>({hidden:false,querySelector:()=>({textContent:name})}));
-  const count={},empty={},more={addEventListener(name,fn){this[name]=fn;}};
-  const document={getElementById:id=>({'capper-search':input,'directory-count':count,'directory-empty':empty})[id],querySelector:()=>({after(){}}),querySelectorAll:()=>rows,createElement:()=>more};
-  vm.runInNewContext(await readFile(new URL('exclusives.js',root),'utf8'),{document});
-  assert.equal(rows.filter(r=>!r.hidden).length,12);assert.equal(more.hidden,false);
-  more.click();assert.equal(rows.filter(r=>!r.hidden).length,20);assert.equal(more.hidden,true);
-  input.value='bankroll bill';handlers.input();assert.equal(count.textContent,'1 of 1 expert source shown');
-  input.value='unknown';handlers.input();assert.equal(empty.hidden,false);assert.equal(count.textContent,'0 of 0 expert sources shown');
-  input.value='';handlers.input();assert.equal(rows.filter(r=>!r.hidden).length,12);assert.equal(empty.hidden,true);
+  const count={},empty={},controls={},previous={},next={};
+  const rail={scrollLeft:0,scrollWidth:4200,clientWidth:300,classList:{add(){},remove(){}},
+    addEventListener(name,fn){handlers[name]=fn;},
+    scrollTo({left,behavior}){this.scrollLeft=left;this.behavior=behavior;},
+    scrollBy({left,behavior}){this.scrollLeft+=left;this.behavior=behavior;}};
+  previous.addEventListener=(name,fn)=>handlers.previous=fn;
+  next.addEventListener=(name,fn)=>handlers.next=fn;
+  const document={getElementById:id=>({'capper-search':input,'lineup-rail':rail,'directory-count':count,'directory-empty':empty})[id],querySelector:selector=>({'[data-directory-controls]':controls,'[data-directory-previous]':previous,'[data-directory-next]':next})[selector],querySelectorAll:()=>rows};
+  return {handlers,input,rows,count,empty,controls,previous,next,rail,context:{document,window:{addEventListener(){}},matchMedia:()=>({matches:reduced})}};
+}
+
+test('horizontal directory exposes the whole roster and search recovers from no matches', async () => {
+  const h=directoryHarness();
+  vm.runInNewContext(await readFile(new URL('exclusives.js',root),'utf8'),h.context);
+  assert.equal(h.rows.filter(r=>!r.hidden).length,20);
+  assert.equal(h.previous.disabled,true); assert.equal(h.next.disabled,false);
+  h.rail.scrollLeft=700;
+  h.input.value='bankroll bill';h.handlers['input:input']();
+  assert.equal(h.count.textContent,'1 expert source');assert.equal(h.rail.scrollLeft,0);
+  h.input.value='unknown';h.handlers['input:input']();
+  assert.equal(h.empty.hidden,false);assert.equal(h.rail.hidden,true);assert.equal(h.controls.hidden,true);
+  h.input.value='';h.handlers['input:input']();
+  assert.equal(h.rows.filter(r=>!r.hidden).length,20);assert.equal(h.empty.hidden,true);assert.equal(h.rail.hidden,false);
+});
+
+test('horizontal wheel respects boundaries, keyboard reaches the end, and reduced motion stays instant', async () => {
+  const h=directoryHarness(true);
+  vm.runInNewContext(await readFile(new URL('exclusives.js',root),'utf8'),h.context);
+  let prevented=0;
+  const wheel={deltaX:0,deltaY:120,deltaMode:0,preventDefault(){prevented++;}};
+  h.handlers.wheel(wheel);assert.equal(h.rail.scrollLeft,120);assert.equal(prevented,1);
+  h.rail.scrollLeft=3900;h.handlers.wheel(wheel);assert.equal(prevented,1);
+  h.rail.scrollLeft=0;h.handlers.wheel({...wheel,deltaY:-120});assert.equal(prevented,1);
+  h.handlers.wheel({...wheel,ctrlKey:true});assert.equal(prevented,1);
+  h.handlers.next();assert.equal(h.rail.behavior,'instant');assert.equal(h.rail.scrollLeft,255);
+  h.handlers.keydown({key:'End',preventDefault(){}});assert.equal(h.rail.scrollLeft,4200);
+  h.handlers.scroll();assert.equal(h.next.disabled,true);
+  h.handlers.keydown({key:'Home',preventDefault(){}});assert.equal(h.rail.scrollLeft,0);
 });
