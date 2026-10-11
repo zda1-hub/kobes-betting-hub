@@ -1,5 +1,5 @@
 const { createHash } = require('node:crypto');
-const { sourceEvidence, sourceTerms } = require('./source-review');
+const { assertFreePickEligible, publicPickTerms, sourceEvidence, visiblePlays } = require('./source-review');
 const { auditedFetch } = require('../../pipeline/api-client');
 
 const MAX_X_POST_LENGTH = 280;
@@ -16,7 +16,12 @@ function freePickXPostId(pickId) {
 }
 
 function buildFreePickXPost(packet) {
-  const terms = sourceTerms(packet);
+  assertFreePickEligible(packet);
+  const plays = visiblePlays(packet);
+  // The raw selection can be only "Over 3.5 receptions" while the approved
+  // player is stored separately. Use the same named terms as Discord/Story.
+  const terms = publicPickTerms(packet).map((term, index) =>
+    `${term}${plays[index]?.units ? ` (${plays[index].units})` : ''}`);
   if (!terms.length) throw new Error('The free pick has no publishable terms for X.');
 
   // Exact approved wager terms are mandatory. Verified evidence is optional

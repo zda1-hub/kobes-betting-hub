@@ -152,3 +152,15 @@ test('falls back to JSON when both source media and Story rendering fail', async
 test('Free Pick site publishing remains disabled without a dedicated credential', () => {
   assert.equal(siteConfig({}), null);
 });
+
+test('website selection includes the approved separate player name before any publish', async () => {
+  const prop = { pick_id: 'named-free-pick', analysis: { extraction: { player_name: 'DeVaughn Vele', selection: 'Over 3.5 receptions', line: '3.5', odds_american: '-125', event: 'New Orleans Saints @ Minnesota Vikings' } } };
+  const calls = [];
+  await publishApprovedFreePickToSite(prop, { environment: { FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret' }, storyRenderer: async () => null,
+    fetchImpl: async (url, init) => { calls.push(JSON.parse(init.body)); return new Response(JSON.stringify({xPosted: false}), {status: 201}); } });
+  assert.equal(calls[0].details.selection, 'DeVaughn Vele Over 3.5 receptions');
+  assert.match(calls[0].caption, /DeVaughn Vele/);
+  delete prop.analysis.extraction.player_name;
+  await assert.rejects(publishApprovedFreePickToSite(prop, {environment: {FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret'}, fetchImpl: async () => {throw new Error('must not publish');}}), /player’s full name/);
+  assert.equal(calls.length, 1);
+});

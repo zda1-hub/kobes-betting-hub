@@ -1,5 +1,5 @@
 const DEFAULT_PUBLISHER_URL = 'https://bettinghub-publisher.kobedirwin.workers.dev';
-const { sourceEvidence } = require('./source-review');
+const { sourceEvidence, visiblePlays } = require('./source-review');
 const { auditedFetch } = require('../../pipeline/api-client');
 const { buildFreePickXPost, freePickXPostId } = require('./free-pick-x');
 const { instagramStoryFilename, renderInstagramStory } = require('./instagram-story');
@@ -23,13 +23,17 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
 
   const extraction = packet.analysis?.extraction || {};
   const firstPlay = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays[0] : extraction;
+  const playerName = visiblePlays(packet)[0]?.playerName || '';
+  const rawSelection = firstPlay.selection || extraction.selection || '';
+  const selection = playerName && !rawSelection.toLowerCase().includes(playerName.toLowerCase())
+    ? `${playerName} ${rawSelection}`.trim() : rawSelection;
   const approvedEvidence = Array.isArray(packet.approval?.exact_evidence)
     ? packet.approval.exact_evidence.filter((claim) => typeof claim === 'string' && claim.trim() && !/https?:\/\//i.test(claim))
     : sourceEvidence(packet);
   const details = {
     sport: extraction.sport || '',
     event: extraction.event || '',
-    selection: firstPlay.selection || extraction.selection || '',
+    selection,
     line: firstPlay.line || extraction.line || '',
     odds: firstPlay.odds_american || extraction.odds_american || '',
     units: firstPlay.units || extraction.units || '',

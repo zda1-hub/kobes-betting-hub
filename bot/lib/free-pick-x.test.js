@@ -13,7 +13,7 @@ const packet = {
 };
 
 test('formats the approved free pick as a compact X post', () => {
-  assert.equal(buildFreePickXPost(packet), 'TODAY’S FREE PICK\n\nArizona Diamondbacks ML -115\n\n❤️ 10 likes and we’ll post another free pick.\nFull writeup → kobesbettinghub.com/free-pick?utm_source=kobe_x\nLegal age where you live. Bet responsibly.');
+  assert.equal(buildFreePickXPost(packet), 'TODAY’S FREE PICK\n\nArizona Diamondbacks ML (-115)\n\n❤️ 10 likes and we’ll post another free pick.\nFull writeup → kobesbettinghub.com/free-pick?utm_source=kobe_x\nLegal age where you live. Bet responsibly.');
   assert.match(freePickXPostId(packet.pick_id), /^free-x-[a-f0-9]{40}$/);
 });
 
@@ -39,10 +39,20 @@ test('never truncates evidence or removes approved wager terms to fit X', () => 
   longEvidencePacket.analysis.extraction.plays[0].source_claims = [longClaim];
 
   const body = buildFreePickXPost(longEvidencePacket);
-  assert.match(body, /Arizona Diamondbacks ML -115/);
+  assert.match(body, /Arizona Diamondbacks ML \(-115\)/);
   assert.doesNotMatch(body, /matchup advantage/);
   assert.match(body, /Legal age where you live\. Bet responsibly\./);
   assert.ok(body.length <= 280);
+});
+
+test('publishes the approved player when the selection contains only the prop market', () => {
+  const prop = { analysis: { extraction: { player_name: 'DeVaughn Vele', selection: 'Over 3.5 receptions', line: '3.5', odds_american: '-125', event: 'New Orleans Saints @ Minnesota Vikings', source_claims: ['He has gone over this line in 3/4 games'] } } };
+  assert.match(buildFreePickXPost(prop), /DeVaughn Vele Over 3\.5 receptions \(-125\)/);
+  assert.ok(buildFreePickXPost(prop).length <= 280);
+  prop.analysis.extraction.odds_american = '+350';
+  assert.match(buildFreePickXPost(prop), /\(\+350\)/);
+  delete prop.analysis.extraction.player_name;
+  assert.throws(() => buildFreePickXPost(prop), /player’s full name/);
 });
 
 test('fails closed when mandatory approved terms cannot fit safely', () => {
