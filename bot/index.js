@@ -33,6 +33,7 @@ const { recoverResultsBacklog, readResultsBacklogCursor } = require('./lib/resul
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
 const { gradeWagerRows, sourcePacketPath } = require('./lib/wager-ledger');
+const { hydrateCanonicalPlayer } = require('./lib/canonical-pick-player');
 const { appendOfficialPick, appendOrRetryPermissionFailedPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm, buildVipWelcome, vipRoleIds } = require('./lib/welcome');
 const {
@@ -905,7 +906,7 @@ async function autoGradePendingOfficialPicks(date, fetchImpl = fetch, freeOnly =
     && (!freeOnly || freePickIds.has(row.pick_id))
     && resultFor(row) === 'PENDING'
   ));
-  for (const row of pending) {
+  for (let row of pending) {
     await recordGradeAttempt({ pickId: row.pick_id, result: null, status: 'STARTED', provider: 'ESPN' });
     let groupedSourceReason = '';
     const packetPath = sourcePacketPath(reviewQueueRoot, row.pick_id);
@@ -913,6 +914,10 @@ async function autoGradePendingOfficialPicks(date, fetchImpl = fetch, freeOnly =
       try {
         const packet = JSON.parse(await fs.readFile(packetPath, 'utf8'));
         groupedSourceReason = publicationGradeHold(row, packet);
+        if (!groupedSourceReason) {
+          const hydrated = hydrateCanonicalPlayer(row, packet);
+          if (hydrated !== row) row = await updateOfficialPick(row.pick_id, { selection: hydrated.selection });
+        }
       } catch {
         groupedSourceReason = publicationGradeHold(row, null);
       }
@@ -1811,6 +1816,7 @@ async function syncApprovedPickToDailyQueue(entry) {
 }
 
 async function postAndLogOfficialPick({ channel, payload, entry, packet = null }) {
+  entry = hydrateCanonicalPlayer(entry, packet);
   await recordPublicationAttempt(packet, { entry, payload });
   try {
     await appendOrRetryPermissionFailedPick(entry);

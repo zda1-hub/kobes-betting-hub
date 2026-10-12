@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { expandPublication, gradeWagerRows, sourcePacketPath } = require('./wager-ledger');
+const { hydrateCanonicalPlayer } = require('./canonical-pick-player');
 const row = { pick_id: '20260917-123-X', operating_date: '2026-09-17', selection: 'Angels ML -110 (10U)',
   league: 'MLB', status: 'PUBLISHED', published_at: '2026-09-17T18:00:00Z',
   post_reference: 'https://discord.com/channels/1/2/3', result: 'W', net_units: '20', units_risked: '10' };
@@ -53,6 +54,27 @@ test('source paths support Telegram and X and reject traversal', () => {
   assert.equal(sourcePacketPath('/queue', 'tg-20260917-123-4'), '/queue/2026-09-17/tg-20260917-123-4.json');
   assert.equal(sourcePacketPath('/queue', 'manual-20260917-aaaaaaaaaaaaaaaaaaaa'), '/queue/2026-09-17/manual-20260917-aaaaaaaaaaaaaaaaaaaa.json');
   assert.equal(sourcePacketPath('/queue', '../secret'), null);
+});
+
+test('a hydrated single-wager canonical result cannot be replaced by unnamed source-only reconstruction', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-named-wager-'));
+  try {
+    const bare = { ...row, pick_id: '20261011-101-X', operating_date: '2026-10-11',
+      selection: 'Over 3.5 receptions', league: 'NFL', sport: 'NFL',
+      published_line: '3.5', published_odds_american: '-125', result: 'W',
+      result_verified_source: 'Verified final result: https://www.espn.com/game/1',
+      result_verified_at: '2026-10-11T23:00:00Z' };
+    const source = { pick_id: bare.pick_id, analysis: { extraction: { lossless_text_terms: true,
+      plays: [{ selection: bare.selection, player_name: 'DeVaughn Vele', line: '3.5', odds_american: '-125' }] } } };
+    const canonical = hydrateCanonicalPlayer(bare, source);
+    const sourcePath = sourcePacketPath(directory, bare.pick_id);
+    await fs.mkdir(path.dirname(sourcePath), { recursive: true });
+    await fs.writeFile(sourcePath, JSON.stringify(source));
+    const result = await gradeWagerRows({ rows: [canonical], date: canonical.operating_date, root: directory,
+      file: path.join(directory, 'ledger.json'), grade: async () => { throw new Error('Settled canonical row must not be regraded'); } });
+    assert.equal(result.rows.length, 1);
+    assert.deepEqual(result.rows[0], { ...canonical, wager_scope: 'individual' });
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
 });
 
 test('checkpoints each verified wager and reuses it across restarts; changed terms stay pending', async () => {
