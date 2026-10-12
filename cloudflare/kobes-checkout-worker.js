@@ -2685,6 +2685,12 @@ async function activateCheckoutAssociation(env, association, eventId = null) {
   const freeTrial = verifiedMonthlyTrial(session, subscription, association, env);
   if (!successfulPayment && !freeTrial) throw new Error('An authoritative successful Stripe payment or verified monthly trial is required before VIP activation.');
   const customerId = stripeId(session.customer) || stripeId(subscription.customer);
+  if (freeTrial) await recordAnalyticsEvent(env, {
+    eventName: 'trial_started', sessionId: association.analytics_session_id, offer: association.offer,
+    customerId, subscriptionId: subscription.id, discordUserId: association.discord_user_id,
+    dedupeKey: `trial_started:${subscription.id}`,
+    properties: { trial_start: stripeTimestamp(subscription.trial_start), trial_end: stripeTimestamp(subscription.trial_end), verified: true },
+  });
   const attempts = Number(association.activation_attempts || 0) + 1;
   await updateCheckoutAssociation(env, association.id, {
     status: 'VIP_PENDING', stripe_customer_id: customerId,
@@ -2996,6 +3002,78 @@ function analyticsRange(url, now = new Date()) {
   return { preset, start, end, includes: value => { const time = new Date(value).getTime(); return Number.isFinite(time) && (!start || time >= start.getTime()) && time < end.getTime(); } };
 }
 
+function subscriptionRevenueSummary(subscriptions, paidSubscriptionIds = new Set()) {
+  const entitled = subscriptions.filter(item => ACTIVE_SUBSCRIPTION_STATUSES.has(item.status) && !item.entitlement_blocked);
+  const active = entitled.filter(item => item.status === 'active');
+  const paid = entitled.filter(item => item.status === 'active' || paidSubscriptionIds.has(item.stripe_subscription_id));
+  const statusTrialing = entitled.filter(item => item.status === 'trialing');
+  const trialing = statusTrialing.filter(item => !paidSubscriptionIds.has(item.stripe_subscription_id));
+  const monthlyValue = item => item.offer === 'annual' ? 19499 / 12 : item.offer === 'six_month' ? 13499 / 6 : 3299;
+  const sum = rows => Math.round(rows.reduce((total, item) => total + monthlyValue(item), 0));
+  return { entitled, paid, trialing, statusTrialing, paidMrrCents: sum(active), potentialTrialMrrCents: sum(statusTrialing) };
+}
+
+function partitionMissingVipDetails(details, paidSubscriptionIds) {
+  return {
+    paid: details.filter(item => item.entitlementStatus === 'active' || paidSubscriptionIds.has(item.subscriptionId)),
+    trial: details.filter(item => item.entitlementStatus === 'trialing' && !paidSubscriptionIds.has(item.subscriptionId)),
+  };
+}
+
+function reportedVipStatus(storedStatus, roleCheck) {
+  if (roleCheck === 'ACTIVE') return 'VIP_ACTIVE';
+  if (roleCheck === 'MISSING_DISCORD') return 'MISSING_DISCORD';
+  if (roleCheck === 'MISSING') return 'VIP_ROLE_MISSING';
+  return storedStatus || 'UNKNOWN';
+}
+
+function entitledVipWorkflowSummary(roleChecks, associations) {
+  let pending = 0, failed = 0;
+  for (const check of roleChecks) {
+    if (check.role === 'ACTIVE') continue;
+    const association = associations.find(item => item.stripe_subscription_id === check.subscription.stripe_subscription_id);
+    if (association?.status === 'VIP_PENDING') pending += 1;
+    if (association?.status === 'VIP_FAILED') failed += 1;
+  }
+  return { pending, failed };
+}
+
+function trialConversionSummary(events, range, now = Date.now()) {
+  const starts = new Map();
+  for (const event of events) {
+    if (event.event_name !== 'trial_started' || event.properties?.verified !== true || !event.stripe_subscription_id) continue;
+    const start = Date.parse(event.properties.trial_start);
+    const end = Date.parse(event.properties.trial_end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end - start !== 2 * 86400000 || start > now) continue;
+    if (!range.includes(new Date(start).toISOString())) continue;
+    const previous = starts.get(event.stripe_subscription_id);
+    if (!previous || start < previous.start) starts.set(event.stripe_subscription_id, { event, start, end });
+  }
+  const payments = new Map();
+  const vip = new Set();
+  for (const event of events) {
+    if (event.event_name === 'vip_activated') vip.add(event.stripe_subscription_id);
+    if (event.event_name !== 'payment_completed' || !event.stripe_subscription_id) continue;
+    const at = Date.parse(event.occurred_at);
+    if (!Number.isFinite(at) || at > now) continue;
+    payments.set(event.stripe_subscription_id, Math.min(payments.get(event.stripe_subscription_id) ?? Infinity, at));
+  }
+  let matured = 0, converted = 0, pending = 0, paidBeforeEnd = 0, vipActivated = 0;
+  for (const [id, trial] of starts) {
+    if (vip.has(id)) vipActivated += 1;
+    const payment = payments.get(id);
+    if (payment !== undefined && payment >= trial.start && payment < trial.end) paidBeforeEnd += 1;
+    if (trial.end > now) { pending += 1; continue; }
+    matured += 1;
+    if (payment !== undefined && payment >= trial.end) converted += 1;
+  }
+  return { started: starts.size, vipActivated, pendingMaturation: pending, matured, firstPaidAfterTrial: converted,
+    maturedWithoutFirstPayment: matured - converted, paidBeforeTrialEnd: paidBeforeEnd,
+    trialToPaidRate: matured ? converted / matured : null,
+    cohortBasis: 'Verified trial start within selected range; first positive payment observed after actual trial end, through generatedAt.',
+    historyBasis: 'Recorded verified trial-start events only; earlier trials are not backfilled.' };
+}
+
 function groupCount(values, key) {
   return values.reduce((out, value) => { const label = key(value) || 'Unknown'; out[label] = (out[label] || 0) + 1; return out; }, {});
 }
@@ -3110,6 +3188,21 @@ function dashboardReportingData(raw, excludedCustomerConfig = '') {
   return data;
 }
 
+async function loadEmailStats(env, range) {
+  if (!env.DASHBOARD_STATS_SECRET) return { data: null, status: 'unconfigured' };
+  try {
+    const url = new URL('https://bettinghub-publisher.kobedirwin.workers.dev/api/admin/email-stats');
+    url.searchParams.set('start', (range.start || new Date(0)).toISOString());
+    url.searchParams.set('end', range.end.toISOString());
+    const request = new Request(url, { headers: { Authorization: `Bearer ${env.DASHBOARD_STATS_SECRET}` }, signal: AbortSignal.timeout(8000) });
+    const response = env.PUBLISHER_SERVICE ? await env.PUBLISHER_SERVICE.fetch(request) : await fetch(request);
+    if (response.ok) return { data: await response.json(), status: 'available' };
+    return { data: null, status: [401, 403].includes(response.status) ? 'authentication_failed' : response.status === 404 ? 'endpoint_missing' : 'service_unavailable' };
+  } catch (error) {
+    return { data: null, status: error?.name === 'TimeoutError' ? 'timeout' : 'service_unavailable' };
+  }
+}
+
 async function adminAnalytics(request, env, origin) {
   if (!await readAdminSession(request, env)) return json({ error: 'Admin sign-in required.' }, 401, origin);
   let range;
@@ -3151,16 +3244,8 @@ async function adminAnalytics(request, env, origin) {
     const response = await fetch('https://bettinghub-publisher.kobedirwin.workers.dev/api/free-pick/current', { signal: AbortSignal.timeout(8_000) });
     if (response.ok) freePick = await response.json();
   } catch { /* Dashboard shows unavailable without blocking business metrics. */ }
-  let emailStats = null;
-  if (env.DASHBOARD_STATS_SECRET) {
-    try {
-      const statsUrl = new URL('https://bettinghub-publisher.kobedirwin.workers.dev/api/admin/email-stats');
-      statsUrl.searchParams.set('start', (range.start || new Date(0)).toISOString());
-      statsUrl.searchParams.set('end', range.end.toISOString());
-      const response = await fetch(statsUrl, { headers: { Authorization: `Bearer ${env.DASHBOARD_STATS_SECRET}` }, signal: AbortSignal.timeout(8000) });
-      if (response.ok) emailStats = await response.json();
-    } catch { /* Subscriber statistics are optional; never block the dashboard. */ }
-  }
+  const emailStatsResult = await loadEmailStats(env, range);
+  const emailStats = emailStatsResult.data;
   const [sessionPage, eventPage, subscriptionPage, customerPage, associationPage, billingPage, referralPage, profilePage, creatorPage, feedbackPage, webhookPage] = await Promise.all([
     supabasePages(env, 'analytics_sessions?select=*&order=started_at.desc,id.desc'),
     supabasePages(env, 'analytics_events?select=*&order=occurred_at.desc,id.desc'),
@@ -3187,14 +3272,21 @@ async function adminAnalytics(request, env, origin) {
     billingPage.truncated && 'Billing history may be incomplete (20,000-row safety limit).',
     [subscriptionPage, customerPage, associationPage, referralPage, profilePage, creatorPage, feedbackPage, webhookPage].some(page => page.truncated) && 'Some member, referral, or alert history may be incomplete (pagination safety limit).',
     stripePaymentsTruncated && 'Stripe payment totals may be incomplete (2,000-invoice/charge safety limit).',
-    !emailStats && 'Subscriber-service counts are temporarily unavailable; consented form events below may still appear.',
+    !emailStats && `Subscriber-service counts are temporarily unavailable (${emailStatsResult.status}); consented form events below may still appear.`,
   ].filter(Boolean);
   const rangedEvents = (events || []).filter(item => range.includes(item.occurred_at));
   const rangedBilling = (billing || []).filter(item => range.includes(item.occurred_at));
   const rangedReferrals = (referrals || []).filter(item => range.includes(item.created_at));
   const rangedFeedback = (feedback || []).filter(item => range.includes(item.created_at));
   const countEvents = name => rangedEvents.filter(event => event.event_name === name).length;
-  const eligible = (subscriptions || []).filter(item => ACTIVE_SUBSCRIPTION_STATUSES.has(item.status) && !item.entitlement_blocked);
+  const paidSubscriptionIds = new Set([
+    ...(events || []).filter(item => item.event_name === 'payment_completed').map(item => item.stripe_subscription_id),
+    ...(billing || []).filter(item => item.event_type === 'invoice_paid' && Number(item.amount_cents) > 0).map(item => item.stripe_subscription_id),
+    ...(stripePayments || []).filter(item => item.amountPaid > 0).map(item => item.subscriptionId),
+  ].filter(Boolean));
+  const subscriptionSummary = subscriptionRevenueSummary(subscriptions || [], paidSubscriptionIds);
+  const { entitled: eligible, paid: paidEligible, trialing: trialEligible } = subscriptionSummary;
+  const trialConversion = trialConversionSummary(events || [], range);
   const mappedEligible = eligible.map(subscription => ({ subscription, customer: (customers || []).find(item => item.stripe_customer_id === subscription.stripe_customer_id) }));
   let guildMembers = null;
   let guildMemberListComplete = false;
@@ -3225,6 +3317,7 @@ async function adminAnalytics(request, env, origin) {
     vipWithoutEntitlement = [...guildMembers.values()].filter(member => member.roles?.includes(env.DISCORD_MEMBER_ROLE_ID) && !entitledDiscordIds.has(member.user?.id)).length;
   }
   const activeIds = new Set(roleChecks.filter(item => item.role === 'ACTIVE').map(item => item.subscription.stripe_subscription_id));
+  const entitledVipWorkflow = entitledVipWorkflowSummary(roleChecks, associations || []);
   const { confirmedMissing: confirmedMissingRole, unavailable: roleCheckUnavailable } = partitionVipRoleChecks(roleChecks);
   const accessDetail = ({ subscription, role }) => {
     const association = (associations || []).find(item => item.stripe_subscription_id === subscription.stripe_subscription_id);
@@ -3237,7 +3330,8 @@ async function adminAnalytics(request, env, origin) {
       failureReason: association?.last_error_code || null, retryAt: association?.next_retry_at || null,
     };
   };
-  const paidWithoutVipDetails = confirmedMissingRole.map(accessDetail);
+  const confirmedMissingDetails = confirmedMissingRole.map(accessDetail);
+  const { paid: paidWithoutVipDetails, trial: trialWithoutVipDetails } = partitionMissingVipDetails(confirmedMissingDetails, paidSubscriptionIds);
   const roleCheckUnavailableDetails = roleCheckUnavailable.map(accessDetail);
   const invoiceWithinRange = stripePayments.filter(item => range.includes(new Date(Number(item.created || 0) * 1000).toISOString()));
   const collected = stripePayments.length
@@ -3254,8 +3348,12 @@ async function adminAnalytics(request, env, origin) {
   const allTimeRevenue = stripePayments.length
     ? stripePayments.reduce((sum, item) => sum + item.amountPaid, 0)
     : (billing || []).filter(item => item.event_type === 'invoice_paid').reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
-  const mrr = eligible.reduce((sum, item) => sum + (item.offer === 'annual' ? 19499 / 12 : item.offer === 'six_month' ? 13499 / 6 : 3299), 0);
+  const mrr = subscriptionSummary.paidMrrCents;
   const measuredSessionIds = new Set(rangedSessions.map(item => item.id));
+  const rangedPaidSubscriptionIds = new Set(rangedEvents.filter(item => item.event_name === 'payment_completed').map(item => item.stripe_subscription_id).filter(Boolean));
+  const activatedSubscriptionIds = new Set((events || []).filter(item => item.event_name === 'vip_activated').map(item => item.stripe_subscription_id).filter(Boolean));
+  const paidVipActivationRate = rangedPaidSubscriptionIds.size
+    ? [...rangedPaidSubscriptionIds].filter(id => activatedSubscriptionIds.has(id)).length / rangedPaidSubscriptionIds.size : 0;
   const measuredCount = name => rangedEvents.filter(event => event.event_name === name && measuredSessionIds.has(event.session_id)).length;
   const funnelNames = ['unique_visitor','join_page_view','offer_selected','discord_verified','checkout_started','payment_completed','vip_activated'];
   const funnel = funnelNames.map((name, index) => {
@@ -3292,7 +3390,7 @@ async function adminAnalytics(request, env, origin) {
       row.purchases += 1; row.revenueCents += paid; campaignRow.purchases += 1; campaignRow.revenueCents += paid;
     }
   }
-  for (const subscription of eligible) {
+  for (const subscription of paidEligible.filter(item => item.status === 'active')) {
     const session = sessionForSubscription(subscription.stripe_subscription_id); const source = firstSourceForSession(session); const campaign = firstCampaignForSession(session); const amount = mrrForSubscription(subscription);
     ensureSource(source).mrrCents += amount; ensureCampaign(source, campaign).mrrCents += amount;
   }
@@ -3344,8 +3442,9 @@ async function adminAnalytics(request, env, origin) {
   const baseMembers = (subscriptions || []).map(subscription => {
     const customer = (customers || []).find(item => item.stripe_customer_id === subscription.stripe_customer_id); const identity = stripeProfileMap.get(subscription.stripe_customer_id) || {};
     const association = associationBySubscription.get(subscription.stripe_subscription_id); const analyticsSession = sessionById.get(association?.analytics_session_id); const firstTouch = analyticsSession?.first_touch || association?.attribution || {}; const lastTouch = analyticsSession?.last_touch || association?.attribution || {};
+    const roleCheck = roleChecks.find(item => item.subscription.stripe_subscription_id === subscription.stripe_subscription_id)?.role || null;
     const memberRewards = (referrals || []).filter(item => item.referrer_discord_user_id === customer?.discord_user_id); const purchase = (billing || []).filter(item => item.stripe_subscription_id === subscription.stripe_subscription_id && item.event_type === 'invoice_paid').sort((a,b) => new Date(a.occurred_at) - new Date(b.occurred_at))[0];
-    return { name: identity.name, email: identity.email, plan: subscription.offer || 'unknown', status: subscription.status, stripeCustomerId: subscription.stripe_customer_id, subscriptionId: subscription.stripe_subscription_id, discordUserId: customer?.discord_user_id || '', vipStatus: association?.status || 'UNKNOWN', joinedAt: subscription.created_at, purchaseAt: purchase?.occurred_at || null, renewsOrEndsAt: subscription.cancel_at || subscription.current_period_end, canceling: Boolean(subscription.cancel_at_period_end || subscription.cancel_at), source: firstSourceForSession(analyticsSession), firstSource: firstSourceForSession(analyticsSession), firstMedium: firstTouch.first_medium || firstTouch.utm_medium || '', firstCampaign: firstTouch.first_campaign || firstTouch.utm_campaign || '', lastSource: normalizedSource(lastTouch.last_source || lastTouch.utm_source || firstTouch.first_source || 'direct'), lastMedium: lastTouch.last_medium || lastTouch.utm_medium || '', lastCampaign: lastTouch.last_campaign || lastTouch.utm_campaign || '', landingPage: analyticsSession?.first_path || firstTouch.landing_path || '', referralSource: association?.referral_code || firstTouch.referral_identifier || '', referralCreditsCents: memberRewards.filter(item => item.status === 'PAYOUT_SENT').reduce((sum,item)=>sum+Number(item.reward_amount_cents||0),0), pendingReferralCreditsCents: memberRewards.filter(item => !['PAYOUT_SENT','VOID'].includes(item.status)).reduce((sum,item)=>sum+Number(item.reward_amount_cents||0),0), failureReason: association?.last_error_code || '' };
+    return { name: identity.name, email: identity.email, plan: subscription.offer || 'unknown', status: subscription.status, stripeCustomerId: subscription.stripe_customer_id, subscriptionId: subscription.stripe_subscription_id, discordUserId: customer?.discord_user_id || '', vipStatus: reportedVipStatus(association?.status, roleCheck), roleCheck, storedVipStatus: association?.status || 'UNKNOWN', hasPositivePayment: paidSubscriptionIds.has(subscription.stripe_subscription_id), joinedAt: subscription.created_at, purchaseAt: purchase?.occurred_at || null, renewsOrEndsAt: subscription.cancel_at || subscription.current_period_end, canceling: Boolean(subscription.cancel_at_period_end || subscription.cancel_at), source: firstSourceForSession(analyticsSession), firstSource: firstSourceForSession(analyticsSession), firstMedium: firstTouch.first_medium || firstTouch.utm_medium || '', firstCampaign: firstTouch.first_campaign || firstTouch.utm_campaign || '', lastSource: normalizedSource(lastTouch.last_source || lastTouch.utm_source || firstTouch.first_source || 'direct'), lastMedium: lastTouch.last_medium || lastTouch.utm_medium || '', lastCampaign: lastTouch.last_campaign || lastTouch.utm_campaign || '', landingPage: analyticsSession?.first_path || firstTouch.landing_path || '', referralSource: association?.referral_code || firstTouch.referral_identifier || '', referralCreditsCents: memberRewards.filter(item => item.status === 'PAYOUT_SENT').reduce((sum,item)=>sum+Number(item.reward_amount_cents||0),0), pendingReferralCreditsCents: memberRewards.filter(item => !['PAYOUT_SENT','VOID'].includes(item.status)).reduce((sum,item)=>sum+Number(item.reward_amount_cents||0),0), failureReason: association?.last_error_code || '' };
   });
   const normalizedEmail = value => String(value || '').trim().toLowerCase();
   const distinct = values => [...new Set(values.filter(Boolean))];
@@ -3393,13 +3492,13 @@ async function adminAnalytics(request, env, origin) {
     generatedAt: new Date().toISOString(), range: { preset: range.preset, start: range.start?.toISOString() || null, end: range.end.toISOString() },
     dataCompletenessWarnings,
     reportingExclusions,
-    scoreboard: { todayPhoenix, activePaid: eligible.length, mrrCents: Math.round(mrr), newPaidToday, cancelledToday: cancellationTodayComplete ? cancelledToday : null, netAddsToday: cancellationTodayComplete ? newPaidToday - cancelledToday : null, newPaidLast7, netAddsLast7: cancellationLast7Complete ? newPaidLast7 - cancelledLast7 : null },
+    scoreboard: { todayPhoenix, activePaid: paidEligible.length, activeTrials: trialEligible.length, statusTrialing: subscriptionSummary.statusTrialing.length, entitled: eligible.length, mrrCents: Math.round(mrr), potentialTrialMrrCents: subscriptionSummary.potentialTrialMrrCents, newPaidToday, cancelledToday: cancellationTodayComplete ? cancelledToday : null, netAddsToday: cancellationTodayComplete ? newPaidToday - cancelledToday : null, newPaidLast7, netAddsLast7: cancellationLast7Complete ? newPaidLast7 - cancelledLast7 : null },
     traffic: { uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
-    conversion: { funnel, offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), unattributedPayments: rangedEvents.filter(item => item.event_name === 'payment_completed' && !sessionById.has(item.session_id)).length, purchaseConversionRate: rangedSessions.length ? measuredCount('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: countEvents('payment_completed') ? countEvents('vip_activated') / countEvents('payment_completed') : 0 },
+    conversion: { funnel, trialConversion, trialStarts: trialConversion.started, trialFunnel: [{ name: 'trial_started', count: trialConversion.started }, { name: 'trial_vip_activated', count: trialConversion.vipActivated }], funnelBasis: 'Period event totals; not an ordered trial cohort. Use trialConversion for matured trial-to-paid reporting.', offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), unattributedPayments: rangedEvents.filter(item => item.event_name === 'payment_completed' && !sessionById.has(item.session_id)).length, purchaseConversionRate: rangedSessions.length ? measuredCount('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionBasis: 'Period payment/start totals; not trial-to-paid conversion. Use matured trialConversion.', checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: paidVipActivationRate, vipActivationBasis: 'Distinct first-paid subscriptions in range with an observed VIP activation through generatedAt; activation may precede payment.' },
     engagement: engagementSummary(rangedEvents), interactions: interactionSummary(rangedEvents, rangedSessions),
-    revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPaymentSummary.attemptCount, failedInvoices: failedPaymentSummary.invoiceCount, affectedCustomers: failedPaymentSummary.affectedCustomers, openFailedInvoices: failedPaymentSummary.openInvoices, recoveredFailedInvoices: failedPaymentSummary.recoveredInvoices, introRevenueCents: invoiceWithinRange.filter(item => [1000, 1999].includes(item.amountPaid)).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
-    membership: { active: eligible.length, intro: eligible.filter(item => item.offer === 'starter').length, monthly: eligible.filter(item => ['trial_2_day','referral_trial','first_month_back','monthly'].includes(item.offer)).length, sixMonth: eligible.filter(item => item.offer === 'six_month').length, annual: eligible.filter(item => item.offer === 'annual').length, newMembers: countEvents('payment_completed'), renewals: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason === 'subscription_cycle').length, scheduledCancellations: eligible.filter(item => item.cancel_at_period_end || item.cancel_at).length, actualCancellations: canceled.filter(item => range.includes(item.updated_at)).length, duplicateGroups, duplicateCount: duplicateGroups.length, highRiskDuplicateCount: duplicateGroups.filter(item => item.risk === 'high').length, members },
-    discord: { paidWithoutVip: paidWithoutVipDetails.length, roleCheckUnavailable: roleCheckUnavailableDetails.length, vipActive: activeIds.size, pending: (associations || []).filter(item => item.status === 'VIP_PENDING').length, failed: (associations || []).filter(item => item.status === 'VIP_FAILED').length, recovered: (associations || []).filter(item => item.status === 'VIP_ACTIVE' && Number(item.activation_attempts || 0) > 1).length, paidDiscordMissing: paidWithoutVipDetails.filter(item => !item.discordConnected).length, vipWithoutEntitlement, joins: discordJoinSummary(rangedEvents), details: [...paidWithoutVipDetails, ...roleCheckUnavailableDetails] },
+    revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), potentialTrialMrrCents: subscriptionSummary.potentialTrialMrrCents, newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPaymentSummary.attemptCount, failedInvoices: failedPaymentSummary.invoiceCount, affectedCustomers: failedPaymentSummary.affectedCustomers, openFailedInvoices: failedPaymentSummary.openInvoices, recoveredFailedInvoices: failedPaymentSummary.recoveredInvoices, introRevenueCents: invoiceWithinRange.filter(item => [1000, 1999].includes(item.amountPaid)).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
+    membership: { active: eligible.length, activePaid: paidEligible.length, activeTrials: trialEligible.length, statusTrialing: subscriptionSummary.statusTrialing.length, paidMonthly: paidEligible.filter(item => ['trial_2_day','referral_trial','first_month_back','monthly'].includes(item.offer)).length, trialMonthly: trialEligible.filter(item => ['trial_2_day','referral_trial','monthly'].includes(item.offer)).length, intro: eligible.filter(item => item.offer === 'starter').length, monthly: eligible.filter(item => ['trial_2_day','referral_trial','first_month_back','monthly'].includes(item.offer)).length, sixMonth: eligible.filter(item => item.offer === 'six_month').length, annual: eligible.filter(item => item.offer === 'annual').length, newMembers: countEvents('payment_completed'), renewals: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason === 'subscription_cycle').length, scheduledCancellations: eligible.filter(item => item.cancel_at_period_end || item.cancel_at).length, actualCancellations: canceled.filter(item => range.includes(item.updated_at)).length, duplicateGroups, duplicateCount: duplicateGroups.length, highRiskDuplicateCount: duplicateGroups.filter(item => item.risk === 'high').length, members },
+    discord: { entitledPending: entitledVipWorkflow.pending, entitledFailed: entitledVipWorkflow.failed, paidWithoutVip: paidWithoutVipDetails.length, trialWithoutVip: trialWithoutVipDetails.length, trialDiscordMissing: trialWithoutVipDetails.filter(item => !item.discordConnected).length, roleCheckUnavailable: roleCheckUnavailableDetails.length, vipActive: activeIds.size, pending: (associations || []).filter(item => item.status === 'VIP_PENDING').length, failed: (associations || []).filter(item => item.status === 'VIP_FAILED').length, recovered: (associations || []).filter(item => item.status === 'VIP_ACTIVE' && Number(item.activation_attempts || 0) > 1).length, paidDiscordMissing: paidWithoutVipDetails.filter(item => !item.discordConnected).length, vipWithoutEntitlement, vipWithoutEntitlementBasis: 'Unmatched recorded entitlement; may include manually comped, staff or other approved access. Review before action.', joins: discordJoinSummary(rangedEvents), details: [...paidWithoutVipDetails, ...trialWithoutVipDetails, ...roleCheckUnavailableDetails] },
     referrals: { visits: countEvents('referral_visit') + rangedSessions.filter(item => item.first_touch?.first_source === 'referral' || item.first_touch?.referral_identifier).length, referredPurchases: rangedReferrals.length, pending: referralStatus('PENDING_PAYMENT') + referralStatus('HOLDING'), qualified: rangedReferrals.filter(item => ['READY','PAYOUT_SENT'].includes(item.status)).length, paidCashCents: rangedReferrals.filter(item => item.status === 'PAYOUT_SENT').reduce((sum, item) => sum + Number(item.reward_amount_cents || 0), 0), links: referralLinks, leaderboard: [...leaderboardMap.values()].map(item => ({ ...item, conversionRate: item.successfulReferrals + item.pendingReferrals ? item.successfulReferrals / (item.successfulReferrals + item.pendingReferrals) : 0 })).sort((a,b)=>b.successfulReferrals-a.successfulReferrals) },
     retention: {
       churnRate: (eligible.length + canceled.length) ? canceled.length / (eligible.length + canceled.length) : 0,
@@ -3414,8 +3513,8 @@ async function adminAnalytics(request, env, origin) {
       offersShown: countEvents('retention_offer_shown'), offersAccepted: countEvents('retention_offer_accepted'),
     },
     history: [...historyMap.values()],
-    operations: { freePick, emailStats },
-    alerts: { total: awaitingDiscord.length + paidWithoutVipDetails.length + roleCheckUnavailableDetails.length + webhookFailures.length + failedPaymentSummary.openInvoices + referralReview.length + duplicateGroups.length, awaitingDiscord, paidWithoutVip: paidWithoutVipDetails, vipCheckUnavailable: roleCheckUnavailableDetails, webhookFailures, failedPayments: failedPaymentDetails, referralReview, duplicates: duplicateGroups },
+    operations: { freePick, emailStats, emailStatsStatus: emailStatsResult.status },
+    alerts: { total: awaitingDiscord.length + paidWithoutVipDetails.length + trialWithoutVipDetails.length + roleCheckUnavailableDetails.length + webhookFailures.length + failedPaymentSummary.openInvoices + referralReview.length + duplicateGroups.length, awaitingDiscord, paidWithoutVip: paidWithoutVipDetails, trialWithoutVip: trialWithoutVipDetails, vipCheckUnavailable: roleCheckUnavailableDetails, webhookFailures, failedPayments: failedPaymentDetails, referralReview, duplicates: duplicateGroups },
   }, 200, origin);
 }
 
@@ -3648,7 +3747,13 @@ export default {
 };
 
 export const __test = {
+  loadEmailStats,
   verifiedMonthlyTrial,
+  subscriptionRevenueSummary,
+  partitionMissingVipDetails,
+  reportedVipStatus,
+  entitledVipWorkflowSummary,
+  trialConversionSummary,
   activateCheckoutAssociation,
   createAssociatedCheckout,
   recordPaidAssociationInvoice,

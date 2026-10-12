@@ -195,6 +195,7 @@ test('unlock saves the source tag, reveals today’s pick, and sends the same pi
     const statsPath = 'https://publisher.test/api/admin/email-stats?start=1970-01-01T00%3A00%3A00.000Z&end=2100-01-01T00%3A00%3A00.000Z';
     const denied = await worker.fetch(new Request(statsPath), env);
     assert.equal(denied.status, 401);
+    await env.DB.prepare("INSERT INTO free_pick_email_outbox (id, email, pick_json, unsubscribe_token, status, created_at) VALUES ('unsubscribed-skip', 'gone@example.com', '{}', 'skip-token', 'skipped', ?)").bind(new Date().toISOString()).run();
     const statsResponse = await worker.fetch(new Request(statsPath, { headers: { authorization: 'Bearer stats-fixture-secret' } }), env);
     assert.equal(statsResponse.status, 200);
     assert.deepEqual(await statsResponse.json(), { activeSubscribers: 1, optIns: 1, unlocks: 1,

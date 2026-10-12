@@ -104,6 +104,17 @@
     return true;
   };
   window.KBHAnalytics = Object.freeze({ sessionId, attribution: current, track: sendInteraction });
+  const membershipOpenings = new Set();
+  window.addEventListener?.('kbh:membership-open', event => {
+    const openingId = event.detail?.openingId;
+    if (!window.KBHConsent?.allowed() || !uuid.test(openingId || '') || membershipOpenings.has(openingId)) return;
+    membershipOpenings.add(openingId);
+    fetch(`${workerOrigin}/analytics/event`, {
+      method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'join_page_view', session_id: sessionId, path: '/join', attribution: current,
+        dedupe_key: `inline_join:${sessionId}:${openingId}` }),
+    }).catch(() => {});
+  });
   if (/^\/(?:admin|admin-analytics|member|partner|creator|welcome)(?:\/|\.|$)/.test(location.pathname)) return;
   const eventName = /\/(?:join|join\.html|membership|membership\.html)$/.test(location.pathname) ? 'join_page_view' : 'page_view';
   const bucket = Math.floor(Date.now() / 1800000);

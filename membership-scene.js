@@ -104,6 +104,7 @@
     history.scrollRestoration='manual';
     hideHome();panel.hidden=false;scene.dataset.open='true';card.removeAttribute('href');card.setAttribute('tabindex','-1');updateTriggers();
     if(home&&push)history.pushState({...history.state,kbhMembership:true},'',location.href);
+    if(home)window.dispatchEvent(new CustomEvent('kbh:membership-open',{detail:{openingId:crypto.randomUUID()}}));
     if(bill)bill.hidden=true;
     align();const after=image.getBoundingClientRect();
     const motions=[flyCard(before,after,400),animate(panel,[{opacity:0,transform:'translateY(8px)'},{opacity:1,transform:'none'}],{duration:300})];

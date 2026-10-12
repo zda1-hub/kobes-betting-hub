@@ -232,7 +232,7 @@ async function emailStats(request, env) {
     env.DB.prepare('SELECT COUNT(*) AS count FROM free_pick_unlock_events WHERE occurred_at >= ? AND occurred_at < ?').bind(start, end).first(),
     env.DB.prepare('SELECT COUNT(*) AS count FROM free_pick_unlock_events WHERE has_pick = 1 AND occurred_at >= ? AND occurred_at < ?').bind(start, end).first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM free_pick_email_outbox WHERE status = 'sent' AND sent_at >= ? AND sent_at < ?").bind(start, end).first(),
-    env.DB.prepare("SELECT COUNT(*) AS count FROM free_pick_email_outbox WHERE status != 'sent'").first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM free_pick_email_outbox WHERE status IN ('pending', 'sending')").first(),
   ]);
   return json({ activeSubscribers: Number(active?.count || 0), optIns: Number(optedIn?.count || 0),
     unlocks: Number(unlocks?.count || 0), unlocksWithPick: Number(withPick?.count || 0),

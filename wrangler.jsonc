@@ -15,6 +15,7 @@
   "version_metadata": {
     "binding": "CF_VERSION_METADATA"
   },
+  "services": [{ "binding": "PUBLISHER_SERVICE", "service": "bettinghub-publisher" }],
   "triggers": {
     "crons": ["*/5 * * * *", "15 16 * * *"]
   },
@@ -52,6 +53,7 @@
       "version_metadata": {
         "binding": "CF_VERSION_METADATA"
       },
+      "services": [{ "binding": "PUBLISHER_SERVICE", "service": "bettinghub-publisher-staging" }],
       // Staging reconciliation remains manual until all test-only resources are configured.
       "triggers": {
         "crons": []

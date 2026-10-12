@@ -8,6 +8,7 @@ const source = await readFile(new URL('../analytics.js', import.meta.url), 'utf8
 function visit({ url, referrer = '', storage = new Map(), now = Date.now() }) {
   const parsed = new URL(url);
   const calls = [];
+  const listeners = new Map();
   const localStorage = { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) };
   const context = {
     URL, URLSearchParams, Intl, Date: class extends Date { static now() { return now; } }, console, localStorage,
@@ -15,12 +16,31 @@ function visit({ url, referrer = '', storage = new Map(), now = Date.now() }) {
     location: { hostname: parsed.hostname, pathname: parsed.pathname, search: parsed.search },
     document: { referrer },
     fetch: async (requestUrl, options) => { calls.push({ requestUrl, body: JSON.parse(options.body) }); return { ok: true }; },
-    window: { __KBH_MEMBERSHIP_CONFIG__: { workerOrigin: 'https://worker.test' }, KBHConsent: { allowed: () => true } },
+    window: { __KBH_MEMBERSHIP_CONFIG__: { workerOrigin: 'https://worker.test' }, KBHConsent: { allowed: () => true },
+      addEventListener: (name, listener) => listeners.set(name, listener) },
   };
   context.window.KBHAnalytics = null;
   vm.runInNewContext(source, context);
-  return { attribution: context.window.KBHAnalytics.attribution, storage, event: calls[0]?.body };
+  return { attribution: context.window.KBHAnalytics.attribution, storage, event: calls[0]?.body, calls, listeners, window: context.window };
 }
+
+test('inline membership openings record one consented join view per opening and permit a real reopening', () => {
+  const page = visit({ url: 'https://kobesbettinghub.com/?utm_source=meta&utm_campaign=trial' });
+  assert.equal(page.event.event_name, 'page_view');
+  const open = page.listeners.get('kbh:membership-open');
+  const first = { detail: { openingId: '11111111-1234-4123-8123-123456789012' } };
+  open(first); open(first);
+  assert.equal(page.calls.length, 2);
+  assert.equal(page.calls[1].body.event_name, 'join_page_view');
+  assert.equal(page.calls[1].body.path, '/join');
+  assert.equal(page.calls[1].body.attribution.first_source, 'meta');
+  open({ detail: { openingId: '22222222-1234-4123-8123-123456789012' } });
+  assert.equal(page.calls.length, 3);
+  assert.notEqual(page.calls[1].body.dedupe_key, page.calls[2].body.dedupe_key);
+  page.window.KBHConsent.allowed = () => false;
+  open({ detail: { openingId: '33333333-1234-4123-8123-123456789012' } });
+  assert.equal(page.calls.length, 3);
+});
 
 test('Discord campaign is normalized and retained through an OAuth/Stripe return', () => {
   const first = visit({ url: 'https://kobesbettinghub.com/join?utm_source=DISCORD&utm_medium=community&utm_campaign=vip_push' });

@@ -84,8 +84,14 @@ test('signed trial checkout activates VIP immediately without recording payment;
   assert.deepEqual(state.roles, ['PUT']);
   assert.equal(state.analytics.filter(e => e.event_name === 'payment_completed').length, 0);
   assert.equal(state.analytics.filter(e => e.event_name === 'vip_activated').length, 1);
+  const trialStarts = state.analytics.filter(e => e.event_name === 'trial_started');
+  assert.equal(trialStarts.length, 1);
+  assert.equal(trialStarts[0].dedupe_key, 'trial_started:sub_trial');
+  assert.equal(trialStarts[0].properties.verified, true);
+  assert.equal(Date.parse(trialStarts[0].properties.trial_end) - Date.parse(trialStarts[0].properties.trial_start), 172800000);
   assert.equal((await signed(event)).status, 200);
   assert.deepEqual(state.roles, ['PUT']);
+  assert.equal(state.analytics.filter(e => e.event_name === 'trial_started').length, 1);
   state.subscription.status = 'canceled';
   assert.equal((await signed({ ...event, id: 'evt_cancel', type: 'customer.subscription.deleted', data: { object: state.subscription } })).status, 200);
   assert.deepEqual(state.roles, ['PUT', 'DELETE']);
@@ -98,6 +104,7 @@ test('unpaid or expired checkout never grants VIP', async t => {
   state.subscription.trial_end = now - 1;
   await assert.rejects(api.activateCheckoutAssociation(env, state.association), /verified monthly trial/);
   assert.deepEqual(state.roles, []);
+  assert.equal(state.analytics.filter(e => e.event_name === 'trial_started').length, 0);
 });
 test('first paid renewal is measured for an already-active trial; zero and mismatched invoices never count', async t => {
   const state = fixture(); mock(t, state);
