@@ -111,4 +111,6 @@ test('an over 0.5 anytime-touchdown line preserves the exact player identity',()
  s.scoringPlays=[{type:{text:'Rushing Touchdown'},text:'James Cook III 17 Yd Rush (Kick)'}];
  assert.equal(specialMarketGrade({selection:'James Cook III over 0.5 anytime touchdowns'},s,'football/nfl').result,'W');
  assert.equal(specialMarketGrade({selection:'James Cook II over 0.5 anytime touchdowns'},s,'football/nfl').status,'PENDING');
+ assert.equal(specialMarketGrade({selection:'James Cook III over 1.5 anytime touchdowns'},s,'football/nfl').status,'PENDING');
+ assert.equal(specialMarketGrade({selection:'James Cook III under 0.5 anytime touchdowns'},s,'football/nfl').status,'PENDING');
 });

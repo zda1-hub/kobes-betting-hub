@@ -1,5 +1,5 @@
 function genericCapperHeading(name) {
-  return /\bodds\b|^(?:main plays?|exclusive (?:plays?|picks?)|free picks?|vip picks?|daily plays?|results?|recap|random other cappers|CF PP)$/i.test(String(name || '').trim());
+  return /\b(?:college football|nfl|mlb|nba|nhl|ncaaf|football|baseball|basketball|hockey)\s+odds\b|^odds(?:\s+(?:board|cont\.?))?$|^(?:main plays?|exclusive (?:plays?|picks?)|free picks?|vip picks?|daily plays?|results?|recap|random other cappers|CF PP)$/i.test(String(name || '').trim());
 }
 
 // Conservative, lossless parser for capper-name + wager-line exclusive posts.

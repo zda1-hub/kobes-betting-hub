@@ -84,6 +84,9 @@ function specialMarketGrade(row, summary, leaguePath) {
   if (/\b(?:anytime|first TD|1st TD|first touchdown)\b/i.test(text)) {
     if (!leaguePath.startsWith('football/')) return pending('Touchdown specials require an identified football game.');
     const names = new Set((summary.boxscore?.players || []).flatMap(t => (t.statistics || []).flatMap(g => (g.athletes || []).map(a => a.athlete?.displayName))).filter(Boolean));
+    const threshold = String(row.selection || '').match(/\b(over|under)\s+(\d+(?:\.\d+)?)/i);
+    if (threshold && (threshold[1].toLowerCase() !== 'over' || Number(threshold[2]) !== 0.5))
+      return pending('Only an explicit over 0.5 anytime-touchdown threshold is supported; other thresholds require their own settlement rules.');
     const prefix = compact(String(row.selection).split(/\b(?:over|under|anytime|first TD|1st TD|first touchdown)\b/i)[0]);
     const matches = [...names].filter(n => compact(n) === prefix);
     if (matches.length !== 1) return pending('The touchdown player cannot be uniquely verified as participating.');
