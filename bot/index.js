@@ -2732,7 +2732,9 @@ async function clarifyStartHereArbitrage(readyClient) {
 async function holdGenericExclusiveApprovalCards() {
   let held = 0;
   for (const id of new Set([exclusivePickApprovalChannelId, process.env.HOCKEY_PICK_APPROVAL_CHANNEL_ID].filter(Boolean))) {
-    const channel = await approvedTextChannel(id);
+    const channel = await client.channels.fetch(id);
+    if (!channel?.isTextBased() || channel.guildId !== process.env.DISCORD_GUILD_ID || !/approval/i.test(channel.name))
+      throw new Error('Unexpected configured private approval channel.');
     const messages = await channel.messages.fetch({ limit: 100 });
     for (const message of messages.values()) {
       if (message.author.id !== client.user.id || !message.components.length) continue;
