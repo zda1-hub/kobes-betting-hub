@@ -3203,6 +3203,19 @@ async function loadEmailStats(env, range) {
   }
 }
 
+function websitePageViewSummary(events, sessions) {
+  const byId = new Map(sessions.map(session => [session.id, session]));
+  const sources = new Map();
+  for (const event of events) {
+    if (!['page_view', 'join_page_view'].includes(event.event_name)
+      || event.properties?.kind || String(event.dedupe_key || '').startsWith('inline_join:')) continue;
+    const source = attributionSourceForSession(byId.get(event.session_id));
+    sources.set(source, (sources.get(source) || 0) + 1);
+  }
+  return { total: [...sources.values()].reduce((sum, count) => sum + count, 0),
+    sources: Object.fromEntries(sources) };
+}
+
 async function adminAnalytics(request, env, origin) {
   if (!await readAdminSession(request, env)) return json({ error: 'Admin sign-in required.' }, 401, origin);
   let range;
@@ -3373,6 +3386,7 @@ async function adminAnalytics(request, env, origin) {
     if (exact.length) return exact.reduce((sum, item) => sum + item.amountPaid, 0);
     return rangedBilling.filter(item => item.stripe_subscription_id === subscriptionId && item.event_type === 'invoice_paid').reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
   };
+  const websiteViews = websitePageViewSummary(rangedEvents, sessions || []);
   const sourceRows = new Map(); const campaignRows = new Map();
   const ensureSource = source => { if (!sourceRows.has(source)) sourceRows.set(source, { source, visitors: 0, joinViews: 0, checkoutStarts: 0, purchases: 0, revenueCents: 0, mrrCents: 0 }); return sourceRows.get(source); };
   const ensureCampaign = (source, campaign) => { const key = `${source}:${campaign}`; if (!campaignRows.has(key)) campaignRows.set(key, { source, campaign, visitors: 0, joinViews: 0, checkoutStarts: 0, purchases: 0, revenueCents: 0, mrrCents: 0 }); return campaignRows.get(key); };
@@ -3394,7 +3408,8 @@ async function adminAnalytics(request, env, origin) {
     const session = sessionForSubscription(subscription.stripe_subscription_id); const source = firstSourceForSession(session); const campaign = firstCampaignForSession(session); const amount = mrrForSubscription(subscription);
     ensureSource(source).mrrCents += amount; ensureCampaign(source, campaign).mrrCents += amount;
   }
-  const sources = [...sourceRows.values()].map(item => ({ ...item, conversionRate: item.visitors ? item.purchases / item.visitors : 0 })).sort((a,b) => b.visitors - a.visitors);
+  for (const [source, pageViews] of Object.entries(websiteViews.sources)) ensureSource(source).pageViews = pageViews;
+  const sources = [...sourceRows.values()].map(item => ({ ...item, pageViews: item.pageViews || 0, conversionRate: item.visitors ? item.purchases / item.visitors : 0 })).sort((a,b) => b.visitors - a.visitors);
   const campaigns = [...campaignRows.values()].map(item => ({ ...item, conversionRate: item.visitors ? item.purchases / item.visitors : 0 })).sort((a,b) => b.revenueCents - a.revenueCents || b.visitors - a.visitors);
   const referralStatus = status => rangedReferrals.filter(item => item.status === status).length;
   const canceled = (subscriptions || []).filter(item => item.status === 'canceled');
@@ -3493,7 +3508,7 @@ async function adminAnalytics(request, env, origin) {
     dataCompletenessWarnings,
     reportingExclusions,
     scoreboard: { todayPhoenix, activePaid: paidEligible.length, activeTrials: trialEligible.length, statusTrialing: subscriptionSummary.statusTrialing.length, entitled: eligible.length, mrrCents: Math.round(mrr), potentialTrialMrrCents: subscriptionSummary.potentialTrialMrrCents, newPaidToday, cancelledToday: cancellationTodayComplete ? cancelledToday : null, netAddsToday: cancellationTodayComplete ? newPaidToday - cancelledToday : null, newPaidLast7, netAddsLast7: cancellationLast7Complete ? newPaidLast7 - cancelledLast7 : null },
-    traffic: { uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
+    traffic: { pageViews: websiteViews.total, metaAdClicks: null, uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
     conversion: { funnel, trialConversion, trialStarts: trialConversion.started, trialFunnel: [{ name: 'trial_started', count: trialConversion.started }, { name: 'trial_vip_activated', count: trialConversion.vipActivated }], funnelBasis: 'Period event totals; not an ordered trial cohort. Use trialConversion for matured trial-to-paid reporting.', offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), unattributedPayments: rangedEvents.filter(item => item.event_name === 'payment_completed' && !sessionById.has(item.session_id)).length, purchaseConversionRate: rangedSessions.length ? measuredCount('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionBasis: 'Period payment/start totals; not trial-to-paid conversion. Use matured trialConversion.', checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: paidVipActivationRate, vipActivationBasis: 'Distinct first-paid subscriptions in range with an observed VIP activation through generatedAt; activation may precede payment.' },
     engagement: engagementSummary(rangedEvents), interactions: interactionSummary(rangedEvents, rangedSessions),
     revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), potentialTrialMrrCents: subscriptionSummary.potentialTrialMrrCents, newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPaymentSummary.attemptCount, failedInvoices: failedPaymentSummary.invoiceCount, affectedCustomers: failedPaymentSummary.affectedCustomers, openFailedInvoices: failedPaymentSummary.openInvoices, recoveredFailedInvoices: failedPaymentSummary.recoveredInvoices, introRevenueCents: invoiceWithinRange.filter(item => [1000, 1999].includes(item.amountPaid)).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
@@ -3747,6 +3762,7 @@ export default {
 };
 
 export const __test = {
+  websitePageViewSummary,
   loadEmailStats,
   verifiedMonthlyTrial,
   subscriptionRevenueSummary,

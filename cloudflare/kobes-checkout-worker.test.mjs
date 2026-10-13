@@ -1586,3 +1586,17 @@ test('CTA reporting uses the same recoverable Meta source as the session report'
   assert.equal(result.ctas[0].clicks,1);
   assert.equal(result.ctas[0].uniqueVisitors,1);
 });
+
+test('website views exclude interaction samples and inline membership openings but retain repeat loads', () => {
+  const sessions=[{id:'meta-session',first_touch:{first_source:'meta'}}];
+  const events=[
+    {event_name:'page_view',session_id:'meta-session'},
+    {event_name:'page_view',session_id:'meta-session'},
+    {event_name:'join_page_view',session_id:'meta-session'},
+    {event_name:'join_page_view',session_id:'meta-session',dedupe_key:'inline_join:meta-session:one'},
+    {event_name:'page_view',session_id:'meta-session',properties:{kind:'engagement'}},
+    {event_name:'page_view',session_id:'meta-session',properties:{kind:'interaction'}},
+    {event_name:'payment_completed',session_id:'meta-session'},
+  ];
+  assert.deepEqual(workerTest.websitePageViewSummary(events,sessions),{total:3,sources:{meta:3}});
+});

@@ -41,3 +41,6 @@
 .ads-manager-link{display:inline-flex;align-items:center;justify-content:center;max-width:100%;min-height:44px;padding:11px 16px;border-radius:14px;background:var(--ink);color:#fff;font-family:inherit;font-size:14px;font-weight:600;line-height:1.4;text-align:center;text-decoration:none;box-shadow:0 2px 5px #0002}
 
 .admin-shell .metric strong.metric-status{font-size:16px;line-height:1.3;letter-spacing:0;overflow-wrap:normal}
+
+[data-meta-traffic]{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:600px){[data-meta-traffic]{grid-template-columns:1fr}}

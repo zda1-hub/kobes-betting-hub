@@ -136,3 +136,10 @@ test('an unknown source or generic paid-social label is not assumed to be Meta',
     assert.equal(visit({url:'https://kobesbettinghub.com/?utm_source='+tag}).attribution.first_source, 'other');
   }
 });
+
+ test('repeat page loads within one session keep distinct view receipts', () => {
+  const first=visit({url:'https://kobesbettinghub.com/?utm_source=meta'});
+  const second=visit({url:'https://kobesbettinghub.com/?utm_source=meta',storage:first.storage});
+  assert.equal(first.event.session_id,second.event.session_id);
+  assert.notEqual(first.event.dedupe_key,second.event.dedupe_key);
+});

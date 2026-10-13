@@ -117,10 +117,10 @@
   });
   if (/^\/(?:admin|admin-analytics|member|partner|creator|welcome)(?:\/|\.|$)/.test(location.pathname)) return;
   const eventName = /\/(?:join|join\.html|membership|membership\.html)$/.test(location.pathname) ? 'join_page_view' : 'page_view';
-  const bucket = Math.floor(Date.now() / 1800000);
+  const pageViewId = crypto.randomUUID();
   pageViewReady = fetch(`${workerOrigin}/analytics/event`, {
     method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ event_name: eventName, session_id: sessionId, path: location.pathname, attribution: current, dedupe_key: `${eventName}:${sessionId}:${location.pathname}:${bucket}` }),
+    body: JSON.stringify({ event_name: eventName, session_id: sessionId, path: location.pathname, attribution: current, dedupe_key: `${eventName}:${sessionId}:${location.pathname}:${pageViewId}` }),
   }).catch(() => {});
   if (typeof document.querySelectorAll !== 'function') return;
 
