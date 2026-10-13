@@ -105,3 +105,10 @@ test('hits+runs+RBIs uses every exact stat and never treats a missing component 
   s.boxscore.players[0].statistics[0].athletes[0].stats[2]='';
   assert.equal((await gradePickFromEspn(r,{fetchImpl:fetcher(s)})).status,'PENDING');
 });
+
+test('an over 0.5 anytime-touchdown line preserves the exact player identity',()=>{
+ const s=summary();s.boxscore={players:[{statistics:[{athletes:[{athlete:{displayName:'James Cook III'},stats:['25','111','2']}]}]}]};
+ s.scoringPlays=[{type:{text:'Rushing Touchdown'},text:'James Cook III 17 Yd Rush (Kick)'}];
+ assert.equal(specialMarketGrade({selection:'James Cook III over 0.5 anytime touchdowns'},s,'football/nfl').result,'W');
+ assert.equal(specialMarketGrade({selection:'James Cook II over 0.5 anytime touchdowns'},s,'football/nfl').status,'PENDING');
+});

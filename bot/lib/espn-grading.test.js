@@ -290,3 +290,13 @@ test('uniquely resolved scoreboard team identity survives missing summary aliase
   assert.equal((await grade(row.selection, box, [game, { ...game, id: 'other' }])).status, 'PENDING');
   assert.equal((await grade('Florida', box)).status, 'PENDING');
 });
+
+test('grades combined defensive tackles from total tackles without adding solo tackles again',async()=>{
+ const teams=[{team:{displayName:'Buffalo Bills',abbreviation:'BUF'}},{team:{displayName:'Los Angeles Rams',abbreviation:'LAR'}}];
+ const e={id:'defense',status:{type:{completed:true}},competitions:[{competitors:teams}]};
+ const b={header:{competitions:[{id:'defense',status:{type:{completed:true}},competitors:teams}]},boxscore:{players:[{statistics:[{name:'defensive',keys:['totalTackles','soloTackles'],athletes:[{athlete:{displayName:'Cole Bishop'},stats:['11','6']}]}]}]}};
+ const fetchImpl=async url=>new Response(JSON.stringify(url.includes('/summary?')?b:{events:[e]}));
+ const r={operating_date:'2026-10-12',league:'NFL',event:'Buffalo Bills at Los Angeles Rams',selection:'Cole Bishop OVER 5.5 Tackles + Assists'};
+ const result=await gradePickFromEspn(r,{fetchImpl});assert.equal(result.result,'W');assert.match(result.outcome,/11 tackles/);
+ assert.equal((await gradePickFromEspn({...r,selection:'Cole Bishop OVER 12.5 Tackles + Assists'},{fetchImpl})).result,'L');
+});

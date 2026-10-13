@@ -4,8 +4,12 @@
   "workflow_id": "exclusive",
   "review_channel_id": "1550992219555762216",
   "destination_channel_id": "1550535535041187920",
-  "source_channel_ids": ["1539055850075852911"],
-  "reviewer_user_ids": ["1209660006383755265"],
+  "source_channel_ids": [
+    "1539055850075852911"
+  ],
+  "reviewer_user_ids": [
+    "1209660006383755265"
+  ],
   "website_vip_role_id": "1542668360985088070",
   "approve_label": "Post to exclusive wins",
   "public_title": "Exclusive recap",
@@ -14,9 +18,13 @@
     "workflow_id": "writeup",
     "review_channel_id": "1550992474367983677",
     "destination_channel_id": "1539062059306848368",
-    "source_channel_ids": ["1539055413633228881", "1487451739459293336"],
+    "source_channel_ids": [
+      "1539055413633228881",
+      "1487451739459293336",
+      "1539061878062583848"
+    ],
     "grouping": "overall",
     "approve_label": "Post to writeup recaps",
-    "public_title": "Writeup recap"
+    "public_title": "Daily plays recap"
   }
 }

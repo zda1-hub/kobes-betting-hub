@@ -37,3 +37,8 @@ test('strips only recognized leading publication wrappers and retains explicit l
   assert.equal(normalizeSelection('UNSUPPORTED HYPE Brewers -1.5'), 'UNSUPPORTED HYPE Brewers -1.5');
   assert.equal(leadingWagerTerms('CFB NFL Houston +7.5').conflictingLeagues, true);
 });
+
+test('combined tackles and assists are one market while separate wagers remain a parlay',()=>{
+ assert.deepEqual(combinationSelections('Cole Bishop OVER 5.5 Tackles + Assists'),['Cole Bishop OVER 5.5 Tackles + Assists']);
+ assert.equal(combinationSelections('Cole Bishop OVER 5.5 Tackles + Bills ML').length,2);
+});

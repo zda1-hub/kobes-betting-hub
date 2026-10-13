@@ -76,7 +76,7 @@ const { datedTimeOverride, nextArizonaDailyStartMs } = require('./lib/daily-wind
 const { createDiscordJoinAttribution, parseCampaigns } = require('./lib/discord-join-attribution');
 const { arbitrageBookmakers, arbitrageSports, createArbitragePaperMonitor } = require('./lib/arbitrage-paper-monitor');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
-const { exclusiveSourceIsCurrent } = require('../pipeline/exclusive-text');
+const { exclusiveSourceIsCurrent, genericCapperHeading } = require('../pipeline/exclusive-text');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { enrichPacket } = require('../pipeline/enrich-pick');
 const { runCollector } = require('../pipeline/collect-x');
@@ -2729,6 +2729,26 @@ async function clarifyStartHereArbitrage(readyClient) {
   console.log('Start-here betting arbitrage wording updated in the existing post.');
 }
 
+async function holdGenericExclusiveApprovalCards() {
+  let held = 0;
+  for (const id of new Set([exclusivePickApprovalChannelId, hockeyPickApprovalChannelId].filter(Boolean))) {
+    const channel = await approvedTextChannel(id);
+    const messages = await channel.messages.fetch({ limit: 100 });
+    for (const message of messages.values()) {
+      if (message.author.id !== client.user.id || !message.components.length) continue;
+      const heading = String(message.embeds?.[0]?.description || '').split('\n')[0].replace(/\*/g, '').trim();
+      if (!genericCapperHeading(heading)) continue;
+      const reject = message.components.flatMap(row => row.toJSON().components).find(button => /^source-review:.*:reject$/.test(button.custom_id || ''));
+      if (!reject) continue;
+      await message.edit({ embeds: [{ ...message.embeds[0].toJSON(),
+        footer: { text: 'HELD: odds board or unnamed play label; original capper required.' } }],
+        components: [{ type: 1, components: [reject] }], allowedMentions: { parse: [] } });
+      held++;
+    }
+  }
+  console.log('Non-capper approval hold receipt:', JSON.stringify({ held }));
+}
+
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
   void clarifyStartHereArbitrage(readyClient).catch(error => console.error('Start-here wording update needs attention:', error.message));
@@ -2839,6 +2859,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   try {
     await refreshPendingTermsOnlyApprovals();
     await refreshVisibleTermsOnlyApprovalControls();
+    await holdGenericExclusiveApprovalCards();
   } catch (error) {
     console.error('Unable to refresh pending expert-picks approval cards:', error);
   }

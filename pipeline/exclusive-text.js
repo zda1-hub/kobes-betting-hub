@@ -1,3 +1,7 @@
+function genericCapperHeading(name) {
+  return /\bodds\b|^(?:main plays?|exclusive (?:plays?|picks?)|free picks?|vip picks?|daily plays?|results?|recap|random other cappers|CF PP)$/i.test(String(name || '').trim());
+}
+
 // Conservative, lossless parser for capper-name + wager-line exclusive posts.
 // Unknown prose falls back to normal image/model extraction, never guessed terms.
 function exclusiveTextExtraction(source, text) {
@@ -7,7 +11,7 @@ function exclusiveTextExtraction(source, text) {
   // or wager-size label ahead of the actual selection. Those labels are not
   // bets; retain only the exact selection lines in the approval card.
   const capper = (lines.shift() || '').replace(/[\s\p{Extended_Pictographic}\uFE0F]+$/gu, '').trim();
-  if (!capper || !/^[\p{L}\p{N} .’'&_-]{2,60}$/u.test(capper)
+  if (!capper || genericCapperHeading(capper) || !/^[\p{L}\p{N} .’'&_-]{2,60}$/u.test(capper)
     || /\b(?:picks? of|report|recap|results?|package|sale|subscribe|week|tonight|tomorrow|public betting)\b/i.test(capper)
     || [source.handle, source.display_name].some(n => String(n || '').toLowerCase() === capper.toLowerCase())) return null;
   const labels = /^(?:NFL|MLB|NBA|WNBA|NHL|NCAAF|NCAAB|CFB|MLS|NFL Props?|MLB Props?|College Football|Soccer)$/i;
@@ -53,4 +57,4 @@ function completeXPost(post) {
   return { ...post, text: post.note_tweet?.text || post.text || '' };
 }
 
-module.exports = { exclusiveTextExtraction, exclusiveSourceIsCurrent, exclusiveTextGroups, exclusiveWagerKey, completeXPost };
+module.exports = { genericCapperHeading, exclusiveTextExtraction, exclusiveSourceIsCurrent, exclusiveTextGroups, exclusiveWagerKey, completeXPost };

@@ -88,3 +88,12 @@ test('exclusive dedupe matches capper spacing but distinguishes odds, lines, sta
   assert.equal(key, exclusiveWagerKey('BankrollBill', 'Twins/Angels under 8 -130 (1.5U)'));
   for (const [capper, bet] of [['Other', 'Twins/Angels Under 8 -130 (1.5U)'], ['BankrollBill', 'Twins/Angels Under 8.5 -130 (1.5U)'], ['BankrollBill', 'Twins/Angels Under 8 -120 (1.5U)'], ['BankrollBill', 'Twins/Angels Under 8 -130 (1U)']]) assert.notEqual(key, exclusiveWagerKey(capper, bet));
 });
+
+test('odds boards and unnamed play labels are not original capper names',()=>{
+ for(const name of ['Saturday College Football Odds','Saturday College Football Odds CONT.','MAIN PLAY','CF PP']){
+  assert.equal(exclusiveTextExtraction(source,`${name}\nMichigan -7 (-110)`),null);
+  const p={source,analysis:{status:'SOURCE_EXTRACTED',extraction:{is_pick_candidate:true,source_capper_name:name,plays:[{selection:'Michigan -7 (-110)'}]}}};
+  assert.throws(()=>buildSourcePickApprovalEmbed(p,'APPROVED PICK'),/original capper/i);
+ }
+ assert.ok(exclusiveTextExtraction(source,'The Sharp Sheets\nMichigan -7 (-110)'));
+});

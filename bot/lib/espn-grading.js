@@ -106,6 +106,7 @@ function statSpec(row, entries) {
   const player = entries.find(entry => names.has(compact(entry.name)));
   if (!player) return null;
   const pick = (category, key, label, transform = Number) => ({ player, category, key, label, transform });
+  if (/tackles?\s*(?:\+|and|&)\s*assists?/.test(text)) return pick('defensive', 'totalTackles', 'tackles + assists');
   if (/hits\s*\+\s*runs\s*\+\s*(?:RBIs?|runs batted in)/i.test(text)) return { ...pick('batting', ['hits', 'runs', 'RBIs'], 'hits + runs + RBIs'), sum: true };
   if (/\bouts?\b|innings pitched/.test(text)) return pick('pitching', 'fullInnings.partInnings', 'outs', inningsToOuts);
   if (/walks? allowed/.test(text)) return pick('pitching', 'walks', 'walks allowed');
