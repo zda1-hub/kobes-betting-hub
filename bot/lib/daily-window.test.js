@@ -30,3 +30,9 @@ test('schedules today before the Arizona start and tomorrow after it', () => {
     '2026-09-20T15:00:00.000Z'
   );
 });
+
+test('today-only numeric recovery settings revert at Arizona midnight',()=>{
+ const config={overrideDate:'2026-10-13',overrideAt:'20',recurringAt:'4'};
+ assert.equal(datedTimeOverride({...config,now:new Date('2026-10-14T06:59:59Z')}),'20');
+ assert.equal(datedTimeOverride({...config,now:new Date('2026-10-14T07:00:00Z')}),'4');
+});

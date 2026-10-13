@@ -9,3 +9,7 @@ Repair: extend collection through 23:59 MST and increase bounded extraction allo
 Verification: 22 focused collector, approver and health tests passed; bot syntax and diff checks passed. Render diagnostic one-off jobs verified channels, card buttons, billing errors, and Kobe ownership. Jobs do not share the service persistent disk (empty /var/data), so no independent job was used to publish approval packets with missing durable local receipts. Settings redeploy dep-db7c0bnavr4c73fl1sfg triggered. Code deploy and actual today-card receipts pending.
 
 Limits: owner must save X billing-cap change because it authorizes additional charges. No guarantee that an external provider never fails; the repair provides visible failures, bounded scans and automatic retry instead of claiming uninterrupted service. Today’s picks must pass event/timing/detail validation; expired wagers cannot be reposted just to fill a quota.
+
+## Today-only steering
+
+User requested elevated collection only today. Recurring schedule remains 08:00–16:00 MST, 15-minute effective polling and four extraction calls/pass. Date-scoped recovery settings for October 13 use 23:59 stop, five-minute polling, and 20 extraction calls/pass. Numeric recovery overrides are evaluated on every pass, so the next Arizona day reverts automatically without a local laptop or scheduled Codex task. Four daily-window tests include exact midnight reversion.

@@ -808,9 +808,12 @@ function xMonitorIntervalMs(now = new Date()) {
   const overrideDate = (process.env.X_MONITOR_INTERVAL_OVERRIDE_DATE || '').trim();
   const overrideMs = (process.env.X_MONITOR_INTERVAL_OVERRIDE_MS || '').trim();
   const today = pacificClock(now).date;
-  const configured = Number(overrideDate && overrideMs && today >= overrideDate
-    ? overrideMs
-    : (process.env.X_MONITOR_INTERVAL_MS || 300000));
+  const regular = overrideDate && overrideMs && today >= overrideDate
+    ? overrideMs : (process.env.X_MONITOR_INTERVAL_MS || 300000);
+  const configured = Number(datedTimeOverride({ now,
+    overrideDate: process.env.X_MONITOR_RECOVERY_DATE,
+    overrideAt: process.env.X_MONITOR_RECOVERY_INTERVAL_MS,
+    recurringAt: regular }));
   // Guard against an accidental rapid polling setting that could create an
   // unnecessary X API bill. Five minutes is the default; one minute is the floor.
   if (!Number.isFinite(configured) || configured < 60000) return 300000;
@@ -1477,8 +1480,11 @@ function arizonaDailyTimestampMs(time, now = new Date()) {
   return new Date(`${values.year}-${values.month}-${values.day}T${time}:00-07:00`).getTime();
 }
 
-function xMonitorModelCallLimit() {
-  const raw = (process.env.X_MONITOR_MAX_MODEL_CALLS_PER_RUN || process.env.X_MONITOR_MAX_CANDIDATES || '').trim();
+function xMonitorModelCallLimit(now = new Date()) {
+  const raw = datedTimeOverride({ now,
+    overrideDate: process.env.X_MONITOR_RECOVERY_DATE,
+    overrideAt: process.env.X_MONITOR_RECOVERY_MAX_MODEL_CALLS,
+    recurringAt: process.env.X_MONITOR_MAX_MODEL_CALLS_PER_RUN || process.env.X_MONITOR_MAX_CANDIDATES || '' });
   if (!raw) return null;
   const limit = Number(raw);
   if (!Number.isInteger(limit) || limit < 1) {
