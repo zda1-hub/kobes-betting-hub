@@ -717,6 +717,8 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
   let created = 0;
   let skipped = 0;
   let deferred = 0;
+  let failedSources = 0;
+  let apiBlocked = null;
 
   let nextSourceIndex = 0;
   let commitChain = Promise.resolve();
@@ -1043,7 +1045,7 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
     while (true) {
       const sourceIndex = nextSourceIndex;
       nextSourceIndex += 1;
-      if (sourceIndex >= sources.length) return;
+      if (sourceIndex >= sources.length || apiBlocked) return;
       const source = orderedSources[sourceIndex];
       try {
         const result = await inspectSource(source);
@@ -1054,6 +1056,9 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
           .catch((error) => console.error(`Commit failed for @${source.handle}: ${error.message}`));
         await commitChain;
       } catch (error) {
+        failedSources += 1;
+        if (/spend.cap.reached|monthly spend cap/i.test(error.message)) apiBlocked = 'X_SPEND_CAP';
+        else if (/credits.depleted|insufficient.credits/i.test(error.message)) apiBlocked = 'X_CREDITS';
         console.error(`Source scan failed for @${source.handle}: ${error.message}`);
       }
     }
@@ -1085,7 +1090,7 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
   if (modelCallBudget.started >= modelCallBudget.limit && Number.isFinite(modelCallBudget.limit)) {
     console.log(`Model-call limit reached: ${modelCallBudget.started} OpenAI extraction request(s); ${deferred} candidate(s) deferred.`);
   }
-  return { created, skipped, deferred, modelCalls: modelCallBudget.started, sourceCount: sources.length };
+  return { created, skipped, deferred, failedSources, apiBlocked, modelCalls: modelCallBudget.started, sourceCount: sources.length };
 }
 
 // Operator recovery reuses a successful audited extraction and delivers only

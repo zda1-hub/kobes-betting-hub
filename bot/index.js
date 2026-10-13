@@ -29,6 +29,7 @@ const { buildPublicResults } = require('./lib/public-results');
 const { publicResultRows } = require('./lib/public-result-rows');
 const { recordEligibility } = require('./lib/record-eligibility');
 const { approvalUserIds } = require('./lib/approval-access');
+const { MARKER: COLLECTOR_HEALTH_MARKER, collectorHealthPayload } = require('./lib/collector-health');
 const { recoverResultsBacklog, readResultsBacklogCursor } = require('./lib/results-backlog');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
@@ -1586,6 +1587,22 @@ async function beginDailyXMonitor() {
   }
 }
 
+let collectorHealthState = '';
+async function reportCollectorHealth(result) {
+  const { state, payload } = collectorHealthPayload(result);
+  if (state === collectorHealthState) return;
+  for (const channelId of new Set([pickApprovalChannelId, exclusivePickApprovalChannelId].filter(Boolean))) {
+    const channel = await approvedTextChannel(channelId);
+    const messages = await channel.messages.fetch({ limit: 100 });
+    const previous = [...messages.values()].find(message => message.author.id === client.user.id
+      && message.embeds?.[0]?.footer?.text?.startsWith(COLLECTOR_HEALTH_MARKER));
+    if (previous) await previous.edit(payload);
+    else if (state !== 'RECOVERED') await channel.send(payload);
+  }
+  console.log('Collector health receipt:', JSON.stringify({ state, ...result }));
+  collectorHealthState = state;
+}
+
 async function collectXSafely() {
   if (xCollectionInProgress) {
     console.log('X collection is already running; skipped overlapping interval.');
@@ -1607,11 +1624,13 @@ async function collectXSafely() {
     // for the configured time window; Kobe's buttons control publication only.
     const modelCallLimit = xMonitorModelCallLimit();
     const result = await runCollector({ maxModelCalls: modelCallLimit ?? undefined });
+    await reportCollectorHealth(result).catch(error => console.error('Collector health alert failed:', error.message));
     if (modelCallLimit !== null && result.deferred > 0) {
       console.log(`Deferred ${result.deferred} candidate(s) after using ${result.modelCalls}/${modelCallLimit} OpenAI extraction call(s); they remain eligible for the next interval.`);
     }
   } catch (error) {
     console.error(`X collection failed: ${error instanceof Error ? error.message : error}`);
+    await reportCollectorHealth({ failedSources: 1, created: 0 }).catch(alertError => console.error('Collector health alert failed:', alertError.message));
   } finally {
     xCollectionInProgress = false;
   }
