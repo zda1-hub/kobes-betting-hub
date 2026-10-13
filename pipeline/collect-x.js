@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { datedTimeOverride } = require('../bot/lib/daily-window');
 const { enrichPacket } = require('./enrich-pick');
 const { exclusiveTextExtraction, exclusiveSourceIsCurrent, exclusiveTextGroups, exclusiveWagerKey, completeXPost } = require('./exclusive-text');
 const { discordRateLimitedFetch, recoverySendFailureStatus } = require('./discord-retry');
@@ -208,8 +209,10 @@ function configuredModelCallLimit(env = process.env) {
   return limit;
 }
 
-function configuredPerSourceModelCallLimit(env = process.env) {
-  const raw = (env.X_MONITOR_MAX_MODEL_CALLS_PER_SOURCE_PER_RUN || '1').trim();
+function configuredPerSourceModelCallLimit(env = process.env, now = new Date()) {
+  const raw = datedTimeOverride({ now, overrideDate: env.X_MONITOR_RECOVERY_DATE,
+    overrideAt: env.X_MONITOR_RECOVERY_PER_SOURCE_MODEL_CALLS,
+    recurringAt: env.X_MONITOR_MAX_MODEL_CALLS_PER_SOURCE_PER_RUN || '1' });
   const limit = Number(raw);
   return Number.isInteger(limit) && limit >= 1 ? limit : 1;
 }

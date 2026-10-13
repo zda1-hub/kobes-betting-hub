@@ -314,3 +314,9 @@ test('exclusive recovery rescan remains eligible after a budget-limited partial 
   const complete = sourceStateAfterPass({ ...options, completedSourcePass: true });
   assert.equal(complete.upcoming_slate_rescan_version, options.upcomingSlateRescanVersion);
 });
+
+test('today-only per-source catch-up allowance reverts without a restart',()=>{
+ const env={X_MONITOR_RECOVERY_DATE:'2026-10-13',X_MONITOR_RECOVERY_PER_SOURCE_MODEL_CALLS:'4'};
+ assert.equal(configuredPerSourceModelCallLimit(env,new Date('2026-10-14T06:59:59Z')),4);
+ assert.equal(configuredPerSourceModelCallLimit(env,new Date('2026-10-14T07:00:00Z')),1);
+});

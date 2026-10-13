@@ -13,3 +13,5 @@ Limits: owner must save X billing-cap change because it authorizes additional ch
 ## Today-only steering
 
 User requested elevated collection only today. Recurring schedule remains 08:00–16:00 MST, 15-minute effective polling and four extraction calls/pass. Date-scoped recovery settings for October 13 use 23:59 stop, five-minute polling, and 20 extraction calls/pass. Numeric recovery overrides are evaluated on every pass, so the next Arizona day reverts automatically without a local laptop or scheduled Codex task. Four daily-window tests include exact midnight reversion.
+
+Live recovery at 16:38–16:39 MST: Discord read-only count verified 4 regular cards, 50 exclusive cards and 6 hockey cards dated today (60 total; 57 still pending). No billing change was performed by the agent. X scans now succeed, establishing that the external block was lifted. The current deployed recovery code 5186537 logs five-minute collection. Final source throughput adjustment allows four model calls/source/pass today instead of one, still bounded by 20 total calls/pass; exact midnight fallback tested.
