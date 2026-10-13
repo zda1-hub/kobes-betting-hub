@@ -2731,7 +2731,7 @@ async function clarifyStartHereArbitrage(readyClient) {
 
 async function holdGenericExclusiveApprovalCards() {
   let held = 0;
-  for (const id of new Set([exclusivePickApprovalChannelId, hockeyPickApprovalChannelId].filter(Boolean))) {
+  for (const id of new Set([exclusivePickApprovalChannelId, process.env.HOCKEY_PICK_APPROVAL_CHANNEL_ID].filter(Boolean))) {
     const channel = await approvedTextChannel(id);
     const messages = await channel.messages.fetch({ limit: 100 });
     for (const message of messages.values()) {
