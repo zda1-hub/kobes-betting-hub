@@ -18,3 +18,11 @@ Evidence: `evidence/2026-10-13-kobe-updates/`. Full-page screenshot capture can 
 ## Release status
 
 Local implementation and verification. Publication receipts and live checks to be appended after rollout.
+
+## Published verification — October 13, approximately 7:12 PM MST
+
+Commit 85d1210 pushed to origin/main. Public site version a3c8d0fa-5f87-46d8-b288-43d29568b87f and publisher version c63a2d62-de5f-4c54-ad3a-bf6da757dc72 deployed. Render deploy dep-db7e8gajnfac73d758l0 became live on the same commit. Live public API refreshed with 683 wins and 49 count-only expert records for October 12 MST. Homepage rendered 16 win cards. Live message disclosure opens; all 22 review screenshots are present and image viewer closes by Escape with focus restored. Authenticated dashboard displayed Website page views beside 30-minute site sessions, with separate Meta views/sessions; actual Meta ad clicks remain unavailable without an Ads Manager connection. Known validation visits are tagged other/codex_verification, not counted as organic customer acquisitions.
+
+Local 320/390/1280 checks remain the responsive evidence. The live browser observed a 520px layout despite a requested 390px override, so that capture is not described as a 390px live check. No new console errors observed in checked live paths. A Discord aggregate embed limit failed in the first bot rollout and is being repaired separately; no claim of completed Discord list refresh until an actual success receipt.
+
+Follow-up: after the production results refresh, local directory at an observed 390px width rendered all 120 record labels with document width390 and header top0. The populated screenshot is `evidence/2026-10-13-kobe-updates/directory-populated-390.png`. Discord follow-up deploy531cc67 became live, and the first list part edited successfully; additional parts are blocked by the channel Send Messages permission. This does not block the public directory or site release.
