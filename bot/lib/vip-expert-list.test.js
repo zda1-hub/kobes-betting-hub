@@ -101,3 +101,19 @@ test('explicit Discord permission rejection clears only the unsent reservation f
     assert.equal(attempts,2);
   } finally { await fs.rm(root,{recursive:true,force:true}); }
 });
+
+test('one known rejected rollout reservation recovers but every other missing receipt stays held', async () => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'expert-list-migration-'));
+  try {
+    for(const marker of ['part:fe0d656c757a98f16f8e:1','part:unknown:1']) {
+      const names=Array.from({length:30},(_,index)=>`Expert Source ${index}`);
+      const original={id:'original',content:'Updated List\n'+names.map(name=>'- '+name).join('\n')};
+      const stateFile=path.join(root,marker.includes('unknown')?'unknown.json':'known.json');
+      await fs.writeFile(stateFile,JSON.stringify({pending_part:{index:1,marker}}));let sends=0;
+      const destination={id:'list',messages:{fetch:async()=>new Map([['original',original]])},send:async()=>{sends++;throw Object.assign(new Error('Missing Permissions'),{code:50013,status:403})}};
+      const engine=createVipExpertList({sourceChannelFor:async()=>({id:'expert',messages:{fetch:async()=>new Map()}}),listChannelFor:async()=>destination,stateFile});
+      if(marker.includes('unknown')) {await assert.rejects(engine.refresh(),/uncertain/);assert.equal(sends,0);assert.equal(JSON.parse(await fs.readFile(stateFile,'utf8')).pending_part.marker,marker);}
+      else {await assert.rejects(engine.refresh(),/Send Messages/);assert.equal(sends,1);assert.equal(JSON.parse(await fs.readFile(stateFile,'utf8')).pending_part,undefined);}
+    }
+  } finally {await fs.rm(root,{recursive:true,force:true});}
+});

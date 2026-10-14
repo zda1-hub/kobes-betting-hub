@@ -175,8 +175,13 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile, read
     if (state.pending_part) {
       const history = await destination.messages.fetch({ limit: 100 });
       const recovered = [...history.values()].find(message => message.embeds?.some(embed => embed.footer?.text?.endsWith(state.pending_part.marker)));
-      if (!recovered) throw new Error('VIP expert list send is uncertain; no duplicate sent. Check the list channel before retrying.');
-      ids[state.pending_part.index] = recovered.id;
+      // One-time migration: this exact first-rollout part was definitively
+      // rejected with Discord 50013 on 2026-10-14 (read-only live audit).
+      // Old code saved its reservation but not the confirmed rejection.
+      // Always prefer an actual receipt; never release any other unknown send.
+      const confirmedRejected = state.pending_part.marker === 'part:fe0d656c757a98f16f8e:1';
+      if (!recovered && !confirmedRejected) throw new Error('VIP expert list send is uncertain; no duplicate sent. Check the list channel before retrying.');
+      if (recovered) ids[state.pending_part.index] = recovered.id;
       delete state.pending_part;
       await save();
     }
