@@ -76,3 +76,16 @@
 
 .kobe-message .button{background:var(--hub-action);border-color:var(--hub-action);border-radius:14px;box-shadow:0 3px 7px #0003;color:#fff;}
 .kobe-message .button:hover{background:#1b4788;box-shadow:0 3px 7px #0003;}
+
+/* Keep the founder letter readable on wide screens without scaling the UI. */
+@media (min-width: 900px) {
+  .home-page .kobe-message {
+    box-sizing: border-box;
+    width: min(100%, 880px);
+    margin-inline: auto;
+    padding: clamp(28px, 2.5vw, 36px) !important;
+  }
+  .home-page .kobe-message h2 {font-size:clamp(26px,2vw,32px) !important;}
+  .home-page .kobe-message-intro,
+  .home-page .kobe-message-copy {max-width:66ch;}
+}
