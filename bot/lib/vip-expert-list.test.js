@@ -48,3 +48,40 @@ test('verified yesterday records deduplicate reposts and hold conflicts and unve
   assert.match(payload.embeds[0].description, /02\. Zulu.*no verified results/);
   assert.deepEqual(managedNames({ embeds: payload.embeds }), ['Alpha', 'Zulu']);
 });
+
+const { payloadsFor, createVipExpertList } = require('./vip-expert-list');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+test('all 366 experts and no-result annotations fit per-message Discord limits without truncation', () => {
+  const names=Array.from({length:366},(_,index)=>`Expert Source ${String(index).padStart(3,'0')} Long Name`);
+  const payloads=payloadsFor(names,{date:'2026-10-13'});
+  assert.ok(payloads.length>1);
+  for (const payload of payloads) {
+    assert.ok(payload.embeds.length<=10);
+    const characters=payload.embeds.reduce((sum,embed)=>sum+embed.title.length+embed.description.length+embed.footer.text.length+50,0);
+    assert.ok(characters<=6000,`aggregate Discord message size ${characters}`);
+    assert.ok(payload.embeds[0].description.length<=4096);
+  }
+  assert.deepEqual(payloads.flatMap(payload=>managedNames({embeds:payload.embeds})),names);
+  assert.throws(()=>payloadFor(names,{date:'2026-10-13'}),/multiple messages/);
+});
+test('multi-message list checkpoints and reconciles lost send receipts without duplicate parts', async () => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'expert-list-'));
+  try {
+    const names=Array.from({length:366},(_,index)=>`Expert Source ${String(index).padStart(3,'0')}`);
+    const original={id:'original',content:'Updated List\n'+names.map(name=>'- '+name).join('\n')};
+    const messages=new Map([['original',original]]);let sends=0,lose=true;
+    const destination={messages:{fetch:async query=>typeof query==='string'?(messages.get(query)||Promise.reject(new Error('missing'))):messages},send:async payload=>{
+      sends++;const message={id:String(sends),embeds:payload.embeds,edit:async next=>{message.embeds=next.embeds;return message}};messages.set(message.id,message);
+      if(lose){lose=false;throw new Error('lost response')}return message;
+    }};
+    const source={id:'expert',messages:{fetch:async()=>new Map()}};
+    const engine=createVipExpertList({sourceChannelFor:async()=>source,listChannelFor:async()=>destination,stateFile:path.join(root,'state.json'),readRows:async()=>[],previousDate:()=> '2026-10-13'});
+    await assert.rejects(engine.refresh(),/lost response/);
+    const result=await engine.refresh();assert.equal(result.messageIds.length,payloadsFor(names,{date:'2026-10-13'}).length);
+    assert.equal(sends,result.messageIds.length);
+    assert.equal((await engine.refresh()).status,'UNCHANGED');assert.equal(sends,result.messageIds.length);
+    assert.deepEqual(result.messageIds.flatMap(id=>managedNames(messages.get(id))),names);
+  } finally { await fs.rm(root,{recursive:true,force:true}); }
+});

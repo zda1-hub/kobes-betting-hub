@@ -27,3 +27,11 @@ Only local bot/backend changes; no bot restart, Discord message changes or publi
 Public focused tests cover counts-only data, excluded channels, repeated/conflicting/unexpanded wagers, strict publisher validation, alphabetical search and unchanged rail controls. Prior MST date tests include winter Pacific/MST boundary. Rendered public directory review remains the parent task's integration step. No deployments performed.
 
 Recap edit semantics: the entire editable commentary is replaced on save, then appended to the immutable generated record/plays. This expands narrative space to 2,000 characters without granting permission to rewrite wager terms or results. If full generated recap rewording is intended, an additional explicit structured prose model is necessary; current changes preserve verified outcomes.
+
+## Live Discord length repair — October 14, 2026
+
+Render's first integrated deployment logged InvalidFormBody when refreshing the expert list. The original implementation bounded each embed at 3,800 characters, but combined several embeds into one message; Discord also enforces a 6,000-character aggregate across all embeds. Record annotations on the large live roster exceeded that aggregate limit.
+
+`payloadsFor` now splits the complete alphabetical roster into one bounded embed per message. Each part includes the full record legend and part number. No names, outcomes or annotations are truncated. The existing first message ID remains the first part; additional IDs are persisted in `message_ids`. Every new send reserves a unique revision/part marker before sending and checkpoints its receipt. If a response is lost, refresh reconciles the exact marker from channel history; absent evidence stops retries instead of sending a duplicate. Refreshes are serialized. Shorter future rosters supersede excess parts without deleting messages. Existing `message_id` state remains compatible, and managed-list recovery reads every managed part.
+
+Five expert-list tests pass, including all 366 sources with no verified-result annotations fitting aggregate Discord limits, complete managed-name round-trip, and lost-send recovery/no duplicate on repeated refresh. Syntax/diff checks pass. Repair remains local for the root's next deployment; no commit, push or message send performed in this subtask.

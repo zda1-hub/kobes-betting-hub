@@ -1,5 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { isPublishedRow } = require('./recap');
 const { distinctCapperWagers, verifiedResult } = require('./capper-recap');
 
@@ -85,7 +86,7 @@ function recordLabel(counts) {
   return record + (notes.length ? ` (${notes.join(', ')})` : '');
 }
 
-function payloadFor(names, { date, records = new Map() } = {}) {
+function payloadsFor(names, { date, records = new Map() } = {}) {
   if (!names.length) throw new Error('Cannot publish an empty VIP expert list.');
   const sorted = [...names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
   const lines = sorted.map((name, index) => `${String(index + 1).padStart(2, '0')}. ${name}${date ? ` — ${recordLabel(records.get(keyFor(name)))}` : ''}`);
@@ -94,17 +95,24 @@ function payloadFor(names, { date, records = new Map() } = {}) {
     if (!chunks.length || `${chunks.at(-1)}\n${line}`.length > 3800) chunks.push(line);
     else chunks[chunks.length - 1] += `\n${line}`;
   }
-  if (chunks.length > 10) throw new Error('VIP expert list exceeds Discord embed limit.');
-  return {
+  // Discord applies 6,000 characters across ALL embeds in a message.
+  // One bounded embed per message keeps every expert and annotation intact.
+  return chunks.map((description, index) => ({
     allowedMentions: { parse: [] },
-    embeds: chunks.map((description, index) => ({
+    embeds: [{
       color: 0xFF7900,
       title: `Current list of experts: ${names.length}${chunks.length > 1 ? ` (${index + 1}/${chunks.length})` : ''}`,
       description,
       footer: { text: date ? `${MARKER} · ${date} verified W/L; pushes, voids and pending excluded.` : MARKER }
-    })),
+    }],
     content: ''
-  };
+  }));
+}
+
+function payloadFor(names, options) {
+  const payloads = payloadsFor(names, options);
+  if (payloads.length !== 1) throw new Error('VIP expert list requires multiple messages; use payloadsFor.');
+  return payloads[0];
 }
 
 async function readState(file) {
@@ -133,14 +141,15 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile, read
   let initialized = false;
   let baseline = [];
   let discovered = [];
-  async function refresh() {
+  async function performRefresh() {
     const [source, destination] = await Promise.all([sourceChannelFor(), listChannelFor()]);
     const state = await readState(stateFile);
     if (!initialized) {
       const listMessages = await destination.messages.fetch({ limit: 100 });
       const original = [...listMessages.values()].find((message) => baselineNames(message).length >= 20);
-      const managed = [...listMessages.values()].find((message) => managedNames(message).length >= 20);
-      baseline = original ? baselineNames(original) : managed ? managedNames(managed) : [];
+      const managedMessages = [...listMessages.values()].filter(message => managedNames(message).length);
+      const managed = managedMessages[0];
+      baseline = original ? baselineNames(original) : managedMessages.flatMap(managedNames);
       if (!baseline.length) throw new Error('VIP expert list source was not found; no replacement posted.');
       if (!state.message_id) {
         if (managed) state.message_id = managed.id;
@@ -156,15 +165,54 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile, read
     // Only the expert-picks destination supplies this list's public record.
     const scoped = rows.filter(row => String(row.post_reference).match(/^https:\/\/discord\.com\/channels\/\d+\/(\d+)\/\d+$/)?.[1] === source.id);
     const records = date ? previousDayRecords(scoped, date) : new Map();
-    const payload = payloadFor(names, { date, records });
-    const signature = JSON.stringify(['records-v1', payload]);
-    const current = state.message_id ? await destination.messages.fetch(state.message_id).catch(() => null) : null;
-    if (state.signature === signature && current) return { status: 'UNCHANGED', count: names.length, messageId: state.message_id };
-    const message = current ? await current.edit(payload) : await destination.send(payload);
-    await writeState(stateFile, { message_id: message.id, signature, discovered, updated_at: new Date().toISOString() });
-    return { status: current ? 'UPDATED' : 'CREATED', count: names.length, additions: discovered.length, messageId: message.id };
+    const payloads = payloadsFor(names, { date, records });
+    const signature = JSON.stringify(['records-messages-v2', payloads]);
+    const revision = createHash('sha256').update(signature).digest('hex').slice(0, 20);
+    const ids = Array.isArray(state.message_ids) ? [...state.message_ids] : state.message_id ? [state.message_id] : [];
+    const save = async () => writeState(stateFile, { ...state, message_id: ids[0], message_ids: ids, discovered, updated_at: new Date().toISOString() });
+    // A lost send response must be reconciled before any new sends, even if
+    // the date/record revision has since changed.
+    if (state.pending_part) {
+      const history = await destination.messages.fetch({ limit: 100 });
+      const recovered = [...history.values()].find(message => message.embeds?.some(embed => embed.footer?.text?.endsWith(state.pending_part.marker)));
+      if (!recovered) throw new Error('VIP expert list send is uncertain; no duplicate sent. Check the list channel before retrying.');
+      ids[state.pending_part.index] = recovered.id;
+      delete state.pending_part;
+      await save();
+    }
+    const current = await Promise.all(ids.map(id => destination.messages.fetch(id).catch(() => null)));
+    if (state.signature === signature && current.length === payloads.length && current.every(Boolean))
+      return { status: 'UNCHANGED', count: names.length, messageId: ids[0], messageIds: ids };
+    for (let index = 0; index < payloads.length; index++) {
+      const marker = `part:${revision}:${index}`;
+      const payload = payloads[index];
+      payload.embeds[0].footer.text += ` · ${marker}`;
+      if (current[index]) await current[index].edit(payload);
+      else {
+        state.pending_part = { index, marker };
+        await save();
+        const message = await destination.send(payload);
+        ids[index] = message.id;
+        delete state.pending_part;
+        await save();
+      }
+    }
+    // A shorter list supersedes old extra parts without deleting messages.
+    for (let index = payloads.length; index < ids.length; index++) {
+      if (current[index]) await current[index].edit({ content: 'This expert-list part was superseded. Use the current list above.', embeds: [], allowedMentions: { parse: [] } });
+    }
+    ids.length = payloads.length;
+    state.signature = signature;
+    await save();
+    return { status: current.some(Boolean) ? 'UPDATED' : 'CREATED', count: names.length, additions: discovered.length, messageId: ids[0], messageIds: ids };
+
   }
-  return { refresh };
+  let tail = Promise.resolve();
+  return { refresh() {
+    const run = tail.then(performRefresh);
+    tail = run.catch(() => {});
+    return run;
+  } };
 }
 
-module.exports = { MARKER, baselineNames, cleanName, createVipExpertList, expertName, listMonth, managedNames, namesFromMessages, payloadFor, previousDayRecords, recordLabel, previousMstDate };
+module.exports = { MARKER, baselineNames, cleanName, createVipExpertList, expertName, listMonth, managedNames, namesFromMessages, payloadFor, payloadsFor, previousDayRecords, recordLabel, previousMstDate };
