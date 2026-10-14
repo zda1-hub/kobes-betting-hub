@@ -3,6 +3,10 @@
   const rail = document.getElementById('lineup-rail');
   if (!input || !rail) return;
   const rows = [...document.querySelectorAll('[data-capper-row]')];
+  const names = new Map(rows.map(row => [row,row.querySelector('th').textContent.trim()]));
+  const sourceName = row => names.get(row);
+  rows.sort((a,b) => sourceName(a).localeCompare(sourceName(b),'en',{sensitivity:'base',numeric:true}));
+  rows.forEach((row,index) => { row.querySelector('.capper-number').textContent = String(index+1).padStart(3,'0'); row.parentElement.append(row); });
   const count = document.getElementById('directory-count');
   const empty = document.getElementById('directory-empty');
   const controls = document.querySelector('[data-directory-controls]');
@@ -17,7 +21,7 @@
   const move = direction => rail.scrollBy({left:direction * rail.clientWidth * .85,behavior:reduced.matches?'instant':'smooth'});
   const render = () => {
     const query = normalize(input.value);
-    const matches = rows.filter(row => normalize(row.querySelector('th').textContent).includes(query));
+    const matches = rows.filter(row => normalize(sourceName(row)).includes(query));
     const visible = new Set(matches);
     rows.forEach(row => row.hidden = !visible.has(row));
     count.textContent = `${matches.length} expert source${matches.length === 1 ? '' : 's'}`;
@@ -63,4 +67,24 @@
   rail.addEventListener('pointercancel',endDrag);
   rail.addEventListener('lostpointercapture',endDrag);
   render();
+  const status = document.createElement('p');
+  status.className = 'directory-record-status'; status.setAttribute('role','status');
+  status.textContent = 'Loading previous-day verified records…'; count.after(status);
+  const url = ['localhost','127.0.0.1','::1'].includes(location.hostname) ? '/preview-api/results' : 'https://bettinghub-publisher.kobedirwin.workers.dev/api/results';
+  fetch(url,{cache:'no-store'}).then(response => { if (!response.ok) throw new Error('Results unavailable'); return response.json(); }).then(snapshot => {
+    const summary = snapshot.expertRecords;
+    if (!summary || !/^\d{4}-\d{2}-\d{2}$/.test(summary.date) || !Array.isArray(summary.experts)) throw new Error('Records unavailable');
+    const key = name => name.toLowerCase().replace(/[^a-z0-9]/g,'');
+    const records = new Map(summary.experts.map(record => [key(record.source),record]));
+    rows.forEach(row => {
+      const record = records.get(key(sourceName(row))), label = document.createElement('span');
+      label.className = 'capper-record';
+      const settled = record && record.wins + record.losses;
+      const notes = record ? [record.pushes && `${record.pushes} push`,record.voids && `${record.voids} void`,record.pending && `${record.pending} pending`].filter(Boolean) : [];
+      label.textContent = (settled ? `${record.wins}-${record.losses}` : 'No verified W/L') + (notes.length ? ` · ${notes.join(' · ')}` : '');
+      label.title = `${summary.date} MST · Verified wins-losses; pending results excluded`;
+      row.querySelector('th').append(label);
+    });
+    status.textContent = `${summary.date} MST · Verified W/L. Pending, pushes and voids are excluded.`;
+  }).catch(() => { status.textContent = 'Previous-day verified records are temporarily unavailable.'; });
 })();

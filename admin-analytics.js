@@ -158,6 +158,7 @@ function renderOverview(d){
     ['Paid recurring MRR',cash(d.scoreboard.mrrCents),`${cash(d.scoreboard.potentialTrialMrrCents)} potential trial MRR`,'ink'],
     ['Collected revenue',cash(d.revenue.collectedCents),'Selected dates',''],
     ['Successful payments',count(d.conversion.successfulPayments),'Selected dates',''],
+    ['Website page views',count(d.traffic.pageViews),'Opted in · selected dates',''],
     ['Tracked site sessions',count(d.traffic.uniqueVisitors),'Opted in · 30-minute sessions',''],
     ['Matured trial → paid',d.conversion.trialConversion?Number.isFinite(d.conversion.trialConversion.trialToPaidRate)?pct(d.conversion.trialConversion.trialToPaidRate):'—':'Unavailable',d.conversion.trialConversion?`${count(d.conversion.trialConversion.matured)} trials ended · ${count(d.conversion.trialConversion.pendingMaturation)} awaiting end`:'Trial cohort not available','']
   ];

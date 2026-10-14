@@ -44,7 +44,7 @@ function reviewButtons(state, disabled = false) {
   const workflowId = state.workflowId || 'exclusive';
   return [{ type: 1, components: [
     { type: 2, style: 3, label: state.approveLabel || 'Post to exclusive wins', custom_id: `recap-review:${workflowId}:approve:${state.key}:${state.digest}`, disabled: disabled || state.pending > 0 },
-    { type: 2, style: 2, label: 'Edit note', custom_id: `recap-review:${workflowId}:edit:${state.key}:${state.digest}`, disabled },
+    { type: 2, style: 2, label: 'Edit commentary', custom_id: `recap-review:${workflowId}:edit:${state.key}:${state.digest}`, disabled },
     { type: 2, style: 4, label: 'Reject', custom_id: `recap-review:${workflowId}:reject:${state.key}:${state.digest}`, disabled }
   ] }];
 }
@@ -227,7 +227,7 @@ function createRecapApprovals({ root, config, channelFor, loadGroups, audit = as
       if (!current || current.digest !== (state.sourceDigest || state.digest))
         throw new Error('The underlying results changed. Wait for a refreshed recap card.');
       const clean = String(note || '').trim();
-      if (clean.length > 500 || /<@|https?:\/\//i.test(clean)) throw new Error('Keep the note under 500 characters, with no pings or links.');
+      if (clean.length > 2000 || /<@|https?:\/\//i.test(clean)) throw new Error('Keep the commentary under 2000 characters, with no pings or links.');
       const previousParts = state.parts.length;
       state.editorNote = clean;
       state.digest = clean ? hash([current.digest, clean]).slice(0, 20) : current.digest;

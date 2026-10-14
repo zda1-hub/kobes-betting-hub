@@ -622,3 +622,10 @@ test('social email uncertainty reuses same provider key and stops before its 24-
  await env.DB.prepare('UPDATE free_pick_social_emails SET first_attempt_at=?').bind(new Date(Date.now()-24*3600000).toISOString()).run();
  await dispatchSocialEmails(env,helpers);assert.equal(calls,2);assert.equal((await env.DB.prepare('SELECT status FROM free_pick_social_emails').first()).status,'held');
 });
+
+test('public results normalization preserves count-only expert records and rejects malformed values', () => {
+  const record={wins:1,losses:0,pushes:0,voids:0};
+  const input={generatedAt:'2026-10-13T20:00:00Z',operatingDate:'2026-10-13',overall:record,today:record,pending:0,settled:1,recent:[],wins:[],expertRecords:{date:'2026-10-12',experts:[{source:'Alpha',...record,pending:2,selection:'Private extra discarded'}]}};
+  assert.deepEqual(workerTest.normalizedPublicResults(input).expertRecords,{date:'2026-10-12',experts:[{source:'Alpha',...record,pending:2}]});
+  assert.equal(workerTest.normalizedPublicResults({...input,expertRecords:{...input.expertRecords,experts:[{source:'Alpha',...record,pending:-1}]}}),null);
+});

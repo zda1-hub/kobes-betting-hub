@@ -2,6 +2,7 @@ const { isPublishedRow } = require('./recap');
 const { resultFor } = require('./pick-log');
 const { publicMetadata } = require('../../result-metadata');
 const { verified } = require('./free-pick-results');
+const { previousDayRecords, previousMstDate } = require('./vip-expert-list');
 
 function counts(rows) {
   const record = { wins: 0, losses: 0, pushes: 0, voids: 0 };
@@ -28,7 +29,7 @@ function publicResult(row) {
   });
 }
 
-function buildPublicResults(rows, today, now = new Date()) {
+function buildPublicResults(rows, today, now = new Date(), { expertChannelIds = [] } = {}) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today || '')) throw new Error('Expected an operating date.');
   const published = rows.filter((row) => isPublishedRow(row) && /^\d{4}-\d{2}-\d{2}$/.test(row.operating_date || ''));
   const settled = published.filter(verified);
@@ -38,7 +39,15 @@ function buildPublicResults(rows, today, now = new Date()) {
   );
   const recent = ordered.slice(0, 50).map(publicResult);
   const wins = ordered.filter((row) => resultFor(row) === 'W').map(publicResult);
+  const expertDate = previousMstDate(now);
+  const expertRows = published.filter(row => expertChannelIds.includes(String(row.post_reference).match(/^https:\/\/discord\.com\/channels\/\d+\/(\d+)\/\d+$/)?.[1]));
+  const expertCounts = previousDayRecords(expertRows, expertDate);
+  const sourceNames = new Map(expertRows.map(row => [String(row.source_name || '').toLowerCase().replace(/[^a-z0-9]/g, ''), String(row.source_name || '').trim()]));
+  const expertRecords = { date: expertDate, experts: [...expertCounts].map(([key, value]) => ({
+    source: sourceNames.get(key), wins: value.W, losses: value.L, pushes: value.P, voids: value.V, pending: value.PENDING
+  })).sort((a, b) => a.source.localeCompare(b.source, 'en', { sensitivity: 'base' })) };
   return {
+    expertRecords,
     generatedAt: now.toISOString(),
     operatingDate: today,
     trackingSince: published.length ? published.map(row => row.operating_date).sort()[0] : null,

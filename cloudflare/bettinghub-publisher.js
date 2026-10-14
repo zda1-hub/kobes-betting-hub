@@ -1075,7 +1075,19 @@ function normalizedPublicResults(input) {
   if (input.wins != null && (!Array.isArray(input.wins) || input.wins.length > 5000)) return null;
   const wins = input.wins == null ? null : input.wins.map(item);
   if (wins && wins.some((value) => !value || value.result !== 'W')) return null;
-  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, settled, recent, ...(wins && { wins }), trackingSince: input.trackingSince || null };
+  let expertRecords;
+  if (input.expertRecords != null) {
+    const value = input.expertRecords;
+    if (!validDate(value.date) || value.date > input.operatingDate || !Array.isArray(value.experts) || value.experts.length > 500) return null;
+    const experts = value.experts.map(entry => {
+      const result = record(entry), pending = count(entry?.pending);
+      if (!result || pending === null || typeof entry.source !== 'string' || !entry.source.trim() || entry.source.length > 120) return null;
+      return { source: entry.source.trim(), ...result, pending };
+    });
+    if (experts.some(entry => !entry)) return null;
+    expertRecords = { date: value.date, experts };
+  }
+  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, settled, recent, ...(wins && { wins }), ...(expertRecords && { expertRecords }), trackingSince: input.trackingSince || null };
 }
 
 async function putPublicResults(request, env) {
@@ -1510,6 +1522,7 @@ function html(message, status = 200) {
 }
 
 export const __test = {
+  normalizedPublicResults,
   freePickEmailLines,
   auditedXFetch,
   redactedResponseShape,

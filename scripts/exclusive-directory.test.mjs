@@ -44,16 +44,17 @@ test('homepage, public manifest and sitemap expose the exclusive directory', { s
 function directoryHarness(reduced = false) {
   const handlers={}, input={value:'',addEventListener(name,fn){handlers['input:'+name]=fn;}};
   const names=['BankrollBill','Teddy Covers',...Array.from({length:18},(_,i)=>`Source ${i}`)];
-  const rows=names.map(name=>({hidden:false,querySelector:()=>({textContent:name})}));
-  const count={},empty={},controls={},previous={},next={};
+  const parent={children:[],append(row){this.children.push(row)}};
+  const rows=names.map(name=>{const th={textContent:name,labels:[],append(label){this.labels.push(label)}};const number={};return {hidden:false,parentElement:parent,querySelector:selector=>selector==='th'?th:number}});
+  const count={after(){}},empty={},controls={},previous={},next={};
   const rail={scrollLeft:0,scrollWidth:4200,clientWidth:300,classList:{add(){},remove(){}},
     addEventListener(name,fn){handlers[name]=fn;},
     scrollTo({left,behavior}){this.scrollLeft=left;this.behavior=behavior;},
     scrollBy({left,behavior}){this.scrollLeft+=left;this.behavior=behavior;}};
   previous.addEventListener=(name,fn)=>handlers.previous=fn;
   next.addEventListener=(name,fn)=>handlers.next=fn;
-  const document={getElementById:id=>({'capper-search':input,'lineup-rail':rail,'directory-count':count,'directory-empty':empty})[id],querySelector:selector=>({'[data-directory-controls]':controls,'[data-directory-previous]':previous,'[data-directory-next]':next})[selector],querySelectorAll:()=>rows};
-  return {handlers,input,rows,count,empty,controls,previous,next,rail,context:{document,window:{addEventListener(){}},matchMedia:()=>({matches:reduced})}};
+  const document={createElement:()=>({setAttribute(){}}),getElementById:id=>({'capper-search':input,'lineup-rail':rail,'directory-count':count,'directory-empty':empty})[id],querySelector:selector=>({'[data-directory-controls]':controls,'[data-directory-previous]':previous,'[data-directory-next]':next})[selector],querySelectorAll:()=>rows};
+  return {handlers,input,rows,count,empty,controls,previous,next,rail,parent,context:{location:{hostname:'localhost'},fetch:()=>Promise.resolve({ok:true,json:async()=>({expertRecords:{date:'2026-10-12',experts:[{source:'BankrollBill',wins:2,losses:1,pushes:0,voids:0,pending:1}]}})}),document,window:{addEventListener(){}},matchMedia:()=>({matches:reduced})}};
 }
 
 test('horizontal directory exposes the whole roster and search recovers from no matches', async () => {
@@ -83,4 +84,14 @@ test('horizontal wheel respects boundaries, keyboard reaches the end, and reduce
   h.handlers.keydown({key:'End',preventDefault(){}});assert.equal(h.rail.scrollLeft,4200);
   h.handlers.scroll();assert.equal(h.next.disabled,true);
   h.handlers.keydown({key:'Home',preventDefault(){}});assert.equal(h.rail.scrollLeft,0);
+});
+
+test('directory alphabetizes rows and shows verified previous-day counts without polluting name search', async () => {
+  const h=directoryHarness();
+  vm.runInNewContext(await readFile(new URL('exclusives.js',root),'utf8'),h.context);
+  await new Promise(resolve=>setImmediate(resolve));
+  const displayed=h.parent.children.map(row=>row.querySelector('th').textContent);
+  assert.equal(displayed[0],'BankrollBill'); assert.equal(displayed.at(-1),'Teddy Covers');
+  assert.match(h.rows[0].querySelector('th').labels[0].textContent,/2-1.*1 pending/);
+  h.input.value='pending';h.handlers['input:input']();assert.equal(h.count.textContent,'0 expert sources');
 });

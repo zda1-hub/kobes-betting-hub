@@ -72,6 +72,8 @@ const publicFiles = [
   'brand.css',
   'home.css',
   'home.js',
+  'kobe-message.css',
+  'kobe-message.js',
   'home-results.js',
   'email-signup.css',
   'email-signup.js',

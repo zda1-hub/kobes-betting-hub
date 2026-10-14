@@ -62,7 +62,7 @@ const { createTelegramReader } = require('./lib/telegram-reader');
 const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/daily-writeup-board');
 const { createFreeWriteupBoard } = require('./lib/free-writeup-board');
 const { archivedWriteupSource } = require('./lib/writeup-archive-source');
-const { createVipExpertList } = require('./lib/vip-expert-list');
+const { createVipExpertList, previousMstDate } = require('./lib/vip-expert-list');
 const { createExpertPulse } = require('./lib/expert-pulse');
 const { createExpertTrendReminder } = require('./lib/expert-trend-reminder');
 const { createMorningDeliveryAlert } = require('./lib/morning-delivery-alert');
@@ -201,7 +201,9 @@ const expertPicksChannelId = process.env.EXPERT_PICKS_CHANNEL_ID || defaultChann
 const vipExpertList = vipExpertListChannelId ? createVipExpertList({
   sourceChannelFor: () => approvedTextChannel(expertPicksChannelId),
   listChannelFor: () => approvedTextChannel(vipExpertListChannelId),
-  stateFile: path.join(path.dirname(pickLogPath()), 'vip-expert-list.json')
+  stateFile: path.join(path.dirname(pickLogPath()), 'vip-expert-list.json'),
+  readRows: readPickLog,
+  previousDate: previousMstDate
 }) : null;
 const expertPulse = vipExpertPulseChannelId && vipExpertPulseApprovalChannelId ? createExpertPulse({
   sourceChannelFor: () => approvedTextChannel(expertPicksChannelId),
@@ -764,7 +766,7 @@ function startPublicResultsSync() {
         lastEligibility = eligibilitySummary;
       }
       const rows = await publicResultRows({ rows: eligibility.eligible, root: reviewQueueRoot, directory: path.dirname(pickLogPath()) });
-      const snapshot = buildPublicResults(rows, dailyPickOperatingDate(new Date()));
+      const snapshot = buildPublicResults(rows, dailyPickOperatingDate(new Date()), new Date(), { expertChannelIds: [expertPicksChannelId] });
       const content = JSON.stringify({ ...snapshot, generatedAt: null });
       if (content === lastContent) return;
       const response = await fetch(`${origin}/api/results`, {
@@ -3118,9 +3120,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!workflow) throw new Error('This recap workflow is not configured.');
         const draft = await workflow.engine.beginEdit({ customId: interaction.customId, userId: interaction.user.id,
           guildId: interaction.guildId, channelId: interaction.channelId, messageId: interaction.message.id });
-        await interaction.showModal({ custom_id: `recap-edit:${workflowId}:${draft.key}:${draft.digest}`, title: 'Edit recap note',
-          components: [{ type: 1, components: [{ type: 4, custom_id: 'note', label: 'Optional context; results stay locked',
-            style: 2, max_length: 500, required: false, value: draft.note }] }] });
+        await interaction.showModal({ custom_id: `recap-edit:${workflowId}:${draft.key}:${draft.digest}`, title: 'Edit recap commentary',
+          components: [{ type: 1, components: [{ type: 4, custom_id: 'note', label: 'Recap commentary; results stay locked',
+            style: 2, max_length: 2000, required: false, value: draft.note }] }] });
         return;
       }
       await interaction.deferReply({ ephemeral: true });

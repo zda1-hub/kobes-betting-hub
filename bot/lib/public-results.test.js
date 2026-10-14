@@ -43,3 +43,16 @@ test('public metadata validates unambiguous mismatches and holds ambiguous sport
   assert.equal(result.overall.wins,3);assert.equal(items[0].sport,'MLB');
   assert.deepEqual(result.wins.map(i=>i.selection).sort(),items.map(i=>i.selection).sort());
 });
+
+test('previous-day expert snapshot exposes only count summaries and holds duplicate conflicting grades', () => {
+  const rows=[row('1','W',{source_name:'Alpha',wager_scope:'individual'}),row('2','W',{source_name:'Alpha',selection:'Pick 1',wager_scope:'individual'}),row('3','L',{source_name:'Alpha',wager_scope:'individual'}),row('4','PENDING',{source_name:'Alpha',wager_scope:'individual'}),row('5','W',{source_name:'Beta',operating_date:'2026-09-23'})];
+  const snapshot=buildPublicResults(rows,'2026-09-25',new Date('2026-09-25T20:00:00Z'),{expertChannelIds:['2']});
+  assert.deepEqual(snapshot.expertRecords,{date:'2026-09-24',experts:[{source:'Alpha',wins:1,losses:1,pushes:0,voids:0,pending:1}]});
+  assert.doesNotMatch(JSON.stringify(snapshot.expertRecords),/Pick|selection|odds|post_reference/);
+});
+
+test('expert record counts exclude non-expert channels and hold conflicting or unexpanded groups', () => {
+  const rows=[row('1','W',{source_name:'Alpha',wager_scope:'individual'}),row('2','L',{source_name:'Alpha',selection:'Pick 1',wager_scope:'individual'}),row('tg-20260924-1-1','W',{source_name:'Alpha',wager_scope:'',post_reference:'https://discord.com/channels/1/2/33'}),row('4','W',{source_name:'Alpha',post_reference:'https://discord.com/channels/1/9/4',wager_scope:'individual'})];
+  const snapshot=buildPublicResults(rows,'2026-09-25',new Date('2026-09-25T20:00:00Z'),{expertChannelIds:['2']});
+  assert.deepEqual(snapshot.expertRecords.experts,[{source:'Alpha',wins:0,losses:0,pushes:0,voids:0,pending:2}]);
+});

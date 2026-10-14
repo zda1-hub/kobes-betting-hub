@@ -145,3 +145,15 @@ test('overview never diagnoses period event totals as lost buyers and separates 
  assert.doesNotMatch(h.element('[data-conversion-signal]').textContent,/drop-off/);
  assert.match(h.element('[data-priority-alerts]').innerHTML,/Unpaid trials without VIP/);
 });
+
+test('overview restores page views beside distinct thirty-minute sessions and separate Meta measures',()=>{
+ const h=harness();h.context.d={scoreboard:{},revenue:{},conversion:{},traffic:{pageViews:91,uniqueVisitors:37,sources:[{source:'meta',pageViews:65,visitors:22}]}};
+ h.run('renderOverview(d)');
+ assert.match(h.element('[data-summary]').innerHTML,/Website page views<\/span><strong>91/);
+ assert.match(h.element('[data-summary]').innerHTML,/Tracked site sessions<\/span><strong>37/);
+ assert.match(h.element('[data-summary]').innerHTML,/30-minute sessions/);
+ assert.match(h.element('[data-meta-traffic]').innerHTML,/Meta website page views<\/span><strong>65/);
+ assert.match(h.element('[data-meta-traffic]').innerHTML,/Meta website sessions<\/span><strong>22/);
+ assert.match(h.element('[data-meta-traffic]').innerHTML,/Meta ad link clicks/);
+ assert.match(h.element('[data-meta-traffic]').innerHTML,/Unavailable/);
+});

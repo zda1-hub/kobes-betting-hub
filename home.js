@@ -134,7 +134,7 @@
     });
     rail.addEventListener('pointerdown', event => {
       setManual(true);
-      if (event.target.closest('button,a,input,select,textarea') || event.pointerType === 'touch' || event.button !== 0) return;
+      if ((event.target.closest('button,a,input,select,textarea') && !event.target.closest('.discord-review')) || event.pointerType === 'touch' || event.button !== 0) return;
       pointerId = event.pointerId; startX = event.clientX; startScroll = rail.scrollLeft; dragging = false;
     });
     rail.addEventListener('pointermove', event => {

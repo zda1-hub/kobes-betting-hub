@@ -36,3 +36,5 @@
 .hub-interior.lineup-bento .directory-empty{margin:20px 0 0;text-align:center;line-height:1.5}
 .hub-interior.lineup-bento [hidden]{display:none!important}
 @media(max-width:700px){.hub-interior.lineup-bento{--lineup-card-width:210px}.hub-interior.lineup-bento .directory-toolbar{flex-direction:column;align-items:stretch;gap:16px}.hub-interior.lineup-bento .directory-toolbar h2,.hub-interior.lineup-bento .directory-hint{text-align:center}.hub-interior.lineup-bento .directory-search{width:100%;max-width:430px;align-self:center}.hub-interior.lineup-bento .capper-table tr{padding:16px;border-radius:16px}.hub-interior.lineup-bento .capper-table tbody{gap:12px}.hub-interior.lineup-bento .capper-table tbody th{font-size:16px!important}.hub-interior.lineup-bento .directory-notice summary{line-height:1.4}}
+
+.lineup-bento .capper-record{display:block;margin-top:6px;font-size:12px;font-weight:600;line-height:1.35;overflow-wrap:anywhere;color:#344860}.lineup-bento .directory-record-status{margin:8px 0 0;font-size:12px;line-height:1.4;color:#344860}

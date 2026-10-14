@@ -228,3 +228,7 @@ html[data-pick-transition]::view-transition-old(free-board),html[data-pick-trans
 .hub-interior .proof-grid .review-source:focus-visible{outline:2px solid #2458a6;outline-offset:3px}
 .hub-interior .proof-grid .review-source>span{font-size:16px!important;text-decoration:none}
 @media(max-width:700px){.hub-interior .proof-grid [data-rail] .quote-card:nth-child(n){height:360px;padding:20px;gap:12px}.hub-interior .proof-grid .quote-card blockquote p{font-size:16px!important;line-height:1.5}.hub-interior .proof-grid .quote-card cite{font-size:12px!important}.hub-interior .proof-grid .review-source{padding:8px 10px}}
+
+/* October 13: original Discord reviews within the existing gallery. */
+.hub-interior .proof-grid [data-rail] .discord-review{font:inherit;display:block;appearance:none;line-height:0;position:relative;text-align:left;cursor:pointer}
+.hub-interior .proof-grid [data-rail] .discord-review:focus-visible{outline:3px solid var(--blue);outline-offset:3px}

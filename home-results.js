@@ -81,7 +81,10 @@ if (verifiedResultsTrack) {
         const date = new Date(`${snapshot.trackingSince}T12:00:00Z`);
         if (Number.isFinite(date.getTime())) since.textContent = `Since ${date.toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric', timeZone:'UTC' })}. Updates automatically as published picks are verified.`;
       }
-      const settled = Array.isArray(snapshot.recent) ? snapshot.recent.filter(item => item.result === 'W').map(KBHResultMetadata.publicMetadata) : [];
+      // The recent feed is capped at 50 entries and can contain no wins even
+      // when the verified historical wins feed is populated.
+      const verified = Array.isArray(snapshot.wins) ? snapshot.wins : (Array.isArray(snapshot.recent) ? snapshot.recent : []);
+      const settled = verified.filter(item => item.result === 'W').map(KBHResultMetadata.publicMetadata);
       const wins = settled.filter(item => item.result === 'W').slice(0, 16);
       const results = winsOnly ? wins : settled.slice(0, 16);
       if (!results.length && !winsOnly) throw new Error('No settled results available');

@@ -1,5 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { isPublishedRow } = require('./recap');
+const { distinctCapperWagers, verifiedResult } = require('./capper-recap');
 
 const MARKER = 'KBH vip-expert-list-v1';
 
@@ -28,7 +30,7 @@ function baselineNames(message) {
 function managedNames(message) {
   if (!message.embeds?.some((embed) => embed.footer?.text?.includes(MARKER))) return [];
   return message.embeds.flatMap((embed) => String(embed.description || '').split(/\r?\n/)
-    .map((line) => line.match(/^\s*\d+\.\s+(.+?)\s*$/)?.[1]).map(cleanName).filter(Boolean));
+    .map((line) => line.match(/^\s*\d+\.\s+(.+?)\s*$/)?.[1]?.split(' — ')[0]).map(cleanName).filter(Boolean));
 }
 
 function listMonth(message) {
@@ -50,9 +52,43 @@ function namesFromMessages(messages, baseline = []) {
   return [...names.values()].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
 }
 
-function payloadFor(names) {
+function previousMstDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
+  const value = type => parts.find(part => part.type === type).value;
+  const yesterday = new Date(`${value('year')}-${value('month')}-${value('day')}T12:00:00Z`);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  return yesterday.toISOString().slice(0, 10);
+}
+
+function previousDayRecords(rows, date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Invalid expert record date.');
+  const grouped = new Map();
+  for (const row of rows) {
+    if (row.operating_date !== date || !isPublishedRow(row)) continue;
+    const key = keyFor(row.source_name);
+    if (!key) continue;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  }
+  return new Map([...grouped].map(([key, listed]) => {
+    const counts = { W: 0, L: 0, P: 0, V: 0, PENDING: 0 };
+    for (const { row } of distinctCapperWagers(listed)) counts[verifiedResult(row)]++;
+    return [key, counts];
+  }));
+}
+
+function recordLabel(counts) {
+  if (!counts) return 'no verified results';
+  const record = counts.W + counts.L ? `${counts.W}-${counts.L}` : 'no verified W/L';
+  const notes = [counts.P && `${counts.P} push`, counts.V && `${counts.V} void`,
+    counts.PENDING && `${counts.PENDING} pending`].filter(Boolean);
+  return record + (notes.length ? ` (${notes.join(', ')})` : '');
+}
+
+function payloadFor(names, { date, records = new Map() } = {}) {
   if (!names.length) throw new Error('Cannot publish an empty VIP expert list.');
-  const lines = names.map((name, index) => `${String(index + 1).padStart(2, '0')}. ${name}`);
+  const sorted = [...names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+  const lines = sorted.map((name, index) => `${String(index + 1).padStart(2, '0')}. ${name}${date ? ` — ${recordLabel(records.get(keyFor(name)))}` : ''}`);
   const chunks = [];
   for (const line of lines) {
     if (!chunks.length || `${chunks.at(-1)}\n${line}`.length > 3800) chunks.push(line);
@@ -65,7 +101,7 @@ function payloadFor(names) {
       color: 0xFF7900,
       title: `Current list of experts: ${names.length}${chunks.length > 1 ? ` (${index + 1}/${chunks.length})` : ''}`,
       description,
-      footer: { text: MARKER }
+      footer: { text: date ? `${MARKER} · ${date} verified W/L; pushes, voids and pending excluded.` : MARKER }
     })),
     content: ''
   };
@@ -93,7 +129,7 @@ async function fetchHistory(channel, maxPages) {
   return messages;
 }
 
-function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile }) {
+function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile, readRows, previousDate }) {
   let initialized = false;
   let baseline = [];
   let discovered = [];
@@ -115,8 +151,13 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile }) {
     const messages = await fetchHistory(source, state.message_id ? 1 : 20);
     const names = namesFromMessages(messages, [...baseline, ...discovered]);
     discovered = names.filter((name) => !baseline.some((item) => keyFor(item) === keyFor(name)));
-    const payload = payloadFor(names);
-    const signature = JSON.stringify(['heading-v2', names]);
+    const date = previousDate?.();
+    const rows = readRows ? await readRows() : [];
+    // Only the expert-picks destination supplies this list's public record.
+    const scoped = rows.filter(row => String(row.post_reference).match(/^https:\/\/discord\.com\/channels\/\d+\/(\d+)\/\d+$/)?.[1] === source.id);
+    const records = date ? previousDayRecords(scoped, date) : new Map();
+    const payload = payloadFor(names, { date, records });
+    const signature = JSON.stringify(['records-v1', payload]);
     const current = state.message_id ? await destination.messages.fetch(state.message_id).catch(() => null) : null;
     if (state.signature === signature && current) return { status: 'UNCHANGED', count: names.length, messageId: state.message_id };
     const message = current ? await current.edit(payload) : await destination.send(payload);
@@ -126,4 +167,4 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile }) {
   return { refresh };
 }
 
-module.exports = { MARKER, baselineNames, cleanName, createVipExpertList, expertName, listMonth, managedNames, namesFromMessages, payloadFor };
+module.exports = { MARKER, baselineNames, cleanName, createVipExpertList, expertName, listMonth, managedNames, namesFromMessages, payloadFor, previousDayRecords, recordLabel, previousMstDate };

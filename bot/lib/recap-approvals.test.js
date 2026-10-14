@@ -111,7 +111,7 @@ test('private preparation never publishes; only Kobe’s exact-card approval sen
   assert.equal(f.channels.wins.sends, 0);
   const control = [...f.channels.review.records.values()].at(-1).payload.components[0].components;
   assert.equal(control[0].label, 'Post to exclusive wins');
-  assert.equal(control[1].label, 'Edit note');
+  assert.equal(control[1].label, 'Edit commentary');
   assert.equal(control[2].label, 'Reject');
   await assert.rejects(engine.decide({ ...f.request(), userId: 'not-kobe' }), /Only Kobe/);
   await assert.rejects(engine.decide({ ...f.request(), guildId: 'other' }), /Only Kobe/);
@@ -134,7 +134,10 @@ test('Kobe can revise a recap note without changing locked wagers or verified re
   const editId = card.payload.components[0].components[1].custom_id;
   const draft = await engine.beginEdit({ customId: editId, userId: 'kobe', guildId: 'guild', channelId: 'review', messageId: card.id });
   await assert.rejects(engine.beginEdit({ customId: editId, userId: 'other', guildId: 'guild', channelId: 'review', messageId: card.id }), /Only Kobe/);
-  await engine.editNote({ key: draft.key, digest: draft.digest, note: 'Correction: this recap includes the late game.',
+  const commentary = 'Correction: this recap includes the late game.\n\n' + 'The published plays and results remain unchanged. '.repeat(20);
+  await assert.rejects(engine.editNote({ key: draft.key, digest: draft.digest, note: 'x'.repeat(2001),
+    userId: 'kobe', guildId: 'guild', channelId: 'review' }), /2000/);
+  await engine.editNote({ key: draft.key, digest: draft.digest, note: commentary,
     userId: 'kobe', guildId: 'guild', channelId: 'review' });
   assert.match(card.embeds[0].description, /Reds ML -110 \(1U\) ☘️/);
   assert.match(card.embeds[0].description, /Correction: this recap includes the late game/);

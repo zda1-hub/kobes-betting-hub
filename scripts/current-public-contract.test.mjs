@@ -13,13 +13,13 @@ test('current public pages retain navigation, legal links and shared stylesheet'
 test('current proof gallery retains unique images and working viewer controls', async () => {
   const html = await readFile(new URL('proof.html', root), 'utf8');
   const images = [...html.matchAll(/(?:src|data-image)="(assets\/[^\"]+)"/g)].map(m=>m[1]);
-  assert.equal(new Set(images.filter(file=>file.includes('/reviews/'))).size, 13);
+  assert.equal(new Set(images.filter(file=>file.includes('/reviews/'))).size, 22);
   assert.equal(new Set(images.filter(file=>file.includes('/slips/'))).size, 4);
   assert.doesNotMatch(html, /17-3-recap|8-2-recap|member-slip-example|data-verified-results-track/);
   await Promise.all([...new Set(images)].map(file=>access(new URL(file, root))));
-  assert.equal((html.match(/data-review-id=/g)||[]).length,14);
-  assert.equal((html.match(/<blockquote>/g)||[]).length,14);
-  assert.equal((html.match(/data-review-source /g)||[]).length,14);
+  assert.equal((html.match(/data-review-id=/g)||[]).length,22);
+  assert.equal((html.match(/<blockquote>/g)||[]).length,0);
+  assert.equal((html.match(/data-review-source /g)||[]).length,22);
   for (const attribute of ['data-dialog-close','data-dialog-image']) assert.ok(html.includes(attribute));
   assert.match(html, /Recent Wins/);
   assert.doesNotMatch(html, /Full ledger/);
