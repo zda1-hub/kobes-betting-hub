@@ -1,0 +1,13 @@
+# Complete mobile winning-play cards and scrolling
+
+Requested from screen recording: mobile wins must show a whole card; Recent Wins goes above Inside the Hub; swipe/scroll must work in addition to buttons; mobile priority with desktop verification.
+
+Root cause: two equal mobile bento columns left a narrow wins rail, while the result card used viewport-based max width and max-content sizing. Page overflow checks passed because the rail clipped its own content. Continuous carousel animation also moved cards partway out of view. Earlier overflow checks did not establish whole-card visibility.
+
+Changes: mobile lower-bento is one column; wins precedes approach in actual DOM order. Desktop retains the existing two-column bento treatment with wins first. Winning-play cards size to their own rail container at every width, use native scroll snapping, and hold complete cards between six-second automatic advances. Manual touch/drag/wheel/keyboard/arrow controls retain priority, four-second idle handling, focus/hover pause and reduced-motion behavior. Mouse drag temporarily disables snap, then settles again. A visible swipe/drag/scroll hint is added with full-width arrow controls. Mobile original-review and ticket galleries similarly size full frames to the rail and use discrete automatic steps; desktop gallery animation and full-image viewing remain unchanged. No palette/font/artwork/billing/verified-result changes.
+
+Files: mobile-polish.css, view-continuity.css, home-results.js, home.js, index.html and cache versions in public HTML files referencing the changed assets. Public whitelist unchanged. Existing unrelated changes preserved.
+
+Verification: supplied1206×2622/5.085s recording inspected at2s.36 mobile next/loop checks at320/390 cover the16-win feed (15 distinct selection strings because two separate entries share wording), all full-card bounds.56 gallery checks cover22 reviews and4 tickets at320/390 with loaded images and complete frames.15 final wins checks at320/390/1024/1440/1920 all show exactly one full card, no page overflow and requested DOM order.81 whole-public-site checks across27 routes at320/390/1440 show no page horizontal overflow/header-at-top errors. Automatic movement held complete cards after manual focus left. Direct mouse drag at390 changed scrollLeft5452→5772, with one complete card after release and no button click. Native touch uses browser scrolling/snap; no claim of a physical iPhone test. Updated mobile evidence in evidence/2026-10-13-mobile-full-cards. Earlier whole-site desktop geometry remains in its audit.
+
+Syntax checks pass; focused contracts/directory/wins tests9 passed with1 pre-existing retired-structure skip. Local verified; public release receipt follows. No email/checkout submission.

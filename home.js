@@ -34,6 +34,7 @@
     if (event.key === 'Tab') { event.preventDefault(); dialog.querySelector('[data-dialog-close]').focus(); }
   });
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const mobileRails = matchMedia('(max-width:700px)');
   document.querySelectorAll('[data-rail]').forEach(rail => {
     const track = rail.querySelector('.rail-track');
     const seen = new Set();
@@ -54,6 +55,7 @@
     track.prepend(...copySet());
     track.append(...copySet());
     let loopWidth = 0, position = 0, lastFrame = 0, initialized = false;
+    let lastStep = performance.now();
     let manual = false, hovered = false, visible = true, dragging = false, suppressClick = false;
     let startX = 0, startScroll = 0, pointerId;
     const controls = document.createElement('div');
@@ -64,7 +66,7 @@
     const next = document.createElement('button'); next.type = 'button'; next.className = 'rail-arrow'; next.textContent = '→'; next.setAttribute('aria-label', 'Next image');
     navigation.append(previous, next); controls.append(hint, navigation); rail.after(controls);
     let resumeTimer;
-    const setManual = value => { manual = value; clearTimeout(resumeTimer); if(value) resumeTimer=setTimeout(()=>{if(dragging || pointerId!==undefined || (rail.contains(document.activeElement) || controls.contains(document.activeElement))){setManual(true);return;}manual=false;position=rail.scrollLeft;lastFrame=0;},4000); };
+    const setManual = value => { manual = value; clearTimeout(resumeTimer); if(value) resumeTimer=setTimeout(()=>{if(dragging || pointerId!==undefined || (rail.contains(document.activeElement) || controls.contains(document.activeElement))){setManual(true);return;}manual=false;position=rail.scrollLeft;lastFrame=0;lastStep=performance.now();},4000); };
     const sizeImages = () => {
       const compact = !!rail.closest('.lower-bento');
       const phone = window.innerWidth <= (compact ? 600 : 700);
@@ -100,8 +102,8 @@
       if (Math.abs(next - rail.scrollLeft) > 1) rail.scrollLeft = next;
       position = next;
     };
-    const browseImage = direction => {
-      setManual(true);
+    const browseImage = (direction, user = true) => {
+      if(user) setManual(true);
       const current = rail.scrollLeft;
       const origin = track.children[0].offsetLeft;
       const offsets = [...track.children].map(card => card.offsetLeft - origin);
@@ -129,6 +131,7 @@
     rail.addEventListener('keydown', event => {
       if (!['ArrowRight','ArrowLeft','Home','End'].includes(event.key)) return;
       setManual(true); event.preventDefault();
+      if(mobileRails.matches && ['ArrowRight','ArrowLeft'].includes(event.key)){browseImage(event.key==='ArrowRight'?1:-1);return;}
       rail.scrollLeft = event.key === 'Home' ? loopWidth : event.key === 'End' ? loopWidth * 2 - rail.clientWidth : rail.scrollLeft + (event.key === 'ArrowRight' ? 1 : -1) * rail.clientWidth * .7;
       normalize();
     });
@@ -165,12 +168,13 @@
     new ResizeObserver(measure).observe(rail);
     new IntersectionObserver(entries => { visible = entries[0].isIntersecting; lastFrame = 0; }).observe(rail);
     reducedMotion.addEventListener('change', () => { setManual(true); });
+    mobileRails.addEventListener('change', () => { measure(); setManual(true); });
     document.addEventListener('visibilitychange', () => { lastFrame = 0; });
     measure(); setManual(reducedMotion.matches);
     const animate = time => {
       if (lastFrame && initialized && visible && !document.hidden && !manual && !hovered && !dragging && !reducedMotion.matches && (!dialog || dialog.hidden)) {
-        position += Math.min(time-lastFrame, 50) * .065;
-        rail.scrollLeft = position; normalize();
+        if(mobileRails.matches){if(time-lastStep>=6000){browseImage(1,false);lastStep=time;}}
+        else{position += Math.min(time-lastFrame, 50) * .065;rail.scrollLeft = position; normalize();}
       }
       lastFrame = time; requestAnimationFrame(animate);
     };

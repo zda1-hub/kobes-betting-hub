@@ -8,13 +8,14 @@ const setupWins = track => {
     if (side === 'before') track.prepend(...copies); else track.append(...copies);
   }
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const mobile = matchMedia('(max-width:700px)');
+  let lastStep = performance.now();
   let manual = reduced.matches, hovered = false, last = 0, loop = 0, position = 0, pointer, startX, startScroll;
   let resumeTimer;
-  const pause = () => { manual = true; clearTimeout(resumeTimer); resumeTimer = setTimeout(() => { if(pointer!==undefined || controls.contains(document.activeElement)){pause();return;} manual = reduced.matches; position=rail.scrollLeft;last=0; },4000); };
+  const pause = () => { manual = true; clearTimeout(resumeTimer); resumeTimer = setTimeout(() => { if(pointer!==undefined || controls.contains(document.activeElement)){pause();return;} manual = reduced.matches; position=rail.scrollLeft;last=0;lastStep=performance.now(); },4000); };
   const measure = () => { loop = track.children[originals.length * 2].offsetLeft - track.children[originals.length].offsetLeft; position = loop; rail.scrollLeft = position; };
-  // Preserve fractional animation progress even when the browser rounds scrollLeft.
   const normalize = (value = rail.scrollLeft) => { if (!loop) return; if(value < loop) value += loop; if(value >= loop*2) value -= loop; rail.scrollLeft = value; position = value; };
-  const browse = direction => { pause(); const origin = track.children[0].offsetLeft; const offsets = [...track.children].map(card => card.offsetLeft - origin); const current = rail.scrollLeft; const target = direction > 0 ? offsets.find(offset => offset > current + 2) : offsets.filter(offset => offset < current - 2).at(-1); rail.scrollLeft = target ?? current + direction * (originals[0].getBoundingClientRect().width + 12); normalize(); };
+  const browse = (direction, user = true) => { if(user) pause(); const origin = track.children[0].offsetLeft; const offsets = [...track.children].map(card => card.offsetLeft - origin); const current = rail.scrollLeft; const target = direction > 0 ? offsets.find(offset => offset > current + 2) : offsets.filter(offset => offset < current - 2).at(-1); rail.scrollLeft = target ?? current + direction * (originals[0].getBoundingClientRect().width + 12); normalize(); };
   controls.querySelector('[data-wins-previous]').addEventListener('click', () => browse(-1));
   controls.querySelector('[data-wins-next]').addEventListener('click', () => browse(1));
   rail.addEventListener('mouseenter', () => hovered = true);
@@ -24,14 +25,15 @@ const setupWins = track => {
   for (const type of ['touchstart','touchmove','touchend']) rail.addEventListener(type, pause, {passive:true});
   rail.addEventListener('wheel', event => { pause(); if(!event.shiftKey && Math.abs(event.deltaY)>=Math.abs(event.deltaX))return; event.preventDefault(); rail.scrollLeft += event.shiftKey?event.deltaY:event.deltaX; normalize(); }, {passive:false});
   rail.addEventListener('keydown', event => { if(['ArrowLeft','ArrowRight'].includes(event.key)){event.preventDefault();browse(event.key==='ArrowRight'?1:-1);} });
-  rail.addEventListener('pointerdown', event => { pause(); if(event.pointerType==='touch'||event.button!==0) return;pointer=event.pointerId; startX=event.clientX;startScroll=rail.scrollLeft;rail.setPointerCapture(pointer); });
+  rail.addEventListener('pointerdown', event => { pause(); if(event.pointerType==='touch'||event.button!==0) return;pointer=event.pointerId; startX=event.clientX;startScroll=rail.scrollLeft;rail.setPointerCapture(pointer);rail.classList.add('is-dragging'); });
   rail.addEventListener('pointermove', event => { if(pointer!==event.pointerId) return;event.preventDefault();rail.scrollLeft=startScroll-(event.clientX-startX); });
-  const finish = event => { if(pointer!==event.pointerId) return;pointer=undefined;if(rail.hasPointerCapture(event.pointerId))rail.releasePointerCapture(event.pointerId);normalize(); pause(); };
+  const finish = event => { if(pointer!==event.pointerId) return;pointer=undefined;rail.classList.remove('is-dragging');if(rail.hasPointerCapture(event.pointerId))rail.releasePointerCapture(event.pointerId);normalize(); pause(); };
   rail.addEventListener('pointerup', finish);rail.addEventListener('pointercancel', finish);
   rail.addEventListener('scroll', () => { if(manual && pointer===undefined)normalize(); }, {passive:true});
   reduced.addEventListener('change', pause);
+  mobile.addEventListener('change', () => { measure(); pause(); });
   new ResizeObserver(measure).observe(rail);measure();
-  const animate = now => { if(last && !manual && !reduced.matches && !hovered && !document.hidden && !document.documentElement?.hasAttribute?.('data-pick-transition') && pointer===undefined){const bounds=rail.getBoundingClientRect();if(bounds.top<innerHeight&&bounds.bottom>0){position+=Math.min(now-last,50)*.065;normalize(position);}}last=now;requestAnimationFrame(animate); };requestAnimationFrame(animate);
+  const animate = now => { if(last && !manual && !reduced.matches && !hovered && !document.hidden && !document.documentElement?.hasAttribute?.('data-pick-transition') && pointer===undefined){const bounds=rail.getBoundingClientRect();if(bounds.top<innerHeight&&bounds.bottom>0){if(now-lastStep>=6000){browse(1,false);lastStep=now;}}}last=now;requestAnimationFrame(animate); };requestAnimationFrame(animate);
 };
 const verifiedResultsTrack = document.querySelector('[data-verified-results-track]') || document.querySelector('[data-wins-track]');
 if (verifiedResultsTrack) {

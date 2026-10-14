@@ -232,3 +232,13 @@ html[data-pick-transition]::view-transition-old(free-board),html[data-pick-trans
 /* October 13: original Discord reviews within the existing gallery. */
 .hub-interior .proof-grid [data-rail] .discord-review{font:inherit;display:block;appearance:none;line-height:0;position:relative;text-align:left;cursor:pointer}
 .hub-interior .proof-grid [data-rail] .discord-review:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+
+/* Mobile galleries settle on a complete frame; original images still enlarge. */
+@media(max-width:700px){
+ .hub-interior .proof-grid [data-rail]{container-type:inline-size;scroll-snap-type:x mandatory;}
+ .hub-interior .proof-grid [data-rail] .media-card:nth-child(n){width:100cqw;max-width:100cqw;flex-basis:100cqw;scroll-snap-align:start;scroll-snap-stop:always;}
+ .hub-interior .proof-grid [data-rail].is-dragging{scroll-snap-type:none;}
+}
+
+.wins-tile .rail-controls{display:grid;grid-template-columns:minmax(0,1fr);justify-content:stretch;gap:10px;}
+.wins-tile .rail-controls>.wins-browse-hint{display:block;font-size:12px;line-height:1.4;color:#626262;}
