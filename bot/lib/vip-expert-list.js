@@ -191,7 +191,18 @@ function createVipExpertList({ sourceChannelFor, listChannelFor, stateFile, read
       else {
         state.pending_part = { index, marker };
         await save();
-        const message = await destination.send(payload);
+        let message;
+        try { message = await destination.send(payload); }
+        catch (error) {
+          // Discord's explicit authorization rejection proves no message was
+          // accepted; do not leave a lost-response reservation for this case.
+          if (error.code === 50013 || error.status === 403) {
+            delete state.pending_part;
+            await save();
+            throw new Error(`Cannot send expert-list part ${index + 1}/${payloads.length} in channel ${destination.id || 'configured expert-list channel'}: Kobe Bot needs channel-specific Send Messages permission. Existing list parts were preserved.`, { cause: error });
+          }
+          throw error;
+        }
         ids[index] = message.id;
         delete state.pending_part;
         await save();

@@ -85,3 +85,19 @@ test('multi-message list checkpoints and reconciles lost send receipts without d
     assert.deepEqual(result.messageIds.flatMap(id=>managedNames(messages.get(id))),names);
   } finally { await fs.rm(root,{recursive:true,force:true}); }
 });
+
+test('explicit Discord permission rejection clears only the unsent reservation for safe retry', async () => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'expert-list-permission-'));
+  try {
+    const names=Array.from({length:30},(_,index)=>`Expert Source ${index}`);
+    const original={id:'original',content:'Updated List\n'+names.map(name=>'- '+name).join('\n')};
+    const stateFile=path.join(root,'state.json');let attempts=0;
+    const destination={id:'list-channel',messages:{fetch:async()=>new Map([['original',original]])},send:async()=>{attempts++;throw Object.assign(new Error('Missing Permissions'),{code:50013,status:403})}};
+    const source={id:'expert',messages:{fetch:async()=>new Map()}};
+    const engine=createVipExpertList({sourceChannelFor:async()=>source,listChannelFor:async()=>destination,stateFile});
+    await assert.rejects(engine.refresh(),/part 1\/1.*list-channel.*Send Messages/);
+    assert.equal(JSON.parse(await fs.readFile(stateFile,'utf8')).pending_part,undefined);
+    await assert.rejects(engine.refresh(),/Send Messages/);
+    assert.equal(attempts,2);
+  } finally { await fs.rm(root,{recursive:true,force:true}); }
+});
