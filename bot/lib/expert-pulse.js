@@ -165,6 +165,9 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
     .filter((item) => item.decisions && item.rate > 0.61));
   const fiveDays = ranked(records.map((expert) => ({ name: expert.name, references: expert.references, ...recordWithin(expert, end - 5 * day, end) }))
     .filter((item) => item.decisions && item.rate > 0.61));
+  const coldFiveDays = records.map((expert) => ({ name: expert.name, references: expert.references, ...recordWithin(expert, end - 5 * day, end) }))
+    .filter((item) => item.decisions > 0 && item.rate < 0.30)
+    .sort((a, b) => a.rate - b.rate || b.decisions - a.decisions || a.name.localeCompare(b.name));
   const sportRecords = (pattern) => ranked(records.map((expert) => {
     const decisions = expert.results.filter((item) => ['W', 'L'].includes(item.grade) && pattern.test(item.sport));
     const wins = decisions.filter((item) => item.grade === 'W').length;
@@ -192,6 +195,7 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
   const sections = [
     ['Yesterday’s best plays · over 61%', lines(yesterday)],
     ['Best records last 5 days · over 61%', lines(fiveDays)],
+    ['Cold streak · last 5 days · under 30%', lines(coldFiveDays, (item) => `${format(item)}${item.decisions < 5 ? ' · small sample' : ''}`)],
     ['Best football records · over 60% all time', lines(football)],
     ['Best baseball records · over 60% all time', lines(baseball)],
     ['Best records ever · over 61%', allTimeBody]
@@ -212,7 +216,7 @@ function payloadFor(report, records = [], { omitEmpty = false } = {}) {
     throw new Error('Expert list exceeds Discord’s message limit; no names were silently omitted.');
   return {
     allowedMentions: { parse: [] },
-    expertNames: [...new Set([...yesterday, ...fiveDays, ...football, ...baseball, ...allTime].map((item) => item.name))],
+    expertNames: [...new Set([...yesterday, ...fiveDays, ...coldFiveDays, ...football, ...baseball, ...allTime].map((item) => item.name))],
     embeds: descriptions.map((description, index) => ({
       color: 0xFF7900,
       title: index ? `Expert Cheat Sheet · ${report.date} · continued` : `Expert Cheat Sheet · ${report.date}`,
