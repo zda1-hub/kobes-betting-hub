@@ -1600,3 +1600,10 @@ test('website views exclude interaction samples and inline membership openings b
   ];
   assert.deepEqual(workerTest.websitePageViewSummary(events,sessions),{total:3,sources:{meta:3}});
 });
+
+ test('first20 window begins Thursday MST and ends Monday at 10AM MST',()=>{
+ assert.equal(workerTest.first20Active(Date.parse('2026-10-15T06:59:59Z')),false);
+ assert.equal(workerTest.first20Active(Date.parse('2026-10-15T07:00:00Z')),true);
+ assert.equal(workerTest.first20Active(Date.parse('2026-10-19T16:59:59Z')),true);
+ assert.equal(workerTest.first20Active(Date.parse('2026-10-19T17:00:00Z')),false);
+ });

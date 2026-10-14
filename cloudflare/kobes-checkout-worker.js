@@ -49,9 +49,9 @@ const FIRST_MONTH_BACK_START = Date.parse('2026-09-22T07:00:00Z');
 const FIRST_MONTH_BACK_END = Date.parse('2026-10-23T07:00:00Z');
 const FIRST_MONTH_BACK_COUPON_ID = 'kbh_first_month_back_2026_09_22';
 const firstMonthBackActive = () => false;
-const FIRST20_START = Date.parse('2026-10-14T07:00:00Z');
-const FIRST20_END = Date.parse('2026-10-19T07:00:00Z');
-const FIRST20_COUPON_ID = 'kbh_first20_20261014';
+const FIRST20_START = Date.parse('2026-10-15T07:00:00Z');
+const FIRST20_END = Date.parse('2026-10-19T17:00:00Z');
+const FIRST20_COUPON_ID = 'kbh_first20_20261015';
 const first20Active = (now = Date.now()) => now >= FIRST20_START && now < FIRST20_END;
 
 async function first20Coupon(env) {
@@ -1800,8 +1800,8 @@ async function prepareCheckout(request, env, origin) {
   let data;
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
   if (!MEMBERSHIP_OFFERS.has(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
-  if (data.offer === 'first_month_back' && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
   const first20 = data.offer === 'first_month_back' && data.deal === 'first20';
+  if (data.offer === 'first_month_back' && !first20 && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
   if (first20 && !first20Active()) return json({ error: 'The limited $5 offer is not open.' }, 400, origin);
   const referralCode = String(data.referral_code || '').toUpperCase();
   if (first20 && referralCode) return json({ error: 'This limited offer cannot be combined with a referral offer.' }, 400, origin);
@@ -1830,8 +1830,8 @@ async function prepareCheckout(request, env, origin) {
 }
 
 async function createAssociatedCheckout(env, association, publicToken, discordUserId) {
-  if (association.offer === 'first_month_back' && !firstMonthBackActive()) throw new Error('The first-month offer has ended. Please choose a current plan.');
   const first20 = association.offer === 'first_month_back' && association.attribution?.promotion === 'first20';
+  if (association.offer === 'first_month_back' && !first20 && !firstMonthBackActive()) throw new Error('The first-month offer has ended. Please choose a current plan.');
   if (first20 && !first20Active()) throw new Error('The limited $5 offer has ended. Please choose a current plan.');
   const longTerm = ['six_month', 'annual'].includes(association.offer);
   const priceId = association.offer === 'six_month' ? env.STRIPE_SIX_MONTH_PRICE_ID
@@ -1886,8 +1886,8 @@ async function createCheckout(request, env, origin) {
   let data;
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
   if (!MEMBERSHIP_OFFERS.has(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
-  if (data.offer === 'first_month_back' && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
   const first20 = data.offer === 'first_month_back' && data.deal === 'first20';
+  if (data.offer === 'first_month_back' && !first20 && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
   if (first20 && !first20Active()) return json({ error: 'The limited $5 offer is not open.' }, 400, origin);
   if (first20 && data.referral_code) return json({ error: 'This limited offer cannot be combined with a referral offer.' }, 400, origin);
   const longTerm = ['six_month', 'annual'].includes(data.offer);
