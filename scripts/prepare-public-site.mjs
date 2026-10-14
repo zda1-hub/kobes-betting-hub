@@ -27,6 +27,7 @@ const publicFiles = [
   'site.css',
   'functional-fixes.css',
   'view-continuity.css',
+  'desktop-scale.css',
   'membership-scene.css',
   'membership-scene.js',
   'site.js',

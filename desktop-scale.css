@@ -1,0 +1,32 @@
+/* Responsive geometry only: the approved mobile styles and visual identity stay intact. */
+@media (min-width: 901px) {
+  :root {
+    --page-width: clamp(870px, 80vw, 1040px);
+  }
+  /* All shared public shells and their header controls use the same desktop canvas. */
+  main:not(.admin-shell) {max-width:var(--page-width);}
+  main.hub-interior {max-width:var(--hub-view-width,870px);}
+  main.partner-page {max-width:var(--hub-view-width,870px);}
+  /* Preserve the original card/bill proportions and the inline Join/Back scene. */
+  .home-page .landing-intro {max-width:min(100%, 870px);}
+  .home-page .landing-intro .intro-community {max-width:72ch;}
+  .home-page .email-tile {grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);}
+  .home-page .email-tile>* {min-width:0;}
+  .hub-interior .article,
+  .hub-interior .content,
+  .hub-interior .chapter-content {overflow-wrap:break-word;}
+}
+
+/* The cap starts while the canvas is still narrower, avoiding a size jump at desktop. */
+@media (min-width:701px) {
+  .home-page .membership-scene,
+  .membership-route .membership-scene {
+    width:100%;
+    max-width:760px;
+    margin-inline:auto;
+  }
+  .hub-interior>.referral-promo-banner {
+    max-width:760px;
+    margin-inline:auto;
+  }
+}
