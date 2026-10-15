@@ -1,0 +1,425 @@
+[
+  {
+    "width": 320,
+    "before": {
+      "nodes": [
+        {
+          "h": 64,
+          "margin": "0px",
+          "padding": "10px 16px",
+          "s": "header",
+          "w": 320,
+          "x": 0,
+          "y": 0
+        },
+        {
+          "h": 40,
+          "margin": "0px",
+          "padding": "0px",
+          "s": ".brand",
+          "w": 40,
+          "x": 140,
+          "y": 12
+        },
+        {
+          "h": 44,
+          "margin": "0px",
+          "padding": "8px 10px",
+          "s": ".header-join",
+          "w": 107.90625,
+          "x": 16,
+          "y": 10
+        },
+        {
+          "h": 312.7421875,
+          "margin": "16px 16px 0px",
+          "padding": "20px",
+          "s": "[data-first20-feature]",
+          "w": 288,
+          "x": 16,
+          "y": 110
+        },
+        {
+          "h": 287.2734375,
+          "margin": "0px",
+          "padding": "36px 0px 28px",
+          "s": ".landing-intro",
+          "w": 272,
+          "x": 24,
+          "y": 422.7421875
+        },
+        {
+          "h": 114.3671875,
+          "margin": "0px 37.7734px 24px 37.7656px",
+          "padding": "0px",
+          "s": ".membership-card-promo",
+          "w": 196.4609375,
+          "x": 61.765625,
+          "y": 710.015625
+        },
+        {
+          "h": 190.4609375,
+          "margin": "0px 0px 24px",
+          "padding": "0px",
+          "s": ".referral-promo-banner",
+          "w": 272,
+          "x": 24,
+          "y": 848.3828125
+        }
+      ],
+      "scroll": 320,
+      "width": 320
+    },
+    "after": {
+      "nodes": [
+        {
+          "h": 64,
+          "margin": "0px",
+          "padding": "10px 16px",
+          "s": "header",
+          "w": 320,
+          "x": 0,
+          "y": 0
+        },
+        {
+          "h": 40,
+          "margin": "0px",
+          "padding": "0px",
+          "s": ".brand",
+          "w": 40,
+          "x": 140,
+          "y": 12
+        },
+        {
+          "h": 44,
+          "margin": "0px",
+          "padding": "8px 10px",
+          "s": ".header-join",
+          "w": 107.90625,
+          "x": 16,
+          "y": 10
+        },
+        {
+          "h": 312.7421875,
+          "margin": "16px 16px 0px",
+          "padding": "20px",
+          "s": "[data-first20-feature]",
+          "w": 288,
+          "x": 16,
+          "y": 228
+        },
+        {
+          "h": 287.2734375,
+          "margin": "0px",
+          "padding": "36px 0px 28px",
+          "s": ".landing-intro",
+          "w": 272,
+          "x": 24,
+          "y": 540.7421875
+        },
+        {
+          "h": 114.3671875,
+          "margin": "0px 37.7734px 24px 37.7656px",
+          "padding": "0px",
+          "s": ".membership-card-promo",
+          "w": 196.4609375,
+          "x": 61.765625,
+          "y": 828.015625
+        },
+        {
+          "h": 190.4609375,
+          "margin": "0px 0px 24px",
+          "padding": "0px",
+          "s": ".referral-promo-banner",
+          "w": 272,
+          "x": 24,
+          "y": 966.3828125
+        }
+      ],
+      "scroll": 320,
+      "width": 320
+    }
+  },
+  {
+    "width": 390,
+    "before": {
+      "nodes": [
+        {
+          "h": 64,
+          "margin": "0px",
+          "padding": "10px 16px",
+          "s": "header",
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        {
+          "h": 40,
+          "margin": "0px",
+          "padding": "0px",
+          "s": ".brand",
+          "w": 40,
+          "x": 175,
+          "y": 12
+        },
+        {
+          "h": 44,
+          "margin": "0px",
+          "padding": "8px 10px",
+          "s": ".header-join",
+          "w": 107.90625,
+          "x": 16,
+          "y": 10
+        },
+        {
+          "h": 242.046875,
+          "margin": "16px 16px 0px",
+          "padding": "20px",
+          "s": "[data-first20-feature]",
+          "w": 358,
+          "x": 16,
+          "y": 110
+        },
+        {
+          "h": 235.6796875,
+          "margin": "0px",
+          "padding": "36px 0px 28px",
+          "s": ".landing-intro",
+          "w": 342,
+          "x": 24,
+          "y": 352.046875
+        },
+        {
+          "h": 143.796875,
+          "margin": "0px 47.4922px 24px 47.4844px",
+          "padding": "0px",
+          "s": ".membership-card-promo",
+          "w": 247.0234375,
+          "x": 71.484375,
+          "y": 587.7265625
+        },
+        {
+          "h": 219.921875,
+          "margin": "0px 0px 24px",
+          "padding": "0px",
+          "s": ".referral-promo-banner",
+          "w": 342,
+          "x": 24,
+          "y": 755.5234375
+        }
+      ],
+      "scroll": 390,
+      "width": 390
+    },
+    "after": {
+      "nodes": [
+        {
+          "h": 64,
+          "margin": "0px",
+          "padding": "10px 16px",
+          "s": "header",
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        {
+          "h": 40,
+          "margin": "0px",
+          "padding": "0px",
+          "s": ".brand",
+          "w": 40,
+          "x": 175,
+          "y": 12
+        },
+        {
+          "h": 44,
+          "margin": "0px",
+          "padding": "8px 10px",
+          "s": ".header-join",
+          "w": 107.90625,
+          "x": 16,
+          "y": 10
+        },
+        {
+          "h": 242.046875,
+          "margin": "16px 16px 0px",
+          "padding": "20px",
+          "s": "[data-first20-feature]",
+          "w": 358,
+          "x": 16,
+          "y": 228
+        },
+        {
+          "h": 235.6796875,
+          "margin": "0px",
+          "padding": "36px 0px 28px",
+          "s": ".landing-intro",
+          "w": 342,
+          "x": 24,
+          "y": 470.046875
+        },
+        {
+          "h": 143.796875,
+          "margin": "0px 47.4922px 24px 47.4844px",
+          "padding": "0px",
+          "s": ".membership-card-promo",
+          "w": 247.0234375,
+          "x": 71.484375,
+          "y": 705.7265625
+        },
+        {
+          "h": 219.921875,
+          "margin": "0px 0px 24px",
+          "padding": "0px",
+          "s": ".referral-promo-banner",
+          "w": 342,
+          "x": 24,
+          "y": 873.5234375
+        }
+      ],
+      "scroll": 390,
+      "width": 390
+    }
+  },
+  {
+    "width": 1440,
+    "before": {
+      "nodes": [
+        {
+          "h": 183,
+          "margin": "0px",
+          "padding": "12px 0px 16px",
+          "s": "header",
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        {
+          "h": 100,
+          "margin": "0px",
+          "padding": "0px",
+          "s": ".brand",
+          "w": 275,
+          "x": 582.5,
+          "y": 12
+        },
+        {
+          "h": 40,
+          "margin": "0px",
+          "padding": "8px 12px",
+          "s": ".header-join",
+          "w": 122.7734375,
+          "x": 200,
+          "y": 127
+        },
+        {
+          "h": 195.4921875,
+          "margin": "22px 180px 0px",
+          "padding": "22px 28px",
+          "s": "[data-first20-feature]",
+          "w": 1080,
+          "x": 180,
+          "y": 235
+        },
+        {
+          "h": 208.375,
+          "margin": "0px",
+          "padding": "36px 0px 28px",
+          "s": ".landing-intro",
+          "w": 870,
+          "x": 200,
+          "y": 430.4921875
+        },
+        {
+          "h": 319.5625,
+          "margin": "0px 105.531px 24px 105.523px",
+          "padding": "0px",
+          "s": ".membership-card-promo",
+          "w": 548.9453125,
+          "x": 445.5234375,
+          "y": 638.8671875
+        },
+        {
+          "h": 365.828125,
+          "margin": "0px 0px 24px",
+          "padding": "0px",
+          "s": ".referral-promo-banner",
+          "w": 760,
+          "x": 340,
+          "y": 982.4296875
+        }
+      ],
+      "scroll": 1440,
+      "width": 1440
+    },
+    "after": {
+      "nodes": [
+        {
+          "h": 183,
+          "margin": "0px",
+          "padding": "12px 0px 16px",
+          "s": "header",
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        {
+          "h": 100,
+          "margin": "0px",
+          "padding": "0px",
+          "s": ".brand",
+          "w": 275,
+          "x": 582.5,
+          "y": 12
+        },
+        {
+          "h": 40,
+          "margin": "0px",
+          "padding": "8px 12px",
+          "s": ".header-join",
+          "w": 122.7734375,
+          "x": 200,
+          "y": 127
+        },
+        {
+          "h": 195.4921875,
+          "margin": "22px 180px 0px",
+          "padding": "22px 28px",
+          "s": "[data-first20-feature]",
+          "w": 1080,
+          "x": 180,
+          "y": 353
+        },
+        {
+          "h": 208.375,
+          "margin": "0px",
+          "padding": "36px 0px 28px",
+          "s": ".landing-intro",
+          "w": 870,
+          "x": 200,
+          "y": 548.4921875
+        },
+        {
+          "h": 319.5625,
+          "margin": "0px 105.531px 24px 105.523px",
+          "padding": "0px",
+          "s": ".membership-card-promo",
+          "w": 548.9453125,
+          "x": 445.5234375,
+          "y": 756.8671875
+        },
+        {
+          "h": 365.828125,
+          "margin": "0px 0px 24px",
+          "padding": "0px",
+          "s": ".referral-promo-banner",
+          "w": 760,
+          "x": 340,
+          "y": 1100.4296875
+        }
+      ],
+      "scroll": 1440,
+      "width": 1440
+    }
+  }
+]

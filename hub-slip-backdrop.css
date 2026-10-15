@@ -1,0 +1,33 @@
+/* User-selected layout with the four original Historical member slips images. */
+body.home-page.has-slip-backdrop{position:relative;isolation:isolate}
+.hub-slip-top-band{height:118px;pointer-events:none}
+.hub-slips-backdrop{position:absolute;inset:94px 0 0;z-index:-1;pointer-events:none;overflow:clip}
+.hub-background-ticket{position:absolute;left:var(--x);top:var(--y);transform:rotate(var(--rot));width:146px;padding:0;border:0;overflow:hidden;border-radius:8px;box-shadow:0 6px 16px #17202a24;opacity:.70}
+.hub-background-ticket>img{display:block;width:100%;height:auto;max-width:100%;object-fit:contain}
+.hub-background-ticket:nth-child(1){left:-2%;top:4px;transform:rotate(-12deg);width:36%}
+.hub-background-ticket:nth-child(2){left:35%;top:1px;transform:rotate(-4deg);width:32%}
+.hub-background-ticket:nth-child(3){left:74%;top:14px;transform:rotate(12deg);width:34%}
+.hub-background-ticket:nth-child(n+4){filter:blur(.4px);opacity:.48}
+.hub-background-ticket:nth-child(4){left:-16%;top:210px;transform:rotate(-18deg)}
+.hub-background-ticket:nth-child(5){left:77%;top:280px;transform:rotate(13deg)}
+.hub-background-ticket:nth-child(6){left:74%;top:480px;transform:rotate(-5deg);opacity:.7;filter:none}
+.hub-background-ticket:nth-child(7){left:-4%;top:610px;transform:rotate(12deg);opacity:.7;filter:none}
+.hub-background-ticket:nth-child(8){left:75%;top:650px;transform:rotate(6deg);opacity:.7;filter:none}
+.hub-background-ticket:nth-child(9){left:-4%;top:810px;transform:rotate(-10deg)}
+.hub-background-ticket:nth-child(10){left:32%;top:850px;transform:rotate(6deg);opacity:.3}
+.hub-background-ticket:nth-child(11){left:78%;top:880px;transform:rotate(9deg);opacity:.4}
+.hub-background-ticket:nth-child(n+12){opacity:.25}
+.has-slip-backdrop .landing-intro{position:relative;isolation:isolate}
+.has-slip-backdrop .landing-intro::before{content:"";position:absolute;inset:0 -24px;z-index:-1;background:radial-gradient(ellipse at 40% 45%,#f5f5f5 35%,#f5f5f5f7 60%,#f5f5f5c9 76%,transparent 100%);pointer-events:none}
+.has-slip-backdrop .scene-panel,.has-slip-backdrop .referral-promo-banner>span{background:var(--paper,#f5f5f5)}
+.has-slip-backdrop .referral-promo-banner>span{box-shadow:0 0 15px 12px #f5f5f5ed}
+@media(min-width:701px){
+ .hub-slips-backdrop{inset:213px 0 0}
+ .hub-background-ticket{width:220px}
+ .hub-background-ticket:nth-child(-n+3){width:22%;max-width:300px}
+ .hub-background-ticket:nth-child(1){left:0}
+ .hub-background-ticket:nth-child(2){left:39%}
+ .hub-background-ticket:nth-child(3){left:79%}
+ .hub-background-ticket:nth-child(6),.hub-background-ticket:nth-child(8),.hub-background-ticket:nth-child(11){left:85%}
+ .hub-background-ticket:nth-child(7),.hub-background-ticket:nth-child(9){left:0}
+}

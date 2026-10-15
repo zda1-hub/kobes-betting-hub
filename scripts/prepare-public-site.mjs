@@ -87,6 +87,8 @@ const publicFiles = [
   'consent.js',
   'analytics-integrations.js',
   'meta-pixel.js',
+  'hub-slip-backdrop.css',
+  'hub-slip-backdrop.js',
   'slip-layout-fix.css',
   'welcome.html',
   'welcome.js',
