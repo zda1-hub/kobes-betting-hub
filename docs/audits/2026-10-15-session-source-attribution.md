@@ -19,3 +19,9 @@ Affected files: analytics.js, checkout worker and focused tests, public build an
 134 focused tests passed across attribution, consent, dashboard dates and campaign links, membership checkout, checkout worker and public build. `git diff --check` passed. Production build prepared through the existing whitelist. Backend pre-release version: cd110ca4-6dff-4d7a-91c2-87939b1bb264. Existing rate limiter, publisher service and bindings were checked; deploy with --keep-vars.
 
 Release evidence will be appended after deployment.
+
+## Published verification
+
+Published commit 4fea0a5 to GitHub main. Backend version bc20ba37-0411-44ac-9225-11945a0884d5; public site version dd39fd6b-a8b6-47ad-bf27-d255a8b924a8. Backend health returned the new version and first20 remained open/ready at $5 then $32.99, limit 20. Fresh production homepage loads analytics cache key 20261015-session-source and preserves approved backdrop asset 20261015-approved1. Public analytics asset was downloaded and compared byte-for-byte to the tested source. Authenticated dashboard refreshed successfully with the new session-acquisition explanation. Existing historical totals stayed 670 sessions / 1,016 page views; no synthetic live events were created. Evidence is saved in primary marketing launch evidence folder.
+
+Arc Meta inspection found account 1681308602427606 has one off campaign ending April 15, 2025, two lifetime link clicks at $1.51 each, and no reported recent delivery for October 14–15. Account 470451029047804 contains one off draft test with no reported results, including Maximum dates. Neither explains the earlier website campaign tags. Actual recent ad account link is requested; no campaigns, budgets, permissions or drafts were changed.
