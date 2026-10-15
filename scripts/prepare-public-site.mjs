@@ -87,7 +87,6 @@ const publicFiles = [
   'consent.js',
   'analytics-integrations.js',
   'meta-pixel.js',
-  'winning-slips-preview.css',
   'slip-layout-fix.css',
   'welcome.html',
   'welcome.js',
@@ -232,6 +231,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
   await Promise.all([...metaPixelFiles].map(async file => {
     const outputPath = path.join(outputRoot, file);
     let source = await readFile(outputPath, 'utf8');
+    source = source.replace(/view-continuity\.css\?v=[^"']+/g, 'view-continuity.css?v=20261015-header-right');
     if (!source.includes('src="/meta-pixel.js')) {
       source = source.replace('</head>', '  <script src="/meta-pixel.js?v=20261015-kobe-pixel" defer></script>\n</head>');
     }

@@ -242,3 +242,15 @@ html[data-pick-transition]::view-transition-old(free-board),html[data-pick-trans
 
 .wins-tile .rail-controls{display:grid;grid-template-columns:minmax(0,1fr);justify-content:stretch;gap:10px;}
 .wins-tile .rail-controls>.wins-browse-hint{display:block;font-size:12px;line-height:1.4;color:#626262;}
+
+/* Restore mobile header: Join left, logo centered, menu/Discord right. */
+@media(max-width:700px){
+ .site-header{grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr);gap:8px}
+ .site-header>.header-top{grid-column:2;grid-row:1;width:40px;justify-self:center}
+ .site-header .brand,.site-header .brand img{width:40px;height:40px}
+ .site-header>.header-bottom,.site-header .header-actions{display:contents!important}
+ .site-header .header-join{grid-column:1!important;grid-row:1!important;justify-self:start;min-width:0!important;max-width:100%;padding-inline:10px!important;font-size:14px!important;white-space:nowrap}
+ .site-header .menu-toggle{grid-column:3!important;grid-row:1!important;justify-self:end;margin-right:46px}
+ .site-header .header-social{display:contents!important}
+ .site-header .header-social .discord{grid-column:3!important;grid-row:1!important;justify-self:end}
+}
