@@ -52,6 +52,7 @@ const publicFiles = [
   'membership.html',
   'cancel.html',
   'cancel.js',
+  'manage-membership.css',
   'recaps.html',
   'recaps.js',
   'recaps-data.json',

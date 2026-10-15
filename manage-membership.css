@@ -1,0 +1,31 @@
+/* Billing page repair: preserve the Hub palette, with one clear action before support detail. */
+.hub-interior.manage-page .manage-shell{box-sizing:border-box;padding:clamp(20px,4vw,32px);gap:24px}
+.hub-interior.manage-page .manage-copy{width:100%;max-width:560px}
+.hub-interior.manage-page .manage-copy .eyebrow{font-size:12px!important;line-height:1.4;margin:0 0 12px;letter-spacing:.06em}
+.hub-interior.manage-page .manage-copy h1{margin:0 0 12px;letter-spacing:-.035em}
+.hub-interior.manage-page .manage-intro{line-height:1.6;letter-spacing:0}
+.hub-interior.manage-page .manage-panel{box-sizing:border-box;justify-self:center;width:100%;max-width:560px;margin:0;padding:clamp(20px,4vw,28px)!important;border-radius:20px}
+.hub-interior.manage-page .manage-label{display:block;margin:0 0 16px;padding:0;color:#ff9b50!important;font-size:12px!important;line-height:1.4;letter-spacing:.08em}
+.hub-interior.manage-page .manage-panel h2{margin:0 0 10px;letter-spacing:-.025em}
+.hub-interior.manage-page .manage-step>p:not(.manage-label){margin:0 0 20px;line-height:1.6}
+.hub-interior.manage-page .manage-actions{display:flex;align-items:center;justify-content:center;margin:0;gap:12px}
+.hub-interior.manage-page .manage-actions .button{width:100%;padding:12px 16px!important;gap:8px;text-align:center}
+.hub-interior.manage-page .manage-actions .button>span{flex:0 0 auto;text-decoration:none}
+.hub-interior.manage-page .manage-step>.manage-security{margin:12px 0 0;color:#bcbcbc;font-size:12px!important;line-height:1.5}
+.hub-interior.manage-page .manage-access-help{margin-top:24px;padding-top:12px;border-top:1px solid #ffffff30;text-align:left}
+.hub-interior.manage-page .manage-access-help summary{display:list-item;min-height:44px;padding:10px 0;box-sizing:border-box;line-height:1.5;cursor:pointer;color:#fff;font-weight:600}
+.hub-interior.manage-page .manage-access-help p{margin:12px 0 0;line-height:1.6}
+.hub-interior.manage-page .manage-access-help a{color:#ffb47b;text-decoration:underline;text-underline-offset:3px}
+.hub-interior.manage-page .manage-policy{max-width:560px;margin:0 auto;padding-top:20px;font-size:12px!important;line-height:1.6}
+.hub-interior.manage-page [data-feedback]{margin-top:20px;text-align:left}
+.hub-interior.manage-page [data-feedback-form]{display:grid;gap:16px}
+.hub-interior.manage-page [data-feedback-form] label{display:grid;gap:8px}
+.hub-interior.manage-page [data-feedback-form] :is(select,textarea){box-sizing:border-box;width:100%;min-width:0;max-width:100%;padding:12px;border:1px solid #777;border-radius:8px;background:#fff;color:#111;font:inherit}
+.hub-interior.manage-page [data-feedback-form] textarea{min-height:100px;resize:vertical}
+.hub-interior.manage-page [data-feedback-login]{color:#ffb47b}
+.hub-interior.manage-page [data-last-chance]{margin-top:16px}
+.hub-interior.manage-page [hidden]{display:none!important}
+
+.hub-interior.manage-page .manage-panel .text-link{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 4px;color:#ffb47b;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.hub-interior.manage-page .manage-panel>p:first-child{margin-top:0}
+.hub-interior.manage-page .manage-panel>p:last-child:empty{display:none}

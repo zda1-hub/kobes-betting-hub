@@ -1,0 +1,708 @@
+{
+  "routes": [
+    "index.html",
+    "join.html",
+    "membership.html",
+    "cancel.html",
+    "welcome.html",
+    "admin-analytics.html",
+    "member.html",
+    "partner.html",
+    "guides/index.html",
+    "guides/how-to-choose-a-sports-betting-discord.html",
+    "guides/sports-betting-arbitrage-explained.html",
+    "guides/how-to-read-betting-odds-and-line-movement.html",
+    "guides/bankroll-management-for-sports-betting.html",
+    "guides/what-a-sports-betting-writeup-should-include.html",
+    "proof.html",
+    "approach.html",
+    "exclusives.html",
+    "recaps.html",
+    "results.html",
+    "free-pick.html",
+    "faq.html",
+    "support.html",
+    "terms.html",
+    "privacy.html",
+    "responsible-gambling.html",
+    "404.html",
+    "refer.html",
+    "creator.html"
+  ],
+  "staticIssues": [
+    {
+      "page": "refer.html",
+      "issue": "h1_count",
+      "count": 2
+    }
+  ],
+  "checkedURLs": 133,
+  "httpFailures": [],
+  "http": [
+    {
+      "url": "https://kobesbettinghub.com/",
+      "result": "200 https://kobesbettinghub.com/",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/404",
+      "result": "200 https://kobesbettinghub.com/404",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/admin-analytics",
+      "result": "200 https://kobesbettinghub.com/admin-analytics",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/admin-analytics.css?v=20261013-traffic-views-fit",
+      "result": "200 https://kobesbettinghub.com/admin-analytics.css?v=20261013-traffic-views-fit",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/admin-analytics.html",
+      "result": "200 https://kobesbettinghub.com/admin-analytics",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/admin-analytics.js?v=20261013-kobe-updates",
+      "result": "200 https://kobesbettinghub.com/admin-analytics.js?v=20261013-kobe-updates",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/approach",
+      "result": "200 https://kobesbettinghub.com/approach",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/approach.html",
+      "result": "200 https://kobesbettinghub.com/approach",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/arbitrage-guide.css?v=20261014-contrast",
+      "result": "200 https://kobesbettinghub.com/arbitrage-guide.css?v=20261014-contrast",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/icons/discord.svg?v=20261004",
+      "result": "200 https://kobesbettinghub.com/assets/icons/discord.svg?v=20261004",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/kobes-betting-hub-logo-20261005-144.webp",
+      "result": "200 https://kobesbettinghub.com/assets/kobes-betting-hub-logo-20261005-144.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/referral/twenty-dollar-960.webp",
+      "result": "200 https://kobesbettinghub.com/assets/referral/twenty-dollar-960.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/0c6d042a.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/0c6d042a.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/35639584.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/35639584.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/63222847.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/63222847.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/6d5f2cbc.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/6d5f2cbc.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/74bc93c4.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/74bc93c4.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/9621ee5c.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/9621ee5c.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/9ae27a9b.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/9ae27a9b.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/9d24c083.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/9d24c083.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/a31dc0a1.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/a31dc0a1.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/afb94592.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/afb94592.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/b6ac9b88.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/b6ac9b88.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/c0c74b63.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/c0c74b63.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/d7b8aabb.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/d7b8aabb.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/f04972eb.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/f04972eb.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/f34ac737.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/f34ac737.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/f8b88cce.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/f8b88cce.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/f94792dd.webp",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/kobe-20261013/f94792dd.webp",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/member-2026/car-story.png",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/member-2026/car-story.png",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/member-2026/community.png",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/member-2026/community.png",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/member-2026/helpful.png",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/member-2026/helpful.png",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/member-2026/member-earnings.png",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/member-2026/member-earnings.png",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/reviews/member-2026/service.png",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/reviews/member-2026/service.png",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/slips/app-slip-fanduel-left.png",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/slips/app-slip-fanduel-left.png",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/slips/app-slip-fanduel-right.png",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/slips/app-slip-fanduel-right.png",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/slips/app-slip-prizepicks-left.png",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/slips/app-slip-prizepicks-left.png",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/assets/slideshows/slips/app-slip-prizepicks-right.png",
+      "result": "200 https://kobesbettinghub.com/assets/slideshows/slips/app-slip-prizepicks-right.png",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/brand.css?v=2",
+      "result": "200 https://kobesbettinghub.com/brand.css?v=2",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/cancel.html",
+      "result": "200 https://kobesbettinghub.com/managemembership",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/cancel.js?v=20261004-live-bento",
+      "result": "200 https://kobesbettinghub.com/cancel.js?v=20261004-live-bento",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/creator",
+      "result": "200 https://kobesbettinghub.com/creator",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/desktop-scale.css?v=20261013-desktop-fit3",
+      "result": "200 https://kobesbettinghub.com/desktop-scale.css?v=20261013-desktop-fit3",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/email-signup.js?v=20261004-release",
+      "result": "200 https://kobesbettinghub.com/email-signup.js?v=20261004-release",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/exclusives",
+      "result": "200 https://kobesbettinghub.com/exclusives",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/exclusives.html",
+      "result": "200 https://kobesbettinghub.com/exclusives",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/exclusives.js?v=20261013-kobe-updates",
+      "result": "200 https://kobesbettinghub.com/exclusives.js?v=20261013-kobe-updates",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/extras.css?v=20261004",
+      "result": "200 https://kobesbettinghub.com/extras.css?v=20261004",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/extras.css?v=20261010-tracker-tight",
+      "result": "200 https://kobesbettinghub.com/extras.css?v=20261010-tracker-tight",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/faq",
+      "result": "200 https://kobesbettinghub.com/faq",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/faq.html",
+      "result": "200 https://kobesbettinghub.com/faq",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/free-pick",
+      "result": "200 https://kobesbettinghub.com/free-pick",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/free-pick.css?v=20261007-clear-form",
+      "result": "200 https://kobesbettinghub.com/free-pick.css?v=20261007-clear-form",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/free-pick.html",
+      "result": "200 https://kobesbettinghub.com/free-pick",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/free-pick.js?v=20261011-two-day-trial",
+      "result": "200 https://kobesbettinghub.com/free-pick.js?v=20261011-two-day-trial",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/functional-fixes.css?v=20261010-visual-restore",
+      "result": "200 https://kobesbettinghub.com/functional-fixes.css?v=20261010-visual-restore",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/gallery.css?v=20261004",
+      "result": "200 https://kobesbettinghub.com/gallery.css?v=20261004",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides",
+      "result": "200 https://kobesbettinghub.com/guides",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/",
+      "result": "200 https://kobesbettinghub.com/guides",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/bankroll-management-for-sports-betting",
+      "result": "200 https://kobesbettinghub.com/guides/bankroll-management-for-sports-betting",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/bankroll-management-for-sports-betting.html",
+      "result": "200 https://kobesbettinghub.com/guides/bankroll-management-for-sports-betting",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/how-to-choose-a-sports-betting-discord",
+      "result": "200 https://kobesbettinghub.com/guides/how-to-choose-a-sports-betting-discord",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/how-to-choose-a-sports-betting-discord.html",
+      "result": "200 https://kobesbettinghub.com/guides/how-to-choose-a-sports-betting-discord",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/how-to-read-betting-odds-and-line-movement",
+      "result": "200 https://kobesbettinghub.com/guides/how-to-read-betting-odds-and-line-movement",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/how-to-read-betting-odds-and-line-movement.html",
+      "result": "200 https://kobesbettinghub.com/guides/how-to-read-betting-odds-and-line-movement",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/index",
+      "result": "200 https://kobesbettinghub.com/guides",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/index.html",
+      "result": "200 https://kobesbettinghub.com/guides",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/learning.css?v=20261010-inline",
+      "result": "200 https://kobesbettinghub.com/guides/learning.css?v=20261010-inline",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/learning.js?v=20261010-inline",
+      "result": "200 https://kobesbettinghub.com/guides/learning.js?v=20261010-inline",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/sports-betting-arbitrage-explained",
+      "result": "200 https://kobesbettinghub.com/guides/sports-betting-arbitrage-explained",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/sports-betting-arbitrage-explained.html",
+      "result": "200 https://kobesbettinghub.com/guides/sports-betting-arbitrage-explained",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/what-a-sports-betting-writeup-should-include",
+      "result": "200 https://kobesbettinghub.com/guides/what-a-sports-betting-writeup-should-include",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/what-a-sports-betting-writeup-should-include.html",
+      "result": "200 https://kobesbettinghub.com/guides/what-a-sports-betting-writeup-should-include",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/home-results.js?v=20261013-full-mobile-cards4",
+      "result": "200 https://kobesbettinghub.com/home-results.js?v=20261013-full-mobile-cards4",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/home.css",
+      "result": "200 https://kobesbettinghub.com/home.css",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/home.css?v=20260901",
+      "result": "200 https://kobesbettinghub.com/home.css?v=20260901",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/home.css?v=20260901-2",
+      "result": "200 https://kobesbettinghub.com/home.css?v=20260901-2",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/home.css?v=20260922-experts-panel",
+      "result": "200 https://kobesbettinghub.com/home.css?v=20260922-experts-panel",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/home.css?v=20261004-ticker",
+      "result": "200 https://kobesbettinghub.com/home.css?v=20261004-ticker",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/home.js?v=20261013-full-mobile-cards4",
+      "result": "200 https://kobesbettinghub.com/home.js?v=20261013-full-mobile-cards4",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/index.html",
+      "result": "200 https://kobesbettinghub.com/",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/join",
+      "result": "200 https://kobesbettinghub.com/join",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/join.html",
+      "result": "200 https://kobesbettinghub.com/join",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/kobe-message.css?v=20261013-responsive-letter",
+      "result": "200 https://kobesbettinghub.com/kobe-message.css?v=20261013-responsive-letter",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/kobe-message.js?v=20261013",
+      "result": "200 https://kobesbettinghub.com/kobe-message.js?v=20261013",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/landing-continuity.css?v=20261010-referral",
+      "result": "200 https://kobesbettinghub.com/landing-continuity.css?v=20261010-referral",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/lineup-bento.css?v=20261013-kobe-updates",
+      "result": "200 https://kobesbettinghub.com/lineup-bento.css?v=20261013-kobe-updates",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/manage-membership.css?v=20261014-mobile-audit",
+      "result": "200 https://kobesbettinghub.com/manage-membership.css?v=20261014-mobile-audit",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/managemembership",
+      "result": "200 https://kobesbettinghub.com/managemembership",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/member",
+      "result": "200 https://kobesbettinghub.com/member",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/member.js?v=20260920",
+      "result": "200 https://kobesbettinghub.com/member.js?v=20260920",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/membership",
+      "result": "200 https://kobesbettinghub.com/join",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/membership-scene.css?v=20261010-view-continuity",
+      "result": "200 https://kobesbettinghub.com/membership-scene.css?v=20261010-view-continuity",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/membership-scene.js?v=20261011-trial-reporting",
+      "result": "200 https://kobesbettinghub.com/membership-scene.js?v=20261011-trial-reporting",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/membership.css?v=20260829-manage",
+      "result": "200 https://kobesbettinghub.com/membership.css?v=20260829-manage",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/membership.css?v=20260920",
+      "result": "200 https://kobesbettinghub.com/membership.css?v=20260920",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/membership.css?v=20261002-vip-guide",
+      "result": "200 https://kobesbettinghub.com/membership.css?v=20261002-vip-guide",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/membership.js?v=20261014-first20-link",
+      "result": "200 https://kobesbettinghub.com/membership.js?v=20261014-first20-link",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/mobile-polish.css?v=20261013-full-mobile-cards4",
+      "result": "200 https://kobesbettinghub.com/mobile-polish.css?v=20261013-full-mobile-cards4",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/partner",
+      "result": "200 https://kobesbettinghub.com/partner",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/partner.css",
+      "result": "200 https://kobesbettinghub.com/partner.css",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/partner.js?v=20260923",
+      "result": "200 https://kobesbettinghub.com/partner.js?v=20260923",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/privacy",
+      "result": "200 https://kobesbettinghub.com/privacy",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/privacy.html",
+      "result": "200 https://kobesbettinghub.com/privacy",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/proof",
+      "result": "200 https://kobesbettinghub.com/proof",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/proof.html",
+      "result": "200 https://kobesbettinghub.com/proof",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/recaps",
+      "result": "200 https://kobesbettinghub.com/recaps",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/recaps.html",
+      "result": "200 https://kobesbettinghub.com/recaps",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/refer",
+      "result": "200 https://kobesbettinghub.com/refer",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/refer.html",
+      "result": "200 https://kobesbettinghub.com/refer",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/referral-preview.js?v=20261010",
+      "result": "200 https://kobesbettinghub.com/referral-preview.js?v=20261010",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/referral-production.js?v=20261010-option-2",
+      "result": "200 https://kobesbettinghub.com/referral-production.js?v=20261010-option-2",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/referral.css?v=20261010-option-2",
+      "result": "200 https://kobesbettinghub.com/referral.css?v=20261010-option-2",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/responsible-gambling",
+      "result": "200 https://kobesbettinghub.com/responsible-gambling",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/responsible-gambling.html",
+      "result": "200 https://kobesbettinghub.com/responsible-gambling",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/result-metadata.js?v=20261014-label-audit",
+      "result": "200 https://kobesbettinghub.com/result-metadata.js?v=20261014-label-audit",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/results",
+      "result": "200 https://kobesbettinghub.com/results",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/results.css?v=20261010",
+      "result": "200 https://kobesbettinghub.com/results.css?v=20261010",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/results.html",
+      "result": "200 https://kobesbettinghub.com/results",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/results.js?v=20261010-sport-labels",
+      "result": "200 https://kobesbettinghub.com/results.js?v=20261010-sport-labels",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/site.css?v=20261010-visual-restore",
+      "result": "200 https://kobesbettinghub.com/site.css?v=20261010-visual-restore",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/site.js?v=20261011-two-day-trial",
+      "result": "200 https://kobesbettinghub.com/site.js?v=20261011-two-day-trial",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/styles.css",
+      "result": "200 https://kobesbettinghub.com/styles.css",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/styles.css?v=20260825-support",
+      "result": "200 https://kobesbettinghub.com/styles.css?v=20260825-support",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/styles.css?v=7",
+      "result": "200 https://kobesbettinghub.com/styles.css?v=7",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/subsite-bento.css?v=20261004",
+      "result": "200 https://kobesbettinghub.com/subsite-bento.css?v=20261004",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/support",
+      "result": "200 https://kobesbettinghub.com/support",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/support.html",
+      "result": "200 https://kobesbettinghub.com/support",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/terms",
+      "result": "200 https://kobesbettinghub.com/terms",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/terms.html",
+      "result": "200 https://kobesbettinghub.com/terms",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/view-continuity.css?v=20261013-full-mobile-cards4",
+      "result": "200 https://kobesbettinghub.com/view-continuity.css?v=20261013-full-mobile-cards4",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/welcome",
+      "result": "200 https://kobesbettinghub.com/welcome",
+      "error": ""
+    },
+    {
+      "url": "https://kobesbettinghub.com/welcome.js?v=20261011-two-day-trial",
+      "result": "200 https://kobesbettinghub.com/welcome.js?v=20261011-two-day-trial",
+      "error": ""
+    }
+  ]
+}

@@ -17,3 +17,11 @@ test('metadata correction preserves wager, grade, source and verification identi
  const corrected=publicMetadata(item);assert.equal(corrected.sport,'WNBA');assert.equal(corrected.sportStatus,'validated');
  const {sport,sportStatus,...rest}=corrected;const {sport:previous,...original}=item;assert.deepEqual(rest,original);assert.equal(item.sport,'');
 });
+
+test('conflicting grouped labels are corrected only with unambiguous identity',()=>{
+ assert.equal(publicMetadata({selection:'Oilers Moneyline (2 units)',sport:'MLB'}).sport,'Hockey');
+ const college=publicMetadata({selection:'FIU +3.5 (2 units)',sport:'MLB'});
+ assert.equal(college.sport,'');assert.equal(college.sportStatus,'needs_review');
+ assert.equal(publicMetadata({selection:'FIU +3.5',sport:'College Football'}).sport,'College Football');
+ assert.equal(publicMetadata({selection:'Blues ML (-115) 1.5u',sport:'College Football'}).sportStatus,'needs_review');
+});
