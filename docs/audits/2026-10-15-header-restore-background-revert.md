@@ -5,3 +5,5 @@ User requested complete removal of homepage slip background and clarified origin
 Scoped mobile header grid in view-continuity.css places logo at exact viewport center, Join at left inset16px, menu/Discord on right. Public build versions shared stylesheet across marketing routes to avoid stale headers. Desktop unchanged. No backend changes.
 
 Actual320/390/1440 renders: no horizontal overflow; no background slips. Logo centers160/195/720 respectively. Controls inside viewport with no overlaps. At320 Back action right132 vs logo left140 (8px gap); menu toggles expanded true. Screenshots saved in evidence/winning-slips-preview/restored-header-*.png. Full ticket fix retained.
+
+Published f40c05b9-6eed-4465-aad0-61b333a045cc with --keep-vars. Four build tests passed. Fresh production after cache refresh: measured520px (browser minimum), Join left16, logo center260, zero slips. Local exact320/390 verified above. Production desktop logo centered. Full-ticket stylesheet remains included.
