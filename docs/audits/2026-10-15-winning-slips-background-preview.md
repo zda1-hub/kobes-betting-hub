@@ -17,3 +17,7 @@ Published October 15: version f5157644-e101-48c6-a86e-0afc9dcc32f6, source 387b4
 Visibility correction: user rejected prior fading and explicitly requested visible green/win marks. Existing source slips now larger cropped decorative tiles (118px mobile, up to185px desktop), .82/.85 opacity without center mask. Added green WON check badges to clearly identify these existing winning examples; no underlying bets, payouts or results altered. Intro retains original white paper surface, with no extra halo/padding. Header, offer and main layout unchanged. Rendered320,390,1440 show30labels and zero horizontal overflow. Mobile screenshot inspected.
 
 Green-win release deployed c9b301ca-b446-456f-a922-de7ce4c0a62e. Fresh worker HTML confirmed30 win labels; custom-domain reload confirmed labels after initial stale HTML. Bumped CSS URL again to greenwins3 after browser retained old CSS. Four public-build tests passed.
+
+Rejected background rollback: user identified incorrect assets and unreadable black text. Restore index.html from pre-background74fd491 and remove background stylesheet from public whitelist. Preserve first20 offer, pixel and all integrations. No further asset selection without identifying requested source. Original source review crop was local only, never deployed.
+
+Rollback published version d8ce252c-f3ee-45b1-9550-e54cc7473c77. Fresh custom-domain browser confirms0background slips, first20banner retained, header top0. Await exact requested source identification before another background release.
