@@ -681,6 +681,8 @@ function cleanAttribution(value = {}) {
     return raw ? 'other' : '';
   };
   return {
+    session_source: source(value.session_source), session_medium: text(value.session_medium),
+    session_campaign: text(value.session_campaign), session_content: text(value.session_content), session_term: text(value.session_term),
     first_source: source(value.first_source) || 'direct', first_medium: text(value.first_medium),
     first_campaign: text(value.first_campaign), first_content: text(value.first_content),
     first_term: text(value.first_term),
@@ -700,14 +702,29 @@ function cleanAttribution(value = {}) {
 function attributionSourceForSession(session) {
   if (!session) return 'unattributed';
   const touch = session.first_touch || {};
+  const acquisition = cleanAttribution({ session_source: touch.session_source }).session_source;
+  if (acquisition) return acquisition;
   const original = cleanAttribution({ first_source: touch.first_source || touch.utm_source || session.first_referrer_host || 'direct' }).first_source;
-  // Recover an explicitly tagged source misclassified by an older normalizer.
-  // Keep genuine direct/known first touches and never invent missing visits.
-  if (original === 'other' && touch.utm_source) {
+  // Older rows can retain a lifetime direct/other source despite explicit session
+  // landing tags. Recover only recognized tags captured in that row's first touch;
+  // never infer from last touch or retroactively manufacture missing visits.
+  if (['other', 'direct'].includes(original) && touch.utm_source) {
     const tagged = cleanAttribution({ first_source: touch.utm_source }).first_source;
     if (!['other', 'direct'].includes(tagged)) return tagged;
   }
   return original;
+}
+
+
+function attributionCampaignForSession(session) {
+  if (!session) return 'unattributed';
+  const touch = session.first_touch || {};
+  if (cleanAttribution({ session_source: touch.session_source }).session_source) {
+    return String(touch.session_campaign || 'uncategorized').slice(0, 120).toLowerCase();
+  }
+  const original = cleanAttribution({ first_source: touch.first_source || touch.utm_source || session.first_referrer_host || 'direct' }).first_source;
+  const recovered = attributionSourceForSession(session) !== original;
+  return String(recovered ? touch.utm_campaign || 'uncategorized' : touch.first_campaign || touch.utm_campaign || 'uncategorized').slice(0, 120).toLowerCase();
 }
 
 function requestAttribution(request, supplied = {}) {
@@ -3167,7 +3184,7 @@ function interactionSummary(events = [], sessions = []) {
     const p = event.properties;
     const touch = sessionById.get(event.session_id)?.first_touch || {};
     const source = attributionSourceForSession(sessionById.get(event.session_id) || { first_touch: touch });
-    const campaign = String(touch.first_campaign || 'uncategorized').slice(0, 120);
+    const campaign = attributionCampaignForSession(sessionById.get(event.session_id) || { first_touch: touch });
     if (p.action === 'cta_click') {
       const key = `${p.target_id}:${p.location}:${event.path}:${source}:${campaign}`;
       const row = ctas.get(key) || { id: p.target_id, location: p.location, path: event.path, source, campaign, clicks: 0, visitors: new Set() };
@@ -3408,7 +3425,7 @@ async function adminAnalytics(request, env, origin) {
   const associationBySubscription = new Map((associations || []).filter(item => item.stripe_subscription_id).map(item => [item.stripe_subscription_id, item]));
   const normalizedSource = value => cleanAttribution({ first_source: value }).first_source;
   const firstSourceForSession = attributionSourceForSession;
-  const firstCampaignForSession = session => session ? String(session.first_touch?.first_campaign || session.first_touch?.utm_campaign || 'uncategorized').toLowerCase() : 'unattributed';
+  const firstCampaignForSession = attributionCampaignForSession;
   const sessionForSubscription = subscriptionId => sessionById.get(associationBySubscription.get(subscriptionId)?.analytics_session_id);
   const mrrForSubscription = subscription => subscription.offer === 'annual' ? Math.round(19499 / 12) : subscription.offer === 'six_month' ? Math.round(13499 / 6) : 3299;
   const revenueForSubscription = subscriptionId => {
@@ -3489,7 +3506,7 @@ async function adminAnalytics(request, env, origin) {
     const association = associationBySubscription.get(subscription.stripe_subscription_id); const analyticsSession = sessionById.get(association?.analytics_session_id); const firstTouch = analyticsSession?.first_touch || association?.attribution || {}; const lastTouch = analyticsSession?.last_touch || association?.attribution || {};
     const roleCheck = roleChecks.find(item => item.subscription.stripe_subscription_id === subscription.stripe_subscription_id)?.role || null;
     const memberRewards = (referrals || []).filter(item => item.referrer_discord_user_id === customer?.discord_user_id); const purchase = (billing || []).filter(item => item.stripe_subscription_id === subscription.stripe_subscription_id && item.event_type === 'invoice_paid').sort((a,b) => new Date(a.occurred_at) - new Date(b.occurred_at))[0];
-    return { name: identity.name, email: identity.email, plan: subscription.offer || 'unknown', status: subscription.status, stripeCustomerId: subscription.stripe_customer_id, subscriptionId: subscription.stripe_subscription_id, discordUserId: customer?.discord_user_id || '', vipStatus: reportedVipStatus(association?.status, roleCheck), roleCheck, storedVipStatus: association?.status || 'UNKNOWN', hasPositivePayment: paidSubscriptionIds.has(subscription.stripe_subscription_id), joinedAt: subscription.created_at, purchaseAt: purchase?.occurred_at || null, renewsOrEndsAt: subscription.cancel_at || subscription.current_period_end, canceling: Boolean(subscription.cancel_at_period_end || subscription.cancel_at), source: firstSourceForSession(analyticsSession), firstSource: firstSourceForSession(analyticsSession), firstMedium: firstTouch.first_medium || firstTouch.utm_medium || '', firstCampaign: firstTouch.first_campaign || firstTouch.utm_campaign || '', lastSource: normalizedSource(lastTouch.last_source || lastTouch.utm_source || firstTouch.first_source || 'direct'), lastMedium: lastTouch.last_medium || lastTouch.utm_medium || '', lastCampaign: lastTouch.last_campaign || lastTouch.utm_campaign || '', landingPage: analyticsSession?.first_path || firstTouch.landing_path || '', referralSource: association?.referral_code || firstTouch.referral_identifier || '', referralCreditsCents: memberRewards.filter(item => item.status === 'PAYOUT_SENT').reduce((sum,item)=>sum+Number(item.reward_amount_cents||0),0), pendingReferralCreditsCents: memberRewards.filter(item => !['PAYOUT_SENT','VOID'].includes(item.status)).reduce((sum,item)=>sum+Number(item.reward_amount_cents||0),0), failureReason: association?.last_error_code || '' };
+    return { name: identity.name, email: identity.email, plan: subscription.offer || 'unknown', status: subscription.status, stripeCustomerId: subscription.stripe_customer_id, subscriptionId: subscription.stripe_subscription_id, discordUserId: customer?.discord_user_id || '', vipStatus: reportedVipStatus(association?.status, roleCheck), roleCheck, storedVipStatus: association?.status || 'UNKNOWN', hasPositivePayment: paidSubscriptionIds.has(subscription.stripe_subscription_id), joinedAt: subscription.created_at, purchaseAt: purchase?.occurred_at || null, renewsOrEndsAt: subscription.cancel_at || subscription.current_period_end, canceling: Boolean(subscription.cancel_at_period_end || subscription.cancel_at), source: firstSourceForSession(analyticsSession), firstSource: cleanAttribution(firstTouch).first_source, firstMedium: firstTouch.first_medium || firstTouch.utm_medium || '', firstCampaign: firstTouch.first_campaign || firstTouch.utm_campaign || '', lastSource: normalizedSource(lastTouch.last_source || lastTouch.utm_source || firstTouch.first_source || 'direct'), lastMedium: lastTouch.last_medium || lastTouch.utm_medium || '', lastCampaign: lastTouch.last_campaign || lastTouch.utm_campaign || '', landingPage: analyticsSession?.first_path || firstTouch.landing_path || '', referralSource: association?.referral_code || firstTouch.referral_identifier || '', referralCreditsCents: memberRewards.filter(item => item.status === 'PAYOUT_SENT').reduce((sum,item)=>sum+Number(item.reward_amount_cents||0),0), pendingReferralCreditsCents: memberRewards.filter(item => !['PAYOUT_SENT','VOID'].includes(item.status)).reduce((sum,item)=>sum+Number(item.reward_amount_cents||0),0), failureReason: association?.last_error_code || '' };
   });
   const normalizedEmail = value => String(value || '').trim().toLowerCase();
   const distinct = values => [...new Set(values.filter(Boolean))];
@@ -3538,7 +3555,7 @@ async function adminAnalytics(request, env, origin) {
     dataCompletenessWarnings,
     reportingExclusions,
     scoreboard: { todayPhoenix, activePaid: paidEligible.length, activeTrials: trialEligible.length, statusTrialing: subscriptionSummary.statusTrialing.length, entitled: eligible.length, mrrCents: Math.round(mrr), potentialTrialMrrCents: subscriptionSummary.potentialTrialMrrCents, newPaidToday, cancelledToday: cancellationTodayComplete ? cancelledToday : null, netAddsToday: cancellationTodayComplete ? newPaidToday - cancelledToday : null, newPaidLast7, netAddsLast7: cancellationLast7Complete ? newPaidLast7 - cancelledLast7 : null },
-    traffic: { pageViews: websiteViews.total, metaAdClicks: null, uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), item => item.first_touch?.first_campaign || item.first_touch?.utm_campaign), landingPages: groupCount(rangedSessions, item => item.first_path) },
+    traffic: { pageViews: websiteViews.total, metaAdClicks: null, uniqueVisitors: rangedSessions.length, sessions: rangedSessions.length, joinVisitors: new Set(rangedEvents.filter(item => item.event_name === 'join_page_view').map(item => item.session_id)).size, sources, campaigns, countries: groupCount(rangedSessions, item => item.first_touch?.country), devices: groupCount(rangedSessions, item => item.first_touch?.device), browsers: groupCount(rangedSessions, item => item.first_touch?.browser), campaignCounts: groupCount(rangedSessions.filter(item => !['uncategorized', 'unattributed'].includes(firstCampaignForSession(item))), firstCampaignForSession), landingPages: groupCount(rangedSessions, item => item.first_path) },
     conversion: { funnel, trialConversion, trialStarts: trialConversion.started, trialFunnel: [{ name: 'trial_started', count: trialConversion.started }, { name: 'trial_vip_activated', count: trialConversion.vipActivated }], funnelBasis: 'Period event totals; not an ordered trial cohort. Use trialConversion for matured trial-to-paid reporting.', offerSelections: countEvents('offer_selected'), discordConnections: countEvents('discord_verified'), checkoutStarts: countEvents('checkout_started'), successfulPayments: countEvents('payment_completed'), unattributedPayments: rangedEvents.filter(item => item.event_name === 'payment_completed' && !sessionById.has(item.session_id)).length, purchaseConversionRate: rangedSessions.length ? measuredCount('payment_completed') / rangedSessions.length : 0, checkoutPurchaseConversionBasis: 'Period payment/start totals; not trial-to-paid conversion. Use matured trialConversion.', checkoutPurchaseConversionRate: countEvents('checkout_started') ? countEvents('payment_completed') / countEvents('checkout_started') : 0, vipActivationRate: paidVipActivationRate, vipActivationBasis: 'Distinct first-paid subscriptions in range with an observed VIP activation through generatedAt; activation may precede payment.' },
     engagement: engagementSummary(rangedEvents), interactions: interactionSummary(rangedEvents, rangedSessions),
     revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), potentialTrialMrrCents: subscriptionSummary.potentialTrialMrrCents, newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPaymentSummary.attemptCount, failedInvoices: failedPaymentSummary.invoiceCount, affectedCustomers: failedPaymentSummary.affectedCustomers, openFailedInvoices: failedPaymentSummary.openInvoices, recoveredFailedInvoices: failedPaymentSummary.recoveredInvoices, introRevenueCents: invoiceWithinRange.filter(item => [1000, 1999].includes(item.amountPaid)).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
@@ -3822,6 +3839,7 @@ export const __test = {
   recordSubscriptionCancellation,
   cleanAttribution,
   attributionSourceForSession,
+  attributionCampaignForSession,
   supabasePages,
   memberWelcomeMessage,
   queueMemberWelcome,

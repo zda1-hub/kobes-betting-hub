@@ -143,3 +143,45 @@ test('an unknown source or generic paid-social label is not assumed to be Meta',
   assert.equal(first.event.session_id,second.event.session_id);
   assert.notEqual(first.event.dedupe_key,second.event.dedupe_key);
 });
+
+
+test('session acquisition rotates independently of lifetime first touch', () => {
+  const first=visit({url:'https://kobesbettinghub.com/',now:100000000});
+  const second=visit({url:'https://kobesbettinghub.com/?utm_source=fb&utm_medium=paid_social&utm_campaign=launch&utm_content=video&utm_term=sports',storage:first.storage,now:101800001});
+  assert.equal(second.attribution.first_source,'direct');
+  assert.equal(second.attribution.session_source,'facebook');
+  assert.equal(second.attribution.session_medium,'paid_social');
+  assert.equal(second.attribution.session_campaign,'launch');
+  assert.equal(second.attribution.session_content,'video');
+  assert.equal(second.attribution.session_term,'sports');
+  const next=visit({url:'https://kobesbettinghub.com/',storage:first.storage,now:103600002});
+  assert.equal(next.attribution.session_source,'direct');
+  assert.equal(next.attribution.session_campaign,'');
+});
+
+test('same-session acquisition remains fixed while last touch can change', () => {
+  const first=visit({url:'https://kobesbettinghub.com/?utm_source=ig&utm_campaign=original'});
+  const second=visit({url:'https://kobesbettinghub.com/join?utm_source=discord&utm_campaign=followup',storage:first.storage});
+  assert.equal(second.attribution.session_source,'instagram');
+  assert.equal(second.attribution.session_campaign,'original');
+  assert.equal(second.attribution.last_source,'discord');
+});
+
+test('fbclid only identifies Meta platform with unknown social medium', () => {
+  const result=visit({url:'https://kobesbettinghub.com/?fbclid=example'});
+  assert.equal(result.attribution.session_source,'meta');
+  assert.equal(result.attribution.session_medium,'unknown_social');
+  assert.equal(visit({url:'https://kobesbettinghub.com/?fbclid=example&utm_source=ig'}).attribution.session_source,'instagram');
+  assert.equal(visit({url:'https://kobesbettinghub.com/?fbclid=example',referrer:'https://www.facebook.com/'}).attribution.session_source,'facebook');
+});
+
+
+test('a later direct session does not inherit lifetime campaign acquisition', () => {
+  const first=visit({url:'https://kobesbettinghub.com/?utm_source=x&utm_campaign=old',now:100000000});
+  const second=visit({url:'https://kobesbettinghub.com/join',storage:first.storage,now:101800001});
+  assert.equal(second.attribution.first_source,'x');
+  assert.equal(second.attribution.first_campaign,'old');
+  assert.equal(second.attribution.session_source,'direct');
+  assert.equal(second.attribution.session_campaign,'');
+  assert.equal(second.attribution.session_medium,'');
+});

@@ -35,8 +35,9 @@
     || referrerHost.endsWith('.kobedirwin.workers.dev') || referrerHost === 'checkout.stripe.com';
   const taggedSource = normalizeSource(query.get('utm_source'));
   const referrerSource = isInternalReferrer ? '' : normalizeSource(referrerHost);
-  const incomingSource = referralIdentifier ? 'referral' : taggedSource || referrerSource;
-  const inferredMedium = !incomingSource ? '' : ['x', 'kobe_x', 'instagram', 'tiktok', 'youtube', 'facebook'].includes(incomingSource) ? 'organic_social' : incomingSource === 'discord' ? 'community' : incomingSource;
+  const clickIdSource = query.get('fbclid') ? 'meta' : '';
+  const incomingSource = referralIdentifier ? 'referral' : taggedSource || referrerSource || clickIdSource;
+  const inferredMedium = !taggedSource && !referrerSource && clickIdSource && !referralIdentifier ? 'unknown_social' : !incomingSource ? '' : ['x', 'kobe_x', 'instagram', 'tiktok', 'youtube', 'facebook'].includes(incomingSource) ? 'organic_social' : incomingSource === 'discord' ? 'community' : incomingSource;
   let sessionId;
   let newSession = false;
   try {
@@ -57,7 +58,15 @@
     } catch { return {}; }
   })();
   const firstSource = normalizeSource(stored.first_source) || incomingSource || 'direct';
+  // Session acquisition is independent of the browser's lifetime first touch.
+  const sessionSource = (!newSession && normalizeSource(stored.session_source)) || incomingSource || 'direct';
+  const retainSession = !newSession && Boolean(normalizeSource(stored.session_source));
   const current = {
+    session_source: sessionSource,
+    session_medium: clean(retainSession ? stored.session_medium : query.get('utm_medium') || inferredMedium),
+    session_campaign: clean(retainSession ? stored.session_campaign : query.get('utm_campaign')),
+    session_content: clean(retainSession ? stored.session_content : query.get('utm_content')),
+    session_term: clean(retainSession ? stored.session_term : query.get('utm_term')),
     first_source: firstSource,
     first_medium: clean(stored.first_medium || (firstSource === incomingSource ? query.get('utm_medium') || inferredMedium : '')),
     first_campaign: clean(stored.first_campaign || (firstSource === incomingSource ? query.get('utm_campaign') : '')),

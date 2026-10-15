@@ -1572,7 +1572,7 @@ test('Meta campaign source is normalized by the server and recovered from preser
     assert.equal(workerTest.cleanAttribution({first_source:tag}).first_source, 'meta');
     assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'other',utm_source:tag}}), 'meta');
   }
-  assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'direct',utm_source:'meta'}}),'direct');
+  assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'direct',utm_source:'meta'}}),'meta');
   assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'x',utm_source:'meta'}}),'x');
   assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'other',utm_source:'unrecognized'}}),'other');
   assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'other',fbclid:'not-enough-to-identify-a-campaign'}}),'other');
@@ -1599,4 +1599,30 @@ test('website views exclude interaction samples and inline membership openings b
     {event_name:'payment_completed',session_id:'meta-session'},
   ];
   assert.deepEqual(workerTest.websitePageViewSummary(events,sessions),{total:3,sources:{meta:3}});
+});
+
+
+test('session acquisition overrides lifetime source and only evidenced historical tags recover', () => {
+  const touch=workerTest.cleanAttribution({session_source:'fb',session_medium:'paid_social',session_campaign:'launch',session_content:'video',session_term:'sports',first_source:'direct'});
+  assert.equal(touch.session_source,'facebook');
+  assert.equal(touch.session_campaign,'launch');
+  assert.equal(touch.session_content,'video');
+  assert.equal(touch.session_term,'sports');
+  assert.equal(workerTest.attributionSourceForSession({first_touch:touch}),'facebook');
+  assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'direct',utm_source:'ig'}}),'instagram');
+  assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'direct'},last_touch:{last_source:'facebook',utm_source:'fb'}}),'direct');
+  assert.equal(workerTest.attributionSourceForSession({first_touch:{first_source:'direct',referrer_host:'facebook.com'}}),'direct');
+  assert.equal(workerTest.attributionSourceForSession({first_touch:{session_source:'direct',first_source:'facebook',utm_source:'fb'}}),'direct');
+});
+
+
+test('recovered historical source keeps its evidenced campaign rather than lifetime campaign', () => {
+  const legacy={id:'s1',first_touch:{first_source:'direct',first_campaign:'old_lifetime',utm_source:'ig',utm_campaign:'new_launch'}};
+  assert.equal(workerTest.attributionCampaignForSession(legacy),'new_launch');
+  assert.equal(workerTest.attributionCampaignForSession({...legacy,first_touch:{...legacy.first_touch,utm_campaign:''}}),'uncategorized');
+  assert.equal(workerTest.attributionCampaignForSession({first_touch:{session_source:'direct',session_campaign:'',first_campaign:'old_lifetime',utm_campaign:'old_launch'}}),'uncategorized');
+  assert.equal(workerTest.attributionCampaignForSession({first_touch:{first_source:'x',first_campaign:'original',utm_source:'ig',utm_campaign:'last'}}),'original');
+  const summary=workerTest.interactionSummary([{event_name:'page_view',session_id:'s1',path:'/join',properties:{kind:'interaction',action:'cta_click',target_id:'join_monthly',location:'membership'}}],[legacy]);
+  assert.equal(summary.ctas[0].source,'instagram');
+  assert.equal(summary.ctas[0].campaign,'new_launch');
 });
