@@ -1,15 +1,5 @@
-/* Review branch only. Existing slip images remain unchanged. */
+/* Review branch only: real existing slips repeated as a decorative field. */
 .slips-preview-main { position:relative; isolation:isolate; }
 .winning-slips-backdrop { position:absolute; inset:0; z-index:-1; pointer-events:none; overflow:clip; }
-.backdrop-slip { position:absolute; width:clamp(66px,9vw,132px); height:auto; opacity:.14; border-radius:9px; filter:saturate(.65); box-shadow:0 12px 28px #0002; }
-.slip-a { left:2%; top:220px; transform:rotate(-13deg); }
-.slip-b { right:2.5%; top:260px; transform:rotate(12deg); }
-.slip-c { left:3%; top:740px; transform:rotate(9deg); }
-.slip-d { right:3%; top:1030px; transform:rotate(-11deg); }
-@media(max-width:600px) {
- .backdrop-slip { width:64px; opacity:.10; }
- .slip-a { left:4px; top:320px; }
- .slip-b { right:4px; top:390px; }
- .slip-c { left:7px; top:850px; }
- .slip-d { right:6px; top:1200px; }
-}
+.backdrop-slip { position:absolute; left:var(--x); top:var(--y); transform:rotate(var(--r)); width:clamp(64px,7.5vw,110px); height:auto; opacity:.24; border-radius:7px; filter:saturate(.8); box-shadow:0 6px 18px #0002; }
+@media(max-width:600px) { .backdrop-slip { width:57px; opacity:.18; } }

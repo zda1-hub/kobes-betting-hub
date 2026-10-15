@@ -5,3 +5,5 @@ User requested small distant winning slips, using existing website assets, with 
 Local preview and GitHub branch only; not merged to main or deployed. Rendered verification to follow.
 
 Rendered at actual 320,390,1440 CSS px: document width equals viewport; header top zero; all four existing images load; opacity .10 mobile and .14 desktop. Join action still resolves first_month_back membership. Moved first slip lower after visual review to avoid intro copy. Screenshots in evidence/winning-slips-preview. Existing remote free-pick/results feeds may be loading in local capture; no changes to those integrations. No Cloudflare commands executed.
+
+Follow-up: user rejected sparse four-slip version. Increased to thirty instances of the same four existing website slips, distributed across the homepage background with varied rotation and increased visibility (.24 desktop/.18 mobile). Intentionally repeats sources; does not invent new slips or outcomes. Temporary phone preview updated only; no Cloudflare release.
