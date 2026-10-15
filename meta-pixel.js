@@ -8,7 +8,7 @@
   // Never load the advertising SDK while a private activation/OAuth credential is in the URL.
   if (['state', 'session_id', 'code', 'token', 'auth'].some(key => new URLSearchParams(location.search).has(key))) return;
   initialized = true;
-  const pixelId = '4640857832799621';
+  const pixelId = '971327835061737';
   let fbq = window.fbq;
   if (!fbq) {
     fbq = function (...args) {

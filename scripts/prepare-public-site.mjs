@@ -231,7 +231,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
     const outputPath = path.join(outputRoot, file);
     let source = await readFile(outputPath, 'utf8');
     if (!source.includes('src="/meta-pixel.js')) {
-      source = source.replace('</head>', '  <script src="/meta-pixel.js?v=20261004-purchase" defer></script>\n</head>');
+      source = source.replace('</head>', '  <script src="/meta-pixel.js?v=20261015-kobe-pixel" defer></script>\n</head>');
     }
     // A noscript pixel would bypass the visitor's tracking choice.
     await writeFile(outputPath, source);

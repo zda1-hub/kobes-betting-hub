@@ -84,3 +84,11 @@ test('URL cleanup preserves activation verification across reload without persis
   assert.equal(requested.length, 2);
   assert.ok(requested.every(url => url.endsWith('state=opaque-private-activation')));
 });
+
+test('Kobe supplied pixel initializes once with one PageView', () => {
+  const page = browser();
+  assert.equal(page.window.fbq.queue.filter(args => args[0] === 'init').length, 1);
+  assert.equal(page.window.fbq.queue.find(args => args[0] === 'init')[1], '971327835061737');
+  page.listeners.get('kbh:tracking-url-ready')();
+  assert.equal(page.events().filter(args => args[1] === 'PageView').length, 1);
+});
