@@ -27,6 +27,7 @@ function checkoutPage(fetchImpl, { config = productionConfig, search = '', histo
   };
   const menuToggle = { addEventListener() {}, setAttribute() {} };
   const checkoutMessage = { textContent: '' };
+  const promotionTerms = { textContent: '' }, promotionRenewal = { textContent: '' }, timers = [];
   const connectionPanel = { hidden: true };
   const connectionTitle = { textContent: '' };
   const connectionMessage = { textContent: '' };
@@ -35,6 +36,9 @@ function checkoutPage(fetchImpl, { config = productionConfig, search = '', histo
   const document = {
     getElementById: () => ({ textContent: '' }),
     querySelector(selector) {
+      if (selector === '[data-primary-membership-checkout]') return buttons[0];
+      if (selector === '[data-primary-membership-terms]') return promotionTerms;
+      if (selector === '.scene-renewal-note') return promotionRenewal;
       if (selector === '[data-menu-toggle]') return menuToggle;
       if (selector === '[data-menu]') return menu;
       if (selector === '[data-checkout-message]') return checkoutMessage;
@@ -48,6 +52,8 @@ function checkoutPage(fetchImpl, { config = productionConfig, search = '', histo
     addEventListener() {},
   };
   const window = {
+    setTimeout(callback) { timers.push(callback); return timers.length; },
+    clearTimeout() {},
     addEventListener() {},
     __KBH_MEMBERSHIP_CONFIG__: config,
     crypto: globalThis.crypto,
@@ -69,7 +75,7 @@ function checkoutPage(fetchImpl, { config = productionConfig, search = '', histo
     Event,
     window,
   });
-  return { tracking, buttons, storage, assignedUrls, checkoutMessage, connectionPanel, connectionTitle, connectionMessage, discordConnect, salesSection };
+  return { tracking, buttons, storage, assignedUrls, checkoutMessage, connectionPanel, connectionTitle, connectionMessage, discordConnect, salesSection, promotionTerms, promotionRenewal, timers };
 }
 
 test('paid checkout handoff exposes Discord first and prevents a second purchase', async () => {
@@ -189,4 +195,59 @@ test('legacy paid return still exposes Discord connection after sanitized URL re
   const page = checkoutPage(() => {}, { search: '?checkout=success', historyState: { kbhCheckoutSession: 'cs_live_example123' } });
   assert.equal(page.discordConnect.hidden, false);
   assert.match(page.discordConnect.href, /session_id=cs_live_example123$/);
+});
+
+test('dedicated $5 link switches only its primary offer and submits the real promotion key', async () => {
+  const requests = [];
+  const page = checkoutPage(async (url, options) => {
+    if (url.endsWith('/promotions/first20')) return Response.json({ state: 'open', ready: true });
+    requests.push(JSON.parse(options.body));
+    return Response.json({ url: 'https://discord.com/oauth2/authorize' });
+  }, { search: '?deal=first20' });
+  await new Promise(setImmediate);
+  assert.equal(page.buttons[0].textContent, 'Start for $5 →');
+  assert.equal(page.buttons[0].disabled, false);
+  assert.match(page.promotionTerms.textContent, /\$5.*\$32.99\/month.*No free trial/);
+  assert.match(page.promotionRenewal.textContent, /October 19 at 10:00 AM MST/);
+  await page.buttons[0].click();
+  assert.equal(requests[0].offer, 'first_month_back');
+  assert.equal(requests[0].deal, 'first20');
+  assert.equal(page.assignedUrls[0], 'https://discord.com/oauth2/authorize');
+});
+test('scheduled $5 link cannot start early and refreshes to open without a page reload', async () => {
+  let state = 'scheduled';
+  const page = checkoutPage(async () => Response.json({ state, ready: true }), { search: '?deal=first20' });
+  await new Promise(setImmediate);
+  assert.equal(page.buttons[0].disabled, true);
+  assert.match(page.checkoutMessage.textContent, /opens October 15/);
+  state = 'open';
+  await page.timers[0]();
+  assert.equal(page.buttons[0].disabled, false);
+});
+test('filled/ended $5 link clearly falls back to the regular trial without sending a discount', async () => {
+  const requests = [];
+  const page = checkoutPage(async (url, options) => {
+    if (url.endsWith('/promotions/first20')) return Response.json({ state: 'sold_out', ready: false });
+    requests.push(JSON.parse(options.body));
+    return Response.json({ url: 'https://discord.com/oauth2/authorize' });
+  }, { search: '?deal=first20' });
+  await new Promise(setImmediate);
+  assert.equal(page.buttons[0].dataset.checkout, 'monthly');
+  assert.equal(page.buttons[0].dataset.deal, undefined);
+  assert.match(page.promotionTerms.textContent, /2 days free/);
+  assert.match(page.checkoutMessage.textContent, /no longer available/);
+  await page.buttons[0].click();
+  assert.equal(requests[0].offer, 'monthly');
+  assert.equal(requests[0].deal, undefined);
+});
+test('unavailable status and referral stacking fail closed on the $5 link', async () => {
+  const page = checkoutPage(async () => { throw new Error('network unavailable'); }, { search: '?deal=first20' });
+  await new Promise(setImmediate);
+  assert.equal(page.buttons[0].disabled, true);
+  assert.match(page.checkoutMessage.textContent, /temporarily unavailable/);
+  let requests = 0;
+  const referral = checkoutPage(async () => { requests++; }, { search: '?deal=first20&ref=KBH-ABCDEF1234' });
+  assert.equal(referral.buttons[0].disabled, true);
+  assert.equal(requests, 0);
+  assert.match(referral.checkoutMessage.textContent, /cannot be combined/);
 });

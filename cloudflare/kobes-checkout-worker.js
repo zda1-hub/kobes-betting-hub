@@ -49,31 +49,49 @@ const FIRST_MONTH_BACK_START = Date.parse('2026-09-22T07:00:00Z');
 const FIRST_MONTH_BACK_END = Date.parse('2026-10-23T07:00:00Z');
 const FIRST_MONTH_BACK_COUPON_ID = 'kbh_first_month_back_2026_09_22';
 const firstMonthBackActive = () => false;
-const FIRST20_START = Date.parse('2026-10-14T07:00:00Z');
-const FIRST20_END = Date.parse('2026-10-19T07:00:00Z');
-const FIRST20_COUPON_ID = 'kbh_first20_20261014';
+const FIRST20_START = Date.parse('2026-10-15T07:00:00Z');
+const FIRST20_END = Date.parse('2026-10-19T17:00:00Z');
+const FIRST20_COUPON_ID = 'kbh_first20_20261015';
 const first20Active = (now = Date.now()) => now >= FIRST20_START && now < FIRST20_END;
 
-async function first20Coupon(env) {
-  let coupon;
-  try {
-    coupon = await stripeGet(env, `/coupons/${FIRST20_COUPON_ID}`);
-  } catch (error) {
-    if (!/No such coupon/i.test(String(error.message))) throw error;
-    try {
-      coupon = await stripe(env, '/coupons', {
-        id: FIRST20_COUPON_ID, amount_off: 2799, currency: 'usd', duration: 'once',
-        max_redemptions: 20, redeem_by: Math.floor(FIRST20_END / 1000) - 1,
-        name: '$5 first month for the first 20 members — then $32.99/month',
-      }, { idempotencyKey: FIRST20_COUPON_ID });
-    } catch (createError) {
-      if (!/already exists/i.test(String(createError.message))) throw createError;
-      coupon = await stripeGet(env, `/coupons/${FIRST20_COUPON_ID}`);
-    }
+function validFirst20Coupon(coupon) {
+  return coupon?.id === FIRST20_COUPON_ID && coupon.amount_off === 2799
+    && coupon.currency === 'usd' && coupon.duration === 'once'
+    && coupon.max_redemptions === 20
+    && coupon.redeem_by === Math.floor(FIRST20_END / 1000);
+}
+
+async function first20Price(env) {
+  const price = await stripeGet(env, `/prices/${encodeURIComponent(env.STRIPE_MONTHLY_PRICE_ID || '')}`);
+  if (price.active !== true || price.currency !== 'usd' || price.unit_amount !== 3299
+      || price.recurring?.interval !== 'month' || price.recurring.interval_count !== 1) {
+    throw new Error('The limited offer monthly price is not configured correctly.');
   }
-  if (coupon?.id !== FIRST20_COUPON_ID || coupon.amount_off !== 2799 || coupon.currency !== 'usd'
-      || coupon.duration !== 'once' || coupon.max_redemptions !== 20
-      || coupon.redeem_by !== Math.floor(FIRST20_END / 1000) - 1 || coupon.valid === false
+  return price;
+}
+
+async function first20Status(env) {
+  const now = Date.now();
+  const details = { opensAt: new Date(FIRST20_START).toISOString(), endsAt: new Date(FIRST20_END).toISOString(),
+    firstMonthCents: 500, renewalCents: 3299, currency: 'usd', limit: 20 };
+  if (now >= FIRST20_END) return { ...details, state: 'ended', ready: false };
+  let price;
+  try { price = await first20Price(env); }
+  catch { return { ...details, state: 'unavailable', ready: false, reason: 'price_unavailable' }; }
+  try {
+    const coupon = await stripeGet(env, `/coupons/${FIRST20_COUPON_ID}`);
+    if (!validFirst20Coupon(coupon)) throw new Error('Coupon configuration mismatch.');
+    if (Number(coupon.times_redeemed || 0) >= 20) return { ...details, state: 'sold_out', ready: false };
+    if (coupon.valid !== true || price.unit_amount - coupon.amount_off !== 500) throw new Error('Offer unavailable.');
+    return { ...details, state: now < FIRST20_START ? 'scheduled' : 'open', ready: true };
+  } catch {
+    return { ...details, state: 'unavailable', ready: false, reason: 'coupon_unavailable' };
+  }
+}
+
+async function first20Coupon(env) {
+  const coupon = await stripeGet(env, `/coupons/${FIRST20_COUPON_ID}`);
+  if (!validFirst20Coupon(coupon) || coupon.valid !== true
       || Number(coupon.times_redeemed || 0) >= 20) {
     throw new Error('The limited $5 offer is unavailable or has filled. Please choose a current plan.');
   }
@@ -1800,11 +1818,15 @@ async function prepareCheckout(request, env, origin) {
   let data;
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
   if (!MEMBERSHIP_OFFERS.has(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
-  if (data.offer === 'first_month_back' && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
   const first20 = data.offer === 'first_month_back' && data.deal === 'first20';
+  if (data.offer === 'first_month_back' && !first20 && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
   if (first20 && !first20Active()) return json({ error: 'The limited $5 offer is not open.' }, 400, origin);
   const referralCode = String(data.referral_code || '').toUpperCase();
   if (first20 && referralCode) return json({ error: 'This limited offer cannot be combined with a referral offer.' }, 400, origin);
+  if (first20) {
+    try { await first20Price(env); await first20Coupon(env); }
+    catch { return json({ error: 'The limited $5 offer is unavailable or has filled. Please choose a current plan.' }, 409, origin); }
+  }
   let referralOwner = null;
   if (data.offer === 'referral_trial' || (['first_month_back', 'monthly'].includes(data.offer) && referralCode)) {
     referralOwner = await referralOwnerForCode(env, referralCode);
@@ -1830,9 +1852,13 @@ async function prepareCheckout(request, env, origin) {
 }
 
 async function createAssociatedCheckout(env, association, publicToken, discordUserId) {
-  if (association.offer === 'first_month_back' && !firstMonthBackActive()) throw new Error('The first-month offer has ended. Please choose a current plan.');
   const first20 = association.offer === 'first_month_back' && association.attribution?.promotion === 'first20';
+  if (association.offer === 'first_month_back' && !first20 && !firstMonthBackActive()) throw new Error('The first-month offer has ended. Please choose a current plan.');
   if (first20 && !first20Active()) throw new Error('The limited $5 offer has ended. Please choose a current plan.');
+  if (first20) {
+    try { await first20Price(env); await first20Coupon(env); }
+    catch { throw new Error('The limited $5 offer is unavailable or has filled. Please choose a current plan.'); }
+  }
   const longTerm = ['six_month', 'annual'].includes(association.offer);
   const priceId = association.offer === 'six_month' ? env.STRIPE_SIX_MONTH_PRICE_ID
     : association.offer === 'annual' ? env.STRIPE_ANNUAL_PRICE_ID : env.STRIPE_MONTHLY_PRICE_ID;
@@ -1886,10 +1912,14 @@ async function createCheckout(request, env, origin) {
   let data;
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
   if (!MEMBERSHIP_OFFERS.has(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
-  if (data.offer === 'first_month_back' && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
   const first20 = data.offer === 'first_month_back' && data.deal === 'first20';
+  if (data.offer === 'first_month_back' && !first20 && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
   if (first20 && !first20Active()) return json({ error: 'The limited $5 offer is not open.' }, 400, origin);
   if (first20 && data.referral_code) return json({ error: 'This limited offer cannot be combined with a referral offer.' }, 400, origin);
+  if (first20) {
+    try { await first20Price(env); await first20Coupon(env); }
+    catch { return json({ error: 'The limited $5 offer is unavailable or has filled. Please choose a current plan.' }, 409, origin); }
+  }
   const longTerm = ['six_month', 'annual'].includes(data.offer);
   const priceId = data.offer === 'six_month' ? env.STRIPE_SIX_MONTH_PRICE_ID
     : data.offer === 'annual' ? env.STRIPE_ANNUAL_PRICE_ID : env.STRIPE_MONTHLY_PRICE_ID;
@@ -3681,6 +3711,10 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: headers(origin) });
     if (request.method === 'GET' && url.pathname === '/health') {
       return json({ ok: true, version: env.CF_VERSION_METADATA?.id || null }, 200, origin);
+    }
+    if (request.method === 'GET' && url.pathname === '/promotions/first20') {
+      const limited = await checkoutRateLimitResponse(request, env, origin);
+      return limited || json(await first20Status(env), 200, origin);
     }
     if (url.pathname.startsWith('/ops/member-welcomes')) {
       return handleMemberWelcomeQueue(request, env);

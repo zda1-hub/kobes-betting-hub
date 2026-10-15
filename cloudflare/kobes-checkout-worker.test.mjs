@@ -592,10 +592,10 @@ test('standard monthly checkout starts a two-day trial on the configured monthly
   assert.equal(checkout.has('discounts[0][coupon]'), false);
 });
 
-test('retired introductory offers and the first-20 deal are closed', async () => {
+test('the legacy introductory offer stays retired independently of the first-20 deal', async () => {
   assert.equal(workerTest.firstMonthBackActive(Date.parse('2026-10-10T12:00:00Z')), false);
   const response = await worker.fetch(new Request('https://worker.test/create-checkout', {
-    method: 'POST', body: JSON.stringify({ offer: 'first_month_back', deal: 'first20' }),
+    method: 'POST', body: JSON.stringify({ offer: 'first_month_back' }),
   }), {});
   assert.equal(response.status, 400);
 });
