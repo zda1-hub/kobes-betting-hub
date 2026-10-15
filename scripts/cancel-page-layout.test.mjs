@@ -18,7 +18,15 @@ test('manage-membership page uses shared site chrome and a bounded responsive la
 
 test('manage-membership action remains the authenticated Stripe portal flow', () => {
   assert.match(cancelHtml, /data-portal-login/);
-  assert.match(cancelHtml, /Open Stripe billing portal/);
+  assert.match(cancelHtml, /data-portal-login>Continue/);
   assert.match(cancelHtml, /Discord account connected to your membership/);
   assert.match(cancelHtml, /Canceling stops the next renewal/);
+});
+
+// The primary action must precede recovery detail, including without JavaScript.
+test('billing action appears before optional access recovery', () => {
+  assert.ok(cancelHtml.indexOf('data-portal-login') < cancelHtml.indexOf('manage-access-help'));
+  assert.match(cancelHtml, /<details class="manage-access-help">/);
+  assert.doesNotMatch(cancelHtml, /MEMBERS ONLY|SECURE ACCOUNT ACCESS/);
+  assert.match(cancelHtml, /manage-membership\.css/);
 });

@@ -1,0 +1,282 @@
+[
+  {
+    "route": "managemembership",
+    "rows": [
+      {
+        "broken": [],
+        "docWidth": 320,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 320
+      },
+      {
+        "broken": [],
+        "docWidth": 390,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 390
+      },
+      {
+        "broken": [],
+        "docWidth": 1440,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 1440
+      }
+    ]
+  },
+  {
+    "route": "welcome",
+    "rows": [
+      {
+        "broken": [],
+        "docWidth": 320,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 320
+      },
+      {
+        "broken": [],
+        "docWidth": 390,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 390
+      },
+      {
+        "broken": [],
+        "docWidth": 1440,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 1440
+      }
+    ]
+  },
+  {
+    "route": "member",
+    "rows": [
+      {
+        "broken": [],
+        "docWidth": 320,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 320
+      },
+      {
+        "broken": [],
+        "docWidth": 390,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 390
+      },
+      {
+        "broken": [],
+        "docWidth": 1440,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 1440
+      }
+    ]
+  },
+  {
+    "route": "partner",
+    "rows": [
+      {
+        "broken": [],
+        "docWidth": 320,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 320
+      },
+      {
+        "broken": [],
+        "docWidth": 390,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 390
+      },
+      {
+        "broken": [],
+        "docWidth": 1440,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 1440
+      }
+    ]
+  },
+  {
+    "route": "guides/sports-betting-arbitrage-explained",
+    "rows": [
+      {
+        "broken": [],
+        "docWidth": 320,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 320
+      },
+      {
+        "broken": [],
+        "docWidth": 390,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 390
+      },
+      {
+        "broken": [],
+        "docWidth": 1440,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 1440
+      }
+    ]
+  },
+  {
+    "route": "results",
+    "rows": [
+      {
+        "broken": [],
+        "docWidth": 320,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 320
+      },
+      {
+        "broken": [],
+        "docWidth": 390,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 390
+      },
+      {
+        "broken": [],
+        "docWidth": 1440,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 1440
+      }
+    ]
+  },
+  {
+    "route": "join?deal=first20",
+    "rows": [
+      {
+        "broken": [],
+        "docWidth": 320,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 320
+      },
+      {
+        "broken": [],
+        "docWidth": 390,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 390
+      },
+      {
+        "broken": [],
+        "docWidth": 1440,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 1440
+      }
+    ]
+  },
+  {
+    "route": "404",
+    "rows": [
+      {
+        "broken": [],
+        "docWidth": 320,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 320
+      },
+      {
+        "broken": [],
+        "docWidth": 390,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 390
+      },
+      {
+        "broken": [],
+        "docWidth": 1440,
+        "h1": [],
+        "headerTop": null,
+        "overflow": [],
+        "textFit": [],
+        "title": "",
+        "width": 1440
+      }
+    ]
+  }
+]
