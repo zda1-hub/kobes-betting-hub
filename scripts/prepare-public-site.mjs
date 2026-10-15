@@ -30,6 +30,7 @@ const publicFiles = [
   'desktop-scale.css',
   'membership-scene.css',
   'membership-scene.js',
+  'first20-feature.js',
   'site.js',
   'extras.css',
   'gallery.css',

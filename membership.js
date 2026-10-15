@@ -78,7 +78,7 @@ if (checkoutSession) {
 }
 const requestedReferralCode = (new URLSearchParams(window.location.search).get('ref') || '').toUpperCase();
 const referralCode = /^(KBH|KBC)-[A-Z0-9]{10}$/.test(requestedReferralCode) ? requestedReferralCode : '';
-const first20Arrival = new URLSearchParams(window.location.search).get('deal') === 'first20' && !checkoutState;
+const first20Arrival = (new URLSearchParams(window.location.search).get('deal') === 'first20' || window.__KBH_FIRST20_FEATURED__ === true) && !checkoutState;
 let refreshFirst20 = null;
 if (first20Arrival) {
   const primary = document.querySelector('[data-primary-membership-checkout]');
@@ -110,10 +110,13 @@ if (first20Arrival) {
         if (promotion.state === 'open' && promotion.ready === true) {
           primary.disabled = false;
           setCheckoutMessage('$5 due at checkout. Then $32.99/month until canceled. Connect Discord, then complete secure Stripe checkout.');
+          refreshTimer = window.setTimeout?.(refreshFirst20, 60000);
         } else if (promotion.state === 'scheduled' && promotion.ready === true) {
           setCheckoutMessage('The $5 deal opens October 15 at 12:00 AM MST. This page checks automatically; no payment can start early.');
           refreshTimer = window.setTimeout?.(refreshFirst20, 30000);
         } else if (['sold_out', 'ended'].includes(promotion.state)) {
+          document.querySelectorAll('[data-first20-feature]').forEach(element => { element.hidden = true; });
+          window.__KBH_RESTORE_FIRST20_FEATURE__?.();
           primary.dataset.checkout = 'monthly';
           delete primary.dataset.deal;
           primary.textContent = 'Start 2 days free →';
