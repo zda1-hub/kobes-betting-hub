@@ -137,3 +137,26 @@ test('verified Discord checkout uses the two-day trial and requires card collect
   assert.equal(checkout.get('line_items[0][price]'), 'price_month');
   assert.equal(checkout.get('subscription_data[metadata][checkout_association_id]'), association.id);
 });
+
+test('verified $5 first-month payment activates VIP once without recording a free trial', async t => {
+  const state = fixture();
+  state.association.offer = 'first_month_back';
+  state.association.attribution = { promotion: 'first20' };
+  state.session.payment_status = 'paid';
+  state.session.amount_total = 500;
+  state.session.metadata = { ...state.session.metadata, offer: 'first_month_back', promotion: 'first20' };
+  state.subscription.status = 'active';
+  state.subscription.metadata = { ...state.session.metadata };
+  state.subscription.current_period_end = now + 30 * 86400;
+  delete state.subscription.trial_start;
+  delete state.subscription.trial_end;
+  mock(t, state);
+  const event = { id: 'evt_paid_first20', type: 'checkout.session.completed', created: now, livemode: false, data: { object: state.session } };
+  assert.equal((await signed(event)).status, 200);
+  assert.equal(state.association.status, 'VIP_ACTIVE');
+  assert.deepEqual(state.roles, ['PUT']);
+  assert.equal(state.analytics.filter(e => e.event_name === 'payment_completed').length, 1);
+  assert.equal(state.analytics.filter(e => e.event_name === 'trial_started').length, 0);
+  assert.equal((await signed(event)).status, 200);
+  assert.deepEqual(state.roles, ['PUT']);
+});

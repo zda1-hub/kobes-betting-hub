@@ -78,6 +78,58 @@ if (checkoutSession) {
 }
 const requestedReferralCode = (new URLSearchParams(window.location.search).get('ref') || '').toUpperCase();
 const referralCode = /^(KBH|KBC)-[A-Z0-9]{10}$/.test(requestedReferralCode) ? requestedReferralCode : '';
+const first20Arrival = new URLSearchParams(window.location.search).get('deal') === 'first20' && !checkoutState;
+let refreshFirst20 = null;
+if (first20Arrival) {
+  const primary = document.querySelector('[data-primary-membership-checkout]');
+  const terms = document.querySelector('[data-primary-membership-terms]');
+  const renewal = document.querySelector('.scene-renewal-note');
+  if (primary && terms) {
+    primary.dataset.checkout = 'first_month_back';
+    primary.dataset.deal = 'first20';
+    primary.textContent = 'Start for $5 →';
+    terms.textContent = '$5 for your first month, then $32.99/month until canceled. First 20 redemptions through October 19, 10:00 AM MST. No free trial.';
+    if (renewal) renewal.textContent = 'Opens October 15 at 12:00 AM MST. Ends October 19 at 10:00 AM MST, or when all 20 offers are redeemed. Cannot be combined with referral offers. Cancel before renewal to avoid the next $32.99 charge.';
+    let refreshTimer;
+    refreshFirst20 = async () => {
+      window.clearTimeout?.(refreshTimer);
+      primary.disabled = true;
+      if (referralCode) {
+        setCheckoutMessage('The $5 deal cannot be combined with a referral link. Open /join?deal=first20 without a referral code, or use your regular referral offer.');
+        return;
+      }
+      if (!membershipConfig) {
+        primary.disabled = false;
+        setCheckoutMessage('Local preview of the $5 offer. Checkout is disabled on localhost.');
+        return;
+      }
+      try {
+        const response = await fetch(`${membershipConfig.workerOrigin}/promotions/first20`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('Offer status unavailable');
+        const promotion = await response.json();
+        if (promotion.state === 'open' && promotion.ready === true) {
+          primary.disabled = false;
+          setCheckoutMessage('$5 due at checkout. Then $32.99/month until canceled. Connect Discord, then complete secure Stripe checkout.');
+        } else if (promotion.state === 'scheduled' && promotion.ready === true) {
+          setCheckoutMessage('The $5 deal opens October 15 at 12:00 AM MST. This page checks automatically; no payment can start early.');
+          refreshTimer = window.setTimeout?.(refreshFirst20, 30000);
+        } else if (['sold_out', 'ended'].includes(promotion.state)) {
+          primary.dataset.checkout = 'monthly';
+          delete primary.dataset.deal;
+          primary.textContent = 'Start 2 days free →';
+          primary.disabled = false;
+          terms.textContent = '2 days free, then $32.99 billed monthly until canceled.';
+          if (renewal) renewal.textContent = 'The limited $5 offer has ended or filled. The regular monthly plan has a 2-day free trial; cancel before it ends to avoid the first charge.';
+          setCheckoutMessage('The $5 offer is no longer available. The regular monthly plan is shown instead.');
+        } else throw new Error('Offer unavailable');
+      } catch {
+        setCheckoutMessage('The $5 offer is temporarily unavailable. Refresh this page to check again; no checkout has started.');
+      }
+    };
+    refreshFirst20();
+    window.addEventListener('focus', refreshFirst20);
+  }
+}
 if (referralCode && !checkoutState) {
   const referralGrid = document.querySelector('.offer-card-grid');
   if (referralGrid) {
@@ -157,6 +209,7 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
     buttons.forEach((item) => { item.disabled = false; });
     button.innerHTML = originalText;
     setCheckoutMessage(error.message || 'Unable to open checkout right now. Please try again.');
+    if (deal === 'first20') refreshFirst20?.();
   }
 }));
 
