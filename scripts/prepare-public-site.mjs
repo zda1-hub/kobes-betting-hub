@@ -87,6 +87,7 @@ const publicFiles = [
   'consent.js',
   'analytics-integrations.js',
   'meta-pixel.js',
+  'winning-slips-preview.css',
   'welcome.html',
   'welcome.js',
   'admin-analytics.html',

@@ -1,5 +1,8 @@
-/* Review branch only: real existing slips repeated as a decorative field. */
+/* Existing member slips; decorative only and independent of content layout. */
 body.home-page { position:relative; isolation:isolate; }
-.winning-slips-backdrop { position:absolute; inset:215px 0 0; z-index:-1; pointer-events:none; overflow:clip; mask-image:linear-gradient(to right,#000 0%,#000 8%,#0004 24%,#0003 50%,#0004 76%,#000 92%,#000 100%); }
-.backdrop-slip { position:absolute; left:var(--x); top:var(--y); transform:rotate(var(--r)); width:clamp(64px,7.5vw,110px); height:auto; opacity:.20; border-radius:7px; filter:saturate(.8); box-shadow:0 6px 18px #0002; }
-@media(max-width:600px) { .backdrop-slip { width:57px; opacity:.15; } }
+.winning-slips-backdrop { position:absolute; inset:215px 0 0; z-index:-1; pointer-events:none; overflow:clip; mask-image:linear-gradient(to right,#000 0%,#000 8%,#0009 24%,#0006 50%,#0009 76%,#000 92%,#000 100%); }
+.backdrop-slip { position:absolute; left:var(--x); top:var(--y); transform:rotate(var(--r)); width:clamp(90px,11vw,158px); height:auto; opacity:.48; border-radius:7px; filter:saturate(.8); box-shadow:0 6px 18px #0002; }
+@media(max-width:600px) { .backdrop-slip { width:88px; opacity:.40; } }
+
+/* Preserve readability without changing content geometry or padding. */
+.home-page .landing-intro,.home-page .scene-panel { background:var(--paper,#f4f4f4); box-shadow:0 0 18px 12px var(--paper,#f4f4f4); }
