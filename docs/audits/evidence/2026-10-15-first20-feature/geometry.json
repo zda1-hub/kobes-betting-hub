@@ -1,0 +1,176 @@
+[
+  {
+    "route": "/",
+    "buttonText": "Start for $5 →",
+    "controls": [
+      {
+        "left": 83.453125,
+        "right": 236.5390625,
+        "text": "20 MEMBERS ONLY",
+        "width": 153.0859375
+      },
+      {
+        "left": 68.9453125,
+        "right": 251.046875,
+        "text": "Get the $5 deal →",
+        "width": 182.1015625
+      }
+    ],
+    "deal": "first20",
+    "headerTop": 0,
+    "offer": "first_month_back",
+    "scrollWidth": 320,
+    "width": 320
+  },
+  {
+    "route": "/membership",
+    "buttonText": "Start for $5 →",
+    "controls": [
+      {
+        "left": 83.453125,
+        "right": 236.5390625,
+        "text": "20 MEMBERS ONLY",
+        "width": 153.0859375
+      },
+      {
+        "left": 68.9453125,
+        "right": 251.046875,
+        "text": "Get the $5 deal →",
+        "width": 182.1015625
+      },
+      {
+        "left": 24,
+        "right": 296,
+        "text": "20 MEMBERS ONLY · $5 FIRST MONTH",
+        "width": 272
+      },
+      {
+        "left": 65,
+        "right": 255,
+        "text": "Start for $5 →",
+        "width": 190
+      }
+    ],
+    "deal": "first20",
+    "headerTop": 0,
+    "offer": "first_month_back",
+    "scrollWidth": 320,
+    "width": 320
+  },
+  {
+    "route": "/",
+    "buttonText": "Start for $5 →",
+    "controls": [
+      {
+        "left": 118.453125,
+        "right": 271.5390625,
+        "text": "20 MEMBERS ONLY",
+        "width": 153.0859375
+      },
+      {
+        "left": 103.9453125,
+        "right": 286.046875,
+        "text": "Get the $5 deal →",
+        "width": 182.1015625
+      }
+    ],
+    "deal": "first20",
+    "headerTop": 0,
+    "offer": "first_month_back",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "route": "/membership",
+    "buttonText": "Start for $5 →",
+    "controls": [
+      {
+        "left": 118.453125,
+        "right": 271.5390625,
+        "text": "20 MEMBERS ONLY",
+        "width": 153.0859375
+      },
+      {
+        "left": 103.9453125,
+        "right": 286.046875,
+        "text": "Get the $5 deal →",
+        "width": 182.1015625
+      },
+      {
+        "left": 54.21875,
+        "right": 335.7734375,
+        "text": "20 MEMBERS ONLY · $5 FIRST MONTH",
+        "width": 281.5546875
+      },
+      {
+        "left": 100,
+        "right": 290,
+        "text": "Start for $5 →",
+        "width": 190
+      }
+    ],
+    "deal": "first20",
+    "headerTop": 0,
+    "offer": "first_month_back",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "route": "/",
+    "buttonText": "Start for $5 →",
+    "controls": [
+      {
+        "left": 209,
+        "right": 362.0859375,
+        "text": "20 MEMBERS ONLY",
+        "width": 153.0859375
+      },
+      {
+        "left": 1048.8984375,
+        "right": 1231,
+        "text": "Get the $5 deal →",
+        "width": 182.1015625
+      }
+    ],
+    "deal": "first20",
+    "headerTop": 0,
+    "offer": "first_month_back",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "route": "/membership",
+    "buttonText": "Start for $5 →",
+    "controls": [
+      {
+        "left": 209,
+        "right": 362.0859375,
+        "text": "20 MEMBERS ONLY",
+        "width": 153.0859375
+      },
+      {
+        "left": 1048.8984375,
+        "right": 1231,
+        "text": "Get the $5 deal →",
+        "width": 182.1015625
+      },
+      {
+        "left": 579.21875,
+        "right": 860.7734375,
+        "text": "20 MEMBERS ONLY · $5 FIRST MONTH",
+        "width": 281.5546875
+      },
+      {
+        "left": 625,
+        "right": 815,
+        "text": "Start for $5 →",
+        "width": 190
+      }
+    ],
+    "deal": "first20",
+    "headerTop": 0,
+    "offer": "first_month_back",
+    "scrollWidth": 1440,
+    "width": 1440
+  }
+]
