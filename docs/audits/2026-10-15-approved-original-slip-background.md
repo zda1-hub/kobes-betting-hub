@@ -11,3 +11,5 @@ Rollback: set const ENABLED=false in hub-slip-backdrop.js, rebuild with node scr
 Release and interaction verification appended below.
 
 16existing offer/Meta/public-build tests passed. At320 Join opened first_month_back scene; Back label right132 vs centered logo left140 (8px separation); menu expanded true; no overflow. Added focused rollback test verifying disabled flag leaves layer hidden with no band/body class.
+
+Published: source307cbee; Cloudflare public-site versione87523b5-948a-47ff-94d7-e3ca512dd362, --keep-vars. Only3assets uploaded: homepageHTML and2new background modules. Fresh custom-domain browser confirms enabled class,15original-image tickets,118px band and header top0. Live screenshot saved. Total19focused tests passed (16integration/build+3background/rollback). No live purchase attempted. Source rollback tag preserved remotely; one-switch rollback verified.
