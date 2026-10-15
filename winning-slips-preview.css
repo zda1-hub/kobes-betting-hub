@@ -1,16 +1,8 @@
-/* Real existing slip images, cropped decoratively; foreground geometry unchanged. */
-body.home-page { position:relative; isolation:isolate; }
-.winning-slips-backdrop { position:absolute; inset:94px 0 0; z-index:-1; pointer-events:none; overflow:clip; }
-.backdrop-slip { position:absolute; left:var(--x); top:var(--y); transform:rotate(var(--r)); width:clamp(118px,13vw,185px); height:255px; object-fit:cover; object-position:center 45%; opacity:.85; border-radius:9px; filter:saturate(1.2); box-shadow:0 6px 18px #0002; }
-/* White beneath the actual reading area; no opaque page-wide overlay or added padding. */
-.home-page .landing-intro { background:linear-gradient(90deg,var(--paper,#f5f5f5) 0%,#f5f5f5e8 70%,#f5f5f580 100%); }
-.home-page .scene-panel { background:#f5f5f5ed; }
-@media(max-width:600px) {
- .backdrop-slip { width:118px; height:185px; opacity:.82; }
- .home-page .landing-intro { background:linear-gradient(90deg,#f5f5f5ed 0%,#f5f5f5ce 68%,#f5f5f550 100%); }
-}
-
-.backdrop-slip { margin:0; overflow:hidden; }
-.backdrop-slip > img { display:block; width:100%; height:100%; object-fit:cover; object-position:center 45%; }
-.slip-win-label { position:absolute; top:7px; right:7px; padding:3px 6px; background:#8df546; color:#133a04; font:800 11px/1.15 Arial,sans-serif!important; border-radius:3px; box-shadow:0 1px 3px #0003; }
-.home-page .landing-intro { background:var(--paper,#f5f5f5); }
+/* These are the exact four images in Historical member slips. No added result labels. */
+body.home-page{position:relative;isolation:isolate}
+.winning-slips-backdrop{position:absolute;inset:94px 0 0;z-index:-1;pointer-events:none;overflow:clip}
+.backdrop-slip{position:absolute;left:var(--x);top:var(--y);transform:rotate(var(--r));width:clamp(130px,14vw,190px);height:auto;max-width:none;opacity:.72;border-radius:8px;box-shadow:0 4px 12px #0001}
+/* Opaque existing-paper reading surfaces; preserve all original spacing. */
+.home-page .landing-intro,.home-page .scene-panel,.home-page .referral-promo-banner>span,.home-page .slideshow-disclaimer{background:var(--paper,#f5f5f5)}
+.home-page .referral-promo-banner>span{position:relative;z-index:1;box-shadow:0 0 0 8px var(--paper,#f5f5f5)}
+@media(max-width:600px){.backdrop-slip{width:130px;opacity:.68}}

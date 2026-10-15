@@ -1,0 +1,5 @@
+/* Fit complete original tickets, rather than a percentage-height image inside a shrinking flex slot. */
+.hub-interior .proof-grid [data-rail] .slip-card:nth-child(n){height:auto;min-height:0;align-self:start;gap:12px}
+.hub-interior .proof-grid .slip-card>.slip-image{display:block;flex:0 0 auto;min-height:0;width:100%;height:auto;overflow:visible}
+.hub-interior .proof-grid [data-rail] .slip-image img{display:block;position:static;width:100%;height:auto;max-width:100%;max-height:none;object-fit:contain;border-radius:12px}
+.hub-interior .proof-grid .slip-card>.slip-open{flex:0 0 auto;margin-top:0}
