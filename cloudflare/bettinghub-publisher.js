@@ -1323,7 +1323,12 @@ async function publishXPost(post, env, triggerType) {
 
 function xPostPayload(post) {
   const replyMatch = /^result-x-(\d{1,25})-[a-f0-9]{20}$/.exec(post.id);
-  return replyMatch ? { text: post.body, reply: { in_reply_to_tweet_id: replyMatch[1] } } : { text: post.body };
+  // Remove only the retired engagement gate from automated free-pick posts.
+  // This also covers approved packets from a bot that has not restarted yet.
+  const text = post.id.startsWith('free-x-')
+    ? post.body.split('\n').filter(line => !/^❤️?\s*10 likes and we[’']ll post another free pick\.$/u.test(line.trim())).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+    : post.body;
+  return replyMatch ? { text, reply: { in_reply_to_tweet_id: replyMatch[1] } } : { text };
 }
 
 async function recordDeliveryFailure(postId, httpStatus, detail, retryable, env) {

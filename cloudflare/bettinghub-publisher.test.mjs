@@ -629,3 +629,10 @@ test('public results normalization preserves count-only expert records and rejec
   assert.deepEqual(workerTest.normalizedPublicResults(input).expertRecords,{date:'2026-10-12',experts:[{source:'Alpha',...record,pending:2}]});
   assert.equal(workerTest.normalizedPublicResults({...input,expertRecords:{...input.expertRecords,experts:[{source:'Alpha',...record,pending:-1}]}}),null);
 });
+
+ test('automated free-pick payload removes retired like gate but preserves terms and result replies', () => {
+ const body = 'TODAY’S FREE PICK\n\nPlayer over 2.5 (-115)\n\n❤️ 10 likes and we’ll post another free pick.\nFull writeup → example.com';
+ assert.deepEqual(workerTest.xPostPayload({id:'free-x-12345678',body}),{text:'TODAY’S FREE PICK\n\nPlayer over 2.5 (-115)\n\nFull writeup → example.com'});
+ assert.deepEqual(workerTest.xPostPayload({id:'result-x-123-01234567890123456789',body:'RESULT: LOSS'}),{text:'RESULT: LOSS',reply:{in_reply_to_tweet_id:'123'}});
+ assert.deepEqual(workerTest.xPostPayload({id:'manual-post',body}),{text:body});
+ });
