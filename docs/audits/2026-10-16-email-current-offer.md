@@ -9,3 +9,5 @@ One explicitly authorized promotion-only follow-up uses the existing subscribed-
 Release evidence and actual follow-up outcome appended below.
 
 Published publisher version9a1d49be-70e8-4b02-833f-636d8a7c3307 with --keep-vars; live health ready, X connected, free-pick and social email ready. Single latest-subscriber follow-up inserted idempotently at2026-10-16T12:12:46.142Z, pending existing cron. New tests cover single send, provider receipt and closed-offer handling;32tests pass including result planner. Public design untouched. No Instagram Story per user's cancellation.
+
+Final committed-source deployment79c44510-9596-4b62-babb-3ae9c573b1ec. Follow-up provider acceptance confirmed2026-10-16T12:15:52.161Z; outbox sent12:15:52.287Z;1attempt; offer_kind first20. Provider message ID saved in private delivery ledger. This proves provider acceptance, not inbox placement/open/click. No duplicate follow-up queued. Result planner remains disabled; no results sent. Main source commit3f629d7 published to GitHub.
