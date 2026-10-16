@@ -210,6 +210,9 @@ async function ensureEmailSubscribers(env) {
       status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL, sent_at TEXT
     )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS free_pick_email_receipts (
+      outbox_id TEXT PRIMARY KEY, provider_message_id TEXT, accepted_at TEXT NOT NULL, offer_kind TEXT NOT NULL
+    )`),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_free_pick_email_outbox_pending ON free_pick_email_outbox (status, created_at)"),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS free_pick_unlock_events (
       id TEXT PRIMARY KEY, source TEXT NOT NULL, has_pick INTEGER NOT NULL, occurred_at TEXT NOT NULL
@@ -300,8 +303,8 @@ async function sendLeadWelcome(env, row) {
     reply_to: "support@kobesbettinghub.com",
     subject: freePickSignup ? "You're on the free-pick list" : "You're on the Kobe's Betting Hub list",
     text: freePickSignup
-      ? `You're on the Kobe's Betting Hub free-pick list. No free pick is posted today; we'll email the next one when it's published.\n\n${vipTrialEmailLines('free_pick_welcome').join('\n')}\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
-      : `Thanks for joining the Kobe's Betting Hub email list. See free picks at https://kobesbettinghub.com/free-pick.\n\n${vipTrialEmailLines('email_welcome').join('\n')}\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
+      ? `You're on the Kobe's Betting Hub free-pick list. No free pick is posted today; we'll email the next one when it's published.\n\n${vipTrialEmailLines('free_pick_welcome', await currentEmailPromotion()).join('\n')}\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
+      : `Thanks for joining the Kobe's Betting Hub email list. See free picks at https://kobesbettinghub.com/free-pick.\n\n${vipTrialEmailLines('email_welcome', await currentEmailPromotion()).join('\n')}\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
   };
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -419,12 +422,38 @@ async function unlockFreePick(request, env, ctx) {
   return json({ ok: true, hasPick: Boolean(pick), pick, message: pick ? 'Unlocked. We’re sending the same pick to your email.' : 'You’re on the list. There is no free pick today.' }, 200, headers);
 }
 
-function vipTrialEmailLines(campaign) {
+async function currentEmailPromotion() {
+  try {
+    const response = await fetch('https://kobes-betting-hub-checkout.kobedirwin.workers.dev/promotions/first20', { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) return false;
+    const p = await response.json();
+    const now = Date.now();
+    if (p.state === 'open' && p.ready === true && p.firstMonthCents === 500 && p.renewalCents === 3299 && p.limit === 20 && now >= Date.parse(p.opensAt) && now < Date.parse(p.endsAt)) return p;
+    return false;
+  } catch { return false; }
+}
+
+function vipTrialEmailLines(campaign, promotion = null) {
   const url = new URL('https://kobesbettinghub.com/join');
   url.searchParams.set('utm_source', 'kbh_email');
   url.searchParams.set('utm_medium', 'email');
   url.searchParams.set('utm_campaign', campaign);
-  url.searchParams.set('utm_content', 'vip_trial');
+  url.searchParams.set('utm_content', promotion ? 'first20' : 'vip_trial');
+  if (promotion) {
+    url.searchParams.set('deal', 'first20');
+    return [
+      'Want the full VIP board? Your first month is $5.',
+      'Expert plays, detailed write-ups, Discord access and arbitrage tools in one membership.',
+      `Join for $5: ${url.href}`,
+      'Then $32.99/month until canceled. No free trial.',
+      'Limited to 20 memberships total. Ends October 19, 2026 at 10 AM MST, or when the 20 redemptions are used. Cannot be combined with referral offers.',
+    ];
+  }
+  if (promotion === false) return [
+    'Want the full VIP board? See the current membership options.',
+    `View membership: ${url.href}`,
+    'Review current pricing and renewal terms before joining.',
+  ];
   return [
     'Want the full VIP board? Try Kobe’s Betting Hub free for 2 days.',
     'Expert plays, detailed write-ups, Discord access and arbitrage tools in one membership.',
@@ -433,7 +462,7 @@ function vipTrialEmailLines(campaign) {
   ];
 }
 
-function freePickEmailLines(pick, unsubscribeUrl) {
+function freePickEmailLines(pick, unsubscribeUrl, promotion = null) {
   const details = pick.details || {};
   let selection = String(details.selection || details.pick || 'Approved free pick').trim();
   const line = String(details.line || '').trim();
@@ -448,7 +477,7 @@ function freePickEmailLines(pick, unsubscribeUrl) {
     ...(extra ? [extra] : []), '',
     ...reasons.map((point, index) => `${index + 1}. ${point}`), '',
     ...(pick.imageUrl ? [`View the approved pick card: ${pick.imageUrl}`, ''] : []),
-    ...vipTrialEmailLines('daily_free_pick'), '',
+    ...vipTrialEmailLines('daily_free_pick', promotion), '',
     'Picks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.', '',
     `Unsubscribe: ${unsubscribeUrl}`,
   ];
@@ -475,14 +504,24 @@ async function deliverPendingFreePickEmails(env, onlyId = null) {
       const pick = JSON.parse(row.pick_json);
       const details = pick.details || {};
       const unsubscribeUrl = `https://bettinghub-publisher.kobedirwin.workers.dev/api/email/unsubscribe?token=${encodeURIComponent(row.unsubscribe_token)}`;
-      const lines = freePickEmailLines(pick, unsubscribeUrl);
+      const promotion = await currentEmailPromotion();
+      if (pick.promotionOnly && !promotion) {
+        await env.DB.prepare("UPDATE free_pick_email_outbox SET status = 'skipped' WHERE id = ?").bind(row.id).run();
+        continue;
+      }
+      const lines = pick.promotionOnly
+        ? ["Thanks for checking out the Hub. Here's the current new-member offer:", '', ...vipTrialEmailLines('first20_followup', promotion), '', '21+ where permitted. No outcome is guaranteed. Wager responsibly.', '', `Unsubscribe: ${unsubscribeUrl}`]
+        : freePickEmailLines(pick, unsubscribeUrl, promotion);
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `kbh-free-pick-${row.id}` },
-        body: JSON.stringify({ from: "Kobe's Betting Hub <support@kobesbettinghub.com>", to: [row.email], reply_to: 'support@kobesbettinghub.com', subject: `Today's free pick — ${pick.publishedDate}`, text: lines.join('\n') }),
+        body: JSON.stringify({ from: "Kobe's Betting Hub <support@kobesbettinghub.com>", to: [row.email], reply_to: 'support@kobesbettinghub.com', subject: pick.promotionOnly ? 'Your first month in the Hub is $5' : `Today's free pick — ${pick.publishedDate}`, text: lines.join('\n') }),
         signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error(`Resend returned ${response.status}`);
+      const receipt = await response.json();
+      await env.DB.prepare('INSERT OR IGNORE INTO free_pick_email_receipts (outbox_id, provider_message_id, accepted_at, offer_kind) VALUES (?, ?, ?, ?)')
+        .bind(row.id, receipt.id || null, new Date().toISOString(), promotion ? 'first20' : 'current_membership').run();
       await env.DB.prepare("UPDATE free_pick_email_outbox SET status = 'sent', sent_at = ? WHERE id = ?").bind(new Date().toISOString(), row.id).run();
     } catch (error) {
       console.error('Free pick email deferred', { id: row.id, message: String(error?.message || error) });
@@ -1529,6 +1568,10 @@ function html(message, status = 200) {
 export const __test = {
   normalizedPublicResults,
   freePickEmailLines,
+  vipTrialEmailLines,
+  currentEmailPromotion,
+  deliverPendingFreePickEmails,
+  ensureEmailSubscribers,
   auditedXFetch,
   redactedResponseShape,
   xPostPayload,
