@@ -10,18 +10,25 @@
     "Banner delegates to existing eligible first20 checkout control instead of reloading join"
   ],
   "verification": [
-    "72 existing checkout Worker tests passed",
-    "32 focused initial admin/date/trial/operations tests passed",
-    "26 focused checkout/feature/exception/operations tests passed before final refactor; rerun required below",
-    "Ignore and restore exercised with synthetic members; no production writes",
-    "Rendered button containment verified at320/390/1440px",
-    "Mobile390 and desktop1440 screenshots inspected or saved in evidence/setup-exceptions-20261017"
+    "123 focused Node tests passed",
+    "Ignore and restore exercised in a synthetic browser fixture; no real customer modified",
+    "Control bounds fit320/390/1440px; mobile390 anddesktop1440 evidence saved",
+    "All7changed live assets matched the production build bySHA256",
+    "Live backend health reports the new version; unauthenticated exception action returns401",
+    "Live authenticated dashboard loaded and shows3per-member ignore controls underAll membership dates/Awaiting Discord",
+    "Live $5 banner enteredConnecting Discord and navigated toDiscord authorization rather than reloadingjoin; stopped before completing authorization or payment"
   ],
   "memberSelection": "Pending owner identification. No real customer suppressed.",
-  "releaseStatus": "Prepared; not deployed yet",
+  "releaseStatus": "Live Worker and website deployed; GitHub merge pending",
   "rollback": "Restore previous Worker/site versions and revert GitHub change. Exception events persist as notification audit history and can be restored via control.",
   "limitations": [
     "Current-day approved free pick still needed for marketing sample delivery",
-    "No membership growth claimed from this release"
-  ]
+    "No membership growth claimed from this release",
+    "Production notification suppression persistence not exercised because owner has not identified the legacy memberships",
+    "The real checkout verification created a QA-tagged preparation only; no payment or membership was created"
+  ],
+  "deployed": {
+    "checkoutVersion": "73a97dd9-850f-462c-8b00-3993871ad457",
+    "siteVersion": "0e19d813-03b1-4dff-9efb-e9f589b56cf7"
+  }
 }
