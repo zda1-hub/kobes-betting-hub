@@ -55,6 +55,9 @@ test('membership operations check is one read-only transaction with no identifie
   assert.doesNotMatch(JSON.stringify(report), /(?:sub|cus)_[A-Za-z0-9_]+|\d{15,}/i);
   assert.match(calls[1].sql, /NOT EXISTS/);
   assert.match(calls[1].sql, /recovered\.occurred_at > failed\.occurred_at/);
+  assert.match(calls[1].sql, /ignored\.stripe_subscription_id = s\.stripe_subscription_id/);
+  assert.match(calls[1].sql, /DISCORD_SETUP_ALERT_RESTORED/);
+  assert.match(calls[1].sql, /ORDER BY ignored\.occurred_at DESC, ignored\.id DESC LIMIT 1/);
 });
 
 test('private operations alarm surfaces held or uncertain referral payouts', () => {

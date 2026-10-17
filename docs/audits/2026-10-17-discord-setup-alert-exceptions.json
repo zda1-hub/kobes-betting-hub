@@ -1,0 +1,27 @@
+{
+  "request": "Ignore recurring missing-Discord warnings for explicitly approved legacy/manual-access members; preserve real failures. Also release the earlier requested $5 banner checkout repair.",
+  "baseCommit": "30c065c9f115dc6d32c4f0b0a9fe762f56ca3f76",
+  "scope": [
+    "Authenticated per-subscription ignore/restore action",
+    "Durable membership_events audit trail; no schema migration",
+    "Dashboard actionable counts exclude only missing-Discord exceptions; raw membership status and ignored list remain visible",
+    "Operations checker reads the same latest admin audit choice",
+    "No changes to billing, entitlements, Discord role grants, commissions or pricing",
+    "Banner delegates to existing eligible first20 checkout control instead of reloading join"
+  ],
+  "verification": [
+    "72 existing checkout Worker tests passed",
+    "32 focused initial admin/date/trial/operations tests passed",
+    "26 focused checkout/feature/exception/operations tests passed before final refactor; rerun required below",
+    "Ignore and restore exercised with synthetic members; no production writes",
+    "Rendered button containment verified at320/390/1440px",
+    "Mobile390 and desktop1440 screenshots inspected or saved in evidence/setup-exceptions-20261017"
+  ],
+  "memberSelection": "Pending owner identification. No real customer suppressed.",
+  "releaseStatus": "Prepared; not deployed yet",
+  "rollback": "Restore previous Worker/site versions and revert GitHub change. Exception events persist as notification audit history and can be restored via control.",
+  "limitations": [
+    "Current-day approved free pick still needed for marketing sample delivery",
+    "No membership growth claimed from this release"
+  ]
+}

@@ -44,3 +44,7 @@
 
 [data-meta-traffic]{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:600px){[data-meta-traffic]{grid-template-columns:1fr}}
+
+/* Per-membership notification exceptions reuse the existing admin controls. */
+.setup-alert-action{display:inline-flex;align-items:center;justify-content:center;max-width:100%;min-height:40px;padding:8px 12px;white-space:normal;overflow-wrap:anywhere;text-align:center;line-height:1.35}
+.setup-alert-exception{flex-wrap:wrap;gap:12px}.setup-alert-exception>span{min-width:0;flex:1 1 180px;overflow-wrap:anywhere}.setup-alert-exception .setup-alert-action{flex:0 1 auto}

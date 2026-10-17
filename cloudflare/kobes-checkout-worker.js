@@ -3125,9 +3125,51 @@ function groupCount(values, key) {
   return values.reduce((out, value) => { const label = key(value) || 'Unknown'; out[label] = (out[label] || 0) + 1; return out; }, {});
 }
 
-function partitionVipRoleChecks(roleChecks) {
+// Notification-only exceptions are scoped to an exact subscription. They never
+// grant roles, alter billing, or hide a linked account's actual role failures.
+function discordSetupAlertExceptions(events = []) {
+  const latest = new Map();
+  for (const event of [...events].sort((a,b) => String(b.occurred_at).localeCompare(String(a.occurred_at)) || String(b.id).localeCompare(String(a.id)))) {
+    const id = event.stripe_subscription_id;
+    if (!/^sub_[A-Za-z0-9_]+$/.test(id || '') || event.actor_type !== 'discord_admin'
+        || !['DISCORD_SETUP_ALERT_IGNORED', 'DISCORD_SETUP_ALERT_RESTORED'].includes(event.event_type) || latest.has(id)) continue;
+    latest.set(id, event);
+  }
+  return new Set([...latest].filter(([,event]) => event.event_type === 'DISCORD_SETUP_ALERT_IGNORED').map(([id]) => id));
+}
+
+async function adminDiscordSetupAlert(request, env, origin, authorize = readAdminSession) {
+  const admin = await authorize(request, env);
+  if (!admin) return json({ error: 'Admin sign-in required.' }, 401, origin);
+  if (!supabaseReady(env)) return json({ error: 'Membership persistence is unavailable.' }, 503, origin);
+  let data;
+  try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
+  if (!/^sub_[A-Za-z0-9_]+$/.test(data.subscriptionId || '') || typeof data.ignored !== 'boolean') {
+    return json({ error: 'A subscription and explicit reminder choice are required.' }, 400, origin);
+  }
+  const subscriptions = await supabase(env, `membership_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(data.subscriptionId)}&select=stripe_subscription_id,stripe_customer_id,status,entitlement_blocked&limit=1`);
+  const subscription = subscriptions?.[0];
+  if (!subscription) return json({ error: 'Membership not found.' }, 404, origin);
+  if (data.ignored) {
+    const customers = await supabase(env, `membership_customers?stripe_customer_id=eq.${encodeURIComponent(subscription.stripe_customer_id)}&select=discord_user_id&limit=1`);
+    if (!ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) || subscription.entitlement_blocked || customers?.[0]?.discord_user_id) {
+      return json({ error: 'Only an active membership awaiting Discord can have this setup reminder ignored.' }, 409, origin);
+    }
+  }
+  await recordMembershipEvent(env, {
+    eventType: data.ignored ? 'DISCORD_SETUP_ALERT_IGNORED' : 'DISCORD_SETUP_ALERT_RESTORED',
+    actorType: 'discord_admin', actorId: admin.discordUserId,
+    customerId: subscription.stripe_customer_id, subscriptionId: data.subscriptionId,
+    details: { reason: data.ignored ? 'Owner-approved legacy/manual Discord access; member declines linking.' : 'Owner restored Discord setup reminder.', notificationOnly: true },
+  });
+  return json({ ok: true, ignored: data.ignored }, 200, origin);
+}
+
+function partitionVipRoleChecks(roleChecks, ignoredSubscriptions = new Set()) {
+  const ignored = item => item.role === 'MISSING_DISCORD' && ignoredSubscriptions.has(item.subscription.stripe_subscription_id);
   return {
-    confirmedMissing: roleChecks.filter(item => ['MISSING_DISCORD', 'MISSING'].includes(item.role)),
+    confirmedMissing: roleChecks.filter(item => ['MISSING_DISCORD', 'MISSING'].includes(item.role) && !ignored(item)),
+    ignoredSetup: roleChecks.filter(ignored),
     unavailable: roleChecks.filter(item => item.role === 'CHECK_FAILED'),
   };
 }
@@ -3306,7 +3348,7 @@ async function adminAnalytics(request, env, origin) {
   } catch { /* Dashboard shows unavailable without blocking business metrics. */ }
   const emailStatsResult = await loadEmailStats(env, range);
   const emailStats = emailStatsResult.data;
-  const [sessionPage, eventPage, subscriptionPage, customerPage, associationPage, billingPage, referralPage, profilePage, creatorPage, feedbackPage, webhookPage] = await Promise.all([
+  const [sessionPage, eventPage, subscriptionPage, customerPage, associationPage, billingPage, referralPage, profilePage, creatorPage, feedbackPage, webhookPage, setupAlertPage] = await Promise.all([
     supabasePages(env, 'analytics_sessions?select=*&order=started_at.desc,id.desc'),
     supabasePages(env, 'analytics_events?select=*&order=occurred_at.desc,id.desc'),
     supabasePages(env, 'membership_subscriptions?select=*&order=updated_at.desc,stripe_subscription_id.desc'),
@@ -3318,6 +3360,7 @@ async function adminAnalytics(request, env, origin) {
     supabasePages(env, 'creator_referral_profiles?select=id,contact_email,display_name,referral_code,discord_user_id,trial_expires_at,access_mode,access_ends_at,status,payout_status&order=id.asc'),
     supabasePages(env, 'cancellation_feedback?select=stripe_subscription_id,reason_code,retention_offer_shown,retention_offer_accepted,created_at&order=created_at.desc,id.desc'),
     supabasePages(env, 'stripe_webhook_events?status=eq.FAILED&select=event_id,event_type,error_detail,received_at&order=received_at.desc,event_id.desc', { pageSize: 100 }),
+    supabasePages(env, 'membership_events?event_type=in.(DISCORD_SETUP_ALERT_IGNORED,DISCORD_SETUP_ALERT_RESTORED)&select=id,event_type,actor_type,stripe_subscription_id,occurred_at&order=occurred_at.desc,id.desc'),
   ]);
   const { sessions, events, subscriptions, customers, associations, billing, feedback, stripePayments, reportingExclusions } = dashboardReportingData({
     sessions: sessionPage.rows, events: eventPage.rows, subscriptions: subscriptionPage.rows,
@@ -3332,6 +3375,7 @@ async function adminAnalytics(request, env, origin) {
     billingPage.truncated && 'Billing history may be incomplete (20,000-row safety limit).',
     [subscriptionPage, customerPage, associationPage, referralPage, profilePage, creatorPage, feedbackPage, webhookPage].some(page => page.truncated) && 'Some member, referral, or alert history may be incomplete (pagination safety limit).',
     stripePaymentsTruncated && 'Stripe payment totals may be incomplete (2,000-invoice/charge safety limit).',
+    setupAlertPage.truncated && 'Discord reminder exception history may be incomplete; review ignored memberships.',
     !emailStats && `Subscriber-service counts are temporarily unavailable (${emailStatsResult.status}); consented form events below may still appear.`,
   ].filter(Boolean);
   const rangedEvents = (events || []).filter(item => range.includes(item.occurred_at));
@@ -3378,7 +3422,8 @@ async function adminAnalytics(request, env, origin) {
   }
   const activeIds = new Set(roleChecks.filter(item => item.role === 'ACTIVE').map(item => item.subscription.stripe_subscription_id));
   const entitledVipWorkflow = entitledVipWorkflowSummary(roleChecks, associations || []);
-  const { confirmedMissing: confirmedMissingRole, unavailable: roleCheckUnavailable } = partitionVipRoleChecks(roleChecks);
+  const setupAlertIgnored = discordSetupAlertExceptions(setupAlertPage.rows);
+  const { confirmedMissing: confirmedMissingRole, ignoredSetup, unavailable: roleCheckUnavailable } = partitionVipRoleChecks(roleChecks, setupAlertIgnored);
   const accessDetail = ({ subscription, role }) => {
     const association = (associations || []).find(item => item.stripe_subscription_id === subscription.stripe_subscription_id);
     return {
@@ -3390,6 +3435,7 @@ async function adminAnalytics(request, env, origin) {
       failureReason: association?.last_error_code || null, retryAt: association?.next_retry_at || null,
     };
   };
+  const ignoredSetupDetails = ignoredSetup.map(accessDetail);
   const confirmedMissingDetails = confirmedMissingRole.map(accessDetail);
   const { paid: paidWithoutVipDetails, trial: trialWithoutVipDetails } = partitionMissingVipDetails(confirmedMissingDetails, paidSubscriptionIds);
   const roleCheckUnavailableDetails = roleCheckUnavailable.map(accessDetail);
@@ -3529,9 +3575,9 @@ async function adminAnalytics(request, env, origin) {
   for (const [customerId, groupMembers] of customerGroups) if (groupMembers.filter(item => ACTIVE_SUBSCRIPTION_STATUSES.has(item.status)).length > 1) addDuplicateGroup('subscription', customerId, groupMembers, 'Stripe customer has multiple active subscriptions');
   duplicateGroups.sort((a, b) => (a.risk === b.risk ? b.activeSubscriptions - a.activeSubscriptions : a.risk === 'high' ? -1 : 1));
   const duplicateSubscriptionIds = new Set(duplicateGroups.flatMap(group => group.subscriptionIds));
-  const members = baseMembers.map(member => ({ ...member, duplicate: duplicateSubscriptionIds.has(member.subscriptionId), duplicateReasons: duplicateGroups.filter(group => group.subscriptionIds.includes(member.subscriptionId)).map(group => group.reason) }));
+  const members = baseMembers.map(member => ({ ...member, discordSetupAlertIgnored: !member.discordUserId && setupAlertIgnored.has(member.subscriptionId), duplicate: duplicateSubscriptionIds.has(member.subscriptionId), duplicateReasons: duplicateGroups.filter(group => group.subscriptionIds.includes(member.subscriptionId)).map(group => group.reason) }));
   const webhookFailures = (webhooks || []).filter(item => range.includes(item.received_at));
-  const awaitingDiscord = (associations || []).filter(item => ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_FAILED'].includes(item.status) && !item.discord_user_id);
+  const awaitingDiscord = (associations || []).filter(item => ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_FAILED'].includes(item.status) && !item.discord_user_id && !setupAlertIgnored.has(item.stripe_subscription_id));
   const failedPaymentSummary = summarizeFailedPayments(rangedBilling, billing || []);
   const failedPaymentDetails = failedPaymentSummary.details.map(item => {
     const member = members.find(member => member.subscriptionId === item.stripe_subscription_id || member.stripeCustomerId === item.stripe_customer_id);
@@ -3560,7 +3606,7 @@ async function adminAnalytics(request, env, origin) {
     engagement: engagementSummary(rangedEvents), interactions: interactionSummary(rangedEvents, rangedSessions),
     revenue: { collectedCents: collected, todayCents: paidSince(startOfDay), weekCents: paidSince(startOfWeek), monthCents: paidSince(startOfMonth), allTimeCents: allTimeRevenue, estimatedMrrCents: Math.round(mrr), potentialTrialMrrCents: subscriptionSummary.potentialTrialMrrCents, newMrrCents: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason !== 'subscription_cycle').reduce((sum,item)=>sum+Number(item.amount_cents||0),0), lostMrrCents: canceled.filter(item => range.includes(item.updated_at)).reduce((sum,item)=>sum+(item.offer === 'annual' ? Math.round(19499/12) : item.offer === 'six_month' ? Math.round(13499/6) : 3299),0), refundsCents: refunds, disputes: rangedBilling.filter(item => item.event_type === 'dispute').length, failedPayments: failedPaymentSummary.attemptCount, failedInvoices: failedPaymentSummary.invoiceCount, affectedCustomers: failedPaymentSummary.affectedCustomers, openFailedInvoices: failedPaymentSummary.openInvoices, recoveredFailedInvoices: failedPaymentSummary.recoveredInvoices, introRevenueCents: invoiceWithinRange.filter(item => [1000, 1999].includes(item.amountPaid)).reduce((sum,item)=>sum+item.amountPaid,0), subscriptionRevenueCents: collected },
     membership: { active: eligible.length, activePaid: paidEligible.length, activeTrials: trialEligible.length, statusTrialing: subscriptionSummary.statusTrialing.length, paidMonthly: paidEligible.filter(item => ['trial_2_day','referral_trial','first_month_back','monthly'].includes(item.offer)).length, trialMonthly: trialEligible.filter(item => ['trial_2_day','referral_trial','monthly'].includes(item.offer)).length, intro: eligible.filter(item => item.offer === 'starter').length, monthly: eligible.filter(item => ['trial_2_day','referral_trial','first_month_back','monthly'].includes(item.offer)).length, sixMonth: eligible.filter(item => item.offer === 'six_month').length, annual: eligible.filter(item => item.offer === 'annual').length, newMembers: countEvents('payment_completed'), renewals: rangedBilling.filter(item => item.event_type === 'invoice_paid' && item.billing_reason === 'subscription_cycle').length, scheduledCancellations: eligible.filter(item => item.cancel_at_period_end || item.cancel_at).length, actualCancellations: canceled.filter(item => range.includes(item.updated_at)).length, duplicateGroups, duplicateCount: duplicateGroups.length, highRiskDuplicateCount: duplicateGroups.filter(item => item.risk === 'high').length, members },
-    discord: { entitledPending: entitledVipWorkflow.pending, entitledFailed: entitledVipWorkflow.failed, paidWithoutVip: paidWithoutVipDetails.length, trialWithoutVip: trialWithoutVipDetails.length, trialDiscordMissing: trialWithoutVipDetails.filter(item => !item.discordConnected).length, roleCheckUnavailable: roleCheckUnavailableDetails.length, vipActive: activeIds.size, pending: (associations || []).filter(item => item.status === 'VIP_PENDING').length, failed: (associations || []).filter(item => item.status === 'VIP_FAILED').length, recovered: (associations || []).filter(item => item.status === 'VIP_ACTIVE' && Number(item.activation_attempts || 0) > 1).length, paidDiscordMissing: paidWithoutVipDetails.filter(item => !item.discordConnected).length, vipWithoutEntitlement, vipWithoutEntitlementBasis: 'Unmatched recorded entitlement; may include manually comped, staff or other approved access. Review before action.', joins: discordJoinSummary(rangedEvents), details: [...paidWithoutVipDetails, ...trialWithoutVipDetails, ...roleCheckUnavailableDetails] },
+    discord: { ignoredSetup: ignoredSetupDetails, entitledPending: entitledVipWorkflow.pending, entitledFailed: entitledVipWorkflow.failed, paidWithoutVip: paidWithoutVipDetails.length, trialWithoutVip: trialWithoutVipDetails.length, trialDiscordMissing: trialWithoutVipDetails.filter(item => !item.discordConnected).length, roleCheckUnavailable: roleCheckUnavailableDetails.length, vipActive: activeIds.size, pending: (associations || []).filter(item => item.status === 'VIP_PENDING').length, failed: (associations || []).filter(item => item.status === 'VIP_FAILED').length, recovered: (associations || []).filter(item => item.status === 'VIP_ACTIVE' && Number(item.activation_attempts || 0) > 1).length, paidDiscordMissing: paidWithoutVipDetails.filter(item => !item.discordConnected).length, vipWithoutEntitlement, vipWithoutEntitlementBasis: 'Unmatched recorded entitlement; may include manually comped, staff or other approved access. Review before action.', joins: discordJoinSummary(rangedEvents), details: [...paidWithoutVipDetails, ...trialWithoutVipDetails, ...roleCheckUnavailableDetails] },
     referrals: { visits: countEvents('referral_visit') + rangedSessions.filter(item => item.first_touch?.first_source === 'referral' || item.first_touch?.referral_identifier).length, referredPurchases: rangedReferrals.length, pending: referralStatus('PENDING_PAYMENT') + referralStatus('HOLDING'), qualified: rangedReferrals.filter(item => ['READY','PAYOUT_SENT'].includes(item.status)).length, paidCashCents: rangedReferrals.filter(item => item.status === 'PAYOUT_SENT').reduce((sum, item) => sum + Number(item.reward_amount_cents || 0), 0), links: referralLinks, leaderboard: [...leaderboardMap.values()].map(item => ({ ...item, conversionRate: item.successfulReferrals + item.pendingReferrals ? item.successfulReferrals / (item.successfulReferrals + item.pendingReferrals) : 0 })).sort((a,b)=>b.successfulReferrals-a.successfulReferrals) },
     retention: {
       churnRate: (eligible.length + canceled.length) ? canceled.length / (eligible.length + canceled.length) : 0,
@@ -3776,6 +3822,7 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/cancel/feedback') return saveCancellationFeedback(request, env, origin);
     if (request.method === 'GET' && url.pathname === '/admin/analytics') return adminAnalytics(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/admin/discord-setup-alert') return adminDiscordSetupAlert(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/admin/retry-vip') return adminRetryVip(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/analytics/event') return collectAnalytics(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/analytics/engagement') return collectEngagement(request, env, origin);
@@ -3813,6 +3860,8 @@ export default {
 };
 
 export const __test = {
+  discordSetupAlertExceptions,
+  adminDiscordSetupAlert,
   websitePageViewSummary,
   loadEmailStats,
   verifiedMonthlyTrial,
