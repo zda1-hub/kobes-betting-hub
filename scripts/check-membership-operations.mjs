@@ -52,6 +52,12 @@ export async function checkMembershipOperations(client, { lookbackHours, linkGra
             WHERE s.status IN ('active', 'trialing')
               AND NOT s.entitlement_blocked
               AND c.discord_user_id IS NULL
+              AND COALESCE((SELECT ignored.event_type = 'DISCORD_SETUP_ALERT_IGNORED'
+                              FROM membership_events ignored
+                             WHERE ignored.stripe_subscription_id = s.stripe_subscription_id
+                               AND ignored.actor_type = 'discord_admin'
+                               AND ignored.event_type IN ('DISCORD_SETUP_ALERT_IGNORED', 'DISCORD_SETUP_ALERT_RESTORED')
+                             ORDER BY ignored.occurred_at DESC, ignored.id DESC LIMIT 1), FALSE) = FALSE
               AND s.created_at < NOW() - make_interval(mins => $2::int)) AS active_without_discord,
           (SELECT COUNT(*)::int
              FROM membership_events failed

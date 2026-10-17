@@ -21,6 +21,17 @@
   banner.dataset.first20Feature = '';
   banner.setAttribute('aria-label', 'Limited first-month membership offer');
   banner.innerHTML = '<div class="first20-feature-copy"><strong class="first20-feature-badge">20 MEMBERS ONLY</strong><p><b>$5</b> for your first month.</p><small>Then $32.99/month until canceled. No free trial.</small></div><a class="button" href="/join?deal=first20">Get the $5 deal <span aria-hidden="true">→</span></a><p class="first20-feature-deadline">Ends Oct 19, 10 AM MST, or after 20 redemptions.</p>';
+  // Reuse the eligibility-checked checkout control instead of reloading /join.
+  banner.addEventListener?.('click', (event) => {
+    if (!event.target.closest('a.button')) return;
+    event.preventDefault();
+    const checkout = document.querySelector('[data-primary-membership-checkout]');
+    if (checkout && !checkout.disabled && checkout.dataset.deal === 'first20') {
+      checkout.click();
+    } else {
+      document.querySelector('[data-checkout-message]')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  });
   const ticker = document.querySelector('.site-ticker');
   (ticker || document.querySelector('.site-header'))?.after(banner);
   const label = document.createElement('p');

@@ -1,0 +1,34 @@
+{
+  "request": "Ignore recurring missing-Discord warnings for explicitly approved legacy/manual-access members; preserve real failures. Also release the earlier requested $5 banner checkout repair.",
+  "baseCommit": "30c065c9f115dc6d32c4f0b0a9fe762f56ca3f76",
+  "scope": [
+    "Authenticated per-subscription ignore/restore action",
+    "Durable membership_events audit trail; no schema migration",
+    "Dashboard actionable counts exclude only missing-Discord exceptions; raw membership status and ignored list remain visible",
+    "Operations checker reads the same latest admin audit choice",
+    "No changes to billing, entitlements, Discord role grants, commissions or pricing",
+    "Banner delegates to existing eligible first20 checkout control instead of reloading join"
+  ],
+  "verification": [
+    "123 focused Node tests passed",
+    "Ignore and restore exercised in a synthetic browser fixture; no real customer modified",
+    "Control bounds fit320/390/1440px; mobile390 anddesktop1440 evidence saved",
+    "All7changed live assets matched the production build bySHA256",
+    "Live backend health reports the new version; unauthenticated exception action returns401",
+    "Live authenticated dashboard loaded and shows3per-member ignore controls underAll membership dates/Awaiting Discord",
+    "Live $5 banner enteredConnecting Discord and navigated toDiscord authorization rather than reloadingjoin; stopped before completing authorization or payment"
+  ],
+  "memberSelection": "Pending owner identification. No real customer suppressed.",
+  "releaseStatus": "Live Worker and website deployed; GitHub merge pending",
+  "rollback": "Restore previous Worker/site versions and revert GitHub change. Exception events persist as notification audit history and can be restored via control.",
+  "limitations": [
+    "Current-day approved free pick still needed for marketing sample delivery",
+    "No membership growth claimed from this release",
+    "Production notification suppression persistence not exercised because owner has not identified the legacy memberships",
+    "The real checkout verification created a QA-tagged preparation only; no payment or membership was created"
+  ],
+  "deployed": {
+    "checkoutVersion": "73a97dd9-850f-462c-8b00-3993871ad457",
+    "siteVersion": "0e19d813-03b1-4dff-9efb-e9f589b56cf7"
+  }
+}

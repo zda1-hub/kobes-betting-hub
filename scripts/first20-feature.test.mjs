@@ -29,3 +29,16 @@ test('kill switch restores regular site; sold-out restore hides feature and orig
  assert.equal(result.terms.textContent,'2 days free');
  assert.ok(result.inserts.every(el=>el.hidden));
 });
+
+test('banner starts existing eligible checkout without navigating back to join',()=>{
+ let handler, clicked=0, prevented=0;
+ const primary={disabled:false,dataset:{deal:'first20'},click(){clicked++}};
+ const document={querySelector:s=>s==='[data-primary-membership-checkout]'?primary:null,querySelectorAll:()=>[],createElement:()=>({dataset:{},setAttribute(){},addEventListener(type,fn){handler=fn}})};
+ vm.runInNewContext(source,{window:{location:{search:''}},document,URLSearchParams,Date:class extends Date{static now(){return Date.parse('2026-10-17T15:00:00Z')}}});
+ // The banner is the only element with a click listener.
+ handler({target:{closest:()=>true},preventDefault(){prevented++}});
+ assert.equal(clicked,1);assert.equal(prevented,1);
+ primary.disabled=true;
+ handler({target:{closest:()=>true},preventDefault(){}});
+ assert.equal(clicked,1);
+});
