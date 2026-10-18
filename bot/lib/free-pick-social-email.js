@@ -1,6 +1,6 @@
 const { auditedFetch } = require('../../pipeline/api-client');
 const { renderFreePickChatCard } = require('./free-pick-chat-card');
-const { visiblePlays } = require('./source-review');
+const { visiblePlays, sourceEvidence } = require('./source-review');
 async function emailFreePickGraphic(row, packet, {environment=process.env, fetchImpl=fetch, render=renderFreePickChatCard}={}) {
   const secret = environment.FREE_PICK_SITE_PUBLISH_SECRET;
   if (!secret) throw new Error('Free Pick graphic email is not configured.');
@@ -9,6 +9,8 @@ async function emailFreePickGraphic(row, packet, {environment=process.env, fetch
   const selection=player&&!raw.toLowerCase().includes(player.toLowerCase()) ? `${player} ${raw}`.trim() : raw;
   const form = new FormData();form.append('pickId',packet.pick_id);form.append('discordUrl',row.post_reference);
   form.append('selection',selection);form.append('odds',String(play.odds_american || ''));
+  form.append('publishedDate', row.operating_date);
+  form.append('reason', sourceEvidence(packet).slice(0, 3).join(' • '));
   form.append('card',new Blob([await render({ ...packet, operating_date: row.operating_date || packet.operating_date })],{type:'image/jpeg'}),`KBH-${packet.pick_id}.jpg`);
   const origin=(environment.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/,'');
   const response = await auditedFetch(`${origin}/api/free-pick/social-email`,{method:'POST',headers:{authorization:`Bearer ${secret}`},body:form},

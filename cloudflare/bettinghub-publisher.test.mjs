@@ -603,12 +603,13 @@ test('Kobe social email sends inline approved JPEG once and preserves existing p
  t.after(()=>env.DB.close());await env.FREE_PICK_KV.put('free-picks/current.json',JSON.stringify(pick));
  let sends=0;const old=globalThis.fetch;t.after(()=>globalThis.fetch=old);
  globalThis.fetch=async(url,init)=>{assert.equal(url,'https://api.resend.com/emails');sends++;
-  const body=JSON.parse(init.body);assert.deepEqual(body.to,['kobedirwin@gmail.com']);assert.match(body.html,/cid:kbh-free-pick/);assert.equal(body.attachments[0].content_id,'kbh-free-pick');assert.match(body.text,/DeVaughn Vele/);assert.match(init.headers['Idempotency-Key'],/approved-social-1/);
+  const body=JSON.parse(init.body);assert.deepEqual(body.to,['kobedirwin@gmail.com']);assert.match(body.html,/cid:kbh-free-pick/);assert.equal(body.attachments[0].content_id,'kbh-free-pick');assert.match(body.text,/DeVaughn Vele/);assert.match(init.headers['Idempotency-Key'],/^kbh-social-(approved-social-1|another-approved-pick)$/);
   return new Response(JSON.stringify({id:'provider-receipt'}),{status:200});};
- const make=(id=pick.pickId,odds='-125')=>{const form=new FormData();form.set('pickId',id);form.set('selection',pick.details.selection);form.set('odds',odds);form.set('discordUrl','https://discord.com/channels/1/2/3');form.set('card',new Blob([Uint8Array.from([255,216,255,1])],{type:'image/jpeg'}),'card.jpg');return new Request('https://publisher.test/api/free-pick/social-email',{method:'POST',headers:{authorization:'Bearer fixture-secret'},body:form});};
- assert.equal((await worker.fetch(make('wrong-id'),env)).status,409);assert.equal((await worker.fetch(make(pick.pickId,'-155'),env)).status,409);assert.equal(sends,0);
+ const make=(id=pick.pickId,odds='-125',publishedDate=date)=>{const form=new FormData();form.set('pickId',id);form.set('selection',pick.details.selection);form.set('odds',odds);form.set('publishedDate',publishedDate);form.set('reason','Approved fact');form.set('discordUrl','https://discord.com/channels/1/2/3');form.set('card',new Blob([Uint8Array.from([255,216,255,1])],{type:'image/jpeg'}),'card.jpg');return new Request('https://publisher.test/api/free-pick/social-email',{method:'POST',headers:{authorization:'Bearer fixture-secret'},body:form});};
+ assert.equal((await worker.fetch(make('another-approved-pick','-125','2020-01-01'),env)).status,409);assert.equal((await worker.fetch(make(pick.pickId,'-155'),env)).status,409);assert.equal(sends,0);
  const first=await worker.fetch(make(),env);assert.equal(first.status,201);assert.equal((await first.json()).status,'sent');
  assert.equal((await worker.fetch(make(),env)).status,200);assert.equal(sends,1);
+ const second=await worker.fetch(make('another-approved-pick'),env);assert.equal(second.status,201);assert.equal((await second.json()).status,'sent');assert.equal(sends,2);
  assert.deepEqual(JSON.parse(await env.FREE_PICK_KV.get('free-picks/current.json')),pick);
 });
 test('social email uncertainty reuses same provider key and stops before its 24-hour expiry',async t=>{

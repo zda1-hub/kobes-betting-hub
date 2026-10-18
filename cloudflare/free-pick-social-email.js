@@ -15,9 +15,18 @@ export async function enqueueSocialEmail(request, env, helpers) {
   if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({error:'Unauthorized'},401);
   if (!env.DB || !env.RESEND_API_KEY || env.RECAP_NOTIFICATION_RECIPIENT !== RECIPIENT) return json({error:'Kobe social email is not configured'},503);
   let form; try { form = await request.formData(); } catch { return json({error:'Expected multipart form data'},400); }
-  const pick = await readFreePick(env), pickId = form.get('pickId'), card = form.get('card'), discordUrl = form.get('discordUrl');
-  if (!/^[A-Za-z0-9_-]{4,160}$/.test(pickId || '') || pickId !== pick?.pickId || pick.publishedDate !== phoenixDate()) return json({error:'Only the current approved Free Pick is eligible'},409);
-  if (form.get('selection') !== pick.details?.selection || form.get('odds') !== pick.details?.odds) return json({error:'Approved wager terms do not match'},409);
+  const currentPick = await readFreePick(env), pickId = form.get('pickId'), card = form.get('card'), discordUrl = form.get('discordUrl');
+  const publishedDate = form.get('publishedDate'), selection = form.get('selection'), odds = form.get('odds');
+  const reason = String(form.get('reason') || '').trim();
+  if (!/^[A-Za-z0-9_-]{4,160}$/.test(pickId || '') || publishedDate !== phoenixDate()) return json({error:'Only an approved Free Pick from today is eligible'},409);
+  if (!selection || !/^[-+]\d{2,4}$/.test(odds || '') || !reason) return json({error:'Approved wager terms and breakdown are required'},400);
+  if (pickId === currentPick?.pickId && (selection !== currentPick.details?.selection || odds !== currentPick.details?.odds)) return json({error:'Approved wager terms do not match'},409);
+  // The authenticated bot verifies the exact canonical Discord post before it
+  // calls this endpoint. Keep each approved pick eligible after a later pick
+  // replaces the website's single current-pick slot.
+  const pick = pickId === currentPick?.pickId ? currentPick : {
+    pickId, publishedDate, details: { selection, odds, reason }
+  };
   if (!/^https:\/\/discord\.com\/channels\/\d+\/\d+\/\d+$/.test(discordUrl || '')) return json({error:'A verified Discord post URL is required'},400);
   if (!(card instanceof File) || card.type !== 'image/jpeg' || card.size < 3 || card.size > 5*1024*1024) return json({error:'card must be a JPEG up to 5 MB'},400);
   const bytes = await card.arrayBuffer(), header = new Uint8Array(bytes);

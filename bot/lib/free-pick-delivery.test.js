@@ -16,6 +16,7 @@ async function setup(t, overrides = {}) {
   const options = { root, channelId: '2', today: () => date, readRows: async () => [row], loadPacket: async () => packet,
     verifyPost: async () => true, publishSite: async (_packet, options) => { calls.push(['site', options]); return { status: 'published' }; },
     readX: async () => ({ status: 'not_requested' }), publishX: async () => { calls.push(['x']); return { status: 'published', xPostId: 'receipt' }; },
+    notify: async () => ({ status: 'sent', messageId: 'email-receipt' }),
     logger: { error() {}, warn() {} }, ...overrides };
   return { calls, options, delivery: createFreePickDelivery(options) };
 }
@@ -31,9 +32,11 @@ test('single writer and restart checkpoint prevent duplicate website/X writes', 
 });
 test('website failure is retried without changing pick date or posting a duplicate X request', async (t) => {
   let attempts = 0;
-  const { delivery, calls } = await setup(t, { publishSite: async () => { if (++attempts === 1) throw new Error('offline'); return { status: 'published' }; } });
+  let emails = 0;
+  const { delivery, calls } = await setup(t, { publishSite: async () => { if (++attempts === 1) throw new Error('offline'); return { status: 'published' }; },
+    notify: async () => { emails += 1; return { status: 'sent', messageId: 'email-receipt' }; } });
   await delivery.run(); await delivery.run();
-  assert.equal(attempts, 2); assert.equal(calls.filter(c => c[0] === 'x').length, 1);
+  assert.equal(attempts, 2); assert.equal(emails, 1); assert.equal(calls.filter(c => c[0] === 'x').length, 1);
 });
 test('ambiguous X response recovers through original provider receipt, not a second post', async (t) => {
   let exists = false, writes = 0;
@@ -60,10 +63,21 @@ test('receipt already queued is left to Publisher cron without a new POST', asyn
   await delivery.run(); assert.equal(calls.filter(c => c[0] === 'x').length, 0);
 });
 test('emails the approved packet without requiring a Story asset and checkpoints once',async t=>{
- let emails=0;const {delivery,options}=await setup(t,{notify:async(r,site,p)=>{assert.equal(p.pick_id,row.pick_id);emails++;}});
+ let emails=0;const {delivery,options}=await setup(t,{notify:async(r,site,p)=>{assert.equal(p.pick_id,row.pick_id);emails++;return {status:'sent',messageId:'email-receipt'};}});
  await delivery.run();await createFreePickDelivery(options).run();assert.equal(emails,1);
 });
 test('failed graphic email retries without reposting website or X',async t=>{
- let emails=0;const {delivery,calls}=await setup(t,{notify:async()=>{if(++emails===1)throw Error('offline');}});
+ let emails=0;const {delivery,calls}=await setup(t,{notify:async()=>{if(++emails===1)throw Error('offline');return {status:'sent',messageId:'email-receipt'};}});
  await delivery.run();await delivery.run();assert.equal(emails,2);assert.equal(calls.length,2);
+});
+test('a superseded Free Pick still gets its graphic email', async t=>{
+ const later={...row,pick_id:'today-2',published_at:'2026-09-17T18:00:00Z',post_reference:'https://discord.com/channels/1/2/4'};
+ const emails=[];const {delivery}=await setup(t,{readRows:async()=>[row,later],loadPacket:async r=>({...packet,pick_id:r.pick_id}),notify:async r=>{emails.push(r.pick_id);return {status:'sent',messageId:r.pick_id};}});
+ await delivery.run();assert.deepEqual(emails,['today-1','today-2']);
+});
+test('a pending email is checked again before delivery is complete', async t=>{
+ let attempts=0;const {delivery}=await setup(t,{notify:async()=>++attempts===1?{status:'pending'}:{status:'sent',messageId:'receipt'}});
+ const first=await delivery.run();const second=await delivery.run();
+ assert.equal(first[0].complete,false);assert.equal(first[0].email,'pending');
+ assert.equal(second[0].complete,true);assert.equal(attempts,2);
 });
