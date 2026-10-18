@@ -3,3 +3,6 @@
 
 /* Orange chapters need dark body copy; nested callouts retain their own surface. */
 .learning-page .guide-chapter:first-child>.chapter-content>p,.learning-page .guide-chapter:first-child>.chapter-content>ul,.learning-page .guide-chapter:first-child>.chapter-content>ol{color:#171717}
+
+/* Local educational-guide proposal; preserve shared header and chapter surfaces. */
+.arb-topic-links{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 18px;margin:18px auto 0;max-width:100%}.arb-topic-links a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:8px 2px;color:#24599e;font-size:15px;text-underline-offset:3px}.arb-topic-links a span{text-decoration:none}.learning-page [id^="arbitrage-"]{scroll-margin-top:110px}.learning-page #arbitrage-questions h2{font-size:18px;line-height:1.35;margin:20px 0 8px}.learning-page #arbitrage-questions h2:first-child{margin-top:0}.arb-topic-links a:focus-visible{outline:3px solid #f57920;outline-offset:3px}

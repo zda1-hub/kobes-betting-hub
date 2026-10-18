@@ -1,0 +1,34 @@
+{
+  "dateMST": "2026-10-17",
+  "status": "LOCAL PREVIEW ONLY; awaiting user approval, no commit/push/deploy",
+  "scope": "Educational arbitrage article, scoped navigation CSS, sitemap lastmod",
+  "files": [
+    "guides/sports-betting-arbitrage-explained.html",
+    "arbitrage-guide.css",
+    "sitemap.xml"
+  ],
+  "changes": [
+    "Question-based article title and H1",
+    "Plain-language definition and execution-risk summary",
+    "Native section links that reveal collapsed answers",
+    "Three concise conceptual questions and answers",
+    "Article JSON-LD matches visible title, author and page update date",
+    "Pending sitemap modification date"
+  ],
+  "preserved": "Header, homepage, membership, pricing, background and integrations",
+  "verification": [
+    "6 indexing/public-build tests passed",
+    "Rendered320px,390px,1440px: no horizontal overflow",
+    "Common questions link opens collapsed answer via native fragment navigation",
+    "Shared header source exactly unchanged; header remains top0",
+    "Single H1, valid JSON-LD, valid section target IDs",
+    "No invented expert review or success-rate claim"
+  ],
+  "limits": [
+    "No ranking lift demonstrated",
+    "No promotional outreach performed",
+    "Google determines rankings; metadata and AI tools confer no priority"
+  ],
+  "preview": "http://127.0.0.1:4198/guides/sports-betting-arbitrage-explained.html",
+  "before": "http://127.0.0.1:4198/guides/arbitrage-before-review.html"
+}
