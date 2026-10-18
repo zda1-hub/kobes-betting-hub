@@ -68,6 +68,13 @@ function createFreePickDelivery({ root, readRows, loadPacket, verifyPost, paused
       if (row !== rows.at(-1)) state.site = { status: 'superseded' };
       try {
         if (date !== today() || await paused()) break;
+        if (!state.notified) {
+          const email = await notify(row, state.site, packet);
+          // Provider acceptance is the receipt; a queued request stays open.
+          state.notified = email?.status === 'sent';
+          state.email = { status: email?.status || 'pending', messageId: email?.messageId || null };
+          await saveDelivery(root, state);
+        }
         if (!state.site || state.site.status === 'disabled') {
           state.site = await publishSite(packet, { copyImage: false, date });
           await saveDelivery(root, state);
@@ -89,12 +96,8 @@ function createFreePickDelivery({ root, readRows, loadPacket, verifyPost, paused
           }
           await saveDelivery(root, state);
         }
-        if (!state.notified && ['published', 'already_published'].includes(state.site?.status)) {
-          await notify(row, state.site, packet);
-          state.notified = true;
-        }
         state.complete = ['published', 'already_published', 'superseded'].includes(state.site?.status)
-          && state.x?.status === 'published';
+          && state.x?.status === 'published' && state.notified === true;
         state.lastError = null;
       } catch (error) {
         // Error text may contain provider response details; retain only a safe
@@ -103,7 +106,7 @@ function createFreePickDelivery({ root, readRows, loadPacket, verifyPost, paused
         logger.error(`Free Pick delivery needs attention for ${row.pick_id}; recovery will check the original receipt.`);
       }
       await saveDelivery(root, state);
-      results.push({ pickId: row.pick_id, site: state.site?.status, x: state.x?.status, held: state.held || null, complete: state.complete === true });
+      results.push({ pickId: row.pick_id, site: state.site?.status, x: state.x?.status, email: state.email?.status || null, held: state.held || null, complete: state.complete === true });
     }
     return results;
   }
