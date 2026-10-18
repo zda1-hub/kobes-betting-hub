@@ -1,0 +1,31 @@
+{
+  "request": "Improve KBH SEO and show changes before deploying",
+  "status": "LOCAL ONLY; awaiting user review; no deployment or publication",
+  "base": "origin/main d6e6f3d2ffac562d584ffafa6c7397e899159894",
+  "branch": "codex/educational-metadata-review",
+  "affectedFiles": [
+    "guides/index.html",
+    "guides/how-to-read-betting-odds-and-line-movement.html",
+    "guides/sports-betting-arbitrage-explained.html",
+    "responsible-gambling.html"
+  ],
+  "before": "Missing learning-hub description/collection metadata; no breadcrumb metadata on two guides; responsible page missing canonical and had generic description",
+  "after": "Accurate learning-hub description and CollectionPage matching five visible guide links; two BreadcrumbList objects; responsible-page self canonical and descriptive summary",
+  "verification": [
+    "Explicit whitelist public build: 99 entries",
+    "Source bodies byte identical to origin/main",
+    "Single canonical and description in source and built HTML",
+    "JSON-LD parses in source and built HTML",
+    "Four routes return HTTP 200 locally",
+    "Review loaded visibly in browser; no review-page console errors"
+  ],
+  "limits": [
+    "No Google Rich Results Test or fresh Search Console inspection",
+    "No measured ranking improvement",
+    "CollectionPage has no promised Google rich result",
+    "Metadata-only; no responsive product layout changes",
+    "Builder rewrites internal links and injects existing analytics as expected; full built bytes differ from source"
+  ],
+  "preview": "http://127.0.0.1:4181/seo-review.html",
+  "evidence": "docs/audits/educational-metadata-20261017/"
+}

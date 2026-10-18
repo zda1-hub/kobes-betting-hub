@@ -1,0 +1,12 @@
+{
+  "base": "d6e6f3d",
+  "pages": 4,
+  "checks": [
+    "source body byte equality against origin/main",
+    "single canonical and description in source and build",
+    "JSON-LD parsing in source and build",
+    "metadata retained in public build",
+    "all local pages HTTP 200"
+  ],
+  "published": false
+}
