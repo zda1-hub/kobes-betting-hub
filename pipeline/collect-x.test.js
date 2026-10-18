@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  approvalOddsEligible,
   createModelCallBudget,
   createSourceModelCallReservation,
   configuredMediaOnlyLimit,
@@ -12,6 +13,7 @@ const {
   mediaCaptionHasBetSignal,
   nflGamesScheduledToday,
   notifyApprovalChannel,
+  packetApprovalOddsEligible,
   recordModelCallDeferral,
   rotateSources,
   shouldQueueForReview,
@@ -21,6 +23,15 @@ const {
 } = require('./collect-x');
 const { enrichPacket } = require('./enrich-pick');
 const { isSupportedSportPick } = require('../bot/lib/event-timing');
+
+test('only plays strictly better than -200 enter approvals', () => {
+  for (const odds of ['-199', '-110', '+100', '+250']) assert.equal(approvalOddsEligible({ odds_american: odds }), true, odds);
+  for (const odds of ['-200', '-201', '', 'EVEN', '3.5']) assert.equal(approvalOddsEligible({ odds_american: odds }), false, odds);
+  const packet = { pick_id: 'odds-test', approval_number: 1, approval: {},
+    source: { publish_mode: 'terms_only' },
+    analysis: { extraction: { plays: [{ selection: 'A', odds_american: '-110' }, { selection: 'B', odds_american: '-250' }] } } };
+  assert.equal(packetApprovalOddsEligible(packet), false);
+});
 
 test('holds a zero-fact writeup before any Discord approval request', async () => {
   const before = { token: process.env.DISCORD_TOKEN, channel: process.env.PICK_APPROVAL_CHANNEL_ID, fetch: global.fetch };
