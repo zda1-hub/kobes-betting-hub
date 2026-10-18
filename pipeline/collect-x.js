@@ -223,6 +223,19 @@ function oddsFrom(text) {
   return match ? Number(match[1]) : null;
 }
 
+function approvalOddsEligible(play) {
+  const raw = play?.odds_american;
+  if (typeof raw !== 'string' && typeof raw !== 'number') return false;
+  const odds = String(raw).trim();
+  return /^[+-]\d{2,4}$/.test(odds) && Number(odds) > -200;
+}
+
+function packetApprovalOddsEligible(packet) {
+  const extraction = packet.analysis?.extraction || {};
+  const plays = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays : [extraction];
+  return plays.every(approvalOddsEligible);
+}
+
 async function readJson(filePath, fallback) {
   try {
     return JSON.parse(await fs.readFile(filePath, 'utf8'));
@@ -544,6 +557,16 @@ async function notifyApprovalChannel(packet) {
       details: { reason: packet.hold_reason, evidence_count: sourceEvidence(packet).length }
     });
     console.log(`Held ${packet.pick_id} before Discord approval: ${packet.hold_reason}`);
+    return null;
+  }
+  if (!packetApprovalOddsEligible(packet)) {
+    packet.status = 'HELD_NOT_READY';
+    packet.approval_ready = false;
+    packet.hold_reason = 'Every play needs stated American odds strictly better than -200 to enter approvals.';
+    await upsertPickCandidate(packet, { status: packet.status, rejectionCodes: ['ODDS_NOT_BETTER_THAN_MINUS_200'] });
+    await recordWorkflowEvent(packet, { eventType: 'CANDIDATE_HELD', afterState: packet.status,
+      details: { rejection_code: 'ODDS_NOT_BETTER_THAN_MINUS_200' } });
+    console.log(`Held ${packet.pick_id}; ${packet.hold_reason}`);
     return null;
   }
   packet.status = 'READY_FOR_APPROVAL';
@@ -1221,6 +1244,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  approvalOddsEligible,
   createModelCallBudget,
   createSourceModelCallReservation,
   configuredMediaOnlyLimit,
@@ -1233,6 +1257,7 @@ module.exports = {
   mediaCaptionHasBetSignal,
   nflGamesScheduledToday,
   notifyApprovalChannel,
+  packetApprovalOddsEligible,
   recordModelCallDeferral,
   recoverAuditedExclusive,
   rotateSources,
