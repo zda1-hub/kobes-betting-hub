@@ -1,0 +1,39 @@
+{
+  "status": "LOCAL PREVIEW ONLY; user approval required before deployment",
+  "dateMST": "2026-10-17",
+  "selectionBasis": "Educational companion to arbitrage guide; not claimed highest-volume query opportunity. Page-specific demand/rank unverified.",
+  "concreteGap": "No meta description; visible H1 is vague rather than topic-descriptive.",
+  "changes": [
+    "Descriptive H1 and title",
+    "Added previously missing meta description",
+    "Clear conceptual summary",
+    "Three concise questions about odds and uncertainty",
+    "Article JSON-LD matching visible authorship and update date",
+    "Related educational link to arbitrage guide",
+    "Sitemap pending lastmod"
+  ],
+  "files": [
+    "guides/how-to-read-betting-odds-and-line-movement.html",
+    "sitemap.xml"
+  ],
+  "preserved": [
+    "Homepage",
+    "Shared CSS",
+    "Header source",
+    "Pricing",
+    "Checkout",
+    "Other pages"
+  ],
+  "verification": [
+    "6 indexing/public-build tests passed",
+    "Single H1 and valid JSON-LD",
+    "320px390px1440px no horizontal overflow",
+    "FAQ opens; header top0"
+  ],
+  "preview": "http://127.0.0.1:4198/guides/how-to-read-betting-odds-and-line-movement.html",
+  "before": "http://127.0.0.1:4198/guides/odds-before-review.html",
+  "limitations": [
+    "No ranking lift verified",
+    "No publication or recrawl request for this draft"
+  ]
+}
