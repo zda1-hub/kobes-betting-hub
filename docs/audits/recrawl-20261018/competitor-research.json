@@ -1,0 +1,46 @@
+{
+  "dateMST": "2026-10-18",
+  "scope": "Non-promotional educational content and technical discoverability only",
+  "queries": [
+    "what is implied probability betting odds line movement meaning",
+    "what is sports arbitrage meaning risks"
+  ],
+  "searchLimits": "Search-tool results are a discovery sample, not a measured personalized Google top-ten ranking; no universal rank or traffic gain inferred",
+  "comparisons": [
+    {
+      "url": "https://www.sportingnews.com/us/betting/news/how-read-betting-odds/094089c3c91f937bf7a60771",
+      "observed": "Named author, jump navigation, definitions, multiple formats and common questions",
+      "KBHGap": "Organizational byline rather than a substantiated individual reviewer; no section navigation on odds page",
+      "action": "Do not invent reviewer credentials. Preserve byline; original probability-literacy clarification added locally."
+    },
+    {
+      "url": "https://www.probetrics.com/learn/line-movement",
+      "observed": "Direct definition, section links, questions that distinguish data from a pick",
+      "KBHGap": "KBH has conceptual FAQ but could better distinguish quoted probability, margin and forecasts",
+      "action": "Added one original chapter explaining those distinctions and limits of interpreting movement."
+    },
+    {
+      "url": "https://www.wisegeek.net/what-is-sports-arbitrage.htm",
+      "observed": "Brief definition and execution-risk discussion; also broad profit assertions",
+      "KBHComparison": "KBH already has detailed risk caveats; competitor claims are not evidence that those claims should be copied",
+      "action": "Keep current caveats. No new arbitrage instructions or promotional additions."
+    }
+  ],
+  "implementation": {
+    "file": "guides/how-to-read-betting-odds-and-line-movement.html",
+    "change": "One native details chapter; original glossary and uncertainty explanation; visible update date and Article dateModified updated",
+    "cssChanges": false,
+    "published": false
+  },
+  "verification": [
+    "Public whitelist build: 99 entries",
+    "320,390,1440 CSSpx: no document overflow, header top 0",
+    "New native chapter opens in browser"
+  ],
+  "remaining": [
+    "Google ranking improvement unobserved",
+    "No sitewide competitive audit or backlink audit claimed",
+    "No reviewer identity invented",
+    "Preview is local only and not deployed"
+  ]
+}
