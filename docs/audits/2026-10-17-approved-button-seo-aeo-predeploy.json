@@ -1,0 +1,47 @@
+{
+  "status": "LOCAL ONLY; not deployed or pushed",
+  "dateMST": "2026-10-17",
+  "googleVerified": {
+    "homepage": "URL is on Google; Page is indexed",
+    "join": "URL is on Google; Page is indexed",
+    "coverageReportLastUpdate": "2026-10-11",
+    "indexedPages": 11,
+    "notIndexed": 24,
+    "reasons": {
+      "redirect": 10,
+      "noindex": 6,
+      "alternateCanonical": 1,
+      "discoveredNotIndexed": 7
+    },
+    "discoveredURLs": [
+      "/approach",
+      "/exclusives",
+      "/guides/",
+      "/guides/bankroll-management-for-sports-betting",
+      "/proof",
+      "/results",
+      "/support"
+    ],
+    "note": "Historical /guides/ report entry redirects to final /guides; current sitemap already uses final path. Do not classify all exclusions as defects."
+  },
+  "changes": [
+    "Use approved clean-blue offer CTA; page/header/background unchanged",
+    "Organization and WebSite JSON-LD on homepage; no pricing/reviews/aggregate-rating claims",
+    "More explicit inclusions and free-versus-VIP answer on existing FAQ",
+    "Generic limited-offer FAQ links to live terms; no hard-coded expiring $5 metadata",
+    "Sitemap lastmod reconciled to source dates; homepage and FAQ use pending release date"
+  ],
+  "verification": [
+    "12 focused tests passed",
+    "Public build completed and includes offer-cta.css",
+    "FAQ expanded answer checked at320px,390px,1440px",
+    "Homepage body exactly matches pre-proposal source",
+    "JSON-LD parses; git diff whitespace check passes"
+  ],
+  "limits": [
+    "No recrawl requested and no deployment performed",
+    "SEO improvements do not guarantee rank, traffic or AI inclusion",
+    "Coverage report is dated October11, not realtime"
+  ],
+  "promotionAnswer": "Removing or changing promotional copy on the same indexable URL does not normally deindex the page. Search snippets and price-related relevance may change after recrawl. Preserve canonical URL, 200 response and substantive content."
+}

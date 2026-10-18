@@ -1,0 +1,104 @@
+[
+  {
+    "route": "/",
+    "before": "2026-10-04",
+    "proposed": "2026-10-17",
+    "basis": "pending local content change"
+  },
+  {
+    "route": "/join",
+    "before": "2026-10-04",
+    "proposed": "2026-10-17",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/exclusives",
+    "before": "2026-10-04",
+    "proposed": "2026-10-13",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/free-pick",
+    "before": "2026-10-04",
+    "proposed": "2026-10-14",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/recaps",
+    "before": "2026-10-04",
+    "proposed": "2026-10-14",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/results",
+    "before": "2026-10-04",
+    "proposed": "2026-10-14",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/proof",
+    "before": "2026-10-04",
+    "proposed": "2026-10-15",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/approach",
+    "before": "2026-10-04",
+    "proposed": "2026-10-13",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/refer",
+    "before": "2026-10-04",
+    "proposed": "2026-10-13",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/faq",
+    "before": "2026-10-04",
+    "proposed": "2026-10-17",
+    "basis": "pending local content change"
+  },
+  {
+    "route": "/guides",
+    "before": "2026-10-04",
+    "proposed": "2026-10-13",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/guides/how-to-choose-a-sports-betting-discord",
+    "before": "2026-10-04",
+    "proposed": "2026-10-13",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/guides/sports-betting-arbitrage-explained",
+    "before": "2026-10-06",
+    "proposed": "2026-10-14",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/guides/how-to-read-betting-odds-and-line-movement",
+    "before": "2026-10-04",
+    "proposed": "2026-10-13",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/guides/bankroll-management-for-sports-betting",
+    "before": "2026-10-04",
+    "proposed": "2026-10-13",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/guides/what-a-sports-betting-writeup-should-include",
+    "before": "2026-10-04",
+    "proposed": "2026-10-13",
+    "basis": "latest committed source change"
+  },
+  {
+    "route": "/support",
+    "before": "2026-10-04",
+    "proposed": "2026-10-13",
+    "basis": "latest committed source change"
+  }
+]
