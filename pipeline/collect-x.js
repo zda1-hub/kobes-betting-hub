@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { fetchBufferedPosts, acknowledgeBufferedPosts } = require('./x-fetch-buffer');
 const { datedTimeOverride } = require('../bot/lib/daily-window');
 const { enrichPacket } = require('./enrich-pick');
 const { exclusiveTextExtraction, exclusiveSourceIsCurrent, exclusiveTextGroups, exclusiveWagerKey, completeXPost } = require('./exclusive-text');
@@ -738,28 +739,23 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
       ? `${UPCOMING_SLATE_RESCAN_VERSION}-exclusive-terms-v3` : UPCOMING_SLATE_RESCAN_VERSION;
     const rescanUpcomingSlate = sourceState.upcoming_slate_rescan_version !== upcomingSlateRescanVersion;
     const dailyCatchup = sourceState.catchup_date !== date || rescanImages || rescanUpcomingSlate;
-    const startTime = dailyCatchup ? pacificStartIso(date) : undefined;
-    const responses = [];
-    let nextToken;
-    do {
-      const response = await postsFor(source, userId, {
-        sinceId: dailyCatchup ? undefined : sourceState.since_id,
-        startTime,
-        nextToken
-      });
-      responses.push(response);
-      nextToken = dailyCatchup ? response.meta?.next_token : undefined;
-    } while (nextToken);
-    const response = responses[0] || {};
+    const bufferFile = path.join(X_MONITORING_ROOT, 'fetch-buffer', `${source.handle}.json`);
+    const bufferEpoch = `${date}:${userId}:${IMAGE_RESCAN_VERSION}:${upcomingSlateRescanVersion}`;
+    const buffered = await fetchBufferedPosts({
+      file: bufferFile, epoch: bufferEpoch,
+      sinceId: dailyCatchup ? undefined : sourceState.since_id,
+      startTime: pacificStartIso(date),
+      fetchPage: options => postsFor(source, userId, options)
+    });
+    const responses = buffered.pages;
+    const response = { meta: { newest_id: buffered.newest_id } };
     const media = Object.assign({}, ...responses.map(mediaUrls));
     // Strong text-identified picks get first look, followed by caption-signaled
     // media and finally dedicated photo-review posts. Keep the original ID as
     // the tie-breaker so a source remains deterministic.
     const posts = responses.flatMap((page) => page.data || []).map(completeXPost)
       .sort((a, b) => intakePriority(source, a) - intakePriority(source, b) || b.id.localeCompare(a.id));
-    if (dailyCatchup && responses.length > 1) {
-      console.log(`Backfilled ${posts.length} post(s) from @${source.handle} since ${startTime}.`);
-    }
+    console.log(`X fetch buffer @${source.handle}: ${buffered.fetched} freshly returned post(s), ${buffered.pending} retained for processing.`);
     const handledPostIds = new Set(Array.isArray(sourceState.handled_post_ids) ? sourceState.handled_post_ids : []);
     let lastProcessedId = sourceState.since_id || '';
     let completedSourcePass = true;
@@ -1005,7 +1001,7 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
       rescanUpcomingSlate,
       upcomingSlateRescanVersion
     });
-    return { source, nextSourceState, acceptedPackets };
+    return { source, nextSourceState, acceptedPackets, bufferFile, bufferEpoch, handledPostIds };
   }
 
   async function commitSourceResult(result) {
@@ -1042,6 +1038,7 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
       queuedSourcePostIds.add(candidate.postId);
     }
     state.sources[result.source.handle] = result.nextSourceState;
+    await acknowledgeBufferedPosts(result.bufferFile, result.bufferEpoch, result.handledPostIds);
   }
 
   async function sourceWorker() {

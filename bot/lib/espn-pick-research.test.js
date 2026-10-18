@@ -99,7 +99,7 @@ test('does not call ESPN when the original post already supplies four usable fac
 test('keeps original-post evidence first and fills only the missing slots from ESPN', async () => {
   const draft = packet(['Averaged 84 receiving yards per game last season']);
   const response = new Response(JSON.stringify(gamelog), { status: 200, headers: { 'content-type': 'application/json' } });
-  const result = await fillMissingEvidence(draft, {
+  const result = await fillMissingEvidence(draft, { allowStatisticalFill: true,
     timing: {
       status: 'UPCOMING',
       athlete: { id: '4426354', fullName: 'George Pickens' },
@@ -111,4 +111,16 @@ test('keeps original-post evidence first and fills only the missing slots from E
   assert.equal(result.added, 3);
   assert.equal(draft.analysis.extraction.source_claims[0], 'Averaged 84 receiving yards per game last season');
   assert.equal(draft.analysis.extraction.supporting_notes.length, 3);
+});
+
+
+test('does not fetch or pad incomplete source evidence by default', async () => {
+  const draft = packet([]);
+  const before = JSON.stringify(draft);
+  const result = await fillMissingEvidence(draft, { fetchImpl: () => { throw new Error('No network allowed'); } });
+  assert.equal(result.complete, false);
+  assert.equal(result.added, 0);
+  assert.equal(result.espnCalls, 0);
+  assert.equal(JSON.stringify(draft), before);
+  assert.match(result.reason, /filler disabled/);
 });
