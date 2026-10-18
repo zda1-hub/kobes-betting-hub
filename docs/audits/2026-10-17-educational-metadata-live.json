@@ -1,0 +1,28 @@
+{
+  "published": true,
+  "version": "1b7babf5-4a20-4e0b-af6d-c9e9ecb3db9d",
+  "uploadedAssets": 4,
+  "liveChecks": [
+    {
+      "url": "https://kobesbettinghub.com/guides",
+      "status": 200,
+      "approvedMetadataPresent": true
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/how-to-read-betting-odds-and-line-movement",
+      "status": 200,
+      "approvedMetadataPresent": true
+    },
+    {
+      "url": "https://kobesbettinghub.com/guides/sports-betting-arbitrage-explained",
+      "status": 200,
+      "approvedMetadataPresent": true
+    },
+    {
+      "url": "https://kobesbettinghub.com/responsible-gambling",
+      "status": 200,
+      "approvedMetadataPresent": true
+    }
+  ],
+  "limits": "Google recrawl, index changes and ranking effects unobserved."
+}
