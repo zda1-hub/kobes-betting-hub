@@ -1,0 +1,50 @@
+[
+  {
+    "page": "hub",
+    "width": 320,
+    "actualWidth": 320,
+    "headerTop": 0,
+    "navOutside": 0,
+    "overflow": false
+  },
+  {
+    "page": "hub",
+    "width": 390,
+    "actualWidth": 390,
+    "headerTop": 0,
+    "navOutside": 0,
+    "overflow": false
+  },
+  {
+    "page": "hub",
+    "width": 1440,
+    "actualWidth": 1440,
+    "headerTop": 0,
+    "navOutside": 0,
+    "overflow": false
+  },
+  {
+    "page": "odds",
+    "width": 320,
+    "actualWidth": 320,
+    "headerTop": 0,
+    "navOutside": 0,
+    "overflow": false
+  },
+  {
+    "page": "odds",
+    "width": 390,
+    "actualWidth": 390,
+    "headerTop": 0,
+    "navOutside": 0,
+    "overflow": false
+  },
+  {
+    "page": "odds",
+    "width": 1440,
+    "actualWidth": 1440,
+    "headerTop": 0,
+    "navOutside": 0,
+    "overflow": false
+  }
+]
