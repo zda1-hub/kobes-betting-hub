@@ -13,6 +13,7 @@ const guideFiles = [
   'guides/index.html',
   'guides/guide.css',
   'guides/learning.css',
+  'guides/reading.css',
   'guides/learning.js',
   'guides/how-to-choose-a-sports-betting-discord.html',
   'guides/sports-betting-arbitrage-explained.html',

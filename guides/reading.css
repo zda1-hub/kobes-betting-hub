@@ -1,0 +1,14 @@
+.guide-contents{margin:20px 0 28px;padding:20px 24px;border-radius:18px;background:#fff;color:#171717;box-shadow:0 4px 12px #0001;min-width:0}
+.guide-contents h2{font-size:20px;margin:0 0 12px;line-height:1.35}
+.guide-contents ul{display:flex;flex-wrap:wrap;gap:8px 20px;list-style:none;padding:0;margin:0}
+.guide-contents li{min-width:0;max-width:100%}
+.guide-contents a{display:inline-flex;align-items:center;min-height:44px;max-width:100%;padding:6px 0;color:#2459a8;font-weight:600;overflow-wrap:anywhere;text-underline-offset:3px}
+.guide-contents a:focus-visible,.guide-chapter>summary:focus-visible{outline:3px solid #2459a8;outline-offset:4px;border-radius:4px}
+.guide-chapter[id]{scroll-margin-top:calc(var(--header-height,180px) + 24px)}
+.learning-reader .guide-contents{margin:0 0 20px;padding:16px;box-shadow:none;background:#f3f3f3}
+.learning-page .learning-reader .guide-contents a{color:#2459a8!important}
+@media(max-width:600px){.guide-contents{padding:16px 20px}.guide-contents ul{display:block}.guide-contents a{padding:8px 0}.guide-chapter[id]{scroll-margin-top:96px}}
+
+.guide-chapters>#sources-and-scope{grid-column:1/-1}
+
+.guide-chapter[id$="sources-and-scope"] .chapter-content a{color:#2459a8;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}

@@ -1,0 +1,61 @@
+{
+  "request": "Implement approved SEO/navigation/source/measurement improvements and show pages before deployment",
+  "status": "LOCAL ONLY; no deployment or GitHub publication",
+  "base": "origin/main 6fcb83b5a3f70e22227bbbb0862010403ed7e50e",
+  "branch": "codex/education-navigation",
+  "affectedFiles": [
+    "guides/index.html",
+    "guides/how-to-read-betting-odds-and-line-movement.html",
+    "guides/learning.js",
+    "guides/reading.css",
+    "scripts/prepare-public-site.mjs",
+    "sitemap.xml"
+  ],
+  "before": "Generic learning-hub title/heading; no odds-guide chapter index or source notes; inline reader has no explicit open/load measurement and imported IDs are not namespaced.",
+  "after": "Clear educational title/heading, native chapter index with disclosure/hash/history handling, OpenStax and NCPG source notes with honest scope, namespaced inline IDs, consent-gated deduplicated open/load-success targets using existing section_view event; cache versions and actual sitemap dates updated.",
+  "sources": [
+    {
+      "url": "https://openstax.org/books/introductory-statistics-2e/pages/3-1-terminology",
+      "supports": "Probability vocabulary and differences between short-run results and long-run expectation; no endorsement of odds or predictions."
+    },
+    {
+      "url": "https://www.ncpgambling.org/help-treatment/faqs-what-is-problem-gambling/",
+      "supports": "Gambling-related harm and support background, not betting math."
+    }
+  ],
+  "analytics": {
+    "event": "section_view",
+    "targets": [
+      "guide_open_<guide_slug>",
+      "guide_load_success_<guide_slug>"
+    ],
+    "location": "learning_reader",
+    "scope": "Inline learning-hub readers only; existing standalone analytics retained.",
+    "backendChange": false,
+    "privacy": "No new trackers or captured text; check consent on every milestone; mark dedupe only after existing analytics API accepts the call."
+  },
+  "verification": [
+    "Public whitelist build: 100 entries",
+    "JSON-LD parsing, unique source IDs, all index targets exist, sitemap XML parsing, git diff --check",
+    "Confirmed 320/390/1440 CSSpx on both routes: header top zero, no document overflow, nav links inside parent",
+    "Populated screenshots compared against source baseline at equal 320 and 1440 widths; existing header/colors/cards/artwork preserved",
+    "Standalone pointer link and direct hash opens target; inline direct hash loads and opens target; keyboard links and browser Back exercised",
+    "Local fixtures: consent off zero events; consent on one open and success; reopen no duplicates; failed load only open; retry adds success",
+    "Production-style extensionless response fixture: inline hash remapped and opens target",
+    "Scripts-removed fixture: native disclosure opens and full-guide fallback becomes visible",
+    "Browser logs on updated pages: no errors",
+    "Two focused existing interaction tests passed"
+  ],
+  "limits": [
+    "No live analytics writes or customer actions performed",
+    "Backend receipt and dashboard aggregation not live-tested; existing accepted event contract used",
+    "Reduced-motion respected by instant hash positioning; OS preference not toggled in this check",
+    "Search Console indexing and rankings not refreshed; no ranking gain claimed",
+    "Fixtures and before screenshots are excluded from public whitelist"
+  ],
+  "previews": [
+    "http://127.0.0.1:4183/guides/",
+    "http://127.0.0.1:4183/guides/how-to-read-betting-odds-and-line-movement"
+  ],
+  "evidence": "docs/audits/education-navigation-20261018/"
+}
