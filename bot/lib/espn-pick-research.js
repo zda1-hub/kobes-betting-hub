@@ -143,10 +143,16 @@ async function fetchGamelog({ packet, athlete, seasonYear, fetchImpl = fetch }) 
   return { payload: await response.json(), url };
 }
 
-async function fillMissingEvidence(packet, { timing, fetchImpl = fetch } = {}) {
+async function fillMissingEvidence(packet, { timing, fetchImpl = fetch, allowStatisticalFill = false } = {}) {
   const existingCount = sourceEvidence(packet).length;
   if (existingCount >= MIN_WRITEUP_EVIDENCE) {
     return { packet, added: 0, complete: true, sourceEvidenceCount: existingCount, espnCalls: 0 };
+  }
+  // Do not manufacture the appearance of a complete authored writeup by
+  // padding sparse source material with automatic game-log statistics.
+  if (!allowStatisticalFill) {
+    return { packet, added: 0, complete: false, sourceEvidenceCount: existingCount, espnCalls: 0,
+      reason: 'Automatic statistical filler disabled; source evidence remains incomplete.' };
   }
   const status = timing || await upcomingEventStatuses(packet, { fetchImpl });
   if (status.status !== 'UPCOMING') {

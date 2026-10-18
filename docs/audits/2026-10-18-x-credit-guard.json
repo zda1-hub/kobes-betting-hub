@@ -1,0 +1,38 @@
+{
+  "request": "Stop repeated X read waste and automatic filler",
+  "status": "TESTED; release pending",
+  "base": "6fcb83b5a3f70e22227bbbb0862010403ed7e50e",
+  "changes": [
+    "Durable per-source fetch buffer stores raw posts and media before advancing independent fetch cursor",
+    "Deferred work replays local buffer; all returned pages persisted atomically; acknowledgement only after downstream commit succeeds",
+    "New day or intentional source-rescan version resets old buffer; malformed buffers and partial API errors fail closed",
+    "Disable automatic ESPN statistical padding by default; sparse source material remains incomplete and existing completeness checks hold it",
+    "Log fresh returned count versus retained backlog to verify behavior without extra scans"
+  ],
+  "preserved": [
+    "Polling cadence, source roster, model-call caps, attribution and publication approval checks",
+    "No new betting recommendations generated",
+    "SEO preview not included in this release"
+  ],
+  "tests": {
+    "passed": 71,
+    "areas": [
+      "Restart/cursor durability",
+      "Media retention",
+      "Complete pagination and overlap deduplication",
+      "Page failure does not advance cursor",
+      "Empty buffer retains high-water mark",
+      "Operating-day change",
+      "Corrupt state and partial errors fail closed",
+      "Large IDs beyond numeric precision",
+      "No automatic statistical-filler network call",
+      "Existing collector/extraction/source-review contracts"
+    ]
+  },
+  "risks": [
+    "Initial deployment needs one buffer-seeding fetch; no claim of zero migration cost",
+    "No dollar savings measured; billing ledger not available",
+    "Existing queued/published cards unchanged",
+    "One writer per source; uses existing bounded single-service collector coordination"
+  ]
+}
