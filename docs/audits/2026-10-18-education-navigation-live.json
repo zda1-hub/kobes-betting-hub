@@ -1,0 +1,23 @@
+{
+  "status": "PUBLISHED",
+  "version": "68f48982-25e9-446f-9ae5-1b7af509f11c",
+  "uploadedAssets": 5,
+  "checks": {
+    "/guides": "200; expected update present",
+    "/guides/how-to-read-betting-odds-and-line-movement": "200; expected update present",
+    "/guides/learning.js": "200; expected update present",
+    "/guides/reading.css": "200; expected update present"
+  },
+  "browser": [
+    "Inline guide source anchor loads and opens on live domain",
+    "Homepage header and responsive menu exercised",
+    "Home widths 320,391,1440 and membership320: no horizontal overflow; header top0",
+    "Live domain has preexisting 75% zoom; viewport adjusted and actual innerWidth recorded"
+  ],
+  "routeAudit": "2026-10-18-website-route-check.json",
+  "unresolved": [
+    "Existing homepage welcome copy advertises a two-day trial while current banner says no free trial; no offer/billing changes made",
+    "Live consented analytics delivery not tested with provider writes",
+    "Payments, email delivery and private member access not transacted"
+  ]
+}
