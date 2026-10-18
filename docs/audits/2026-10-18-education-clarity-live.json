@@ -1,0 +1,14 @@
+{
+  "published": true,
+  "version": "84a97a18-c5f9-47c4-9691-46d41b9ba8d4",
+  "uploadedAssets": [
+    "/sitemap.xml",
+    "/guides/how-to-read-betting-odds-and-line-movement.html"
+  ],
+  "checks": [
+    "Live guide HTTP 200; new chapter found",
+    "Live sitemap HTTP 200; XML parses; responsible-gambling URL found",
+    "Public build and metadata valid; review files excluded"
+  ],
+  "limits": "No ranking improvement or number-one placement established."
+}

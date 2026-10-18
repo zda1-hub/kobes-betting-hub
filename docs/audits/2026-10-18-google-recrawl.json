@@ -1,0 +1,31 @@
+{
+  "dateMST": "2026-10-18",
+  "property": "sc-domain:kobesbettinghub.com",
+  "requests": [
+    {
+      "path": "/guides",
+      "before": "Discovered - currently not indexed",
+      "result": "Indexing requested; added to priority crawl queue",
+      "receipt": "recrawl-20261018/guides.png"
+    },
+    {
+      "path": "/guides/how-to-read-betting-odds-and-line-movement",
+      "before": "URL is on Google",
+      "result": "Indexing requested; added to priority crawl queue",
+      "receipt": "recrawl-20261018/odds.png"
+    },
+    {
+      "path": "/guides/sports-betting-arbitrage-explained",
+      "before": "URL is on Google",
+      "result": "Indexing requested; added to priority crawl queue",
+      "receipt": "recrawl-20261018/arbitrage.png"
+    },
+    {
+      "path": "/responsible-gambling",
+      "before": "URL is unknown to Google",
+      "result": "Indexing requested; added to priority crawl queue",
+      "receipt": "recrawl-20261018/responsible-gambling.png"
+    }
+  ],
+  "limits": "Accepted requests do not prove a subsequent crawl, indexing or ranking improvement. No repeat submissions performed."
+}

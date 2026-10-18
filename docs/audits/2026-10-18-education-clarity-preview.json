@@ -1,0 +1,31 @@
+{
+  "requested": "Compare search-result pages and improve educational SEO; show before deployment",
+  "status": "LOCAL PREVIEW ONLY",
+  "base": "origin/main 9fa095b",
+  "files": [
+    "guides/how-to-read-betting-odds-and-line-movement.html",
+    "sitemap.xml"
+  ],
+  "before": "Conceptual FAQs but no dedicated glossary separating implied probability, pricing margin and a forecast",
+  "after": "One original chapter explaining uncertainty and limits of interpreting price movement; native keyboard-operated details; update date reconciled",
+  "design": "Existing CSS, typography, header, buttons and artwork preserved; no shared CSS edits",
+  "verification": [
+    "Public build passed",
+    "JSON-LD parses",
+    "Unique chapter anchor",
+    "320,390,1440: no page overflow; header top 0",
+    "Expanded chapter visibly inspected",
+    "Keyboard Enter closes/reopens disclosure",
+    "Browser error log empty",
+    "Before desktop screenshot saved at same 1440 viewport"
+  ],
+  "evidence": "docs/audits/recrawl-20261018/",
+  "limits": [
+    "Search-tool result sample is not verified Google rank order",
+    "No ranking uplift measured",
+    "Only three comparison pages reviewed",
+    "Original chapter is clarity improvement, not evidence that KBH will outrank competitors",
+    "No deployment authorized for this new chapter"
+  ],
+  "discoveryFix": "Responsible-gambling URL absent from sitemap; add existing canonical public URL with actual last material-change date 2026-10-17. Google inspection reported unknown URL and no referring sitemap."
+}
