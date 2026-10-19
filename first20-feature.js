@@ -5,7 +5,7 @@
   const params = new URLSearchParams(window.location.search);
   const now = Date.now();
   if (!FEATURE_FIRST20 || now < Date.parse('2026-10-15T07:00:00Z')
-      || now >= Date.parse('2026-10-19T17:00:00Z')
+      || now >= Date.parse('2026-10-22T17:00:00Z')
       || params.has('ref') || params.has('checkout')
       || !document.querySelector('[data-primary-membership-checkout]')) return;
   window.__KBH_FIRST20_FEATURED__ = true;
@@ -20,7 +20,7 @@
   banner.className = 'first20-feature';
   banner.dataset.first20Feature = '';
   banner.setAttribute('aria-label', 'Limited first-month membership offer');
-  banner.innerHTML = '<div class="first20-feature-copy"><strong class="first20-feature-badge">20 MEMBERS ONLY</strong><p><b>$5</b> for your first month.</p><small>Then $32.99/month until canceled. No free trial.</small></div><a class="button" href="/join?deal=first20">Get the $5 deal <span aria-hidden="true">→</span></a><p class="first20-feature-deadline">Ends Oct 19, 10 AM MST, or after 20 redemptions.</p>';
+  banner.innerHTML = '<div class="first20-feature-copy"><strong class="first20-feature-badge">20 MEMBERS ONLY</strong><p><b>$5</b> for your first month.</p><small>Then $32.99/month until canceled. No free trial.</small></div><a class="button" href="/join?deal=first20">Get the $5 deal <span aria-hidden="true">→</span></a><p class="first20-feature-deadline">Ends Oct 22, 10 AM MST, or after 20 redemptions.</p>';
   // Reuse the eligibility-checked checkout control instead of reloading /join.
   banner.addEventListener?.('click', (event) => {
     if (!event.target.closest('a.button')) return;

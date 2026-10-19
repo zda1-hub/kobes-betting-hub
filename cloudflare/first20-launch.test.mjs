@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('./kobes-checkout-worker.js', import.meta.url), 'utf8');
 const { default: worker, __test: api } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
-const start = Date.parse('2026-10-15T07:00:00Z'), end = Date.parse('2026-10-19T17:00:00Z');
+const start = Date.parse('2026-10-15T07:00:00Z'), end = Date.parse('2026-10-22T17:00:00Z');
 const env = { STRIPE_SECRET_KEY: 'sk_test_fixture', STRIPE_MONTHLY_PRICE_ID: 'price_month',
   SUPABASE_URL: 'https://fixture.supabase.test', SUPABASE_SECRET_KEY: 'fixture', DISCORD_OAUTH_STATE_SECRET: 'fixture',
   DISCORD_CLIENT_ID: '123', DISCORD_REDIRECT_URI: 'https://worker.test/discord/callback' };
-const coupon = () => ({ id: 'kbh_first20_20261015', amount_off: 2799, currency: 'usd', duration: 'once',
+const coupon = () => ({ id: 'kbh_first20_20261022', amount_off: 2799, currency: 'usd', duration: 'once',
   max_redemptions: 20, redeem_by: end / 1000, times_redeemed: 0, valid: true });
 function fixture(t, { now = start, couponPatch = {}, pricePatch = {}, absent = false } = {}) {
   t.mock.method(Date, 'now', () => now);
@@ -17,7 +17,7 @@ function fixture(t, { now = start, couponPatch = {}, pricePatch = {}, absent = f
     calls.push({ path: url.pathname, method: options.method || 'GET', body, raw: options.body });
     if (url.pathname === '/v1/prices/price_month') return Response.json({ active: true, unit_amount: 3299,
       currency: 'usd', recurring: { interval: 'month', interval_count: 1 }, ...pricePatch });
-    if (url.pathname === '/v1/coupons/kbh_first20_20261015') return absent
+    if (url.pathname === '/v1/coupons/kbh_first20_20261022') return absent
       ? Response.json({ error: { message: 'No such coupon: fixture' } }, { status: 404 })
       : Response.json({ ...coupon(), ...couponPatch });
     if (url.pathname === '/v1/coupons' && options.method === 'POST') return Response.json(coupon());
@@ -89,7 +89,7 @@ test('actual Stripe session parameters charge $5 now with one-time coupon, month
   assert.equal(response.status, 200);
   const checkout = calls.find(c => c.path === '/v1/checkout/sessions').body;
   assert.equal(checkout.get('line_items[0][price]'), 'price_month');
-  assert.equal(checkout.get('discounts[0][coupon]'), 'kbh_first20_20261015');
+  assert.equal(checkout.get('discounts[0][coupon]'), 'kbh_first20_20261022');
   assert.equal(checkout.get('metadata[promotion]'), 'first20');
   assert.equal(checkout.has('subscription_data[trial_period_days]'), false);
 });
@@ -99,7 +99,7 @@ test('Discord-associated checkout keeps association metadata and does not grant 
   const checkout = calls.find(c => c.path === '/v1/checkout/sessions').body;
   assert.equal(checkout.get('subscription_data[metadata][promotion]'), 'first20');
   assert.equal(checkout.get('metadata[checkout_association_id]'), 'association_fixture');
-  assert.equal(checkout.get('discounts[0][coupon]'), 'kbh_first20_20261015');
+  assert.equal(checkout.get('discounts[0][coupon]'), 'kbh_first20_20261022');
   assert.equal(checkout.has('subscription_data[trial_period_days]'), false);
 });
 test('referral rewards cannot be stacked with the $5 deal', async t => {

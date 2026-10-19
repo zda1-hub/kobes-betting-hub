@@ -16,7 +16,7 @@ function run({time='2026-10-15T15:00:00Z',search='',enabled=true}={}){
 test('regular arrivals feature the offer only inside its approved window',()=>{
  assert.equal(run().window.__KBH_FIRST20_FEATURED__,true);
  assert.equal(run({time:'2026-10-15T06:59:59Z'}).inserts.length,0);
- assert.equal(run({time:'2026-10-19T17:00:00Z'}).inserts.length,0);
+ assert.equal(run({time:'2026-10-22T17:00:00Z'}).inserts.length,0);
 });
 test('referral and checkout-return arrivals retain their own flow',()=>{
  assert.equal(run({search:'?ref=KBH-ABCDEFGHIJ'}).inserts.length,0);
