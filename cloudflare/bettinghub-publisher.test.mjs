@@ -300,9 +300,9 @@ test('result reply parent lookup requires a confirmed original X receipt', async
   assert.deepEqual(await result.json(), { xPostId: '123456789' });
 });
 
-test('result replies use the X reply field while ordinary posts stay top-level', () => {
+test('verified result and ordinary posts are standalone on X', () => {
   assert.deepEqual(workerTest.xPostPayload({ id: 'result-x-123456789-aaaaaaaaaaaaaaaaaaaa', body: 'LOSS' }), {
-    text: 'LOSS', reply: { in_reply_to_tweet_id: '123456789' },
+    text: 'LOSS',
   });
   assert.deepEqual(workerTest.xPostPayload({ id: 'free-x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', body: 'PICK' }), { text: 'PICK' });
 });
@@ -631,10 +631,10 @@ test('public results normalization preserves count-only expert records and rejec
   assert.equal(workerTest.normalizedPublicResults({...input,expertRecords:{...input.expertRecords,experts:[{source:'Alpha',...record,pending:-1}]}}),null);
 });
 
- test('automated free-pick payload removes retired like gate but preserves terms and result replies', () => {
+ test('automated free-pick payload removes retired like gate and keeps results standalone', () => {
  const body = 'TODAY’S FREE PICK\n\nPlayer over 2.5 (-115)\n\n❤️ 10 likes and we’ll post another free pick.\nFull writeup → example.com';
  assert.deepEqual(workerTest.xPostPayload({id:'free-x-12345678',body}),{text:'TODAY’S FREE PICK\n\nPlayer over 2.5 (-115)\n\nFull writeup → example.com'});
- assert.deepEqual(workerTest.xPostPayload({id:'result-x-123-01234567890123456789',body:'RESULT: LOSS'}),{text:'RESULT: LOSS',reply:{in_reply_to_tweet_id:'123'}});
+ assert.deepEqual(workerTest.xPostPayload({id:'result-x-123-01234567890123456789',body:'RESULT: LOSS'}),{text:'RESULT: LOSS'});
  assert.deepEqual(workerTest.xPostPayload({id:'manual-post',body}),{text:body});
  });
 
