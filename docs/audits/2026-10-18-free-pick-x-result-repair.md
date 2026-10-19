@@ -17,3 +17,9 @@ Requested: post the verified result of every Free Pick to X as a separate post, 
 ## Verification and release status
 
 The focused ESPN grading test includes the October 18 wording, 95-yard box-score field, and ambiguous-name hold. A read-only run against the live ESPN summary returned `GRADED`, `W`, `James Cook III: 95 rushing yards`, and event `401873005`. Focused result-queue tests passed. The production bot's automatic deploy and a confirmed X result-post receipt remain to be checked after merge.
+
+## Follow-up: X reply routing found after live publication
+
+PR #249 merged and Render automatically graded the pick as a win, then published [X result 2112039454168752133](https://x.com/kobesbettinghub/status/2112039454168752133). The live X page showed **“Replying to @kobesbettinghub”**. The earlier statement that the publisher created a standalone post was incorrect: `cloudflare/bettinghub-publisher.js` added `reply.in_reply_to_tweet_id` for `result-x-*` IDs. That Worker had not changed in PR #249. This follow-up removes that reply field while retaining the deterministic ID and the existing no-automatic-retry guard for uncertain result delivery. The published reply remains on X; [today's standalone result](https://x.com/kobesbettinghub/status/2112040109533241709) was published separately instead of requeuing the already published receipt.
+
+The October 22 coupon still showed 0/20 uses when the promotional copy was prepared, so the [new offer post](https://x.com/kobesbettinghub/status/2112040174964158523) uses the verified deadline and 20-use cap without saying three remain. All 29 publisher tests pass, including result payload checks. The publisher Worker release remains to be recorded below.

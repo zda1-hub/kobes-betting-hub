@@ -828,7 +828,7 @@ async function enqueueXPost(request, env) {
   if (!Number.isFinite(scheduleTime)) return json({ error: "scheduledAt must be an ISO-8601 date" }, 400);
 
   const id = typeof input.id === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(input.id) ? input.id : crypto.randomUUID();
-  if (id.startsWith('result-x-') && !/^result-x-\d{1,25}-[a-f0-9]{20}$/.test(id)) return json({ error: 'Invalid result reply id' }, 400);
+  if (id.startsWith('result-x-') && !/^result-x-\d{1,25}-[a-f0-9]{20}$/.test(id)) return json({ error: 'Invalid result post id' }, 400);
   const result = await env.DB.prepare(
     `INSERT INTO approved_posts (id, channel, body, scheduled_at, status, created_at)
      VALUES (?, 'x', ?, ?, 'approved', ?)
@@ -1324,7 +1324,7 @@ async function recoverStuckPosts(now, env) {
      WHERE status = 'publishing' AND id NOT LIKE 'result-x-%' AND scheduled_at < ?`,
   ).bind(cutoff).run();
   await env.DB.prepare(
-    `UPDATE approved_posts SET status = 'failed', last_error = 'Interrupted result reply; check X before retrying'
+    `UPDATE approved_posts SET status = 'failed', last_error = 'Interrupted result post; check X before retrying'
      WHERE status = 'publishing' AND id LIKE 'result-x-%' AND scheduled_at < ?`,
   ).bind(cutoff).run();
 }
@@ -1361,13 +1361,12 @@ async function publishXPost(post, env, triggerType) {
 }
 
 function xPostPayload(post) {
-  const replyMatch = /^result-x-(\d{1,25})-[a-f0-9]{20}$/.exec(post.id);
   // Remove only the retired engagement gate from automated free-pick posts.
   // This also covers approved packets from a bot that has not restarted yet.
   const text = post.id.startsWith('free-x-')
     ? post.body.split('\n').filter(line => !/^❤️?\s*10 likes and we[’']ll post another free pick\.$/u.test(line.trim())).join('\n').replace(/\n{3,}/g, '\n\n').trim()
     : post.body;
-  return replyMatch ? { text, reply: { in_reply_to_tweet_id: replyMatch[1] } } : { text };
+  return { text };
 }
 
 async function recordDeliveryFailure(postId, httpStatus, detail, retryable, env) {
