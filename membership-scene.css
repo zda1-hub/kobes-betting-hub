@@ -11,6 +11,7 @@ body:has(.membership-scene[data-phase="opening"]) .site-ticker-track,body:has(.m
 .membership-scene[data-open="false"]>.referral-promo-banner{width:100%;grid-column:1/-1;min-width:0}
 .membership-scene[data-open="true"]{padding-top:36px}
 .membership-scene[data-open="true"]>.membership-card-promo{width:85%;max-width:980px;margin:0 auto 28px;pointer-events:none}
+.membership-scene[data-open="true"]>.membership-card-promo[data-card-checkout]{pointer-events:auto;cursor:pointer}
 .membership-scene[data-open="true"]>.membership-card-promo>span{display:none}
 .membership-scene .membership-card-promo img{transform-origin:top left}
 .membership-scene[data-open="true"]>.referral-promo-banner{position:absolute;left:50%;transform:translateX(-50%);pointer-events:none;z-index:0}
