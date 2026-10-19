@@ -16,7 +16,7 @@
   const panel=document.createElement('div'); panel.className='scene-panel'; panel.hidden=true;
   panel.innerHTML=`<h1 class="scene-sr-only" tabindex="-1" id="membership-heading">KBH membership options</h1>
   <section class="scene-confirmation" data-membership-confirmation hidden aria-live="polite"><h2 data-connection-title>Connect your Discord.</h2><p data-connection-message></p><a class="button scene-primary" data-discord-connect hidden aria-hidden="true">Connect Discord →</a><a href="/support">Get help</a><p>Already paid? Use the same Discord account. Do not purchase again.</p></section>
-  <article class="scene-monthly" data-membership-sales><p class="scene-promise">Cancel Anytime, No Commitment.</p><button class="button scene-primary" type="button" data-checkout="monthly" data-primary-membership-checkout>Start 2 days free →</button><p class="scene-terms" data-primary-membership-terms>2 days free, then $32.99 billed monthly until canceled.</p></article>
+  <article class="scene-monthly" data-membership-sales><p class="scene-promise">Cancel Anytime, No Commitment.</p><button class="button scene-primary" type="button" data-checkout="monthly" data-primary-membership-checkout>Start 2 days free →</button><p class="scene-terms" id="monthly-membership-terms" data-primary-membership-terms>2 days free, then $32.99 billed monthly until canceled.</p></article>
   <div class="scene-support"><p class="scene-tools" data-membership-sales>Expert plays · Detailed writeups · Arbitrage tools</p><p class="scene-status" data-checkout-message role="status" aria-live="polite">Secure checkout with Stripe. VIP access connects to Discord.</p></div>
   <section class="scene-other" data-membership-sales><h2>Want a longer run?</h2><div class="scene-plan-toggle" role="group" aria-label="Membership duration" data-selected="six_month"><span class="scene-toggle-thumb" aria-hidden="true"></span><button type="button" data-longer-plan="six_month" aria-pressed="true" aria-controls="longer-membership-plan">Six months</button><button type="button" data-longer-plan="annual" aria-pressed="false" aria-controls="longer-membership-plan">One year</button></div>
   <article class="scene-plan" id="longer-membership-plan"><div class="scene-plan-face" aria-live="polite" aria-atomic="true"><h3>KBH VIP</h3><p class="scene-price" data-longer-price>$134.99</p><p class="scene-renewal" data-longer-period>Billed every 6 months.</p></div><div class="scene-plan-actions"><button class="button" type="button" data-checkout="six_month" data-longer-checkout>Join six months →</button></div></article>
@@ -27,6 +27,9 @@
   scene.append(panel);
   // Referral rewards apply to monthly memberships; keep the other offers private on referral arrivals.
   const arrival=new URLSearchParams(location.search);
+  const cardStartsCheckout=!['success','connected'].includes(arrival.get('checkout'));
+  const primaryCheckout=panel.querySelector('[data-primary-membership-checkout]');
+  const originalCardLabel=card.getAttribute('aria-label');
   const referral=(arrival.get('ref') || '').toUpperCase();
   if(/^(KBH|KBC)-[A-Z0-9]{10}$/.test(referral) && !arrival.has('checkout')) panel.querySelector('.scene-other').hidden=true;
   const image=card.querySelector('img');
@@ -64,7 +67,10 @@
     });
   };
   const updateTriggers=()=>{
-    controls.forEach(a=>{a.setAttribute('aria-controls',scene.id);a.setAttribute('aria-expanded',String(opened));});
+    controls.forEach(a=>{
+      if(a===card&&opened){a.removeAttribute('aria-controls');a.removeAttribute('aria-expanded');return;}
+      a.setAttribute('aria-controls',scene.id);a.setAttribute('aria-expanded',String(opened));
+    });
     if(headerJoin){headerJoin.toggleAttribute('data-membership-return',opened);headerJoin.textContent=opened?'Back to the Hub':headerLabel;headerJoin.setAttribute('href',opened?'/':headerHref);}
   };
   const longerOffers={
@@ -102,7 +108,12 @@
     if(scene.dataset.open!=='true')homeScroll=scrollY;
     opened=true;opener=trigger||opener;const current=++revision;cancel();const finishProbe=motionProbe('open');scene.dataset.phase='opening';
     history.scrollRestoration='manual';
-    hideHome();panel.hidden=false;scene.dataset.open='true';card.removeAttribute('href');card.setAttribute('tabindex','-1');updateTriggers();
+    hideHome();panel.hidden=false;scene.dataset.open='true';card.removeAttribute('href');
+    if(cardStartsCheckout){
+      card.dataset.cardCheckout='monthly';card.setAttribute('role','button');card.setAttribute('tabindex','0');
+      card.setAttribute('aria-label','Start 2 days free and connect Discord');card.setAttribute('aria-describedby','monthly-membership-terms');
+    }else card.setAttribute('tabindex','-1');
+    updateTriggers();
     if(home&&push)history.pushState({...history.state,kbhMembership:true},'',location.href);
     if(home)window.dispatchEvent(new CustomEvent('kbh:membership-open',{detail:{openingId:crypto.randomUUID()}}));
     if(bill)bill.hidden=true;
@@ -122,6 +133,8 @@
     opened=false;const current=++revision;cancel();const finishProbe=motionProbe('close');scene.dataset.phase='closing';
     // Restore the destination in one batch; the fixed card bridges the geometry change.
     panel.hidden=true;scene.dataset.open='false';restoreHome();card.href='/join';card.removeAttribute('tabindex');
+    card.removeAttribute('data-card-checkout');card.removeAttribute('role');card.removeAttribute('aria-describedby');
+    if(originalCardLabel===null)card.removeAttribute('aria-label');else card.setAttribute('aria-label',originalCardLabel);
     if(bill)bill.hidden=false;
     updateTriggers();window.scrollTo({top:homeScroll,behavior:'instant'});
     const after=image.getBoundingClientRect();
@@ -131,6 +144,14 @@
     opener?.focus({preventScroll:true});
     await Promise.all(motions);finishProbe();if(current===revision&&!opened){scene.dataset.phase='closed';history.scrollRestoration=originalRestoration;}
   };
+  const startFromCard=event=>{
+    if(!opened||!cardStartsCheckout||primaryCheckout.disabled)return;
+    event.preventDefault();primaryCheckout.click();
+  };
+  card.addEventListener('click',startFromCard);
+  card.addEventListener('keydown',event=>{
+    if(event.key==='Enter'||event.key===' ')startFromCard(event);
+  });
   document.addEventListener('click',event=>{
       const a=event.target.closest('a[href]');if(!a||!controls.includes(a)||a.closest('.october-offer-overlay')||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
       if(a===headerJoin&&opened){if(!home)return;event.preventDefault();if(history.state?.kbhMembership)history.back();else close();return;}
