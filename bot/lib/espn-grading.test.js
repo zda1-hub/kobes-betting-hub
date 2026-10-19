@@ -68,6 +68,33 @@ test('grades a standard final MLB player prop from the ESPN box score', async ()
   });
 });
 
+test('grades published Rush Yards wording against an official name with a suffix', async () => {
+  const nflEvent = {
+    id: '401873005', status: { type: { completed: true } },
+    competitions: [{ competitors: [
+      { team: { displayName: 'Buffalo Bills', shortDisplayName: 'Bills', abbreviation: 'BUF' } },
+      { team: { displayName: 'Las Vegas Raiders', shortDisplayName: 'Raiders', abbreviation: 'LV' } }
+    ] }]
+  };
+  const nflSummary = {
+    header: { competitions: [{ id: '401873005', status: { type: { completed: true } } }] },
+    boxscore: { players: [{ statistics: [{ type: 'rushing', keys: ['rushingAttempts', 'rushingYards'],
+      athletes: [{ athlete: { displayName: 'James Cook III', id: '123' }, stats: ['22', '95'] }]
+    }] }] }
+  };
+  const row = { operating_date: '2026-10-18', league: 'NFL', event: 'Buffalo Bills @ Las Vegas Raiders',
+    selection: 'James Cook Over 93.5 Rush Yards', published_line: '93.5', result: 'PENDING' };
+  const fetchImpl = async url => new Response(JSON.stringify(url.includes('/summary?') ? nflSummary : { events: [nflEvent] }));
+  const grade = await gradePickFromEspn(row, { fetchImpl });
+  assert.deepEqual(grade, { status: 'GRADED', result: 'W', outcome: 'James Cook III: 95 rushing yards',
+    source: 'https://www.espn.com/nfl/game/_/gameId/401873005' });
+
+  const ambiguous = structuredClone(nflSummary);
+  ambiguous.boxscore.players[0].statistics[0].athletes.push({ athlete: { displayName: 'James Cook II', id: '456' }, stats: ['20', '100'] });
+  const held = await gradePickFromEspn(row, { fetchImpl: async url => new Response(JSON.stringify(url.includes('/summary?') ? ambiguous : { events: [nflEvent] })) });
+  assert.equal(held.status, 'PENDING');
+});
+
 test('grades a final moneyline and keeps unsupported props pending', async () => {
   const moneyline = await gradePickFromEspn({
     operating_date: '2026-09-07', league: 'MLB', event: 'Chicago Cubs at Milwaukee Brewers',
