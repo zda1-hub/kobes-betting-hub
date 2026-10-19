@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   checkPickOperations,
   evaluatePickOperationMetrics,
@@ -7,6 +8,12 @@ import {
 } from './check-pick-operations.mjs';
 
 const productionUrl = () => 'postgresql://postgres.mpajyubbnnsdpgdizvht:secret@aws-0-us-west-1.pooler.supabase.com:5432/postgres?sslmode=require';
+
+test('pick operations alarm still runs when the membership alarm finds an exception', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/membership-operations-alert.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /- name: Install locked dependencies\s+id: install\s+run: npm ci/);
+  assert.match(workflow, /- name: Check private pick operations dashboard\s+if: \$\{\{ !cancelled\(\) && steps\.install\.outcome == 'success' \}\}\s+run: node scripts\/check-pick-operations\.mjs/);
+});
 
 test('pick operations config is locked to encrypted production Supabase', () => {
   const config = pickOperationCheckConfig({ DATABASE_URL: productionUrl() });
