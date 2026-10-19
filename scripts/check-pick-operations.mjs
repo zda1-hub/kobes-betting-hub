@@ -20,6 +20,10 @@ export function evaluatePickOperationMetrics(row) {
     pendingApprovalCards: Number(row.pending_approval_cards || 0),
     stuckApprovedCards: Number(row.stuck_approved_cards || 0),
     stuckPublications: Number(row.stuck_publications || 0),
+    stuckApprovedLast24Hours: Number(row.stuck_approved_last_24_hours || 0),
+    stuckPublicationsLast24Hours: Number(row.stuck_publications_last_24_hours || 0),
+    stuckPublicationsWithDiscordReceipt: Number(row.stuck_publications_with_discord_receipt || 0),
+    oldestStuckPublicationAt: row.oldest_stuck_publication_at || null,
     unresolvedPublicationFailures: Number(row.unresolved_publication_failures || 0),
     failedRecaps: Number(row.failed_recaps || 0),
     networkErrors: Number(row.network_errors || 0),
@@ -59,6 +63,25 @@ export async function checkPickOperations(client, { lookbackHours, stuckMinutes 
              FROM published_picks
             WHERE status = 'PUBLISHING'
               AND updated_at < NOW() - make_interval(mins => $2::int)) AS stuck_publications,
+          (SELECT COUNT(*)::int
+             FROM approval_cards
+            WHERE status = 'APPROVED_PENDING_PUBLICATION'
+              AND action_at >= NOW() - INTERVAL '24 hours'
+              AND action_at < NOW() - make_interval(mins => $2::int)) AS stuck_approved_last_24_hours,
+          (SELECT COUNT(*)::int
+             FROM published_picks
+            WHERE status = 'PUBLISHING'
+              AND updated_at >= NOW() - INTERVAL '24 hours'
+              AND updated_at < NOW() - make_interval(mins => $2::int)) AS stuck_publications_last_24_hours,
+          (SELECT COUNT(*)::int
+             FROM published_picks
+            WHERE status = 'PUBLISHING'
+              AND updated_at < NOW() - make_interval(mins => $2::int)
+              AND discord_message_id IS NOT NULL) AS stuck_publications_with_discord_receipt,
+          (SELECT MIN(updated_at)
+             FROM published_picks
+            WHERE status = 'PUBLISHING'
+              AND updated_at < NOW() - make_interval(mins => $2::int)) AS oldest_stuck_publication_at,
           (SELECT COUNT(*)::int
              FROM published_picks failed
             WHERE failed.status IN ('POST_FAILED', 'FAILED')

@@ -35,6 +35,10 @@ test('pick operations alerts cover stuck approvals, publication, recap, and netw
     pending_approval_cards: 4,
     stuck_approved_cards: 1,
     stuck_publications: 2,
+    stuck_approved_last_24_hours: 1,
+    stuck_publications_last_24_hours: 1,
+    stuck_publications_with_discord_receipt: 1,
+    oldest_stuck_publication_at: '2026-09-13T18:00:00.000Z',
     unresolved_publication_failures: 3,
     failed_recaps: 4,
     network_errors: 5,
@@ -45,6 +49,9 @@ test('pick operations alerts cover stuck approvals, publication, recap, and netw
   assert.equal(report.ok, false);
   assert.equal(report.alerts.length, 4);
   assert.equal(report.metrics.pendingApprovalCards, 4);
+  assert.equal(report.metrics.stuckPublicationsLast24Hours, 1);
+  assert.equal(report.metrics.stuckPublicationsWithDiscordReceipt, 1);
+  assert.equal(report.metrics.oldestStuckPublicationAt, '2026-09-13T18:00:00.000Z');
   assert.equal(report.metrics.openAIEstimatedCostUsd, 0.1234);
 });
 
