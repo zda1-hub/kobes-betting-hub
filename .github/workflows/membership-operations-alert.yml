@@ -36,8 +36,10 @@ jobs:
           node-version: 24
           cache: npm
       - name: Install locked dependencies
+        id: install
         run: npm ci
       - name: Check paid access and billing exceptions
         run: node scripts/check-membership-operations.mjs
       - name: Check private pick operations dashboard
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: node scripts/check-pick-operations.mjs
