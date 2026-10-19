@@ -5,6 +5,7 @@ import {
   checkPickOperations,
   evaluatePickOperationMetrics,
   pickOperationCheckConfig,
+  pickOperationFailureKind,
 } from './check-pick-operations.mjs';
 
 const productionUrl = () => 'postgresql://postgres.mpajyubbnnsdpgdizvht:secret@aws-0-us-west-1.pooler.supabase.com:5432/postgres?sslmode=require';
@@ -20,6 +21,13 @@ test('pick operations config is locked to encrypted production Supabase', () => 
   assert.equal(config.lookbackHours, 26);
   assert.equal(config.stuckMinutes, 5);
   assert.throws(() => pickOperationCheckConfig({ DATABASE_URL: productionUrl().replace('mpajyubbnnsdpgdizvht', 'aaaaaaaaaaaaaaaaaaaa') }), /non-production/);
+});
+
+test('failure diagnostics classify the cause without logging database details', () => {
+  assert.equal(pickOperationFailureKind({ code: '57014', message: 'query text' }), 'timeout');
+  assert.equal(pickOperationFailureKind({ code: '42P01', message: 'private table name' }), 'schema');
+  assert.equal(pickOperationFailureKind({ code: 'ECONNREFUSED' }), 'connection');
+  assert.equal(pickOperationFailureKind(new Error('unknown private detail')), 'unknown');
 });
 
 test('pick operations alerts cover stuck approvals, publication, recap, and network failures', () => {

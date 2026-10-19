@@ -37,6 +37,13 @@ export function evaluatePickOperationMetrics(row) {
   return { ok: alerts.length === 0, alerts, metrics };
 }
 
+export function pickOperationFailureKind(error) {
+  if (error?.code === '57014' || /timeout|timed out/i.test(String(error?.message || ''))) return 'timeout';
+  if (error?.code === '42P01' || error?.code === '42703') return 'schema';
+  if (/^(?:ECONN|ENET|EHOST)/.test(String(error?.code || ''))) return 'connection';
+  return 'unknown';
+}
+
 export async function checkPickOperations(client, { lookbackHours, stuckMinutes }) {
   await client.query('BEGIN READ ONLY');
   try {
@@ -106,8 +113,8 @@ async function main() {
     connectionString: config.databaseUrl,
     max: 1,
     connectionTimeoutMillis: 10_000,
-    query_timeout: 10_000,
-    statement_timeout: 9_000,
+    query_timeout: 30_000,
+    statement_timeout: 25_000,
   });
   try {
     const report = await checkPickOperations(pool, config);
@@ -119,8 +126,8 @@ async function main() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch(() => {
-    console.error('Pick operations check failed safely. Review the private Actions run.');
+  main().catch((error) => {
+    console.error(`Pick operations check failed safely (${pickOperationFailureKind(error)}). Review the private Actions run.`);
     process.exitCode = 1;
   });
 }

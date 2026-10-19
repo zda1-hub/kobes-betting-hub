@@ -26,3 +26,7 @@ The membership alarm failed before the next step, so GitHub Actions skipped the 
 ## Limits
 
 The site and public API checks do not verify a completed Stripe payment, member role grant, automatic email delivery, or pick publication history. The private pick-operations state remains unknown until the independent alarm runs with production database access. No production site, Worker, Stripe, or member record was changed during this audit.
+
+## Follow-up — independent alarm run, October 18 at 19:17 MST
+
+PR #242 merged as `4bbe167`. Manual production Actions run [39189270296](https://github.com/zda1-hub/kobes-betting-hub/actions/runs/39189270296) proved that the pick-operations step now executes even when the membership step fails. The membership check again reported 3 unlinked active/trialing subscription records. The pick check failed safely after approximately 10 seconds without metrics; this does not establish a stuck pick or publication failure. A follow-up local change increases its read-only query window to 25 seconds and logs only a coarse error category, so the next run can distinguish timeout, schema, connection, or unknown failure without exposing private query details. Production verification of that follow-up is pending.
