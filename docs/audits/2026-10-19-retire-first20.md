@@ -27,4 +27,10 @@ The owner asked to restore the website without the $5 promotion and verify paddi
 
 ## Publication status
 
-Local and built preview verified. Append deployment identifiers and live verification below after release.
+Published from merged PR [#253](https://github.com/zda1-hub/kobes-betting-hub/pull/253), commit `932897d`, with `--keep-vars`. The checkout Worker deployed first as version `5512e8d5-ed6a-46e5-aade-7f0beaf0b2b8`; the publisher followed as `eaeb8ecd-daf5-43cc-ba9e-3a0f83eef7a9`; the public site followed as `b65f87a9-f6c8-4b3a-a323-60943a8fa438`. Existing bindings, secrets and schedules were preserved.
+
+- Live `GET /promotions/first20` returned `{ "state": "retired", "ready": false }`. Live `POST /checkout/prepare` for `first_month_back` plus `first20` returned HTTP 400 without a checkout URL.
+- The publisher `/health` returned `ready`, `xConnected`, `freePickReady` and `socialEmailReady`. No promotional email was sent for verification.
+- Fresh custom-domain browser checks on `/` and `/join?deal=first20` at 320px, 390px and 1440px showed no visible $5 copy or promo banner, no horizontal page overflow, header at top 0 and ticker immediately below it. The old promotion URL displayed `Start 2 days free` with `data-checkout="monthly"` and no deal attribute. No page errors were observed.
+- The live 390px member-card image loaded and the full membership screen visually matched the local proof; the original orange artwork, action padding and poster composition remained intact. Live evidence: `evidence/2026-10-19-retire-first20/live-home-390.png` and `live-join-390.png`.
+- A completed real checkout was not attempted. The historical Stripe coupon and any Stripe Checkout session created before retirement were not deleted or expired; the app rejects new discounted preparations and associated checkouts.
