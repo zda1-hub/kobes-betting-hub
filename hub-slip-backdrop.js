@@ -5,11 +5,4 @@
   if (!ENABLED || !layer || !document.body.classList.contains('home-page')) return;
   document.body.classList.add('has-slip-backdrop');
   layer.hidden = false;
-  const offer = document.querySelector('[data-first20-feature]');
-  if (offer && !offer.hidden) {
-    const band = document.createElement('div');
-    band.className = 'hub-slip-top-band';
-    band.setAttribute('aria-hidden', 'true');
-    offer.before(band);
-  }
 })();

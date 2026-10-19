@@ -238,7 +238,7 @@ test('a no-pick signup receives the next published pick once with a concise VIP 
     await Promise.all(publishTasks);
     assert.equal(sent.length, 2);
     assert.match(sent[1].text, /Team A moneyline/);
-    assert.match(sent[1].text, /View membership: https:\/\/kobesbettinghub.com\/join/);
+    assert.match(sent[1].text, /Start your 2-day VIP trial: https:\/\/kobesbettinghub.com\/join/);
     assert.doesNotMatch(sent[1].text, /See the Hub:/);
     assert.equal((await env.DB.prepare("SELECT status FROM free_pick_email_outbox WHERE email = 'newfan@example.com'").first()).status, 'sent');
     assert.equal((await (await worker.fetch(new Request('https://publisher.test/api/free-pick/gate'), env)).json()).hasPick, true);
@@ -276,7 +276,7 @@ test('homepage email signup receives the current pick instead of a second welcom
     await Promise.all(background);
     assert.equal(sent.length, 1);
     assert.match(sent[0].text, /Team B spread/);
-    assert.match(sent[0].text, /View membership: https:\/\/kobesbettinghub.com\/join/);
+    assert.match(sent[0].text, /Start your 2-day VIP trial: https:\/\/kobesbettinghub.com\/join/);
   } finally {
     globalThis.fetch = originalFetch;
     env.DB.close();
@@ -639,31 +639,27 @@ test('public results normalization preserves count-only expert records and rejec
  });
 
 
-test('verified first20 email uses clear paid offer, renewal and tracked destination', () => {
- const lines=workerTest.vipTrialEmailLines('test_offer',{state:'open',ready:true});
+test('membership email uses the standard two-day trial and no retired promotion link', () => {
+ const lines=workerTest.vipTrialEmailLines('test_offer');
  const body=lines.join('\n');
- assert.match(body,/first month is \$5/);assert.match(body,/Then \$32\.99\/month until canceled\. No free trial/);
- assert.match(body,/20 memberships total/);assert.match(body,/October 22, 2026 at 10 AM MST/);
- const link=new URL(lines.find(l=>l.startsWith('Join for $5:')).slice('Join for $5: '.length));
- assert.equal(link.searchParams.get('deal'),'first20');assert.equal(link.searchParams.get('utm_content'),'first20');
- assert.equal(link.searchParams.has('referral_code'),false);assert.doesNotMatch(body,/free for 2 days/);
-});
-test('unavailable promotion does not advertise an unverified deal',()=>{
- const body=workerTest.vipTrialEmailLines('test',false).join('\n');assert.match(body,/current membership options/);assert.doesNotMatch(body,/first month is \$5|free for 2 days/);
+ assert.match(body,/free for 2 days/);
+ assert.match(body,/\$0 today, then \$32\.99\/month until canceled/);
+ assert.doesNotMatch(body,/\$5|first20/);
+ const link=new URL(lines.find(line=>line.startsWith('Start your 2-day VIP trial:')).split(': ').slice(1).join(': '));
+ assert.equal(link.searchParams.has('deal'),false);
+ assert.equal(link.searchParams.get('utm_content'),'vip_trial');
 });
 
-test('one authorized promotion follow-up sends once and records provider acceptance', async () => {
+test('pending retired promotion follow-up is skipped without emailing', async () => {
  const env={DB:memoryD1(),RESEND_API_KEY:'fixture'};await workerTest.ensureEmailSubscribers(env);
  await env.DB.prepare("INSERT INTO email_subscribers (email,unsubscribe_token,consent_at,welcome_status) VALUES (?,?,?,?)").bind('optin@example.com','token','2026-10-16T04:45:48Z','sent').run();
  await env.DB.prepare("INSERT INTO free_pick_email_outbox (id,email,pick_json,unsubscribe_token,created_at) VALUES (?,?,?,?,?)").bind('first20-fixture','optin@example.com',JSON.stringify({promotionOnly:true}),'token',new Date().toISOString()).run();
  const original=globalThis.fetch;let sends=0;
- globalThis.fetch=async(url,options)=>{
-  if(String(url).includes('/promotions/first20'))return Response.json({state:'open',ready:true,firstMonthCents:500,renewalCents:3299,limit:20,opensAt:new Date(Date.now()-60000).toISOString(),endsAt:new Date(Date.now()+60000).toISOString()});
-  assert.equal(url,'https://api.resend.com/emails');let body=JSON.parse(options.body);assert.equal(body.subject,'Your first month in the Hub is $5');assert.match(body.text,/No free trial/);assert.match(body.text,/Unsubscribe:/);assert.equal(options.headers['Idempotency-Key'],'kbh-free-pick-first20-fixture');sends++;return Response.json({id:'provider-fixture'});
- };
- try{await workerTest.deliverPendingFreePickEmails(env);await workerTest.deliverPendingFreePickEmails(env);assert.equal(sends,1);let receipt=await env.DB.prepare('SELECT * FROM free_pick_email_receipts WHERE outbox_id=?').bind('first20-fixture').first();assert.equal(receipt.provider_message_id,'provider-fixture');assert.equal(receipt.offer_kind,'first20');}finally{globalThis.fetch=original;env.DB.close();}
-});
-test('promotion resolver fails closed on closed offer or network failure',async()=>{
- const original=globalThis.fetch;
- try{globalThis.fetch=async()=>Response.json({state:'closed',ready:true});assert.equal(await workerTest.currentEmailPromotion(),false);globalThis.fetch=async()=>{throw Error('offline')};assert.equal(await workerTest.currentEmailPromotion(),false);}finally{globalThis.fetch=original;}
+ globalThis.fetch=async()=>{sends++;throw new Error('Retired promotion must not send');};
+ try {
+  await workerTest.deliverPendingFreePickEmails(env);
+  const row=await env.DB.prepare('SELECT * FROM free_pick_email_outbox WHERE id=?').bind('first20-fixture').first();
+  assert.equal(row.status,'skipped');
+  assert.equal(sends,0);
+ } finally {globalThis.fetch=original;env.DB.close();}
 });

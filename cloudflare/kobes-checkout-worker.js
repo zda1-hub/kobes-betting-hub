@@ -52,7 +52,9 @@ const firstMonthBackActive = () => false;
 const FIRST20_START = Date.parse('2026-10-15T07:00:00Z');
 const FIRST20_END = Date.parse('2026-10-22T17:00:00Z');
 const FIRST20_COUPON_ID = 'kbh_first20_20261022';
-const first20Active = (now = Date.now()) => now >= FIRST20_START && now < FIRST20_END;
+// The owner retired the $5 promotion early. Keep its historical identifiers for
+// existing payment records, but reject all new discounted checkout attempts.
+const first20Active = () => false;
 
 function validFirst20Coupon(coupon) {
   return coupon?.id === FIRST20_COUPON_ID && coupon.amount_off === 2799
@@ -71,6 +73,7 @@ async function first20Price(env) {
 }
 
 async function first20Status(env) {
+  if (!first20Active()) return { state: 'retired', ready: false };
   const now = Date.now();
   const details = { opensAt: new Date(FIRST20_START).toISOString(), endsAt: new Date(FIRST20_END).toISOString(),
     firstMonthCents: 500, renewalCents: 3299, currency: 'usd', limit: 20 };
