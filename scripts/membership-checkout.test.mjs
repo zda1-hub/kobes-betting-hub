@@ -208,7 +208,7 @@ test('dedicated $5 link switches only its primary offer and submits the real pro
   assert.equal(page.buttons[0].textContent, 'Start for $5 →');
   assert.equal(page.buttons[0].disabled, false);
   assert.match(page.promotionTerms.textContent, /\$5.*\$32.99\/month.*No free trial/);
-  assert.match(page.promotionRenewal.textContent, /October 19 at 10:00 AM MST/);
+  assert.match(page.promotionRenewal.textContent, /October 22 at 10:00 AM MST/);
   await page.buttons[0].click();
   assert.equal(requests[0].offer, 'first_month_back');
   assert.equal(requests[0].deal, 'first20');

@@ -643,7 +643,7 @@ test('verified first20 email uses clear paid offer, renewal and tracked destinat
  const lines=workerTest.vipTrialEmailLines('test_offer',{state:'open',ready:true});
  const body=lines.join('\n');
  assert.match(body,/first month is \$5/);assert.match(body,/Then \$32\.99\/month until canceled\. No free trial/);
- assert.match(body,/20 memberships total/);assert.match(body,/October 19, 2026 at 10 AM MST/);
+ assert.match(body,/20 memberships total/);assert.match(body,/October 22, 2026 at 10 AM MST/);
  const link=new URL(lines.find(l=>l.startsWith('Join for $5:')).slice('Join for $5: '.length));
  assert.equal(link.searchParams.get('deal'),'first20');assert.equal(link.searchParams.get('utm_content'),'first20');
  assert.equal(link.searchParams.has('referral_code'),false);assert.doesNotMatch(body,/free for 2 days/);

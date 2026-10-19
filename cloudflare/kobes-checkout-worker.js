@@ -50,8 +50,8 @@ const FIRST_MONTH_BACK_END = Date.parse('2026-10-23T07:00:00Z');
 const FIRST_MONTH_BACK_COUPON_ID = 'kbh_first_month_back_2026_09_22';
 const firstMonthBackActive = () => false;
 const FIRST20_START = Date.parse('2026-10-15T07:00:00Z');
-const FIRST20_END = Date.parse('2026-10-19T17:00:00Z');
-const FIRST20_COUPON_ID = 'kbh_first20_20261015';
+const FIRST20_END = Date.parse('2026-10-22T17:00:00Z');
+const FIRST20_COUPON_ID = 'kbh_first20_20261022';
 const first20Active = (now = Date.now()) => now >= FIRST20_START && now < FIRST20_END;
 
 function validFirst20Coupon(coupon) {

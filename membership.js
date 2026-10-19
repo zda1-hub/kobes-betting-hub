@@ -88,8 +88,8 @@ if (first20Arrival) {
     primary.dataset.checkout = 'first_month_back';
     primary.dataset.deal = 'first20';
     primary.textContent = 'Start for $5 →';
-    terms.textContent = '$5 for your first month, then $32.99/month until canceled. First 20 redemptions through October 19, 10:00 AM MST. No free trial.';
-    if (renewal) renewal.textContent = 'Opens October 15 at 12:00 AM MST. Ends October 19 at 10:00 AM MST, or when all 20 offers are redeemed. Cannot be combined with referral offers. Cancel before renewal to avoid the next $32.99 charge.';
+    terms.textContent = '$5 for your first month, then $32.99/month until canceled. First 20 redemptions through October 22, 10:00 AM MST. No free trial.';
+    if (renewal) renewal.textContent = 'Opens October 15 at 12:00 AM MST. Ends October 22 at 10:00 AM MST, or when all 20 offers are redeemed. Cannot be combined with referral offers. Cancel before renewal to avoid the next $32.99 charge.';
     let refreshTimer;
     refreshFirst20 = async () => {
       window.clearTimeout?.(refreshTimer);

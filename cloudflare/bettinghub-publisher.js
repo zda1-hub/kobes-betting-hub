@@ -446,7 +446,7 @@ function vipTrialEmailLines(campaign, promotion = null) {
       'Expert plays, detailed write-ups, Discord access and arbitrage tools in one membership.',
       `Join for $5: ${url.href}`,
       'Then $32.99/month until canceled. No free trial.',
-      'Limited to 20 memberships total. Ends October 19, 2026 at 10 AM MST, or when the 20 redemptions are used. Cannot be combined with referral offers.',
+      'Limited to 20 memberships total. Ends October 22, 2026 at 10 AM MST, or when the 20 redemptions are used. Cannot be combined with referral offers.',
     ];
   }
   if (promotion === false) return [
