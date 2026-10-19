@@ -1,16 +1,4 @@
 /* Membership-only composition; preserve the supplied KBH artwork. */
-.first20-feature{box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px 24px;max-width:1080px;margin:22px auto 0;padding:22px 28px;border:1px solid #ff690b;border-radius:24px;background:#fff4e9;color:#171717}
-.first20-feature[hidden],.first20-scene-badge[hidden]{display:none}
-.first20-feature-copy{min-width:0}
-.first20-feature-badge{display:inline-block;max-width:100%;box-sizing:border-box;padding:7px 12px;border-radius:999px;background:#171717;color:#fff;font-size:12px!important;font-weight:800!important;line-height:1.4;letter-spacing:.06em!important}
-.first20-feature .first20-feature-copy p{margin:8px 0 4px;font-size:clamp(22px,3vw,30px)!important;line-height:1.2;font-weight:700!important}
-.first20-feature-copy p b{color:#bd4900;font-size:1.4em!important;font-weight:700!important}
-.first20-feature .first20-feature-copy small,.first20-feature .first20-feature-deadline{font-size:13px!important;line-height:1.5}
-.first20-feature .button{display:inline-flex;align-items:center;justify-content:center;gap:10px;box-sizing:border-box;max-width:100%;min-height:44px;padding:13px 20px;text-align:center;color:#fff;text-decoration:none;background:var(--hub-action,#2459a8)}
-.first20-feature-deadline{grid-column:1/-1;margin:0;color:#555}
-.first20-scene-badge{margin:0 0 16px}
-@media(max-width:1120px){.first20-feature{margin-left:20px;margin-right:20px}}
-@media(max-width:600px){.first20-feature{grid-template-columns:minmax(0,1fr);gap:12px;margin:16px 16px 0;padding:20px;border-radius:22px;text-align:center}.first20-feature .button{justify-self:center}.first20-feature-copy p{font-size:25px}.first20-feature-deadline{font-size:12px}}
 .membership-scene{position:relative;min-width:0;--scene-action:var(--hub-action,#2459a8);--scene-orange:#ff690b;--scene-smooth:cubic-bezier(.22,1,.36,1)}
 .membership-scene[data-open="false"]{display:block}
 .membership-scene[data-open="false"]>.membership-card-promo{width:72.23%;margin:0 auto 24px}

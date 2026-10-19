@@ -197,57 +197,20 @@ test('legacy paid return still exposes Discord connection after sanitized URL re
   assert.match(page.discordConnect.href, /session_id=cs_live_example123$/);
 });
 
-test('dedicated $5 link switches only its primary offer and submits the real promotion key', async () => {
+test('retired promotion link uses the regular monthly checkout without a discount', async () => {
   const requests = [];
   const page = checkoutPage(async (url, options) => {
-    if (url.endsWith('/promotions/first20')) return Response.json({ state: 'open', ready: true });
-    requests.push(JSON.parse(options.body));
+    requests.push({ url, body: JSON.parse(options.body) });
     return Response.json({ url: 'https://discord.com/oauth2/authorize' });
   }, { search: '?deal=first20' });
-  await new Promise(setImmediate);
-  assert.equal(page.buttons[0].textContent, 'Start for $5 →');
+  page.buttons[0].dataset.checkout = 'monthly';
   assert.equal(page.buttons[0].disabled, false);
-  assert.match(page.promotionTerms.textContent, /\$5.*\$32.99\/month.*No free trial/);
-  assert.match(page.promotionRenewal.textContent, /October 22 at 10:00 AM MST/);
-  await page.buttons[0].click();
-  assert.equal(requests[0].offer, 'first_month_back');
-  assert.equal(requests[0].deal, 'first20');
-  assert.equal(page.assignedUrls[0], 'https://discord.com/oauth2/authorize');
-});
-test('scheduled $5 link cannot start early and refreshes to open without a page reload', async () => {
-  let state = 'scheduled';
-  const page = checkoutPage(async () => Response.json({ state, ready: true }), { search: '?deal=first20' });
-  await new Promise(setImmediate);
-  assert.equal(page.buttons[0].disabled, true);
-  assert.match(page.checkoutMessage.textContent, /opens October 15/);
-  state = 'open';
-  await page.timers[0]();
-  assert.equal(page.buttons[0].disabled, false);
-});
-test('filled/ended $5 link clearly falls back to the regular trial without sending a discount', async () => {
-  const requests = [];
-  const page = checkoutPage(async (url, options) => {
-    if (url.endsWith('/promotions/first20')) return Response.json({ state: 'sold_out', ready: false });
-    requests.push(JSON.parse(options.body));
-    return Response.json({ url: 'https://discord.com/oauth2/authorize' });
-  }, { search: '?deal=first20' });
-  await new Promise(setImmediate);
-  assert.equal(page.buttons[0].dataset.checkout, 'monthly');
   assert.equal(page.buttons[0].dataset.deal, undefined);
-  assert.match(page.promotionTerms.textContent, /2 days free/);
-  assert.match(page.checkoutMessage.textContent, /no longer available/);
+  assert.equal(requests.length, 0);
   await page.buttons[0].click();
-  assert.equal(requests[0].offer, 'monthly');
-  assert.equal(requests[0].deal, undefined);
-});
-test('unavailable status and referral stacking fail closed on the $5 link', async () => {
-  const page = checkoutPage(async () => { throw new Error('network unavailable'); }, { search: '?deal=first20' });
-  await new Promise(setImmediate);
-  assert.equal(page.buttons[0].disabled, true);
-  assert.match(page.checkoutMessage.textContent, /temporarily unavailable/);
-  let requests = 0;
-  const referral = checkoutPage(async () => { requests++; }, { search: '?deal=first20&ref=KBH-ABCDEF1234' });
-  assert.equal(referral.buttons[0].disabled, true);
-  assert.equal(requests, 0);
-  assert.match(referral.checkoutMessage.textContent, /cannot be combined/);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, `${productionConfig.workerOrigin}/checkout/prepare`);
+  assert.equal(requests[0].body.offer, 'monthly');
+  assert.equal(requests[0].body.deal, undefined);
+  assert.equal(page.assignedUrls[0], 'https://discord.com/oauth2/authorize');
 });
