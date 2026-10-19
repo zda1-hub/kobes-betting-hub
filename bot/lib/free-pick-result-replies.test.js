@@ -21,6 +21,9 @@ test('result copy reports each verified outcome plainly', () => {
   }
   assert.throws(() => buildResultReply({ ...row, result_verified_source: '' }), /not verified/);
   assert.equal(resultReplyId(row.pick_id, '123456789'), resultReplyId(row.pick_id, '123456789'));
+  assert.match(buildResultReply(row, '123456789'), /Original pick: https:\/\/x\.com\/kobesbettinghub\/status\/123456789$/);
+  assert.throws(() => buildResultReply(row, 'not-an-id'), /confirmed X post ID/);
+  assert.doesNotMatch(buildResultReply({ ...row, selection: 'A'.repeat(170) }, '123456789'), /Original pick:/);
 });
 
 test('sync waits for an original X receipt and skips unverified results', async () => {
@@ -47,4 +50,5 @@ test('sync submits one reply request tied to the confirmed parent', async () => 
   const submitted = JSON.parse(calls[1].init.body);
   assert.match(submitted.id, /^result-x-123456789-[a-f0-9]{20}$/);
   assert.match(submitted.body, /FREE PICK RESULT: WIN/);
+  assert.match(submitted.body, /Original pick: https:\/\/x\.com\/kobesbettinghub\/status\/123456789/);
 });
