@@ -19,7 +19,7 @@ function resultReplyId(pickId, xPostId) {
   return `result-x-${xPostId}-${hash}`;
 }
 
-function buildResultReply(row) {
+function buildResultReply(row, originalXPostId = null) {
   if (!verified(row)) throw new Error('The Free Pick result is not verified.');
   const label = { W: 'WIN', L: 'LOSS', P: 'PUSH', V: 'VOID' }[resultFor(row)];
   const wager = [row.selection, row.published_line, row.published_odds_american].map((part) => String(part || '').trim()).filter(Boolean).join(' | ');
@@ -27,7 +27,12 @@ function buildResultReply(row) {
   if (!wager || !outcome) throw new Error('A result reply needs the exact wager and final outcome.');
   const body = [`FREE PICK RESULT: ${label}`, wager, `Final: ${outcome}`].join('\n');
   if (body.length > 280) throw new Error('Result reply exceeds X length; review the wager and outcome.');
-  return body;
+  // Link to the confirmed pregame post when it fits. A long but valid result
+  // must still publish instead of being blocked by optional proof text.
+  if (originalXPostId == null) return body;
+  if (!/^\d{1,25}$/.test(String(originalXPostId))) throw new Error('A confirmed X post ID is required.');
+  const withOriginal = `${body}\n\nOriginal pick: https://x.com/kobesbettinghub/status/${originalXPostId}`;
+  return withOriginal.length <= 280 ? withOriginal : body;
 }
 
 async function syncFreePickResultReplies(rows, channelId, { environment = process.env, fetchImpl = fetch } = {}) {
@@ -44,7 +49,7 @@ async function syncFreePickResultReplies(rows, channelId, { environment = proces
       if (parent.status === 404) { receipts.push({ pickId: row.pick_id, status: 'awaiting_original_post' }); continue; }
       if (!parent.ok) throw new Error(`Original post lookup failed (${parent.status}).`);
       const { xPostId } = await parent.json();
-      const body = buildResultReply(row);
+      const body = buildResultReply(row, xPostId);
       const response = await auditedFetch(`${config.publisherUrl}/api/queue/x`, {
         method: 'POST', headers: { authorization: `Bearer ${config.secret}`, 'content-type': 'application/json' },
         body: JSON.stringify({ id: resultReplyId(row.pick_id, xPostId), body, scheduledAt: new Date().toISOString(), publishNow: true }),
