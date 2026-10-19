@@ -101,7 +101,7 @@ function selectedPlayerName(row) {
 
 function statSpec(row, entries) {
   const text = `${row.selection || ''} ${row.market || ''} ${row.published_line || ''}`.toLowerCase();
-  const names = new Set(entries.filter(entry => selectedPlayerName(row) === compact(entry.name) && compact(entry.name).length >= 5).map(entry => compact(entry.name)));
+  const names = new Set(entries.filter(entry => playerNameMatches(selectedPlayerPrefix(row), entry.name) && compact(entry.name).length >= 5).map(entry => compact(entry.name)));
   if (names.size !== 1) return null;
   const player = entries.find(entry => names.has(compact(entry.name)));
   if (!player) return null;
@@ -131,7 +131,7 @@ function statSpec(row, entries) {
   if (/rushing touchdowns?|rush tds?/.test(text)) return pick('rushing', ['rushingTouchdowns', 'rushingTDs'], 'rushing touchdowns');
   if (/rushing attempts?|carries/.test(text)) return pick('rushing', ['rushingAttempts', 'attempts', 'carries'], 'rushing attempts');
   if (/longest rush|long rush/.test(text)) return pick('rushing', ['longRushing', 'longestRush', 'long'], 'longest rush');
-  if (/rushing yards?/.test(text)) return pick('rushing', 'rushingYards', 'rushing yards');
+  if (/\brush(?:ing)? yards?\b/.test(text)) return pick('rushing', 'rushingYards', 'rushing yards');
   if (/longest reception|long reception|longest catch|long catch/.test(text)) {
     return pick('receiving', ['longestReception', 'longReception', 'long'], 'longest reception');
   }
