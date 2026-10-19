@@ -1,5 +1,18 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const crypto = require('node:crypto');
+
+const writeTails = new Map();
+
+function withPickLogWrite(logPath, task) {
+  const key = path.resolve(logPath);
+  const previous = writeTails.get(key) || Promise.resolve();
+  const current = previous.then(task);
+  const settled = current.then(() => {}, () => {});
+  writeTails.set(key, settled);
+  settled.then(() => { if (writeTails.get(key) === settled) writeTails.delete(key); });
+  return current;
+}
 
 const PICK_LOG_HEADERS = [
   'pick_id', 'operating_date', 'event', 'sport', 'league', 'event_start', 'event_timezone',
@@ -72,10 +85,16 @@ async function readPickLog(logPath = pickLogPath()) {
 async function writePickLog(rows, logPath = pickLogPath()) {
   await fs.mkdir(path.dirname(logPath), { recursive: true });
   const csv = [PICK_LOG_HEADERS.join(','), ...rows.map((row) => PICK_LOG_HEADERS.map((header) => csvCell(row[header])).join(','))].join('\n');
-  await fs.writeFile(logPath, `${csv}\n`);
+  const temporaryPath = path.join(path.dirname(logPath), `.${path.basename(logPath)}.${process.pid}.${crypto.randomUUID()}.tmp`);
+  try {
+    await fs.writeFile(temporaryPath, `${csv}\n`);
+    await fs.rename(temporaryPath, logPath);
+  } finally {
+    await fs.rm(temporaryPath, { force: true });
+  }
 }
 
-async function appendOfficialPick(entry, logPath = pickLogPath()) {
+async function appendOfficialPickUnlocked(entry, logPath) {
   if (!entry.pick_id || !entry.operating_date || !entry.published_at || !entry.destination) {
     throw new Error('Official pick logging requires a Pick ID, operating date, publication time, and destination.');
   }
@@ -88,26 +107,38 @@ async function appendOfficialPick(entry, logPath = pickLogPath()) {
   return row;
 }
 
-async function appendOrRetryPermissionFailedPick(entry, logPath = pickLogPath()) {
+function appendOfficialPick(entry, logPath = pickLogPath()) {
+  return withPickLogWrite(logPath, () => appendOfficialPickUnlocked(entry, logPath));
+}
+
+async function appendOrRetryPermissionFailedPickUnlocked(entry, logPath) {
   const rows = await readPickLog(logPath);
   const prior = rows.find((row) => row.pick_id === entry.pick_id);
-  if (!prior) return appendOfficialPick(entry, logPath);
+  if (!prior) return appendOfficialPickUnlocked(entry, logPath);
   if (prior.status !== 'POST_FAILED'
     || prior.post_reference
     || prior.destination !== entry.destination
     || !/Discord post failed:.*(?:Missing Permissions|50013)/i.test(prior.notes || '')) {
     throw new Error(`Pick ID ${entry.pick_id} already exists in pick-log.csv.`);
   }
-  return updateOfficialPick(entry.pick_id, { ...entry, status: 'PUBLISHING', post_reference: '' }, logPath);
+  return updateOfficialPickUnlocked(entry.pick_id, { ...entry, status: 'PUBLISHING', post_reference: '' }, logPath);
 }
 
-async function updateOfficialPick(pickId, patch, logPath = pickLogPath()) {
+function appendOrRetryPermissionFailedPick(entry, logPath = pickLogPath()) {
+  return withPickLogWrite(logPath, () => appendOrRetryPermissionFailedPickUnlocked(entry, logPath));
+}
+
+async function updateOfficialPickUnlocked(pickId, patch, logPath) {
   const rows = await readPickLog(logPath);
   const index = rows.findIndex((row) => row.pick_id === pickId);
   if (index === -1) throw new Error(`Pick ID ${pickId} was not found in pick-log.csv.`);
   rows[index] = { ...rows[index], ...patch };
   await writePickLog(rows, logPath);
   return rows[index];
+}
+
+function updateOfficialPick(pickId, patch, logPath = pickLogPath()) {
+  return withPickLogWrite(logPath, () => updateOfficialPickUnlocked(pickId, patch, logPath));
 }
 
 function numeric(value) {

@@ -49,3 +49,29 @@ test('retries only a definite permission failure with no Discord post', async ()
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+test('simultaneous approvals preserve every pick and its later Discord receipt', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'kobe-pick-concurrent-'));
+  const logPath = path.join(directory, 'pick-log.csv');
+  const entries = Array.from({ length: 24 }, (_, index) => ({
+    pick_id: `20261018-NFL-${String(index + 1).padStart(3, '0')}`,
+    operating_date: '2026-10-18', published_at: '2026-10-18T18:00:00.000Z', destination: '#expert-picks',
+    selection: `Selection ${index + 1}`, result: 'PENDING'
+  }));
+  try {
+    await Promise.all(entries.map((entry) => appendOrRetryPermissionFailedPick(entry, logPath)));
+    await Promise.all(entries.map((entry) => updateOfficialPick(entry.pick_id, {
+      status: 'PUBLISHED', post_reference: `https://discord.com/channels/1/2/${entry.pick_id}`
+    }, logPath)));
+    const rows = await readPickLog(logPath);
+    assert.equal(rows.length, entries.length);
+    for (const entry of entries) {
+      const row = rows.find((candidate) => candidate.pick_id === entry.pick_id);
+      assert.equal(row?.selection, entry.selection);
+      assert.equal(row?.status, 'PUBLISHED');
+      assert.equal(row?.post_reference, `https://discord.com/channels/1/2/${entry.pick_id}`);
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
