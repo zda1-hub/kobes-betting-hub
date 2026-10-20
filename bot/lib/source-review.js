@@ -161,6 +161,9 @@ function requiresNamedPlayer(play) {
 
 function hasExplicitBettingMarket(play) {
   const terms = play?.terms || '';
+  // A price is not a wager. The old numeric spread fallback also matched a
+  // bare extracted price such as "-115", creating an approvable empty card.
+  if (/^(?:[+-]\s*\d{2,4})(?:\s+[+-]\s*\d{2,4})*$/.test(terms.trim())) return false;
   return /\b(?:over|under|o\s*\/\s*u|moneyline|\bml\b|spread|nrfi|yrfi|btts|to hit|anytime|team total|yes|no)\b|\bby\s+(?:ko(?:\s*\/\s*tko)?|tko|submission|decision)\b|\b[ou]\s*\d+(?:\.\d+)?|(?:^|[\s(])[+-]\s*\d+(?:\.\d+)?/i.test(terms)
     || /\d+(?:\.\d+)?\+\s+(?:receiving|rushing|passing)\s+yards\b/i.test(terms)
     || (/\bparlay\b/i.test(terms) && /[A-Za-z]+\s*[\/+]\s*[A-Za-z]+/.test(terms));
@@ -470,6 +473,9 @@ function assertPublishableExtraction(packet) {
     throw new Error('The play is not clearly visible, so this card cannot be published automatically.');
   }
   const plays = visiblePlays(packet);
+  if (plays.some((play) => !/[A-Za-z]/.test(play.selection))) {
+    throw new Error('The source shows a price without the selection it belongs to. Hold this card for source review.');
+  }
   if (plays.some((play) => /^\s*(?:player props?:\s*)?(?:pass|no play|skip)\b/i.test(play.terms))) {
     throw new Error('The source does not contain a definitive play.');
   }
@@ -489,6 +495,9 @@ function assertFreePickEligible(packet) {
     throw new Error('Free picks require Kobe’s original writeup or an independently verified breakdown. Monitoring-only source text and media cannot be republished.');
   }
   const plays = visiblePlays(packet);
+  if (plays.some((play) => !/[A-Za-z]/.test(play.selection))) {
+    throw new Error('A Free Pick needs the actual selection, not only its price.');
+  }
   if (plays.length === 0 || !plays.every(hasExplicitBettingMarket)) {
     throw new Error('A Free Pick needs a clear betting market before it can be approved.');
   }

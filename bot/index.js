@@ -2498,6 +2498,16 @@ async function refreshPendingTermsOnlyApprovals() {
     ) continue;
     try {
       const message = await approvalChannel.messages.fetch(packet.discord_review_message_id);
+      try {
+        assertPublishableExtraction(packet);
+      } catch (error) {
+        await message.edit({
+          embeds: [{ color: 0xD74A49, description: 'Held — incomplete source extraction. The wager selection must be verified from the original source before a new approval card is created.' }],
+          components: []
+        });
+        console.warn(`Held invalid expert-picks approval card ${packet.pick_id}: ${error.message}`);
+        continue;
+      }
       await message.edit({
         components: reviewButtons(packet.pick_id, {
           paidOnly: true,
