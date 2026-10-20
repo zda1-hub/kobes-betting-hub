@@ -102,6 +102,7 @@ for (const name of required) {
 const publisherRoleIds = listFromEnv(process.env.PUBLISHER_ROLE_IDS);
 const allowedChannelIds = listFromEnv(process.env.ALLOWED_CHANNEL_IDS);
 if (process.env.HOCKEY_PICK_CHANNEL_ID) allowedChannelIds.add(process.env.HOCKEY_PICK_CHANNEL_ID);
+if (process.env.BASKETBALL_WRITEUPS_CHANNEL_ID) allowedChannelIds.add(process.env.BASKETBALL_WRITEUPS_CHANNEL_ID);
 // Explicit repository-controlled recap route, not an arbitrary slash-command destination.
 for (const workflow of recapWorkflowConfigs) {
   allowedChannelIds.add(workflow.review_channel_id);
@@ -294,6 +295,9 @@ const sportChannelMap = new Map(
     .filter(([sport, channelId]) => sport && channelId)
     .map(([sport, channelId]) => [sport.toLowerCase(), channelId])
 );
+if (process.env.BASKETBALL_WRITEUPS_CHANNEL_ID) {
+  sportChannelMap.set('basketball', process.env.BASKETBALL_WRITEUPS_CHANNEL_ID);
+}
 const discordJoinAttributionEnabled = process.env.DISCORD_JOIN_ATTRIBUTION_ENABLED === 'true';
 const client = new Client({ intents: [
   GatewayIntentBits.Guilds,

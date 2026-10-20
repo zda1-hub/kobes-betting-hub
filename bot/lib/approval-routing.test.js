@@ -49,3 +49,14 @@ test('routes NHL approval and paid posts to dedicated hockey channels', () => {
   assert.equal(approvalChannelIdForPacket(football, env), 'standard-approvals');
   assert.equal(paidChannelIdForPacket(football, env), 'football-vip');
 });
+
+test('routes NBA writeups through private pick approvals to the basketball VIP channel', () => {
+  const env = {
+    PICK_APPROVAL_CHANNEL_ID: 'pick-approvals',
+    BASKETBALL_WRITEUPS_CHANNEL_ID: 'nba-writeups',
+    SPORT_CHANNEL_MAP: 'football:football-vip,baseball:baseball-vip'
+  };
+  const packet = { source: { publish_mode: 'independent_writeup' }, analysis: { extraction: { sport: 'Basketball', league: 'NBA' } } };
+  assert.equal(approvalChannelIdForPacket(packet, env), 'pick-approvals');
+  assert.equal(paidChannelIdForPacket(packet, env), 'nba-writeups');
+});

@@ -58,6 +58,8 @@ services:
         value: 07:00-18:00
       - key: SPORT_CHANNEL_MAP
         sync: false
+      - key: BASKETBALL_WRITEUPS_CHANNEL_ID
+        value: "1562152923725701141"
       - key: PUBLISHER_ROLE_IDS
         sync: false
       - key: PICK_LOG_PATH
