@@ -31,6 +31,9 @@ function paidChannelIdForPacket(packet, env = process.env) {
       : /basketball|nba|wnba|ncaab/.test(sourceSport) ? 'basketball'
         : /hockey|nhl/.test(sourceSport) ? 'hockey'
           : /soccer|fifa|mls/.test(sourceSport) ? 'soccer' : '';
+  if (sport === 'basketball' && env.BASKETBALL_WRITEUPS_CHANNEL_ID) {
+    return env.BASKETBALL_WRITEUPS_CHANNEL_ID;
+  }
   return (env.SPORT_CHANNEL_MAP || '').split(',')
     .map((entry) => entry.trim().split(':'))
     .find(([key, channelId]) => key?.toLowerCase() === sport && channelId)?.[1] || '';

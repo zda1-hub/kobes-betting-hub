@@ -63,7 +63,7 @@ to be checked before publishing.
 2. Copy the bot token **once** into a local `.env` file. Do not send it in chat or commit it. By default, enable no privileged gateway intents. The optional join-attribution feature described above additionally requires Server Members Intent.
 3. Under **OAuth2 → URL Generator**, select scopes `bot` and `applications.commands`; grant the bot `View Channels`, `Send Messages`, and `Embed Links` in only the destination channels.
 4. Enable Developer Mode in Discord, then copy the application, server, channel, and authorized publisher-role IDs.
-5. Copy `../.env.example` to `../.env` and set the values. During setup set `DISCORD_GUILD_ID` so command updates are immediate. Add every production destination to `ALLOWED_CHANNEL_IDS`; map sport defaults with `SPORT_CHANNEL_MAP`, such as `baseball:123,basketball:456`. A publisher can select a different allowlisted channel at the final step.
+5. Copy `../.env.example` to `../.env` and set the values. During setup set `DISCORD_GUILD_ID` so command updates are immediate. Add every production destination to `ALLOWED_CHANNEL_IDS`; map sport defaults with `SPORT_CHANNEL_MAP`, such as `baseball:123,basketball:456`. `BASKETBALL_WRITEUPS_CHANNEL_ID` explicitly routes approved NBA writeups and adds that channel to the bot allowlist; give the Kobe Bot role View Channel, Send Messages, Embed Links, and Read Message History on the channel. A publisher can select a different allowlisted channel at the final step.
 6. From the project root, run `npm install` (or `pnpm install`), then `npm run register:commands`, then `npm run bot`.
 
 ## Welcome existing members
