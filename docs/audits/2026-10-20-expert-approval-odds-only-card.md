@@ -14,3 +14,9 @@ The owner showed an exclusive approval card attributed to Dan Gamble containing 
 ## Verification and limits
 
 Focused source-review and collector tests: 60 passed. `bot/index.js` syntax check and `git diff --check` passed. The Telegram reader suite has 10 existing failures from its September 17 frozen fixtures; the same 10 failed on the unchanged base commit, so they are outside this repair. The latest 100 member-facing `#expert-picks` messages did not contain the malformed Dan Gamble odds-only card; this is a bounded check, not a complete historical audit. The original source image could not be recovered from the approval embed, so the actual wagers were not guessed or reconstructed. A new card requires a readable original source and complete terms.
+
+## Follow-up: context-free exclusive total
+
+The owner asked why no exclusives were appearing. At 12:33 PM MST, `#expert-picks` had zero October 20 posts. One new exclusive approval existed, but its entire member-facing wager was `Over 66.5 -110 (4 units)` with no game, team, player, or stat market. The live approval message `1562173337382420611` was changed to a held notice with no publish controls.
+
+The first guard blocked price-only cards, but an otherwise complete extraction could still carry the matchup only in a hidden event field while the terms-only member card omitted it. `bot/lib/source-review.js` now holds context-free totals and generic ML/spread labels when the selection line itself does not identify the target. Existing complete matchup and player selections remain eligible. Focused source-review and collector tests: 61 passed; `git diff --check` passed. This does not reconstruct the original Telegram image or relax the strict better-than-`-200` odds rule.
