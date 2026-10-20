@@ -1,0 +1,907 @@
+{
+  "date": "2026-10-20",
+  "scope": "Non-promotional risk information and sports statistics literacy",
+  "method": "50 separate queries through web search. Source order is tool-returned order, not a verified localized Google rank. No search-volume estimates. Query-level sources are observed search results, not all fully read pages.",
+  "queries": [
+    {
+      "number": 1,
+      "query": "gambling warning signs",
+      "observedSources": [
+        {
+          "title": "Find out when is gambling a problem | Safer Play | For the Public | Responsible Gambling Council",
+          "url": "https://responsiblegambling.org/for-the-public/safer-play/when-is-gambling-a-problem/"
+        },
+        {
+          "title": "Gambling Addiction: Symptoms, Causes, and Help",
+          "url": "https://www.helpguide.org/mental-health/addiction/gambling-addiction-and-problem-gambling"
+        },
+        {
+          "title": "Gambling Addiction Warning Signs: What to Look For in Yourself or Someone Else | Simply Psychology",
+          "url": "https://www.simplypsychology.com/articles/gambling-addiction-warning-signs"
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "query": "signs sports betting is becoming a problem",
+      "observedSources": [
+        {
+          "title": "Sports Betting Addiction: 12 Signs It's Becoming a Problem (and What to Do Next) — Guardian Angel",
+          "url": "https://addiction-recovery.app/blog/sports-betting-problem-signs/"
+        },
+        {
+          "title": "How Can You Tell if Someone Has a Gambling Addiction?",
+          "url": "https://www.aarp.org/health/healthy-living/signs-of-gambling-addiction/"
+        },
+        {
+          "title": "Sportsbooks & Sports Betting Addiction Resources | Gambling Addiction Hotline",
+          "url": "https://gamblingaddictionhotline.org/platforms/sportsbooks/"
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "query": "how to stop chasing gambling losses",
+      "observedSources": [
+        {
+          "title": "How to Stop Chasing Gambling Losses | StayClear",
+          "url": "https://stayclear.org/blog/how-to-stop-chasing-gambling-losses"
+        },
+        {
+          "title": "How to Stop Chasing Gambling Losses Before You Place the Next Bet | Clean Break",
+          "url": "https://www.cleanbreak.app/blog/how-to-stop-chasing-gambling-losses/"
+        },
+        {
+          "title": "How to Stop Chasing Losses Before It Gets Worse | Responsible Online Gaming Association",
+          "url": "https://www.responsibleonlinegaming.org/updates/how-to-stop-chasing-losses-before-it-gets-worse/"
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "query": "gambling help United States",
+      "observedSources": [
+        {
+          "title": "About the National Problem Gambling Helpline™ - National Council on Problem Gambling",
+          "url": "https://www.ncpgambling.org/help-treatment/about-the-national-problem-gambling-helpline/"
+        },
+        {
+          "title": "Getting Help for Residents Outside of Canada | Help for Problem Gambling | For the Public | Responsible Gambling Council",
+          "url": "https://responsiblegambling.org/for-the-public/problem-gambling-help/help-for-us-residents/"
+        },
+        {
+          "title": "Getting Help for Residents Outside of Canada | Help for Problem Gambling | For the Public | Responsible Gambling Council",
+          "url": "https://www.responsiblegambling.org/for-the-public/problem-gambling-help/help-for-us-residents/"
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "query": "what is problem gambling",
+      "observedSources": [
+        {
+          "title": "Compulsive Gambling | Gambling Addiction | MedlinePlus",
+          "url": "https://medlineplus.gov/compulsivegambling.html"
+        },
+        {
+          "title": "FAQs: What is Problem Gambling? - National Council on Problem Gambling",
+          "url": "https://www.ncpgambling.org/help-treatment/faqs-what-is-problem-gambling/"
+        },
+        {
+          "title": "Problem Gambling | CAMH",
+          "url": "https://www.camh.ca/en/health-info/mental-illness-and-addiction-index/problem-gambling"
+        }
+      ]
+    },
+    {
+      "number": 6,
+      "query": "gambling harm warning signs checklist",
+      "observedSources": [
+        {
+          "title": "Find out when is gambling a problem | Safer Play | For the Public | Responsible Gambling Council",
+          "url": "https://responsiblegambling.org/for-the-public/safer-play/when-is-gambling-a-problem/"
+        },
+        {
+          "title": "Recognising the Signs of Gambling Harm | GambleAware",
+          "url": "https://www.gambleaware.nsw.gov.au/learn-about-gambling/impacts-of-gambling/recognising-the-signs-of-gambling-harm"
+        },
+        {
+          "title": "Signs of gambling harm - qld.gov.au",
+          "url": "https://www.qld.gov.au/community/getting-support-health-social-issue/gambling-harm-support/gambling-harm-signs"
+        }
+      ]
+    },
+    {
+      "number": 7,
+      "query": "sports betting affecting relationships",
+      "observedSources": [
+        {
+          "title": "\"The Impact of Legalized Sports Betting on Divorce\" by Alvaro Muniz-Fernandez, Brad Humphreys et al.",
+          "url": "https://researchrepository.wvu.edu/econ_working-papers/265/"
+        },
+        {
+          "title": "The Impact of Legalized Sports Betting on Divorce by Álvaro Muñiz Fernández, Brad R. Humphreys, Jane E. Ruseski :: SSRN",
+          "url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6597298"
+        },
+        {
+          "title": "The Impact of Legalized Sports Betting on Divorce by Álvaro Muñiz Fernández, Brad R. Humphreys, Jane E. Ruseski :: SSRN",
+          "url": "https://papers.ssrn.com/sol3/Delivery.cfm/6597298.pdf?abstractid=6597298&mirid=1"
+        }
+      ]
+    },
+    {
+      "number": 8,
+      "query": "gambling and missed bills",
+      "observedSources": [
+        {
+          "title": "Tackling problem gambling and debt | MoneyHelper",
+          "url": "https://www.moneyhelper.org.uk/en/money-troubles/dealing-with-debt/tackling-problem-gambling-and-debt?source=mas"
+        },
+        {
+          "title": "How Sports Bettors Say Gambling Is Impacting Their Financial Health—More Likely To Miss Bill Payments",
+          "url": "https://www.forbes.com/sites/maryroeloffs/2026/07/09/online-sports-bettors-15-times-more-likely-to-miss-bill-payments-than-in-person-gamblers-report-says/?ss=small-business-taxes"
+        },
+        {
+          "title": "Find out when is gambling a problem | Safer Play | For the Public | Responsible Gambling Council",
+          "url": "https://www.responsiblegambling.org/for-the-public/safer-play/when-is-gambling-a-problem/"
+        }
+      ]
+    },
+    {
+      "number": 9,
+      "query": "hiding gambling from family",
+      "observedSources": [
+        {
+          "title": "Coming Clean: How to Tell Your Family About Your Gambling Problem by Fresh Start Guides - Books on Google Play",
+          "url": "https://play.google.com/store/books/details/Fresh_Start_Guides_Coming_Clean?id=DiwREgAAQBAJ"
+        },
+        {
+          "title": "How a concerned family member, friend or member of the public can help someone with gambling problems: a Delphi consensus study - PMC",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4739356/"
+        },
+        {
+          "title": "Help for a Family Member With Gambling Addiction | Gambling Addiction Hotline",
+          "url": "https://gamblingaddictionhotline.org/help-for-others/family-member/"
+        }
+      ]
+    },
+    {
+      "number": 10,
+      "query": "gambling self assessment",
+      "observedSources": [
+        {
+          "title": "Take the Gambling Self-Assessment Quiz | Safer Play | For the Public | Responsible Gambling Council",
+          "url": "https://responsiblegambling.org/for-the-public/safer-play/self-assessment-quiz/"
+        },
+        {
+          "title": "Problem Gambling Self Assessment: NODS-SA - National Council on Problem Gambling",
+          "url": "https://www.ncpgambling.org/help-treatment/problem-gambling-self-assessments/problem-gambling-self-assessment/"
+        },
+        {
+          "title": "Find out when is gambling a problem | Safer Play | For the Public | Responsible Gambling Council",
+          "url": "https://www.responsiblegambling.org/for-the-public/safer-play/when-is-gambling-a-problem/"
+        }
+      ]
+    },
+    {
+      "number": 11,
+      "query": "gambling self exclusion United States",
+      "observedSources": [
+        {
+          "title": "Gambling Self-Exclusion List by State: All 50 Compared",
+          "url": "https://trycashout.com/self-exclusion/"
+        },
+        {
+          "title": "Self-Exclusion Programs | Gambling Addiction Hotline",
+          "url": "https://gamblingaddictionhotline.org/resources/self-exclusion-programs/"
+        },
+        {
+          "title": "US Gambling Self-Exclusion Programs by State: Data | DC",
+          "url": "https://www.deucescracked.com/blog/us-gambling-self-exclusion-programs-by-state-data"
+        }
+      ]
+    },
+    {
+      "number": 12,
+      "query": "Arizona gambling self exclusion",
+      "observedSources": [
+        {
+          "title": "Self-Exclusion | Arizona Department of Gaming",
+          "url": "https://gaming.az.gov/exclude"
+        },
+        {
+          "title": "Self Exclusion | Problem Gambling",
+          "url": "https://problemgambling.az.gov/self-exclusion"
+        },
+        {
+          "title": "Self Exclusion | Problem Gambling",
+          "url": "https://problemgambling.az.gov/treatment-counseling/self-ban"
+        }
+      ]
+    },
+    {
+      "number": 13,
+      "query": "self exclusion online gambling",
+      "observedSources": [
+        {
+          "title": "Self-exclusion",
+          "url": "https://www.gamblingcommission.gov.uk/public-and-players/page/self-exclusion"
+        },
+        {
+          "title": "Self-exclusion from gambling venues or activities - qld.gov.au",
+          "url": "https://www.qld.gov.au/community/getting-support-health-social-issue/gambling-harm-support/gambling-self-exclusion"
+        },
+        {
+          "title": "Free multi operator and national self-exclusion schemes",
+          "url": "https://www.gamblingcommission.gov.uk/public-and-players/page/free-multi-operator-and-national-self-exclusion-schemes"
+        }
+      ]
+    },
+    {
+      "number": 14,
+      "query": "self exclusion versus account closure gambling",
+      "observedSources": [
+        {
+          "title": "Gambling Self-Exclusion vs. Account Deactivation - SafePlay",
+          "url": "https://safeplay.ng/gambling-self-exclusion-vs-account-deactivation/"
+        },
+        {
+          "title": "Self-exclusion",
+          "url": "https://www.gamblingcommission.gov.uk/public-and-players/page/self-exclusion"
+        },
+        {
+          "title": "Taking Control: A Guide to Permanent Gambling Account Closure - Sports Betting Guide - RG",
+          "url": "https://rg.org/guides/responsible-gambling/permanent-account-closure-guide"
+        }
+      ]
+    },
+    {
+      "number": 15,
+      "query": "gambling time out versus self exclusion",
+      "observedSources": [
+        {
+          "title": "Cooling off, time out or self exclusion, which one you actually want",
+          "url": "https://gamblersgpt.com/knowledge-hub/guides/cooling-off-time-out-or-self-exclusion"
+        },
+        {
+          "title": "Voluntary self-exclusion from gambling: Expert opinions on gaps and needs for improvement",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11869254/"
+        },
+        {
+          "title": "Self-exclusion",
+          "url": "https://www.gamblingcommission.gov.uk/public-and-players/page/self-exclusion"
+        }
+      ]
+    },
+    {
+      "number": 16,
+      "query": "how to block gambling websites",
+      "observedSources": [
+        {
+          "title": "How to block gambling sites on a PC — NetSecWall Blog",
+          "url": "https://www.netsecwall.com/blog/block-gambling-sites-pc/"
+        },
+        {
+          "title": "How to block gambling websites on every device | BetClear",
+          "url": "https://www.betclear.app/en/guides/how-to-block-gambling-websites"
+        },
+        {
+          "title": "Blocking Software | Gambling Addiction Hotline",
+          "url": "https://gamblingaddictionhotline.org/resources/blocking-software/"
+        }
+      ]
+    },
+    {
+      "number": 17,
+      "query": "gambling blocking software limitations",
+      "observedSources": [
+        {
+          "title": "Gambling Blocking Tools: A Complete Guide | Casino.com",
+          "url": "https://www.casino.com/responsible-gambling/blocking-tools/"
+        },
+        {
+          "title": "Blocking Software | Gambling Addiction Hotline",
+          "url": "https://gamblingaddictionhotline.org/resources/blocking-software/"
+        },
+        {
+          "title": "Blocking Gambling Sites — Tools That Work | GameGuard Responsible Gambling",
+          "url": "https://www.gameguardmx.com/responsible-gambling/tools-and-limits/blocking-gambling-sites-tools"
+        }
+      ]
+    },
+    {
+      "number": 18,
+      "query": "bank gambling transaction blocks",
+      "observedSources": [
+        {
+          "title": "Block gambling payments with your bank",
+          "url": "https://www.gamblingcommission.gov.uk/public-and-players/page/i-want-to-know-how-to-block-gambling-transactions"
+        },
+        {
+          "title": "View playing history and restrict or block gambling activity",
+          "url": "https://www.gamblingcommission.gov.uk/public-and-players/page/view-playing-history-and-restrict-or-block-gambling-activity"
+        },
+        {
+          "title": "How to Block Gambling on Your Bank Account: Steps and Limits - LegalClarity",
+          "url": "https://legalclarity.org/how-to-block-gambling-on-your-bank-account-steps-and-limits/"
+        }
+      ]
+    },
+    {
+      "number": 19,
+      "query": "how to unsubscribe gambling marketing",
+      "observedSources": [
+        {
+          "title": "How can I stop getting gambling marketing texts and emails?",
+          "url": "https://www.gamblingcommission.gov.uk/public-and-players/page/how-can-i-stop-getting-gambling-marketing-texts-and-emails"
+        },
+        {
+          "title": "How to Stop Gambling Marketing Emails, Texts and Calls",
+          "url": "https://b4gamble.com/en/learn/responsible-gambling/stop-gambling-marketing"
+        },
+        {
+          "title": "How to Reduce Gambling Ads and Stop Marketing Messages | GuardingGamblers",
+          "url": "https://www.guardinggamblers.com/guides/how-to-block-gambling-ads"
+        }
+      ]
+    },
+    {
+      "number": 20,
+      "query": "how to set gambling account limits",
+      "observedSources": [
+        {
+          "title": "Regulatory returns guidance - RTS 12 – Financial limits",
+          "url": "https://www.gamblingcommission.gov.uk/guidance/regulatory-returns-guidance/rts-12-financial-limits"
+        },
+        {
+          "title": "Remote gambling and software technical standards (RTS) - RTS 12 – Financial limits",
+          "url": "https://www.gamblingcommission.gov.uk/standards/remote-gambling-and-software-technical-standards/rts-12-financial-limits"
+        },
+        {
+          "title": "Setting Limits & Self-Exclusion Tools | Gambling101",
+          "url": "https://gambling101.com/responsible-gambling/setting-limits.html"
+        }
+      ]
+    },
+    {
+      "number": 21,
+      "query": "gambling deposit limit versus loss limit",
+      "observedSources": [
+        {
+          "title": "New deposit limit rules provide clarity for consumers",
+          "url": "https://www.gamblingcommission.gov.uk/news/article/new-deposit-limit-rules-provide-clarity-for-consumers"
+        },
+        {
+          "title": "Exploring consumer journeys using deposit limits - Appendix",
+          "url": "https://www.gamblingcommission.gov.uk/report/exploring-consumer-journeys-using-deposit-limits/appendix-definitions-of-key-terms"
+        },
+        {
+          "title": "Deposit limit vs loss limit: what UK gambling rules say — Bet Bulletin",
+          "url": "https://betbulletin.co.uk/blog/deposit-limit-vs-loss-limit-uk-gambling/"
+        }
+      ]
+    },
+    {
+      "number": 22,
+      "query": "gambling cooling off period",
+      "observedSources": [
+        {
+          "title": "Self-exclusion from gambling venues or activities - qld.gov.au",
+          "url": "https://www.qld.gov.au/community/getting-support-health-social-issue/gambling-harm-support/gambling-self-exclusion"
+        },
+        {
+          "title": "LCCP Condition 3.5.2 - Non-remote ordinary code",
+          "url": "https://www.gamblingcommission.gov.uk/licensees-and-businesses/lccp/condition/3-5-2-non-remote-ordinary-code"
+        },
+        {
+          "title": "What Is a Cooling-Off Period in Gambling?",
+          "url": "https://www.fortunegames.com/what-is-a-cooling-off-period"
+        }
+      ]
+    },
+    {
+      "number": 23,
+      "query": "gambling spending limits not guarantee safety",
+      "observedSources": [
+        {
+          "title": "Gamble More Safely | Tips to Reduce Gambling Harm | GambleAware",
+          "url": "https://www.gambleaware.nsw.gov.au/learn-about-gambling/gamble-more-safely"
+        },
+        {
+          "title": "National Strategic Assessment 2020 - RTS 12 – Financial limits",
+          "url": "https://www.gamblingcommission.gov.uk/strategy/national-strategic-assessment-2020/rts-12-financial-limits"
+        },
+        {
+          "title": "Conclusion",
+          "url": "https://www.gamblingcommission.gov.uk/about-us/guide/page/exploring-online-staking-conclusion"
+        }
+      ]
+    },
+    {
+      "number": 24,
+      "query": "how to take a break from sports betting",
+      "observedSources": [
+        {
+          "title": "Sports betting: How to set limits and reduce your risk | Division of Student Life | University of Colorado Boulder",
+          "url": "https://www.colorado.edu/studentlife/gambling-sports-betting"
+        },
+        {
+          "title": "Make a 'Forget the bet' game plan - qld.gov.au",
+          "url": "https://www.qld.gov.au/community/getting-support-health-social-issue/gambling-harm-support/forget-the-bet/make-a-forget-the-bet-game-plan"
+        },
+        {
+          "title": "Problematic Sports Betting in NC",
+          "url": "https://morethanagame.nc.gov/wp-content/uploads/Problematic_Sports_Betting_NC_Guidebook_3.11.25_web.pdf"
+        }
+      ]
+    },
+    {
+      "number": 25,
+      "query": "watch sports without betting",
+      "observedSources": [
+        {
+          "title": "‎Recap Sports App - App Store",
+          "url": "https://apps.apple.com/us/app/recap-sports/id6746951044"
+        },
+        {
+          "title": "How to Enjoy Sports Without Betting: A Game-Day Plan",
+          "url": "https://nextchapterwell.com/enjoy-sports-without-betting/"
+        },
+        {
+          "title": "‎Recap Sports App - App Store",
+          "url": "https://apps.apple.com/pl/app/recap-sports/id6746951044?platform=watch"
+        }
+      ]
+    },
+    {
+      "number": 26,
+      "query": "help for family of someone gambling",
+      "observedSources": [
+        {
+          "title": "Help for a Family Member With Gambling Addiction | Gambling Addiction Hotline",
+          "url": "https://gamblingaddictionhotline.org/help-for-others/family-member/"
+        },
+        {
+          "title": "How to help a family member with a gambling problem - Counselling Directory",
+          "url": "https://www.counselling-directory.org.uk/articles/how-to-help-a-family-member-with-a-gambling-problem"
+        },
+        {
+          "title": "Help For Loved Ones | Help for Problem Gambling | For the Public | Responsible Gambling Council",
+          "url": "https://responsiblegambling.org/for-the-public/problem-gambling-help/help-for-loved-ones/"
+        }
+      ]
+    },
+    {
+      "number": 27,
+      "query": "how to talk to someone about gambling",
+      "observedSources": [
+        {
+          "title": "Talking about gambling",
+          "url": "https://www.gambleaware.org/advice/for-family-and-friends/talking-about-gambling/"
+        },
+        {
+          "title": "How to talk to someone about their gambling - GamCare",
+          "url": "https://www.gamcare.org.uk/news-and-blog/blog/how-to-talk-to-someone-about-their-gambling/"
+        },
+        {
+          "title": "Talking to your partner about their gambling (Ireland)",
+          "url": "https://gamblinghelp.ie/learn/talking-to-your-partner-about-their-gambling"
+        }
+      ]
+    },
+    {
+      "number": 28,
+      "query": "gambling support groups United States",
+      "observedSources": [
+        {
+          "title": "Gambling Support Groups: GA, SMART Recovery, Gam-Anon",
+          "url": "https://gamblingrelatedharm.org/explainers/gambling-support-groups/"
+        },
+        {
+          "title": "Support Groups for Gambling Addiction | Gambling Addiction Hotline",
+          "url": "https://gamblingaddictionhotline.org/resources/support-groups-for-gambling-addiction/"
+        },
+        {
+          "title": "About the National Problem Gambling Helpline™ - National Council on Problem Gambling",
+          "url": "https://www.ncpgambling.org/help-treatment/about-the-national-problem-gambling-helpline/"
+        }
+      ]
+    },
+    {
+      "number": 29,
+      "query": "confidential gambling help",
+      "observedSources": [
+        {
+          "title": "Help for problems with gambling - NHS",
+          "url": "https://www.nhs.uk/live-well/addiction-support/gambling-addiction/"
+        },
+        {
+          "title": "Find the right support for you - GamCare",
+          "url": "https://www.gamcare.org.uk/get-support/find-local-support/"
+        },
+        {
+          "title": "Counselling, support and advice for gambling harm - qld.gov.au",
+          "url": "https://www.qld.gov.au/community/getting-support-health-social-issue/gambling-harm-support/gambling-harm-counselling"
+        }
+      ]
+    },
+    {
+      "number": 30,
+      "query": "what happens when you call gambling helpline",
+      "observedSources": [
+        {
+          "title": "Video: What Happens When You Call 1-800-MY-RESET? - National Council on Problem Gambling",
+          "url": "https://www.ncpgambling.org/help-treatment/video-what-happens-when-you-call-1-800-my-reset/"
+        },
+        {
+          "title": "What happens when I call the National Gambling Helpline? - GamCare",
+          "url": "https://www.gamcare.org.uk/news-and-blog/blog/what-happens-when-i-call-the-national-gambling-helpline/"
+        },
+        {
+          "title": "Gambling Addiction FAQ | Gambling Addiction Hotline",
+          "url": "https://gamblingaddictionhotline.org/resources/gambling-addiction-faq/"
+        }
+      ]
+    },
+    {
+      "number": 31,
+      "query": "gambling support outside United States",
+      "observedSources": [
+        {
+          "title": "Gambling Help and Recovery Resources | GuardingGamblers",
+          "url": "https://www.guardinggamblers.com/resources"
+        },
+        {
+          "title": "Restricted Regions | Dicey Help Center",
+          "url": "https://help.dicey.com/en/articles/12611841-restricted-regions"
+        },
+        {
+          "title": "Countries With Legal Sports Betting | Betting Outside of USA",
+          "url": "https://www.legalsportsbetting.com/countries/"
+        }
+      ]
+    },
+    {
+      "number": 32,
+      "query": "gambling peer support versus treatment",
+      "observedSources": [
+        {
+          "title": "Recommendations | Gambling-related harms: identification, assessment and management | Guidance | NICE",
+          "url": "https://www.nice.org.uk/guidance/NG248/chapter/recommendations"
+        },
+        {
+          "title": "Gambling-related harms - NCBI Bookshelf",
+          "url": "https://www.ncbi.nlm.nih.gov/books/NBK612774/"
+        },
+        {
+          "title": "Psychological treatments for gambling disorder",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4199649/"
+        }
+      ]
+    },
+    {
+      "number": 33,
+      "query": "gambling financial harm support",
+      "observedSources": [
+        {
+          "title": "Financial counselling for gambling | Department of Social Services",
+          "url": "https://www.dss.gov.au/financial-counselling/financial-counselling-gambling"
+        },
+        {
+          "title": "Help for problems with gambling - NHS",
+          "url": "https://www.nhs.uk/live-well/addiction-support/gambling-addiction/"
+        },
+        {
+          "title": "Gambling support services | Department of Social Services",
+          "url": "https://www.dss.gov.au/gambling/gambling-support-services"
+        }
+      ]
+    },
+    {
+      "number": 34,
+      "query": "gambling debt help nonprofit",
+      "observedSources": [
+        {
+          "title": "GamFin - Financial Counseling for Gambling Addiction",
+          "url": "https://www.gamfin.org/"
+        },
+        {
+          "title": "Gambling Debt Help | Relief Options Before New Loans",
+          "url": "https://betonrecovery.org/resources/gambling-debt-help"
+        },
+        {
+          "title": "Financial Help for Gamblers & How to Pay Off Gambling Debt",
+          "url": "https://www.debt.org/advice/gambling/"
+        }
+      ]
+    },
+    {
+      "number": 35,
+      "query": "how to find licensed gambling counselor",
+      "observedSources": [
+        {
+          "title": "IPGGC- International Problem Gambling and Gaming Certification Organization",
+          "url": "https://ipggc.org/"
+        },
+        {
+          "title": "Gambling Counselor Directory - National Council on Problem Gambling",
+          "url": "https://www.ncpgambling.org/help-treatment/counselor-directory/"
+        },
+        {
+          "title": "Directory - IPGGC- International Problem Gambling and Gaming Certification Organization",
+          "url": "https://ipggc.org/directory/"
+        }
+      ]
+    },
+    {
+      "number": 36,
+      "query": "why winning percentage can be misleading",
+      "observedSources": [
+        {
+          "title": "Winning percentage",
+          "url": "https://en.wikipedia.org/wiki/Winning_percentage"
+        },
+        {
+          "title": "Graphing Cumulative Rate Statistics – Society for American Baseball Research",
+          "url": "https://sabr.org/journal/article/graphing-cumulative-rate-statistics/"
+        },
+        {
+          "title": "Normalized Winning Percentage, Revisited – Society for American Baseball Research",
+          "url": "https://sabr.org/journal/article/normalized-winning-percentage-revisited/"
+        }
+      ]
+    },
+    {
+      "number": 37,
+      "query": "sports statistics small sample size",
+      "observedSources": [
+        {
+          "title": "Issues in Estimating Risks and Rates in Sports Injury Research - PMC",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC1472638/"
+        },
+        {
+          "title": "Why sample size matters in sports statistics | Slatery",
+          "url": "https://tryslatery.com/blog/why-sample-size-matters"
+        },
+        {
+          "title": "New View of Statistics: Sample Size - 1",
+          "url": "https://sportscience.sportsci.org/resource/stats/samplesize.html"
+        }
+      ]
+    },
+    {
+      "number": 38,
+      "query": "sports statistics selection bias",
+      "observedSources": [
+        {
+          "title": "The bias for statistical significance in sport and exercise medicine - PubMed",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36966124/"
+        },
+        {
+          "title": "Running Performance, VO2max, and Running Economy: The Widespread Issue of Endogenous Selection Bias.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/28983866/"
+        },
+        {
+          "title": "Selection Biases in Sports Markets - Néstor Gandelman, 2009",
+          "url": "https://journals.sagepub.com/doi/10.1177/1527002509332237"
+        }
+      ]
+    },
+    {
+      "number": 39,
+      "query": "sports highlights survivorship bias",
+      "observedSources": [
+        {
+          "title": "Are we really studying resilience in sport? A critical review of adopted methodologies",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10637379/"
+        },
+        {
+          "title": "The Sports Page — Survivorship Bias",
+          "url": "https://thesportspage.net/concepts/survivorship-bias.html"
+        },
+        {
+          "title": "Full article: Selective Exposure and Exemplification within Sports Highlights",
+          "url": "https://www.tandfonline.com/doi/full/10.1080/08838151.2021.2008938?af=R"
+        }
+      ]
+    },
+    {
+      "number": 40,
+      "query": "correlation versus causation sports statistics",
+      "observedSources": [
+        {
+          "title": "Do football stats mislead? Five correlations put to the test | Research",
+          "url": "https://www.footballdatascience.co.uk/research/correlation-causation"
+        },
+        {
+          "title": "Correlation versus causation in sports statistics | Slatery",
+          "url": "https://tryslatery.com/blog/correlation-versus-causation-sports-statistics"
+        },
+        {
+          "title": "Distinguishing between causal and non-causal associations: implications for sports medicine clinicians | British Journal of Sports Medicine",
+          "url": "https://bjsm.bmj.com/content/53/7/398"
+        }
+      ]
+    },
+    {
+      "number": 41,
+      "query": "mean versus median sports statistics",
+      "observedSources": [
+        {
+          "title": "Analytic Methods in Sports; Using Mathematics and Statistics to Understand Data from Baseball, Football, Basketball, and Other Sports; Second Edition",
+          "url": "https://api.pageplace.de/preview/DT0400.9781000050905_A39584939/preview-9781000050905_A39584939.pdf"
+        },
+        {
+          "title": "2.5 Measures of the Center of the Data - Statistics | OpenStax",
+          "url": "https://openstax.org/books/statistics/pages/2-5-measures-of-the-center-of-the-data"
+        },
+        {
+          "title": "Analytic Methods in Sports: Using Mathematics and Statistics to Understand Data from Baseball, Football, Basketball, and Other Sports: Third edition",
+          "url": "https://api.pageplace.de/preview/DT0400.9781040521069_A63309689/preview-9781040521069_A63309689.pdf"
+        }
+      ]
+    },
+    {
+      "number": 42,
+      "query": "sports statistics outliers averages",
+      "observedSources": [
+        {
+          "title": "Understand Averages and Distributions Through Sports | SkillVeris",
+          "url": "https://www.skillveris.com/blog/understand-averages-and-distributions-through-sports"
+        },
+        {
+          "title": "Statistics for Sports Data - Free Course | SportsDataTutorials",
+          "url": "https://sportsdatatutorials.com/tracks/statistics-essentials.html"
+        },
+        {
+          "title": "Position-by-Position Stats - NBC Sports",
+          "url": "https://www.nbcsports.com/fantasy/basketball/news/article-numbers-game-position-position-stats"
+        }
+      ]
+    },
+    {
+      "number": 43,
+      "query": "sports statistics regression to mean",
+      "observedSources": [
+        {
+          "title": "Regression to the mean (in sports): definition - 4Analytics",
+          "url": "https://www.4analytics.com/glossary/regression-to-the-mean-in-sports/"
+        },
+        {
+          "title": "New View of Statistics: Regression to the Mean",
+          "url": "https://www.sportsci.org/resource/stats/regmean.html"
+        },
+        {
+          "title": "Regression to the Mean in Sports | SportsDataTutorials",
+          "url": "https://sportsdatatutorials.com/tutorials/regression-to-the-mean.html"
+        }
+      ]
+    },
+    {
+      "number": 44,
+      "query": "why past results do not guarantee future results probability",
+      "observedSources": [
+        {
+          "title": "Past Matka Results & Future Outcomes | SattaMatka.pm",
+          "url": "https://sattamatka.pm/education/why-past-matka-results-cannot-guarantee-future-results/"
+        },
+        {
+          "title": "Why Historical Performance Doesn't Guarantee Future Results | EdgeIQ Learning Center",
+          "url": "https://edgeiqinsights.com/blog/historical-performance-no-guarantee"
+        },
+        {
+          "title": "Why Past Performance Does Not Predict Future Results",
+          "url": "https://tyriantrade.com/insights/why-past-performance-does-not-predict-future-results"
+        }
+      ]
+    },
+    {
+      "number": 45,
+      "query": "gambler fallacy independent events",
+      "observedSources": [
+        {
+          "title": "Independence of events, and errors in understanding it | Humanities and Social Sciences Communications",
+          "url": "https://www.nature.com/articles/palcomms201650"
+        },
+        {
+          "title": "Gambler's fallacy",
+          "url": "https://en.wikipedia.org/wiki/Gambler%27s_fallacy"
+        },
+        {
+          "title": "5  Independent Events – STAT 414 | Introduction to Probability Theory",
+          "url": "https://online.stat.psu.edu/stat414/Lesson05"
+        }
+      ]
+    },
+    {
+      "number": 46,
+      "query": "how to spot misleading sports statistics",
+      "observedSources": [
+        {
+          "title": "How to spot spin and inappropriate use of statistics - House of Commons Library",
+          "url": "https://commonslibrary.parliament.uk/research-briefings/sn04446/"
+        },
+        {
+          "title": "Six questions before you trust a statistic | TipManager",
+          "url": "https://tipmanager.net/en/learn/reading-statistics-claims"
+        },
+        {
+          "title": "Five Questions to Ask Before Trusting a Statistic | Helsen Institute",
+          "url": "https://www.helseninstitute.com/insights/five-questions-before-trusting-a-statistic"
+        }
+      ]
+    },
+    {
+      "number": 47,
+      "query": "how to evaluate sports data sources",
+      "observedSources": [
+        {
+          "title": "Evaluating Data Sources - Data & Statistics - Subject Guides at University of Northern British Columbia",
+          "url": "https://libguides.unbc.ca/data/evaluate"
+        },
+        {
+          "title": "Evaluate Sources - HIST 1200: More Than a Game: Sports & Politics in Modern American History (Fall 2026) - LibGuides at Cornell University",
+          "url": "https://guides.library.cornell.edu/hist1200ct/eval"
+        },
+        {
+          "title": "Evaluating Sources for Data and Statistics - Finding Data and Statistics - LibGuides at Wesleyan University",
+          "url": "https://libguides.wesleyan.edu/datastats/evaluate"
+        }
+      ]
+    },
+    {
+      "number": 48,
+      "query": "sports statistics denominator sample size",
+      "observedSources": [
+        {
+          "title": "International Olympic Committee Consensus Statement: Methods for Recording and Reporting of Epidemiological Data on Injury and Illness in Sports 2020 (Including the STROBE Extension for Sports Injury and Illness Surveillance (STROBE-SIIS)) - PMC",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7029549/"
+        },
+        {
+          "title": "Sports Calculators - Tests & Tools",
+          "url": "https://testsandtools.com/calculators/sports-calculators/"
+        },
+        {
+          "title": "New View of Statistics: Sample Size - 1",
+          "url": "https://sportscience.sportsci.org/resource/stats/samplesize.html"
+        }
+      ]
+    },
+    {
+      "number": 49,
+      "query": "probability versus certainty explained",
+      "observedSources": [
+        {
+          "title": "7.5 Basic Concepts of Probability - Contemporary Mathematics | OpenStax",
+          "url": "https://openstax.org/books/contemporary-mathematics/pages/7-5-basic-concepts-of-probability"
+        },
+        {
+          "title": "3.4 Probability Theory - Principles of Data Science | OpenStax",
+          "url": "https://openstax.org/books/principles-data-science/pages/3-4-probability-theory"
+        },
+        {
+          "title": "7  Understanding Uncertainty – STAT 100 | Statistical Concepts and Reasoning",
+          "url": "https://online.stat.psu.edu/stat100/Lesson07"
+        }
+      ]
+    },
+    {
+      "number": 50,
+      "query": "how to read complete sports results records",
+      "observedSources": [
+        {
+          "title": "How to Read Horse Racing Results: Form, Figures & Symbols | UK Horseracing Results",
+          "url": "https://horseracingresultsuk.com/race-results/"
+        },
+        {
+          "title": "Translate Sports Scores & Standings | Preserve Results and Statistics",
+          "url": "https://edukatesg.com/2026/09/18/translate-sports-scores-standings-records-statistics-results-competition-meaning/"
+        },
+        {
+          "title": "How to Read a Tournament Results Page Without Missing the Story | OVR Blog - OVR",
+          "url": "https://ovr.link/blog/how-to-read-a-tournament-results-page-without-missing-the-story"
+        }
+      ]
+    }
+  ]
+}

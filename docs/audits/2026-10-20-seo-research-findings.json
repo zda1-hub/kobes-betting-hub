@@ -1,0 +1,78 @@
+{
+  "date": "2026-10-20",
+  "scope": "Non-promotional risk support and sports statistics literacy",
+  "searches_completed": 50,
+  "method": "50 individual web-search calls, source titles/URLs reviewed; not a localized Google rank measurement. Four primary reference pages opened; Arizona official source blocked fetch (not used for jurisdiction-specific claims).",
+  "search_console": {
+    "account": "themartinventures@gmail.com",
+    "property": "sc-domain:kobesbettinghub.com",
+    "performance_range_selected": "3 months",
+    "chart_range_displayed": "2026-09-24 through 2026-10-17",
+    "clicks": 15,
+    "impressions": 238,
+    "ctr_percent": 6.3,
+    "average_position": 36.8,
+    "performance_update": "4.5 hours ago as displayed",
+    "index_report_date": "2026-10-11",
+    "indexed": 11,
+    "excluded": {
+      "redirect": 10,
+      "noindex": 6,
+      "canonical_duplicate": 1,
+      "discovered_not_indexed": 7
+    },
+    "note": "Do not treat all exclusions as errors. Index report predates recent releases; baseline does not show ranking gains."
+  },
+  "findings": [
+    {
+      "cluster": "Warning signs",
+      "observation": "Results include checklist, self-assessment and official help formats.",
+      "gap": "Original page condensed warning signs into one paragraph.",
+      "preview": "Descriptive H1, scannable checklist, source link; does not diagnose."
+    },
+    {
+      "cluster": "Controls",
+      "observation": "Results distinguish deposit limits, time-outs, account closure and self-exclusion; geography changes coverage.",
+      "gap": "Original page named tools without explaining differences.",
+      "preview": "Plain-language definition list and jurisdiction limitation."
+    },
+    {
+      "cluster": "Help",
+      "observation": "Official NCPG results provide state directory and explain helpline scope.",
+      "gap": "Original page had one broad support link.",
+      "preview": "Direct helpline/privacy and state-directory links; loved-one access explained."
+    },
+    {
+      "cluster": "Statistics literacy",
+      "observation": "Returned results include textbooks, research and definition/worked-example pages. Some queries drifted to sports medicine or horse racing.",
+      "decision": "Backlog only; narrow future articles to sports-media statistical literacy. Do not imitate irrelevant result formats or promise wagering advantage."
+    }
+  ],
+  "backlinks": {
+    "status": "not created; no outreach sent",
+    "opportunities": [
+      {
+        "source": "University/library statistics-literacy resource lists",
+        "evidence": "UNBC, Cornell and Wesleyan source-evaluation guides returned for query 47",
+        "asset_needed": "An original sports-media source-checking worksheet with worked examples, reviewed before outreach",
+        "limitation": "No evidence these institutions accept KBH links or endorse it."
+      },
+      {
+        "source": "Sports education community reference lists",
+        "evidence": "SABR statistical graphics article returned for query 36",
+        "asset_needed": "An original non-promotional illustration of sample size and denominator errors",
+        "limitation": "No submission or contact permission inferred."
+      }
+    ],
+    "not_recommended": "Do not ask treatment charities to endorse a betting service. Direct readers to their official support pages. Outbound citations are not backlinks."
+  },
+  "follow_up": {
+    "after_publication": [
+      "Record actual publication date and exact changed URLs.",
+      "After several days, inspect canonical/index status and crawl date.",
+      "After one week, compare page-level clicks, impressions and query coverage using equal windows.",
+      "After one month, repeat and revise useful answers based on observed queries."
+    ],
+    "status": "Plan recorded; no scheduled job or future checks claimed complete. New content not deployed."
+  }
+}
