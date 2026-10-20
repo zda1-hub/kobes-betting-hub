@@ -9,13 +9,13 @@ Explain why VIP members have not received arbitrage opportunities and extend the
 - Render worker `srv-da6hvmijnfac73apb6v0` scanned every five minutes from 07:00 to 18:00 MST.
 - It scanned NFL, college football, MLB and NHL moneylines from configured US books. NBA was absent.
 - Forty-two scan receipts between 07:00 and 10:30 MST on October 20 reported no opportunity meeting the configured 1% minimum edge. Some scans found one fresh mathematically positive cross-book price, but none reached 1%.
-- The source Blueprint listed only NFL, college football and MLB, and omitted the interval setting; it did not match the live NHL/five-minute configuration.
+- The source Blueprint listed only NFL, college football and MLB, and omitted the interval setting; it did not match the live NHL/five-minute configuration. It also contained old test values for the edge threshold (2%) and member posting (`false`), while the live worker used 1% and `true`.
 
 ## Change
 
 - Added `basketball_nba` to `ARBITRAGE_SPORTS` and set `ARBITRAGE_SCAN_INTERVAL_MINUTES` to six minutes. This changes planned odds calls from roughly 48 to 50 per hour during the configured window (four sports every five minutes versus five sports every six minutes), excluding approval rechecks.
 - Kept the live 1% discovery threshold, five-minute quote freshness rule, private approval and live recheck before member posting. No opportunity is fabricated or guaranteed.
-- Render environment values were merged into the existing worker environment, triggering deployment `dep-dbbqbb3rjlhs73es2a40` from the already released application commit. The matching Blueprint values are recorded in `render.yaml` for future syncs.
+- Render environment values were merged into the existing worker environment, triggering deployment `dep-dbbqbb3rjlhs73es2a40` from the already released application commit. The matching sport and interval values are recorded in `render.yaml` for future syncs. The threshold and member-posting keys are left as existing-service environment values (`sync: false`) so the stale test defaults do not overwrite the live choices in a future sync.
 
 ## Verification and limits
 

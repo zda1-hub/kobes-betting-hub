@@ -51,11 +51,11 @@ services:
       - key: ARBITRAGE_DESTINATION_CHANNEL_ID
         sync: false
       - key: ARBITRAGE_MEMBER_POSTING_ENABLED
-        value: "false"
+        sync: false
       - key: ARBITRAGE_EXAMPLE_BANKROLL
         value: "1000"
       - key: ARBITRAGE_MIN_EDGE_PERCENT
-        value: "2"
+        sync: false
       - key: ARBITRAGE_WINDOWS_ARIZONA
         value: 07:00-18:00
       - key: SPORT_CHANNEL_MAP
