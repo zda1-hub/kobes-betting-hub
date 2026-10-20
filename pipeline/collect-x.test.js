@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   approvalOddsEligible,
+  basketballPriority,
   createModelCallBudget,
   createSourceModelCallReservation,
   configuredMediaOnlyLimit,
@@ -11,6 +12,7 @@ const {
   intakePriority,
   isSinglePlayPacket,
   mediaCaptionHasBetSignal,
+  nbaGamesScheduledToday,
   nflGamesScheduledToday,
   notifyApprovalChannel,
   packetApprovalOddsEligible,
@@ -84,6 +86,26 @@ test('prioritizes strong text picks before signaled and image-only media', () =>
   assert.equal(intakePriority({ monitoring_mode: 'standard' }, { text: 'MLB player over 1.5 hits' }), 3);
   assert.equal(intakePriority({ monitoring_mode: 'writeup_or_trend' }, { text: 'NFL card', attachments: { media_keys: ['1'] } }), 4);
   assert.equal(intakePriority({ monitoring_mode: 'photo_review' }, { text: '', attachments: { media_keys: ['1'] } }), 6);
+});
+
+test('gives NBA text picks first look on an NBA slate without changing eligibility', () => {
+  const nba = { text: 'NBA Jayson Tatum over 5.5 assists (-140)' };
+  const nbaAbbrev = { text: 'KAT over 4.5 ast -139' };
+  const nfl = { text: 'NFL Rams -4.5 2u' };
+  assert.equal(basketballPriority(nba), 0);
+  assert.equal(basketballPriority(nbaAbbrev), 0);
+  assert.equal(basketballPriority({ text: 'NFL Chiefs over 21.5 points' }), 1);
+  assert.ok(intakePriority({}, nba, { prioritizeBasketball: true }) < intakePriority({}, nfl, { prioritizeBasketball: true }));
+  assert.ok(intakePriority({}, nbaAbbrev, { prioritizeBasketball: true }) < intakePriority({}, nfl, { prioritizeBasketball: true }));
+  assert.equal(intakePriority({}, nba), 3);
+});
+
+test('NBA schedule preflight is fail-open and detects a same-day slate', async () => {
+  assert.equal(await nbaGamesScheduledToday({ now: new Date('2026-10-20T18:00:00Z'),
+    fetchImpl: async () => ({ ok: true, json: async () => ({ events: [{ name: 'Celtics at Pistons' }] }) }) }), true);
+  assert.equal(await nbaGamesScheduledToday({ now: new Date('2026-10-20T18:00:00Z'),
+    fetchImpl: async () => ({ ok: true, json: async () => ({ events: [] }) }) }), false);
+  assert.equal(await nbaGamesScheduledToday({ fetchImpl: async () => ({ ok: false }) }), null);
 });
 
 test('prioritizes source-supported writeups within the same sport', () => {

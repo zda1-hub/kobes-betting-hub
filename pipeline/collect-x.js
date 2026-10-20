@@ -58,6 +58,7 @@ const FOOTBALL_SCOREBOARD_URLS = [
   'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
   'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard'
 ];
+const NBA_SCOREBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
 const PACIFIC_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Los_Angeles',
   year: 'numeric', month: '2-digit', day: '2-digit'
@@ -130,8 +131,14 @@ function shouldQueueForReview(source, post, postMediaUrls) {
   return mediaCaptionHasBetSignal(post.text);
 }
 
-function intakePriority(source, post) {
+function basketballPriority(post) {
+  if (footballPriority(post) === 0) return 1;
+  return /\b(?:nba|basketball|points?|pts|rebounds?|reb|assists?|ast|pra|threes|three.pointers?)\b/i.test(post?.text || '') ? 0 : 1;
+}
+
+function intakePriority(source, post, { prioritizeBasketball = false } = {}) {
   const football = footballPriority(post) === 0;
+  const basketball = prioritizeBasketball && basketballPriority(post) === 0;
   // A complete post normally contributes one signal from the selection line
   // plus at least three separate statistical/support lines.
   const supportedWriteup = sourceSupportSignalCount(post?.text) >= 4;
@@ -139,6 +146,8 @@ function intakePriority(source, post) {
   // three-bullet approval-card gate. Put those posts ahead of bare terms so a
   // small model-call budget produces more cards Kobe can actually publish.
   if (likelyPick(post?.text)) {
+    if (basketball && supportedWriteup) return -2;
+    if (basketball) return -1;
     if (football && supportedWriteup) return 0;
     if (football) return 1;
     if (supportedWriteup) return 2;
@@ -310,6 +319,22 @@ async function footballGamesScheduledToday({ now = new Date(), fetchImpl = fetch
     }
   }
   return successfulChecks > 0 ? false : null;
+}
+
+async function nbaGamesScheduledToday({ now = new Date(), fetchImpl = fetch } = {}) {
+  const date = pacificDate(now).replaceAll('-', '');
+  try {
+    const response = await fetchImpl(`${NBA_SCOREBOARD_URL}?dates=${date}&limit=100`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return Array.isArray(payload.events) ? payload.events.length > 0 : null;
+  } catch (error) {
+    console.warn(`NBA schedule preflight was unavailable; continuing with normal gates: ${error instanceof Error ? error.message : error}`);
+    return null;
+  }
 }
 
 // Backward-compatible export name for local callers and older tests.
@@ -718,12 +743,15 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
   // Check the priority sports first, but do not use their slate as a global
   // gate: baseball, basketball, hockey, soccer, and other configured sports
   // must still be collected when football is off.
-  const footballGamesToday = await footballGamesScheduledToday();
+  const [footballGamesToday, nbaGamesToday] = await Promise.all([
+    footballGamesScheduledToday(), nbaGamesScheduledToday()
+  ]);
   if (footballGamesToday === false) {
     console.log(`No NFL or college-football games are scheduled for ${date}; continuing with all supported sports.`);
   } else if (footballGamesToday === true) {
-    console.log(`NFL or college-football games are scheduled for ${date}; priority sports remain first in the intake gates.`);
+    console.log(`NFL or college-football games are scheduled for ${date}; football remains eligible for approval.`);
   }
+  if (nbaGamesToday === true) console.log(`NBA games are scheduled for ${date}; NBA text picks get first look within each source.`);
 
   await cleanMonitoringFolderIfDue();
   const state = await readJson(STATE_PATH, { sources: {} });
@@ -777,7 +805,8 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
     // media and finally dedicated photo-review posts. Keep the original ID as
     // the tie-breaker so a source remains deterministic.
     const posts = responses.flatMap((page) => page.data || []).map(completeXPost)
-      .sort((a, b) => intakePriority(source, a) - intakePriority(source, b) || b.id.localeCompare(a.id));
+      .sort((a, b) => intakePriority(source, a, { prioritizeBasketball: nbaGamesToday === true })
+        - intakePriority(source, b, { prioritizeBasketball: nbaGamesToday === true }) || b.id.localeCompare(a.id));
     console.log(`X fetch buffer @${source.handle}: ${buffered.fetched} freshly returned post(s), ${buffered.pending} retained for processing.`);
     const handledPostIds = new Set(Array.isArray(sourceState.handled_post_ids) ? sourceState.handled_post_ids : []);
     let lastProcessedId = sourceState.since_id || '';
@@ -1252,6 +1281,8 @@ module.exports = {
   configuredPerSourceModelCallLimit,
   footballGamesScheduledToday,
   footballPriority,
+  basketballPriority,
+  nbaGamesScheduledToday,
   intakePriority,
   isSinglePlayPacket,
   mediaCaptionHasBetSignal,
