@@ -466,6 +466,24 @@ test('holds expert approval cards when extraction found prices without wagers', 
   assert.throws(() => assertPublishableExtraction(mixed), /price without the selection/);
 });
 
+test('holds terms-only totals that omit the game or player from the member-facing selection', () => {
+  const exclusive = {
+    ...packet,
+    source: { handle: 'ExclusiveSource', publish_mode: 'terms_only' },
+    analysis: { status: 'SOURCE_EXTRACTED', extraction: {
+      is_pick_candidate: true, source_capper_name: 'PorterPicks',
+      plays: [{ selection: 'Over 66.5', event: 'Celtics at Knicks', odds_american: '-110', units: '4 units', market: 'total' }]
+    } }
+  };
+  assert.throws(() => buildSourcePickApprovalEmbed(exclusive, 'APPROVED PICK'), /does not identify the game/);
+  const priceAndStakeInline = structuredClone(exclusive);
+  priceAndStakeInline.analysis.extraction.plays[0].selection = 'Over 66.5 -110 (4 units)';
+  assert.throws(() => buildSourcePickApprovalEmbed(priceAndStakeInline, 'APPROVED PICK'), /does not identify the game/);
+  const complete = structuredClone(exclusive);
+  complete.analysis.extraction.plays[0].selection = 'Celtics at Knicks over 224.5';
+  assert.doesNotThrow(() => buildSourcePickApprovalEmbed(complete, 'APPROVED PICK'));
+});
+
 test('allows verified Free Picks from any explicit betting market', () => {
   assert.doesNotThrow(() => assertFreePickEligible(packet));
   assert.throws(() => assertFreePickEligible({ ...packet, source: { ...packet.source, publish_mode: 'terms_only' } }), /original writeup/);

@@ -173,6 +173,18 @@ function isGenericMarketWithoutEvent(play) {
   return !hasNamedPlayer(play) && /^(?:over|under|o\s*\/\s*u|nrfi|yrfi|btts|yes|no)\b/i.test((play?.terms || '').trim()) && !visible(play?.event, '');
 }
 
+function isContextFreeExclusiveSelection(play) {
+  // Terms-only member posts show the selection line, not a separate event
+  // field. Even if extraction stored a matchup elsewhere, "Over 66.5 -110"
+  // leaves members unable to identify the wager they are being offered.
+  const selection = visible(play?.selection, '')
+    .replace(/(?:^|\s)\(?[+-]\d{2,4}\)?(?=\s|$)/g, ' ')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:u|units?)\b/gi, ' ')
+    .replace(/[()]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  return /^(?:(?:over|under|o\s*\/\s*u)\s*\d+(?:\.\d+)?(?:\s+(?:points?|pts|yards?|yds|runs?|hits?|rebounds?|reb|assists?|ast|pra|threes?|goals?|shots?|saves?))?|(?:ml|moneyline|spread))$/i.test(selection);
+}
+
 function isUnnamedBareProp(play) {
   return !play?.market && /^(?:over|under)\b/i.test(play?.terms || '');
 }
@@ -475,6 +487,9 @@ function assertPublishableExtraction(packet) {
   const plays = visiblePlays(packet);
   if (plays.some((play) => !/[A-Za-z]/.test(play.selection))) {
     throw new Error('The source shows a price without the selection it belongs to. Hold this card for source review.');
+  }
+  if (isTermsOnlyMode(packet) && plays.some(isContextFreeExclusiveSelection)) {
+    throw new Error('The exclusive wager does not identify the game, team, or player in its member-facing selection.');
   }
   if (plays.some((play) => /^\s*(?:player props?:\s*)?(?:pass|no play|skip)\b/i.test(play.terms))) {
     throw new Error('The source does not contain a definitive play.');
