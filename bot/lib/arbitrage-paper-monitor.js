@@ -98,6 +98,10 @@ function findArbitrage(events, { minimumEdgePercent = 2, bankroll = 1000, freshO
 
 function money(value) { return `$${Number(value).toFixed(2)}`; }
 
+function isUnknownDiscordChannel(error) {
+  return Number(error?.code ?? error?.rawError?.code) === 10003;
+}
+
 function freshOpportunity(opportunity, now = new Date()) {
   const start = Date.parse(opportunity.commenceTime);
   if (!Number.isFinite(start) || start <= now.getTime()) return false;
@@ -161,7 +165,8 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
   if (!Number.isInteger(intervalMinutes) || intervalMinutes < 1 || intervalMinutes > 60) {
     throw new Error('ARBITRAGE_SCAN_INTERVAL_MINUTES must be a whole number from 1 to 60.');
   }
-  let timer = null, scanning = false, quotaExhausted = false, state = { scans: [], opportunities: {} };
+  let timer = null, scanning = false, quotaExhausted = false, archiveAvailable = Boolean(archiveChannel);
+  let state = { scans: [], opportunities: {} };
   const save = async () => {
     await fs.mkdir(path.dirname(stateFile), { recursive: true, mode: 0o700 });
     await fs.writeFile(`${stateFile}.tmp`, JSON.stringify(state, null, 2), { mode: 0o600 });
@@ -260,7 +265,7 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
         setTimeout(() => void recheck(opportunity, message, 30), 30000).unref();
         setTimeout(() => void recheck(opportunity, message, 60), 60000).unref();
       }
-      if (archiveChannel) {
+      if (archiveAvailable) {
         const liveIds = new Set(freshPositive.filter(item => freshOpportunity(item, now())).map(item => item.id));
         const candidate = Object.values(state.opportunities)
           .filter(item => item.status === 'PUBLISHED' && item.approvedSnapshot && !item.archivedAt
@@ -268,11 +273,17 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
           .sort((a, b) => b.approvedSnapshot.edgePercent - a.approvedSnapshot.edgePercent)[0];
         if (candidate) {
           const example = candidate.approvedSnapshot;
-          const message = await archiveChannel.send({ allowedMentions: { parse: [] }, embeds: [{ color: 0x65748B,
-            title: 'Past arbitrage example — not live',
-            description: `${alertDescription(example, 'EXPIRED EXAMPLE — DO NOT PLACE THESE BETS')}\n\nThis is a theoretical return if both wagers were accepted at the displayed odds. It is not a verified member profit or settled result. Kobe can post proof of any actual result separately.` }] });
-          candidate.archivedAt = now().toISOString();
-          candidate.archivedMessageId = message.id;
+          try {
+            const message = await archiveChannel.send({ allowedMentions: { parse: [] }, embeds: [{ color: 0x65748B,
+              title: 'Past arbitrage example — not live',
+              description: `${alertDescription(example, 'EXPIRED EXAMPLE — DO NOT PLACE THESE BETS')}\n\nThis is a theoretical return if both wagers were accepted at the displayed odds. It is not a verified member profit or settled result. Kobe can post proof of any actual result separately.` }] });
+            candidate.archivedAt = now().toISOString();
+            candidate.archivedMessageId = message.id;
+          } catch (error) {
+            if (!isUnknownDiscordChannel(error)) throw error;
+            archiveAvailable = false;
+            console.warn(`Optional arbitrage archive channel ${archiveChannel.id} no longer exists; live scans will continue.`);
+          }
         }
       }
       await save();
@@ -367,4 +378,4 @@ function createArbitragePaperMonitor({ apiKey, reviewChannel, destinationChannel
   };
 }
 
-module.exports = { activeWindow, alertDescription, arbitrageBookmakers, arbitrageSports, createArbitragePaperMonitor, findArbitrage, reviewComponents };
+module.exports = { activeWindow, alertDescription, arbitrageBookmakers, arbitrageSports, createArbitragePaperMonitor, findArbitrage, isUnknownDiscordChannel, reviewComponents };

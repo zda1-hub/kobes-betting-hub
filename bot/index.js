@@ -74,7 +74,7 @@ const { isTrendOnlySource } = require('./lib/trend-only-source');
 const retiredTrendCardIds = new Set(['20260926-167-X']);
 const { datedTimeOverride, nextArizonaDailyStartMs } = require('./lib/daily-window');
 const { createDiscordJoinAttribution, parseCampaigns } = require('./lib/discord-join-attribution');
-const { arbitrageBookmakers, arbitrageSports, createArbitragePaperMonitor } = require('./lib/arbitrage-paper-monitor');
+const { arbitrageBookmakers, arbitrageSports, createArbitragePaperMonitor, isUnknownDiscordChannel } = require('./lib/arbitrage-paper-monitor');
 const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timing');
 const { exclusiveSourceIsCurrent, genericCapperHeading } = require('../pipeline/exclusive-text');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
@@ -345,17 +345,29 @@ let telegramReader = null;
 let arbitragePaperMonitor = null;
 
 async function ensureArbitrageChannel({ configuredId, name, sourceId, topic, reason }) {
+  const source = await approvedTextChannel(sourceId);
   if (configuredId) {
     allowedChannelIds.add(configuredId);
-    return approvedTextChannel(configuredId);
+    try {
+      const configured = await approvedTextChannel(configuredId);
+      if (configured.name !== name) throw new Error(`Configured ${name} channel has an unexpected name.`);
+      if (configured.guildId !== source.guildId) throw new Error(`Configured ${name} channel is in the wrong server.`);
+      return configured;
+    } catch (error) {
+      if (!isUnknownDiscordChannel(error)) throw error;
+      console.warn(`Configured ${name} channel ${configuredId} no longer exists; checking the current server channel.`);
+    }
   }
-  const source = await approvedTextChannel(sourceId);
   const channels = await source.guild.channels.fetch();
-  const existing = channels.find(channel => channel?.isTextBased?.() && channel.name === name);
+  const matches = [...channels.values()].filter(channel => channel?.isTextBased?.() && channel.name === name);
+  if (matches.length > 1) throw new Error(`Multiple ${name} channels exist; configure the exact destination ID.`);
+  const existing = matches[0];
   if (existing) {
     allowedChannelIds.add(existing.id);
+    if (configuredId) console.warn(`Using current ${name} channel ${existing.id}; update the stale Render channel ID.`);
     return approvedTextChannel(existing.id);
   }
+  if (configuredId) throw new Error(`Configured ${name} channel is missing and no exact replacement exists.`);
   const created = await source.clone({ name, reason });
   await created.setTopic(topic);
   allowedChannelIds.add(created.id);
@@ -395,7 +407,15 @@ async function startArbitragePaperTest() {
   const { reviewChannel, destinationChannel } = await ensureArbitrageChannels();
   const archiveChannelId = String(process.env.ARBITRAGE_PUBLIC_ARCHIVE_CHANNEL_ID || '').trim();
   if (archiveChannelId) allowedChannelIds.add(archiveChannelId);
-  const archiveChannel = archiveChannelId ? await approvedTextChannel(archiveChannelId) : null;
+  let archiveChannel = null;
+  if (archiveChannelId) {
+    try {
+      archiveChannel = await approvedTextChannel(archiveChannelId);
+    } catch (error) {
+      if (!isUnknownDiscordChannel(error)) throw error;
+      console.warn(`Optional arbitrage archive channel ${archiveChannelId} no longer exists; live scans will continue.`);
+    }
+  }
   if (archiveChannel && archiveChannel.guildId !== reviewChannel.guildId) throw new Error('Arbitrage archive must be in the same Discord server.');
   if (archiveChannel && archiveChannel.permissionOverwrites.cache.get(archiveChannel.guildId)?.deny.has(PermissionFlagsBits.ViewChannel)) {
     throw new Error('Arbitrage archive must be visible to free members.');
