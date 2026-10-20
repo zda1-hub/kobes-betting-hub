@@ -17,3 +17,7 @@ Discord's bot API listed the basketball channel but returned `403 Missing Access
 ## Verification and release state
 
 Focused routing and collector tests passed locally. Production still requires the Render setting/deploy and a Discord permission grant for the Kobe Bot role on the basketball channel. A successful deploy alone does not prove that an NBA post can publish; bot access and a real approved NBA card must be checked before claiming end-to-end delivery.
+
+### Release follow-up — October 20
+
+PR #260 was merged as `03839f9`. Render deployment `dep-dbbq7342ggas73fnn7e0` reached **live**, and the new process logged in as Kobe Bot. The production Render service received `BASKETBALL_WRITEUPS_CHANNEL_ID=1562152923725701141` without replacing other variables. Kobe granted the bot access to the basketball category and channel; subsequent bot API reads of the channel and message history both succeeded. The channel grants View and Send to the bot, while the bot role supplies Embed Links. This verifies configuration and access, but no real NBA writeup was approved or published merely for this test.
