@@ -43,7 +43,9 @@ services:
       - key: ARBITRAGE_BOOKMAKERS
         sync: false
       - key: ARBITRAGE_SPORTS
-        value: "americanfootball_nfl,americanfootball_ncaaf,baseball_mlb"
+        value: "americanfootball_nfl,americanfootball_ncaaf,baseball_mlb,icehockey_nhl,basketball_nba"
+      - key: ARBITRAGE_SCAN_INTERVAL_MINUTES
+        value: "6"
       - key: ARBITRAGE_APPROVAL_CHANNEL_ID
         sync: false
       - key: ARBITRAGE_DESTINATION_CHANNEL_ID
