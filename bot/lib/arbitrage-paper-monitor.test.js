@@ -3,7 +3,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { activeWindow, alertDescription, arbitrageBookmakers, arbitrageSports, createArbitragePaperMonitor, findArbitrage } = require('./arbitrage-paper-monitor');
+const { activeWindow, alertDescription, arbitrageBookmakers, arbitrageSports, createArbitragePaperMonitor, findArbitrage, isUnknownDiscordChannel } = require('./arbitrage-paper-monitor');
+
+test('recognizes only Discord Unknown Channel errors for optional archive recovery', () => {
+  assert.equal(isUnknownDiscordChannel({ code: 10003 }), true);
+  assert.equal(isUnknownDiscordChannel({ rawError: { code: 10003 } }), true);
+  assert.equal(isUnknownDiscordChannel({ code: 50013 }), false);
+});
 
 test('uses all nine Arizona books covered by the feed within one quota group and allows a narrower member list', () => {
   const books = arbitrageBookmakers();
@@ -33,6 +39,30 @@ test('finds a two-book arbitrage and produces a balanced $1,000 example', () => 
   assert.match(alertDescription(opportunity), /Total example: \*\*\$1000\.00\*\*/);
   assert.doesNotMatch(alertDescription(opportunity), /paper test/i);
   assert.match(alertDescription(opportunity), /AWAITING KOBE APPROVAL/);
+});
+
+test('a deleted optional archive does not stop live arbitrage scans', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
+  const stateFile = path.join(root, 'state.json');
+  const approvedSnapshot = findArbitrage([event], { minimumEdgePercent: 0 })[0];
+  await fs.writeFile(stateFile, JSON.stringify({ scans: [], opportunities: {
+    [approvedSnapshot.id]: { ...approvedSnapshot, status: 'PUBLISHED', publishedAt: '2026-10-18T16:00:00Z', approvedSnapshot }
+  } }));
+  let archiveAttempts = 0;
+  const monitor = createArbitragePaperMonitor({ apiKey: 'test',
+    reviewChannel: { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' } },
+    archiveChannel: { id: 'deleted-archive', send: async () => { archiveAttempts += 1; throw { code: 10003 }; } },
+    stateFile, fetchImpl: async () => new Response('[]', { status: 200 }),
+    now: () => new Date('2026-10-19T16:00:00Z'), windows: ['07:00-18:00'], log: () => {} });
+  try {
+    assert.equal((await monitor.start()).status, 'SCANNED');
+    assert.equal((await monitor.scan({ force: true })).status, 'SCANNED');
+    assert.equal(archiveAttempts, 1);
+    assert.equal(monitor.snapshot().scans.length, 2);
+  } finally {
+    await monitor.stop();
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
 
 test('finds a cross-book edge when one book has the highest price on both sides', () => {
