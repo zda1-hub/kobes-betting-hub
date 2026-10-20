@@ -1,0 +1,13 @@
+{
+  "request": "Complete the search-intent research and prepare improvements using the supplied SEO post",
+  "status": "local content preview; not deployed",
+  "scope": "Non-promotional risk and support information",
+  "files": ["responsible-gambling.html", "docs/audits/2026-10-20-search-research-50.json", "docs/audits/2026-10-20-search-intent-matrix.json", "docs/audits/2026-10-20-seo-research-findings.json"],
+  "before": "Generic visible heading, warning signs in one paragraph, broad support and controls copy",
+  "after": "Descriptive heading, anchored contents, warning-sign checklist, controls definitions, direct official resource links, sources and jurisdiction scope",
+  "research": "50 separate web queries, observed source links preserved; not a localized Google ranking audit or proof of ranking causes. Three primary pages fully retrieved; fourth official Arizona page returned 403 and was not used for detailed claims.",
+  "searchConsole": "Live account/property verified. Performance displayed 15 clicks, 238 impressions, 6.3% CTR and position 36.8; chart September 24–October 17. Index report dated October 11, prior to recent releases: 11 indexed, 24 excluded (10 redirects, 6 noindex, 1 canonical duplicate, 7 discovered/not indexed).",
+  "verification": ["Public whitelist build passed before browser review; changed generated page synchronized after semantic navigation fix", "50 unique query records and JSON parse", "Header markup preserved", "Unique section IDs and valid anchor targets", "Structured data parses", "Rendered at 320, 390 and 1440 CSS-pixel widths; measured document width equal to viewport and header top zero", "Mobile anchor action reached correct hash and settled below header (target top approximately 150px, header bottom 64px)", "Fixed contents element hidden by existing broad mobile nav rule by using an accessible navigation role without changing shared CSS", "git diff --check"],
+  "evidence": ["/tmp/kbh-risk-320.png", "/tmp/kbh-risk-390.png", "/tmp/kbh-risk-after-1440.png", "/tmp/kbh-gsc-performance-20261020.png"],
+  "limits": ["No new backlinks or outreach", "No ranking increase demonstrated", "No future monitoring run or scheduled job claimed", "Statistical-literacy page ideas remain backlog", "No production publish of this new content", "No treatment or regulatory affiliation claimed"]
+}

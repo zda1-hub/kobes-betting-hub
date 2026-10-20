@@ -13,3 +13,7 @@ Verification: public whitelist build passed (98 entries); source and built JSON-
 References: https://developers.google.com/search/docs/appearance/structured-data/breadcrumb and https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap . Structured data can help describe hierarchy but does not promise rich results or ranking gains. No current Search Console performance evidence, competitive ranking positions, or 50-query research completed in this pass. This is a bounded technical metadata improvement, not a full search-intent campaign.
 
 Status: LOCAL ONLY. No commit, PR, production deployment, recrawl submission, external outreach, or scheduled work performed. Awaiting user review before publication.
+
+## Approved publication follow-up
+
+User approved making the previewed change. PR #258 merged as dbe64de. Cloudflare version ea2dab10-3ca7-45a3-b393-a9d70fc98b5f deployed only three changed assets. Fresh no-cache public requests verified the support-page title/WebPage markup, learning-hub breadcrumbs, and sitemap date; JSON-LD parsed. Live browser confirmed the new document title and existing support content. The 50-query, competitor, backlink, and Search Console work remains unperformed; this deployment is not represented as evidence of ranking improvement.
