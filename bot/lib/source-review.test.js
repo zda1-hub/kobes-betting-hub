@@ -446,6 +446,26 @@ test('does not allow unclear capper or non-pick extraction to publish', () => {
   assert.deepEqual(sourceTerms(packet), ['Jacob Misiorowski OVER 6.5 strikeouts -115 (1u)', 'Team ML +120']);
 });
 
+test('holds expert approval cards when extraction found prices without wagers', () => {
+  const oddsOnly = {
+    ...packet,
+    source: { handle: 'DanGambleAI', publish_mode: 'terms_only' },
+    analysis: { status: 'SOURCE_EXTRACTED', extraction: {
+      is_pick_candidate: true,
+      source_capper_name: 'Dan Gamble',
+      plays: ['-115', '-108', '-110'].map((odds_american) => ({
+        selection: '', line: '', odds_american, units: ''
+      }))
+    } }
+  };
+  assert.throws(() => assertPublishableExtraction(oddsOnly), /price without the selection/);
+  assert.throws(() => buildSourcePickApprovalEmbed(oddsOnly, 'APPROVED PICK'), /price without the selection/);
+  assert.throws(() => assertFreePickEligible({ ...oddsOnly, source: {} }), /actual selection/);
+  const mixed = structuredClone(oddsOnly);
+  mixed.analysis.extraction.plays.unshift({ selection: 'Celtics ML', odds_american: '-120' });
+  assert.throws(() => assertPublishableExtraction(mixed), /price without the selection/);
+});
+
 test('allows verified Free Picks from any explicit betting market', () => {
   assert.doesNotThrow(() => assertFreePickEligible(packet));
   assert.throws(() => assertFreePickEligible({ ...packet, source: { ...packet.source, publish_mode: 'terms_only' } }), /original writeup/);
