@@ -75,6 +75,12 @@ function validateApprovalPacket(packet) {
   return embed;
 }
 
+function manualSourceReviewPayload(packet) {
+  return {embeds:[{title:'Telegram source needs manual review',color:0xf59e0b,
+    description:`[Open the original Telegram post](${packet.source.post_url})\n\nThe image or GIF could not be parsed because today's source-analysis allowance is exhausted. Check the original capper, event, exact wager, line, odds, and timing before creating a pick. This notice cannot be posted to members.`,
+    footer:{text:`Manual source review ${packet.pick_id}`}}],allowedMentions:{parse:[]}};
+}
+
 function telegramPacket(message, channelId, now=new Date()) {
   if (String(message.peerId?.channelId || '') !== channelId || !Number.isSafeInteger(message.id)) throw new Error('Unexpected Telegram peer.');
   const posted=new Date(Number(message.date)*1000);
@@ -194,7 +200,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         return aFresh?a.id-b.id:b.id-a.id;
       });
     }
-    const channel=await channelFor();const results=[];let modelCalls=0;
+    const channel=await channelFor();const results=[];let modelCalls=0,manualAlerts=0;
     for(const message of messages){
       if(stopping)break;
       const packet=telegramPacket(message,config.channelId,now());
@@ -243,6 +249,15 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         await save(packetFile,saved);await audit.recordApprovalCard(saved,{channelId:channel.id,messageId:matches[0].id,payload:previous.payload});
         previous=state.records[String(message.id)]={status:'DELIVERED',messageId:matches[0].id};await save(file,state);
       }
+      if(previous?.status==='MANUAL_REVIEW_RESERVED'){
+        const recent=await channel.messages.fetch({limit:100});
+        const marker=`Manual source review ${packet.pick_id}`;
+        const matches=[...recent.values()].filter(m=>m.author.id===channel.client.user.id
+          &&m.embeds?.some(embed=>embed.footer?.text===marker));
+        if(matches.length!==1){results.push({status:'UNCERTAIN_MANUAL_REVIEW',messageId:message.id});break;}
+        previous=state.records[String(message.id)]={status:'MANUAL_REVIEW_SENT',messageId:matches[0].id};
+        state.cursor=Math.max(state.cursor,message.id);await save(file,state);
+      }
       if(previous){state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);state.cursor=Math.max(state.cursor,message.id);await save(file,state);continue;}
       let analysis=exclusiveTextExtraction(packet.source,packet.source.text);
       if(analysis)packet.analysis={status:'SOURCE_EXTRACTED',source_only:true,extraction:analysis};
@@ -267,6 +282,19 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         packet.source.media_urls=[]; // no source image in private/public cards or saved packets.
         if(packet.analysis.status!=='SOURCE_EXTRACTED'){
           const extractionStatus=['EXTRACTION_FAILED','ENRICHMENT_OFF','WAITING_FOR_OPENAI_API_KEY','BUDGET_EXCEEDED','MODEL_CALL_LIMIT_REACHED'].includes(packet.analysis.status)?packet.analysis.status:'UNKNOWN';
+          if(extractionStatus==='BUDGET_EXCEEDED' && telegramMediaKind(message)){
+            if(manualAlerts>=8){results.push({status:'DEFERRED_MANUAL_REVIEW_CAP',messageId:message.id});break;}
+            packet.status='MANUAL_REVIEW_PENDING';packet.approval_ready=false;await save(packetFile,packet);
+            const payload=manualSourceReviewPayload(packet);
+            state.records[String(message.id)]={status:'MANUAL_REVIEW_RESERVED'};await save(file,state);
+            const posted=await channel.send({...payload,nonce:hash(`manual-${packet.pick_id}`).slice(0,24),enforceNonce:true});
+            if(!posted?.id)throw new Error('Telegram manual-review receipt missing.');
+            packet.status='MANUAL_REVIEW_SENT';packet.discord_review_message_id=posted.id;await save(packetFile,packet);
+            state.records[String(message.id)]={status:'MANUAL_REVIEW_SENT',messageId:posted.id};
+            state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);
+            state.cursor=Math.max(state.cursor,message.id);await save(file,state);
+            manualAlerts++;results.push({status:'MANUAL_REVIEW_SENT',messageId:message.id});continue;
+          }
           // Configuration and spending limits are not bad source content.
           // Retain the cursor so the source can recover after the limit clears.
           if(extractionStatus!=='EXTRACTION_FAILED'){

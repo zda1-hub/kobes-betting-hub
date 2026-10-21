@@ -105,13 +105,33 @@ test('an unextractable message retries across restarts, is preserved, and cannot
   assert.ok(!JSON.stringify(held).includes('private-provider-detail'));
   await createTelegramReader(h.options).run();assert.equal(h.sent.length,1);
 });
-test('configuration and budget deferrals are not mistaken for bad source content',async t=>{
+test('configuration deferrals are not mistaken for bad source content',async t=>{
   const h=await harness(t);h.messages[0]={...message(1,''),photo:{}};
-  h.options.enrich=async()=>({status:'BUDGET_EXCEEDED'});
-  for(let i=0;i<4;i++)assert.equal((await createTelegramReader(h.options).run())[0].extractionStatus,'BUDGET_EXCEEDED');
+  h.options.enrich=async()=>({status:'WAITING_FOR_OPENAI_API_KEY'});
+  for(let i=0;i<4;i++)assert.equal((await createTelegramReader(h.options).run())[0].extractionStatus,'WAITING_FOR_OPENAI_API_KEY');
   h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:{lossless_text_terms:true,is_pick_candidate:true,
     source_capper_name:'AnalyticsCapper',selection:'Angels ML -110',plays:[{selection:'Angels ML -110'}],missing_or_ambiguous:[]}});
   await createTelegramReader(h.options).run();
+  assert.equal(h.sent.length,1);
+});
+test('an exhausted image-analysis budget sends a private manual source link without a publish button',async t=>{
+  const h=await harness(t);h.messages[0]={...message(1,'Kleos'),media:{document:{mimeType:'image/png',attributes:[]}}};
+  h.telegram.downloadMedia=async()=>require('sharp')({create:{width:32,height:32,channels:3,background:'white'}}).png().toBuffer();
+  h.options.enrich=async()=>({status:'BUDGET_EXCEEDED',detail:'daily cap'});
+  const result=await createTelegramReader(h.options).run();
+  assert.equal(result[0].status,'MANUAL_REVIEW_SENT');
+  assert.equal(h.sent.length,1);
+  assert.equal(h.sent[0].components,undefined);
+  assert.match(h.sent[0].embeds[0].description,/cannot be posted to members/);
+  await createTelegramReader(h.options).run();assert.equal(h.sent.length,1);
+});
+test('uncertain manual source notice is held rather than sent again',async t=>{
+  const h=await harness(t);h.messages[0]={...message(1,'Kleos'),media:{document:{mimeType:'image/png',attributes:[]}}};
+  h.telegram.downloadMedia=async()=>require('sharp')({create:{width:32,height:32,channels:3,background:'white'}}).png().toBuffer();
+  h.options.enrich=async()=>({status:'BUDGET_EXCEEDED'});
+  h.channel.send=async payload=>{h.sent.push(payload);throw Error('lost receipt');};
+  assert.equal((await createTelegramReader(h.options).run())[0].status,'NEEDS_ATTENTION');
+  assert.equal((await createTelegramReader(h.options).run())[0].status,'UNCERTAIN_MANUAL_REVIEW');
   assert.equal(h.sent.length,1);
 });
 test('configured model-call cap can match the X collector without losing the next message',async t=>{
@@ -175,7 +195,7 @@ test('rescans skipped current-day GIFs behind the cursor and retains deferred ba
   h.telegram.getMessages=async(_,params)=>h.messages.filter(m=>params.ids?params.ids.includes(m.id):params.minId?m.id>params.minId:true);
   await fs.writeFile(path.join(h.root,'reader-state.json'),JSON.stringify({channelId,cursor:2,records:{}}));
   h.options.maxModelCalls=1;
-  h.options.enrich=async()=>({status:'BUDGET_EXCEEDED'});
+  h.options.enrich=async()=>({status:'WAITING_FOR_OPENAI_API_KEY'});
   const first=await createTelegramReader(h.options).run();
   assert.equal(first[0].status,'DEFERRED_EXTRACTION');
   const state=JSON.parse(await fs.readFile(path.join(h.root,'reader-state.json'),'utf8'));
@@ -191,7 +211,7 @@ test('recent skipped media is reconsidered before older backfill without passing
   h.telegram.getMessages=async(_,params)=>h.messages.filter(m=>params.ids?params.ids.includes(m.id):params.minId?m.id>params.minId:true);
   h.telegram.downloadMedia=async()=>require('sharp')({create:{width:32,height:32,channels:3,background:'white'}}).png().toBuffer();
   await fs.writeFile(path.join(h.root,'reader-state.json'),JSON.stringify({channelId,cursor:3,records:{}}));
-  h.options.enrich=async()=>({status:'BUDGET_EXCEEDED'});
+  h.options.enrich=async()=>({status:'WAITING_FOR_OPENAI_API_KEY'});
   const result=await createTelegramReader(h.options).run();
   assert.equal(result[0].messageId,3);
   const state=JSON.parse(await fs.readFile(path.join(h.root,'reader-state.json'),'utf8'));
