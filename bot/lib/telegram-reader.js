@@ -14,6 +14,7 @@ const { recordSourcePost, upsertPickCandidate, recordApprovalCard, recordWorkflo
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const TERMS_PARSE_VERSION=2;
 const MEDIA_SCAN_VERSION=1;
+const CAPPER_PROMPT_VERSION=1;
 async function save(file,value){await fs.mkdir(path.dirname(file),{recursive:true,mode:0o700});await fs.writeFile(`${file}.tmp`,JSON.stringify(value),{mode:0o600});await fs.rename(`${file}.tmp`,file);}
 
 function telegramMediaKind(message) {
@@ -84,7 +85,8 @@ function telegramPacket(message, channelId, now=new Date()) {
   const id=`tg-${pacificOperatingDate(now).replaceAll('-','')}-${channelId}-${message.id}`;
   return {pick_id:id,status:'NOT_STARTED',created_at:now.toISOString(),approval:{decision:null,approver:'Kobe'},
     source:{platform:'Telegram',handle:'cappers-free',display_name:'CAPPERS FREE',post_id:`${channelId}-${message.id}`,
-      post_url:`https://t.me/c/${channelId}/${message.id}`,posted_at:posted.toISOString(),text,media_urls:[],
+      post_url:`https://t.me/c/${channelId}/${message.id}`,posted_at:posted.toISOString(),text,
+      author_signature:String(message.postAuthor||'').trim(),media_urls:[],
       publish_mode:'terms_only',reuse_permission:'OWNER_AUTHORIZED_REVIEW_ONLY'},analysis:{status:'NOT_STARTED'}};
 }
 
@@ -175,7 +177,9 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       }
       const recoverIds=Object.entries(state.records).filter(([,record])=>
         (record.status==='HELD_EXTRACTION_FAILED'&&record.media_download_version!==2)
-        || (record.status==='HELD_UNCLEAR_TERMS'&&record.terms_parse_version!==TERMS_PARSE_VERSION))
+        || (record.status==='HELD_UNCLEAR_TERMS'&&record.terms_parse_version!==TERMS_PARSE_VERSION)
+        || (record.status==='HELD_UNCLEAR_TERMS'&&record.hold_code==='ORIGINAL_CAPPER_MISSING'
+          &&record.capper_prompt_version!==CAPPER_PROMPT_VERSION))
         .map(([id])=>Number(id)).filter(Number.isSafeInteger).sort((a,b)=>b-a).slice(0,50);
       if(recoverIds.length){
         const held=await telegram.getMessages(entity,{ids:recoverIds});
@@ -197,6 +201,8 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       if(!packet){
         if(state.records[String(message.id)]?.status==='HELD_UNCLEAR_TERMS')
           state.records[String(message.id)].terms_parse_version=TERMS_PARSE_VERSION;
+        if(state.records[String(message.id)]?.hold_code==='ORIGINAL_CAPPER_MISSING')
+          state.records[String(message.id)].capper_prompt_version=CAPPER_PROMPT_VERSION;
         state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);
         state.cursor=Math.max(state.cursor,message.id);await save(file,state);continue;
       }
@@ -216,6 +222,16 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
           delete state.records[String(message.id)];previous=undefined;await save(file,state);
         }else{
           previous.terms_parse_version=TERMS_PARSE_VERSION;await save(file,state);
+        }
+      }
+      if(previous?.status==='HELD_UNCLEAR_TERMS' && previous.hold_code==='ORIGINAL_CAPPER_MISSING'
+        &&previous.capper_prompt_version!==CAPPER_PROMPT_VERSION){
+        // Re-evaluate only current-day source media or signed posts with the
+        // Telegram-specific credit instruction. A failed retry is versioned.
+        if(telegramMediaKind(message)||message.postAuthor){
+          delete state.records[String(message.id)];previous=undefined;await save(file,state);
+        }else{
+          previous.capper_prompt_version=CAPPER_PROMPT_VERSION;await save(file,state);
         }
       }
       if(previous?.status==='RESERVED'){
@@ -292,7 +308,8 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       }catch(error){
         const holdCode=approvalHoldCode(error);
         packet.status='HELD_UNCLEAR_TERMS';packet.hold_code=holdCode;await save(packetFile,packet);
-        state.records[String(message.id)]={status:'HELD_UNCLEAR_TERMS',terms_parse_version:TERMS_PARSE_VERSION,hold_code:holdCode};state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);state.cursor=Math.max(state.cursor,message.id);await save(file,state);
+        state.records[String(message.id)]={status:'HELD_UNCLEAR_TERMS',terms_parse_version:TERMS_PARSE_VERSION,
+          capper_prompt_version:CAPPER_PROMPT_VERSION,hold_code:holdCode};state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);state.cursor=Math.max(state.cursor,message.id);await save(file,state);
         results.push({status:'HELD_UNCLEAR_TERMS',messageId:message.id,holdCode});continue;
       }
       await audit.upsertPickCandidate(packet,{status:'READY_FOR_APPROVAL'});
