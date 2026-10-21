@@ -138,6 +138,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
     // Oldest-first pagination prevents a busy channel's newer messages from
     // hiding deferred picks. Initial catch-up starts at the current day only.
     let messages;
+    const cursorAtStart=state.cursor;
     async function currentDayMessages(){
       // Page backwards to the day's boundary, not just the latest 100 posts.
       // Refuse an incomplete baseline rather than silently lose older picks.
@@ -164,12 +165,12 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         const today=await currentDayMessages();
         state.media_backfill_ids=today.filter(message=>message.id<=state.cursor
           && !state.records[String(message.id)] && telegramPacket(message,config.channelId,now()))
-          .map(message=>message.id);
+          .map(message=>message.id).sort((a,b)=>b-a);
         state.media_scan_date=operatingDate;state.media_scan_version=MEDIA_SCAN_VERSION;
         await save(file,state);
       }
       if(state.media_backfill_ids?.length){
-        const backfill=await telegram.getMessages(entity,{ids:state.media_backfill_ids.slice(0,50)});
+        const backfill=await telegram.getMessages(entity,{ids:[...state.media_backfill_ids].sort((a,b)=>b-a).slice(0,50)});
         messages=[...backfill,...messages];
       }
       const recoverIds=Object.entries(state.records).filter(([,record])=>
@@ -180,7 +181,14 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         const held=await telegram.getMessages(entity,{ids:recoverIds});
         messages=[...new Map([...held,...messages].filter(Boolean).map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
       }
-      messages=[...new Map(messages.filter(Boolean).map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
+      messages=[...new Map(messages.filter(Boolean).map(message=>[message.id,message])).values()].sort((a,b)=>{
+        const aFresh=a.id>cursorAtStart,bFresh=b.id>cursorAtStart;
+        if(aFresh!==bFresh)return aFresh?-1:1;
+        // Fresh items stay oldest-first so the cursor cannot pass a deferred
+        // message. Previously skipped items are already behind that cursor;
+        // newest first gives current games a chance before they expire.
+        return aFresh?a.id-b.id:b.id-a.id;
+      });
     }
     const channel=await channelFor();const results=[];let modelCalls=0;
     for(const message of messages){
