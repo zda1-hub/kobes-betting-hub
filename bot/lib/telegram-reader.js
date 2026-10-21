@@ -1,6 +1,9 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
+const { spawn } = require('node:child_process');
+const os = require('node:os');
+const sharp = require('sharp');
 const { pacificOperatingDate } = require('./pick-log');
 const { exclusiveTextExtraction } = require('../../pipeline/exclusive-text');
 const { assertPublishableExtraction, buildSourcePickEmbed, reviewButtons, approvalCopySha256 } = require('./source-review');
@@ -10,14 +13,73 @@ const { enrichPacket } = require('../../pipeline/enrich-pick');
 const { recordSourcePost, upsertPickCandidate, recordApprovalCard, recordWorkflowEvent } = require('../../pipeline/audit-store');
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const TERMS_PARSE_VERSION=2;
+const MEDIA_SCAN_VERSION=1;
 async function save(file,value){await fs.mkdir(path.dirname(file),{recursive:true,mode:0o700});await fs.writeFile(`${file}.tmp`,JSON.stringify(value),{mode:0o600});await fs.rename(`${file}.tmp`,file);}
+
+function telegramMediaKind(message) {
+  if(message.photo||message.media?.photo)return 'photo';
+  const document=message.document||message.media?.document;
+  if(!document)return null;
+  const mime=String(document.mimeType||'').toLowerCase();
+  if(['image/jpeg','image/png','image/webp','image/gif'].includes(mime))return 'image-document';
+  const animated=(document.attributes||[]).some(attribute=>attribute.className==='DocumentAttributeAnimated');
+  return mime==='video/mp4'&&animated?'animation':null;
+}
+
+async function firstAnimationFrame(bytes) {
+  const ffmpeg=require('@ffmpeg-installer/ffmpeg').path;
+  if(!ffmpeg)throw new Error('Telegram animation decoder unavailable.');
+  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'kbh-telegram-frame-'));
+  try {
+    const input=path.join(directory,'animation.mp4');
+    await fs.writeFile(input,bytes,{mode:0o600});
+    return await new Promise((resolve,reject)=>{
+      const child=spawn(ffmpeg,['-hide_banner','-loglevel','error','-i',input,'-frames:v','1','-f','image2pipe','-vcodec','png','pipe:1'],
+        {stdio:['ignore','pipe','ignore']});
+      const chunks=[];let length=0;const timer=setTimeout(()=>child.kill('SIGKILL'),15000);
+      child.stdout.on('data',chunk=>{length+=chunk.length;if(length>10000000)child.kill('SIGKILL');else chunks.push(chunk);});
+      child.on('error',error=>{clearTimeout(timer);reject(error);});
+      child.on('close',code=>{clearTimeout(timer);if(code!==0||!length||length>10000000)reject(new Error('Telegram animation frame unavailable.'));else resolve(Buffer.concat(chunks));});
+    });
+  }finally{await fs.rm(directory,{recursive:true,force:true});}
+}
+
+async function telegramImageBytes(telegram,message) {
+  const kind=telegramMediaKind(message);
+  if(!kind)return null;
+  const bytes=await telegram.downloadMedia(message);
+  if(!Buffer.isBuffer(bytes)||!bytes.length||bytes.length>10000000)throw new Error('Telegram image unavailable or oversized.');
+  if(kind==='photo')return bytes;
+  const image=kind==='animation'?await firstAnimationFrame(bytes):bytes;
+  return sharp(image,{animated:false,limitInputPixels:25000000}).jpeg({quality:88}).toBuffer();
+}
+
+function approvalHoldCode(error) {
+  const reason=String(error?.message||'');
+  if(/original capper/i.test(reason))return 'ORIGINAL_CAPPER_MISSING';
+  if(/game, team, or player|matchup/i.test(reason))return 'EVENT_CONTEXT_MISSING';
+  if(/player.s full name/i.test(reason))return 'PLAYER_NAME_MISSING';
+  if(/explicit betting market/i.test(reason))return 'MARKET_MISSING';
+  if(/selection|actual play|clearly visible|definitive play/i.test(reason))return 'SELECTION_MISSING';
+  if(/Unclear source terms/i.test(reason))return 'AMBIGUOUS_SOURCE_TERMS';
+  if(/Oversized capper card/i.test(reason))return 'CARD_TOO_LONG';
+  return 'VALIDATION_FAILED';
+}
+
+function validateApprovalPacket(packet) {
+  assertPublishableExtraction(packet);
+  if(packet.analysis.extraction.missing_or_ambiguous?.length)throw new Error('Unclear source terms.');
+  const embed=buildSourcePickEmbed(packet,'PAID PICK');
+  if((embed.description||'').length>4000)throw new Error('Oversized capper card.');
+  return embed;
+}
 
 function telegramPacket(message, channelId, now=new Date()) {
   if (String(message.peerId?.channelId || '') !== channelId || !Number.isSafeInteger(message.id)) throw new Error('Unexpected Telegram peer.');
   const posted=new Date(Number(message.date)*1000);
   if (!Number.isFinite(posted.getTime()) || posted>now || pacificOperatingDate(posted)!==pacificOperatingDate(now)) return null;
   const text=String(message.message||'');
-  if (!message.photo && !message.media?.photo && !/\b(?:ML|moneyline|over|under|NRFI|YRFI|BTTS)\b|[+-]\d/.test(text)) return null;
+  if (!telegramMediaKind(message) && !/\b(?:ML|moneyline|over|under|NRFI|YRFI|BTTS)\b|[+-]\d/i.test(text)) return null;
   if (/\b(?:recap|yesterday|already won|cashed|results|final record|signup|subscribe)\b/i.test(text)) return null;
   const id=`tg-${pacificOperatingDate(now).replaceAll('-','')}-${channelId}-${message.id}`;
   return {pick_id:id,status:'NOT_STARTED',created_at:now.toISOString(),approval:{decision:null,approver:'Kobe'},
@@ -57,26 +119,59 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
     const file=path.join(config.root,'reader-state.json');let state;
     try {state=JSON.parse(await fs.readFile(file,'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;state={channelId:config.channelId,cursor:0,records:{}};}
     if(state.channelId!==config.channelId)throw new Error('Telegram channel changed.');
+    // Explain existing current-day holds from their saved extraction without
+    // re-reading Telegram, spending model calls, or sending an approval twice.
+    const operatingDate=pacificOperatingDate(now());
+    let diagnosed=false;
+    for(const [id,record] of Object.entries(state.records||{})){
+      if(record.status!=='HELD_UNCLEAR_TERMS'||record.hold_code||!/^[0-9]+$/.test(id))continue;
+      const packetFile=path.join(queueRoot,operatingDate,`tg-${operatingDate.replaceAll('-','')}-${config.channelId}-${id}.json`);
+      let packet;
+      try{packet=JSON.parse(await fs.readFile(packetFile,'utf8'));}catch(error){if(error.code==='ENOENT')continue;throw error;}
+      try{validateApprovalPacket(packet);record.hold_code='REQUIRES_REVIEW';}
+      catch(error){record.hold_code=approvalHoldCode(error);}
+      diagnosed=true;
+      logger.info?.(`Telegram held message ${id}: ${record.hold_code}`);
+    }
+    if(diagnosed)await save(file,state);
     if(!await connect())return[{status:'AWAITING_LOGIN'}];
     // Oldest-first pagination prevents a busy channel's newer messages from
     // hiding deferred picks. Initial catch-up starts at the current day only.
     let messages;
-    if(!state.cursor){
+    async function currentDayMessages(){
       // Page backwards to the day's boundary, not just the latest 100 posts.
       // Refuse an incomplete baseline rather than silently lose older picks.
-      messages=[];let offsetId=0,complete=false;
+      const collected=[];let offsetId=0,complete=false;
       for(let page=0;page<20;page++){
         const batch=await telegram.getMessages(entity,{limit:100,...(offsetId?{offsetId}:{})});
-        messages.push(...batch);
+        collected.push(...batch);
         if(batch.length<100 || batch.some(message=>pacificOperatingDate(new Date(Number(message.date)*1000))<pacificOperatingDate(now()))){complete=true;break;}
         const next=Math.min(...batch.map(message=>message.id));
         if(offsetId && next>=offsetId)throw new Error('Telegram pagination did not advance.');
         offsetId=next;
       }
       if(!complete)throw new Error('Telegram current-day baseline exceeds safety limit; review before proceeding.');
-      messages=[...new Map(messages.map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
+      return [...new Map(collected.map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
+    }
+    if(!state.cursor){
+      messages=await currentDayMessages();
     } else {
       messages=await telegram.getMessages(entity,{minId:state.cursor,reverse:true,limit:30});
+      if(state.media_scan_date!==operatingDate||state.media_scan_version!==MEDIA_SCAN_VERSION){
+        // One bounded current-day rescan recovers GIFs and title-cased wagers
+        // skipped before the old cursor. Persist IDs so model-call caps cannot
+        // strand the remaining backfill behind that cursor.
+        const today=await currentDayMessages();
+        state.media_backfill_ids=today.filter(message=>message.id<=state.cursor
+          && !state.records[String(message.id)] && telegramPacket(message,config.channelId,now()))
+          .map(message=>message.id);
+        state.media_scan_date=operatingDate;state.media_scan_version=MEDIA_SCAN_VERSION;
+        await save(file,state);
+      }
+      if(state.media_backfill_ids?.length){
+        const backfill=await telegram.getMessages(entity,{ids:state.media_backfill_ids.slice(0,50)});
+        messages=[...backfill,...messages];
+      }
       const recoverIds=Object.entries(state.records).filter(([,record])=>
         (record.status==='HELD_EXTRACTION_FAILED'&&record.media_download_version!==2)
         || (record.status==='HELD_UNCLEAR_TERMS'&&record.terms_parse_version!==TERMS_PARSE_VERSION))
@@ -85,6 +180,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         const held=await telegram.getMessages(entity,{ids:recoverIds});
         messages=[...new Map([...held,...messages].filter(Boolean).map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
       }
+      messages=[...new Map(messages.filter(Boolean).map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
     }
     const channel=await channelFor();const results=[];let modelCalls=0;
     for(const message of messages){
@@ -93,6 +189,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       if(!packet){
         if(state.records[String(message.id)]?.status==='HELD_UNCLEAR_TERMS')
           state.records[String(message.id)].terms_parse_version=TERMS_PARSE_VERSION;
+        state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);
         state.cursor=Math.max(state.cursor,message.id);await save(file,state);continue;
       }
       const date=pacificOperatingDate(now()),packetFile=path.join(queueRoot,date,`${packet.pick_id}.json`);
@@ -122,16 +219,24 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         await save(packetFile,saved);await audit.recordApprovalCard(saved,{channelId:channel.id,messageId:matches[0].id,payload:previous.payload});
         previous=state.records[String(message.id)]={status:'DELIVERED',messageId:matches[0].id};await save(file,state);
       }
-      if(previous){state.cursor=Math.max(state.cursor,message.id);await save(file,state);continue;}
+      if(previous){state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);state.cursor=Math.max(state.cursor,message.id);await save(file,state);continue;}
       let analysis=exclusiveTextExtraction(packet.source,packet.source.text);
       if(analysis)packet.analysis={status:'SOURCE_EXTRACTED',source_only:true,extraction:analysis};
       else {
         if(modelCalls>=maxModelCalls){results.push({status:'DEFERRED_MODEL_CAP',messageId:message.id});break;}
-        if(message.photo||message.media?.photo){
-          // Omission selects the largest real photo; this library does not
-          // support Python-style negative thumbnail indexes.
-          const bytes=await telegram.downloadMedia(message);
-          if(!Buffer.isBuffer(bytes)||!bytes.length||bytes.length>10000000)throw new Error('Telegram image unavailable or oversized.');
+        if(telegramMediaKind(message)){
+          // Telegram GIFs are animated MP4 documents; use a full-resolution
+          // frame instead of their small thumbnail for readable wager terms.
+          let bytes;
+          try{bytes=await telegramImageBytes(telegram,message);}
+          catch(error){
+            packet.status='HELD_MEDIA_UNREADABLE';packet.hold_code='MEDIA_UNREADABLE';await save(packetFile,packet);
+            state.records[String(message.id)]={status:'HELD_MEDIA_UNREADABLE',hold_code:'MEDIA_UNREADABLE'};
+            state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);
+            state.cursor=Math.max(state.cursor,message.id);await save(file,state);
+            logger.info?.(`Telegram held message ${message.id}: MEDIA_UNREADABLE`);
+            results.push({status:'HELD_MEDIA_UNREADABLE',messageId:message.id});continue;
+          }
           packet.source.media_urls=[`data:image/jpeg;base64,${bytes.toString('base64')}`];
         }
         packet.analysis=await enrich(packet,{beforeOpenAIRequest:()=>{if(modelCalls>=maxModelCalls)return false;modelCalls++;return true;}});
@@ -158,6 +263,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
           packet.analysis={status:packet.analysis.status,source_only:true,extraction:null};
           packet.status='HELD_EXTRACTION_FAILED';await save(packetFile,packet);
           state.records[String(message.id)]={status:'HELD_EXTRACTION_FAILED',media_download_version:2};
+          state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);
           state.cursor=Math.max(state.cursor,message.id);await save(file,state);
           results.push({status:'HELD_EXTRACTION_FAILED',messageId:message.id});continue;
         }
@@ -165,23 +271,21 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       await audit.recordSourcePost(packet);
       let payload;
       try {
-        assertPublishableExtraction(packet);
-        if(packet.analysis.extraction.missing_or_ambiguous?.length)throw new Error('Unclear source terms.');
-        const embed=buildSourcePickEmbed(packet,'PAID PICK');
-        if((embed.description||'').length>4000)throw new Error('Oversized capper card.');
+        const embed=validateApprovalPacket(packet);
         const fingerprint=hash(embed.description||'');
         if(Object.values(state.records).some(record=>record.fingerprint===fingerprint)){
-          state.records[String(message.id)]={status:'DUPLICATE',fingerprint};state.cursor=Math.max(state.cursor,message.id);await save(file,state);continue;
+          state.records[String(message.id)]={status:'DUPLICATE',fingerprint};state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);state.cursor=Math.max(state.cursor,message.id);await save(file,state);continue;
         }
         packet.approval.exact_final_copy=embed.description;
         packet.approval.exact_final_copy_sha256=approvalCopySha256(packet.approval.exact_final_copy);
         packet.approval_ready=true;packet.status='READY_FOR_APPROVAL';
         payload={embeds:[embed],components:reviewButtons(packet.pick_id,{paidOnly:true,paidLabel:'Post to #expert-picks'}),allowedMentions:{parse:[]}};
         previous={status:'RESERVED',fingerprint,payload};
-      }catch{
-        packet.status='HELD_UNCLEAR_TERMS';await save(packetFile,packet);
-        state.records[String(message.id)]={status:'HELD_UNCLEAR_TERMS',terms_parse_version:TERMS_PARSE_VERSION};state.cursor=Math.max(state.cursor,message.id);await save(file,state);
-        results.push({status:'HELD_UNCLEAR_TERMS',messageId:message.id});continue;
+      }catch(error){
+        const holdCode=approvalHoldCode(error);
+        packet.status='HELD_UNCLEAR_TERMS';packet.hold_code=holdCode;await save(packetFile,packet);
+        state.records[String(message.id)]={status:'HELD_UNCLEAR_TERMS',terms_parse_version:TERMS_PARSE_VERSION,hold_code:holdCode};state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);state.cursor=Math.max(state.cursor,message.id);await save(file,state);
+        results.push({status:'HELD_UNCLEAR_TERMS',messageId:message.id,holdCode});continue;
       }
       await audit.upsertPickCandidate(packet,{status:'READY_FOR_APPROVAL'});
       await save(packetFile,packet);state.records[String(message.id)]=previous;await save(file,state);
@@ -191,6 +295,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       packet.discord_review_message_id=posted.id;await save(packetFile,packet);
       await audit.recordApprovalCard(packet,{channelId:channel.id,messageId:posted.id,payload});
       state.records[String(message.id)]={status:'DELIVERED',messageId:posted.id,fingerprint:previous.fingerprint};
+      state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);
       state.cursor=Math.max(state.cursor,message.id);await save(file,state);results.push({status:'PRIVATE_APPROVAL_DELIVERED',messageId:message.id});
     }
     state.checkedAt=now().toISOString();await save(file,state);return results;

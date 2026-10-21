@@ -12,6 +12,9 @@ test('Telegram packet accepts only selected current-day channel, rejects old res
   assert.throws(()=>telegramPacket({...message(),peerId:{channelId:'other'}},channelId,now));
   assert.equal(telegramPacket({...message(),date:now.getTime()/1000-86400},channelId,now),null);
   assert.equal(telegramPacket(message(1,'Yesterday results Angels ML -110'),channelId,now),null);
+  assert.ok(telegramPacket(message(2,'Angels Over 7.5'),channelId,now));
+  assert.ok(telegramPacket({...message(3,'Kleos'),media:{document:{mimeType:'video/mp4',attributes:[{className:'DocumentAttributeAnimated'}]}}},channelId,now));
+  assert.equal(telegramPacket({...message(4,'Kleos'),media:{document:{mimeType:'video/mp4',attributes:[]}}},channelId,now),null);
 });
 test('encrypted session round-trip hides secret and rejects wrong key/tampering',()=>{
   const value=encryptSession('private-account-session',apiHash);
@@ -61,7 +64,27 @@ test('uncertain delivery recovers matching native button receipt',async t=>{
 test('unknown capper or missing market is held, not published as slop',async t=>{
   const h=await harness(t);h.messages[0]=message(1,'Some text with Over 44');
   h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:{is_pick_candidate:true,selection:'Over 44',source_capper_name:'',plays:[]}});
-  await createTelegramReader(h.options).run();assert.equal(h.sent.length,0);
+  const result=await createTelegramReader(h.options).run();assert.equal(h.sent.length,0);
+  assert.equal(result[0].holdCode,'ORIGINAL_CAPPER_MISSING');
+  const held=JSON.parse(await fs.readFile(path.join(h.root,'reader-state.json'),'utf8'));
+  assert.equal(held.records['1'].hold_code,'ORIGINAL_CAPPER_MISSING');
+});
+test('diagnoses a saved current-day hold without a new model call or approval send',async t=>{
+  const h=await harness(t);h.messages[0]=message(1,'Some text with Over 44');
+  h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:{is_pick_candidate:true,selection:'Over 44',source_capper_name:'',plays:[]}});
+  await createTelegramReader(h.options).run();
+  const stateFile=path.join(h.root,'reader-state.json');
+  const state=JSON.parse(await fs.readFile(stateFile,'utf8'));
+  delete state.records['1'].hold_code;
+  await fs.writeFile(stateFile,JSON.stringify(state));
+  let modelCalls=0;const logged=[];
+  h.options.enrich=async()=>{modelCalls++;throw Error('unexpected extraction');};
+  h.options.logger={error(){},info(message){logged.push(message);}};
+  await createTelegramReader(h.options).run();
+  const diagnosed=JSON.parse(await fs.readFile(stateFile,'utf8'));
+  assert.equal(diagnosed.records['1'].hold_code,'ORIGINAL_CAPPER_MISSING');
+  assert.equal(modelCalls,0);assert.equal(h.sent.length,0);
+  assert.deepEqual(logged,['Telegram held message 1: ORIGINAL_CAPPER_MISSING']);
 });
 test('missing session reports awaiting login without a Telegram connection',async t=>{
   const h=await harness(t);await fs.rename(h.config.sessionFile,`${h.config.sessionFile}.held`);
@@ -112,8 +135,55 @@ test('downloads the default largest photo and never sends empty bytes for extrac
   const h=await harness(t);h.messages[0]={...message(1,''),photo:{}};let models=0;
   h.telegram.downloadMedia=async(...args)=>{assert.equal(args.length,1);return Buffer.alloc(0);};
   h.options.enrich=async()=>{models++;return{status:'EXTRACTION_FAILED'};};
-  assert.equal((await createTelegramReader(h.options).run())[0].status,'NEEDS_ATTENTION');
+  assert.equal((await createTelegramReader(h.options).run())[0].status,'HELD_MEDIA_UNREADABLE');
   assert.equal(models,0);assert.equal(h.sent.length,0);
+});
+test('decodes a Telegram MP4 animation frame before source extraction',async t=>{
+  const h=await harness(t);
+  h.messages[0]={...message(1,'Kleos'),media:{document:{mimeType:'video/mp4',attributes:[{className:'DocumentAttributeAnimated'}]}}};
+  const videoFile=path.join(h.root,'animated.mp4');
+  const {execFile}=require('node:child_process');
+  await new Promise((resolve,reject)=>execFile(require('@ffmpeg-installer/ffmpeg').path,
+    ['-hide_banner','-loglevel','error','-f','lavfi','-i','color=c=white:s=320x240:d=1','-pix_fmt','yuv420p',videoFile],
+    error=>error?reject(error):resolve()));
+  h.telegram.downloadMedia=async()=>fs.readFile(videoFile);
+  h.options.enrich=async packet=>{
+    const image=Buffer.from(packet.source.media_urls[0].split(',')[1],'base64');
+    assert.equal((await require('sharp')(image).metadata()).format,'jpeg');
+    return {status:'SOURCE_EXTRACTED',extraction:{lossless_text_terms:true,is_pick_candidate:true,
+      source_capper_name:'Kleos',selection:'Panthers ML -110',plays:[{selection:'Panthers ML -110',event:'Panthers @ Opponent'}],missing_or_ambiguous:[]}};
+  };
+  const result=await createTelegramReader(h.options).run();
+  assert.equal(result[0].status,'PRIVATE_APPROVAL_DELIVERED');
+});
+test('extracts a current-day image document even when its caption only names the capper',async t=>{
+  const h=await harness(t);h.messages[0]={...message(1,'Kleos'),media:{document:{mimeType:'image/gif',attributes:[]}}};
+  const image=await require('sharp')({create:{width:32,height:32,channels:3,background:'white'}}).gif().toBuffer();
+  h.telegram.downloadMedia=async()=>image;
+  h.options.enrich=async packet=>{
+    assert.match(packet.source.media_urls[0],/^data:image\/jpeg;base64,/);
+    return {status:'SOURCE_EXTRACTED',extraction:{lossless_text_terms:true,is_pick_candidate:true,
+      source_capper_name:'Kleos',selection:'Panthers ML -110',plays:[{selection:'Panthers ML -110',event:'Panthers @ Opponent'}],missing_or_ambiguous:[]}};
+  };
+  const result=await createTelegramReader(h.options).run();
+  assert.equal(result[0].status,'PRIVATE_APPROVAL_DELIVERED');assert.equal(h.sent.length,1);
+});
+test('rescans skipped current-day GIFs behind the cursor and retains deferred backfill IDs',async t=>{
+  const h=await harness(t);
+  h.messages=[{...message(1,'Kleos'),media:{document:{mimeType:'image/png',attributes:[]}}},message(2,'ordinary discussion')];
+  h.telegram.downloadMedia=async()=>require('sharp')({create:{width:32,height:32,channels:3,background:'white'}}).png().toBuffer();
+  h.telegram.getMessages=async(_,params)=>h.messages.filter(m=>params.ids?params.ids.includes(m.id):params.minId?m.id>params.minId:true);
+  await fs.writeFile(path.join(h.root,'reader-state.json'),JSON.stringify({channelId,cursor:2,records:{}}));
+  h.options.maxModelCalls=1;
+  h.options.enrich=async()=>({status:'BUDGET_EXCEEDED'});
+  const first=await createTelegramReader(h.options).run();
+  assert.equal(first[0].status,'DEFERRED_EXTRACTION');
+  const state=JSON.parse(await fs.readFile(path.join(h.root,'reader-state.json'),'utf8'));
+  assert.deepEqual(state.media_backfill_ids,[1]);
+  h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:{lossless_text_terms:true,is_pick_candidate:true,
+    source_capper_name:'Kleos',selection:'Panthers ML -110',plays:[{selection:'Panthers ML -110',event:'Panthers @ Opponent'}],missing_or_ambiguous:[]}});
+  const second=await createTelegramReader(h.options).run();
+  assert.equal(second[0].status,'PRIVATE_APPROVAL_DELIVERED');assert.equal(h.sent.length,1);
 });
 test('recovers a never-delivered legacy photo hold behind the cursor without replaying delivered cards',async t=>{
   const h=await harness(t);h.messages[0]={...message(1,''),photo:{}};h.messages.push(message(3));
