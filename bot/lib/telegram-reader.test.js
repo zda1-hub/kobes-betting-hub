@@ -197,6 +197,22 @@ test('recent skipped media is reconsidered before older backfill without passing
   const state=JSON.parse(await fs.readFile(path.join(h.root,'reader-state.json'),'utf8'));
   assert.deepEqual(state.media_backfill_ids,[3,2,1]);
 });
+test('retries a held source-credit image once with Telegram-specific credit context',async t=>{
+  const h=await harness(t);
+  h.messages[0]={...message(1,'Kleos'),postAuthor:'Kleos',media:{document:{mimeType:'image/png',attributes:[]}}};
+  h.telegram.getMessages=async(_,params)=>h.messages.filter(m=>params.ids?params.ids.includes(m.id):m.id>(params.minId||0));
+  h.telegram.downloadMedia=async()=>require('sharp')({create:{width:32,height:32,channels:3,background:'white'}}).png().toBuffer();
+  await fs.writeFile(path.join(h.root,'reader-state.json'),JSON.stringify({channelId,cursor:1,records:{'1':{
+    status:'HELD_UNCLEAR_TERMS',terms_parse_version:2,hold_code:'ORIGINAL_CAPPER_MISSING'}}}));
+  h.options.enrich=async packet=>{
+    assert.equal(packet.source.author_signature,'Kleos');
+    return {status:'SOURCE_EXTRACTED',extraction:{lossless_text_terms:true,is_pick_candidate:true,
+      source_capper_name:'Kleos',selection:'Panthers ML -110',plays:[{selection:'Panthers ML -110',event:'Panthers @ Opponent'}],missing_or_ambiguous:[]}};
+  };
+  const result=await createTelegramReader(h.options).run();
+  assert.equal(result[0].status,'PRIVATE_APPROVAL_DELIVERED');
+  await createTelegramReader(h.options).run();assert.equal(h.sent.length,1);
+});
 test('recovers a never-delivered legacy photo hold behind the cursor without replaying delivered cards',async t=>{
   const h=await harness(t);h.messages[0]={...message(1,''),photo:{}};h.messages.push(message(3));
   h.telegram.getMessages=async(_,params)=>h.messages.filter(m=>params.ids?params.ids.includes(m.id):m.id>(params.minId||0));

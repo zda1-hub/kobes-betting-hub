@@ -33,3 +33,12 @@ test('allows a controlled low-detail image benchmark without changing code', () 
   assert.equal(requestBody.max_output_tokens, 1200);
   assert.deepEqual(requestBody.reasoning, { effort: 'low' });
 });
+test('Telegram extraction considers visible source credit without using the relay as capper',()=>{
+  const telegram={source:{...packet.source,platform:'Telegram',handle:'cappers-free',
+    post_url:'https://t.me/c/3593544389/1',text:'Kleos',author_signature:'Kleos'}};
+  const {requestBody}=extractionRequest(telegram,{});
+  const prompt=requestBody.input[0].content[0].text;
+  assert.match(prompt,/Telegram channel post/);
+  assert.match(prompt,/Post author signature: Kleos/);
+  assert.match(prompt,/CAPPERS FREE is the relay channel, not the capper/);
+});
