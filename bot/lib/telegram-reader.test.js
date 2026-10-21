@@ -185,6 +185,18 @@ test('rescans skipped current-day GIFs behind the cursor and retains deferred ba
   const second=await createTelegramReader(h.options).run();
   assert.equal(second[0].status,'PRIVATE_APPROVAL_DELIVERED');assert.equal(h.sent.length,1);
 });
+test('recent skipped media is reconsidered before older backfill without passing fresh deferred messages',async t=>{
+  const h=await harness(t);
+  h.messages=[1,2,3].map(id=>({...message(id,'Kleos'),media:{document:{mimeType:'image/png',attributes:[]}}}));
+  h.telegram.getMessages=async(_,params)=>h.messages.filter(m=>params.ids?params.ids.includes(m.id):params.minId?m.id>params.minId:true);
+  h.telegram.downloadMedia=async()=>require('sharp')({create:{width:32,height:32,channels:3,background:'white'}}).png().toBuffer();
+  await fs.writeFile(path.join(h.root,'reader-state.json'),JSON.stringify({channelId,cursor:3,records:{}}));
+  h.options.enrich=async()=>({status:'BUDGET_EXCEEDED'});
+  const result=await createTelegramReader(h.options).run();
+  assert.equal(result[0].messageId,3);
+  const state=JSON.parse(await fs.readFile(path.join(h.root,'reader-state.json'),'utf8'));
+  assert.deepEqual(state.media_backfill_ids,[3,2,1]);
+});
 test('recovers a never-delivered legacy photo hold behind the cursor without replaying delivered cards',async t=>{
   const h=await harness(t);h.messages[0]={...message(1,''),photo:{}};h.messages.push(message(3));
   h.telegram.getMessages=async(_,params)=>h.messages.filter(m=>params.ids?params.ids.includes(m.id):m.id>(params.minId||0));
