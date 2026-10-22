@@ -1,12 +1,17 @@
+import {createCopyResult} from './copy-result.mjs';
 import {summarizeValues,formatStatistic as fmt,INPUT_ERROR} from './statistics-calculations.mjs';
 const form = document.querySelector('[data-stat-form]');
 if (form) {
   const input=form.querySelector('textarea');
   const error=document.querySelector('[data-stat-error]');
   const output=document.querySelector('[data-stat-output]');
+  const copyContainer=document.createElement('div');
+  output.after(copyContainer);
+  const copy=createCopyResult(copyContainer);
   const fallback=document.querySelector('[data-stat-fallback]');
   function calculate() {
     output.replaceChildren();
+    copy.set('');
     error.textContent='';
     input.removeAttribute('aria-invalid');
     try {
@@ -35,11 +40,13 @@ if (form) {
         paragraph.textContent=line;
         output.append(paragraph);
       }
+      copy.set('Descriptive statistics — use one statistic, unit and reporting window.\nEntered values: '+input.value+'\n'+output.innerText);
     } catch {
       input.setAttribute('aria-invalid','true');
       error.textContent=INPUT_ERROR;
     }
   }
+  form.addEventListener('input',()=>{output.replaceChildren();copy.set('');error.textContent='';});
   form.addEventListener('submit',event=>{event.preventDefault();calculate();});
   form.querySelector('[data-stat-reset]').addEventListener('click',()=>{input.value='2, 4, 4, 5, 25';calculate();});
   form.hidden=false;
