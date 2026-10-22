@@ -12,6 +12,13 @@ function pacificDate(date) {
 function espnLeague(packet) {
   const extraction = packet.analysis?.extraction || {};
   const plays = Array.isArray(extraction.plays) ? extraction.plays : [];
+  // A split card may come from a mixed NFL/NBA post. Classify its own wager
+  // before looking at the original post's other selections.
+  if (plays.length === 1) {
+    const ownTerms = [plays[0].selection, plays[0].market, plays[0].line].join(' ').toLowerCase();
+    if (/\b(?:rush(?:ing)?|receiving|passing|receptions?|completions?|interceptions?)\b/.test(ownTerms)) return 'football/nfl';
+    if (/\b(?:rebounds?|assists?|threes?|three[- ]pointers?|blocks?|steals?|pra)\b/.test(ownTerms)) return 'basketball/nba';
+  }
   const text = [
     packet.source?.text || '', extraction.league || '', extraction.sport || '',
     extraction.market || '', extraction.selection || '', extraction.line || '',
@@ -173,6 +180,22 @@ async function verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl) {
   }
 }
 
+async function resolveNamedPlayerEvent(packet, events, leaguePath, fetchImpl, now) {
+  const playerNames = extractedPlayerNames(packet);
+  if (playerNames.length !== 1 || playerNames[0].trim().split(/\s+/).length < 2) return null;
+  const today = pacificDate(now);
+  const sameDayUpcoming = events.filter(event => event.date && pacificDate(new Date(event.date)) === today
+    && Date.parse(event.date) > now.getTime());
+  const matches = [];
+  for (const event of sameDayUpcoming) {
+    const roster = await verifyPlayersOnEventTeams(packet, event, leaguePath, fetchImpl);
+    // If any roster is unavailable, uniqueness cannot be established.
+    if (roster.status === 'UNVERIFIABLE') return null;
+    if (!roster.status && roster.athlete) matches.push(event);
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
 async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fetch } = {}) {
   const leaguePath = espnLeague(packet);
   if (!leaguePath) return { status: 'UNVERIFIABLE', reason: 'No supported league for current-day schedule check.' };
@@ -180,7 +203,8 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
   const plays = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays : [extraction];
   const playPackets = plays.map((play) => packetForPlay(packet, play));
   const exclusiveTeamLookup = packet.source?.publish_mode === 'terms_only';
-  if (!exclusiveTeamLookup && playPackets.some((playPacket) => !playPacket.analysis.extraction.event?.trim())) {
+  if (!exclusiveTeamLookup && playPackets.some((playPacket) => !playPacket.analysis.extraction.event?.trim()
+    && extractedPlayerNames(playPacket).length !== 1)) {
     return {
       status: 'UNVERIFIABLE',
       reason: 'The source did not identify an exact event.',
@@ -229,12 +253,15 @@ async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fet
   }
   if (!events.length) return { status: 'NOT_SCHEDULED_TODAY', reason: 'No matching event is scheduled in the upcoming three-day slate.' };
 
-  const matchedEvents = playPackets.map((playPacket) => {
+  const matchedEvents = await Promise.all(playPackets.map(async (playPacket) => {
     if (exclusiveTeamLookup && !playPacket.analysis.extraction.event?.trim()) {
       return completeSlate ? resolveExclusiveTeamEvent(playPacket, events) : null;
     }
+    if (!playPacket.analysis.extraction.event?.trim()) {
+      return completeSlate ? resolveNamedPlayerEvent(playPacket, events, leaguePath, fetchImpl, now) : null;
+    }
     return events.find((candidate) => matchesExtractedEvent(playPacket, candidate));
-  });
+  }));
   const playStatuses = [];
   for (let index = 0; index < matchedEvents.length; index += 1) {
     const event = matchedEvents[index];

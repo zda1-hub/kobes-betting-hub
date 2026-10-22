@@ -50,7 +50,7 @@ const STATE_PATH = path.join(X_MONITORING_ROOT, 'state.json');
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
 // Revisit image posts once after changing source routing so previously held
 // image cards can be reconsidered under the current approval-card mode.
-const IMAGE_RESCAN_VERSION = 'source-routing-image-rescan-v3';
+const IMAGE_RESCAN_VERSION = 'source-routing-image-rescan-v4';
 // Revisit today's held posts once after expanding event verification from only
 // today to the verified upcoming weekend slate. This recovers Friday NFL
 // posts for Sunday without duplicating cards already delivered to Kobe.
@@ -103,11 +103,32 @@ function likelyPick(text) {
   // Text-only picks are valid. Require recognizable betting language plus a
   // price, line, stake, or stat market so ordinary sports commentary does not
   // flood the vision/extraction queue.
-  return (market || units || plusStat || explicitLeaguePick) && (odds || total || line || units || statMarket || plusStat);
+  return (market || total || units || plusStat || explicitLeaguePick) && (odds || total || line || units || statMarket || plusStat);
+}
+
+function monitoredTextExtraction(source, text) {
+  if (source.publish_mode === 'terms_only' || source.reuse_permission === 'CONFIRMED') return null;
+  // Parse only complete, visibly priced player props. This is deliberately
+  // narrower than model extraction and leaves shorthand markets we cannot
+  // identify precisely (such as RA) out of the approval queue.
+  const linePattern = /^\s*[-•→]\s*([A-Z][A-Za-z'’.-]+(?:\s+[A-Z][A-Za-z'’.-]+){1,3})\s+([ou])\s*(\d+(?:\.\d+)?)\s+(Rush Attempts|Rushing Yards|Receiving Yards|Passing Yards|Receptions|Rebounds|Assists|Points|Threes|Strikeouts|Total Bases)\s*\(([-+]\d{2,4})\)\s*$/i;
+  const plays = String(text || '').split(/\r?\n/).flatMap(line => {
+    const match = line.match(linePattern);
+    if (!match) return [];
+    const [, playerName, direction, number, market, odds] = match;
+    return [{ selection: `${playerName} ${direction}${number} ${market} (${odds})`,
+      player_name: playerName, market, line: `${number} ${market}`,
+      odds_american: odds, event: '', units: '', source_claims: [] }];
+  });
+  if (!plays.length) return null;
+  return { is_pick_candidate: true, source_capper_name: '', sport: '', league: '', event: '',
+    market: '', selection: plays[0].selection, player_name: plays[0].player_name,
+    line: plays[0].line, odds_american: plays[0].odds_american, units: '', plays,
+    source_claims: [], image_summary: '', missing_or_ambiguous: [], lossless_text_terms: true };
 }
 
 function mediaCaptionHasBetSignal(text) {
-  return /\b(?:pick|play|bet|card|slip|ladder|prop|parlay|odds?|units?|over|under|moneyline|spread|run line|puck line|anytime|to score)\b/i.test(text || '');
+  return /\b(?:picks?|plays?|bet|card|slip|ladder|prop|parlay|odds?|units?|over|under|moneyline|spread|run line|puck line|anytime|to score)\b/i.test(text || '');
 }
 
 function sourceSupportSignalCount(text) {
@@ -727,6 +748,25 @@ async function queueSplitPlayPackets(packet, outputPath) {
   return created;
 }
 
+async function candidateEventTiming(packet, { verifySingle = upcomingEventStatus,
+  verifyAll = upcomingEventStatuses } = {}) {
+  const plays = Array.isArray(packet.analysis?.extraction?.plays) ? packet.analysis.extraction.plays : [];
+  if (plays.length < 2 || plays.every(play => play.event?.trim())) return verifyAll(packet);
+  const playStatuses = await Promise.all(plays.map(async play => {
+    const single = isolatePlayPacket(packet, play, plays);
+    const result = await verifySingle(single);
+    return { ...(result.playStatuses?.[0] || result), play };
+  }));
+  return {
+    status: playStatuses.every(result => result.status === 'UPCOMING') ? 'UPCOMING'
+      : playStatuses.find(result => result.status !== 'UPCOMING')?.status || 'UNVERIFIABLE',
+    playStatuses,
+    eventStart: playStatuses.filter(result => result.status === 'UPCOMING')
+      .map(result => result.eventStart).filter(Boolean).sort()[0] || null,
+    source: 'ESPN schedule and roster'
+  };
+}
+
 async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}) {
   if (await pickWorkflowPaused()) {
     console.log('Pick workflow is paused; no X posts will be collected or sent for approval.');
@@ -862,7 +902,7 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
         handledPostIds.add(post.id);
         continue;
       }
-      const textExtraction = exclusiveTextExtraction(source, post.text);
+      const textExtraction = exclusiveTextExtraction(source, post.text) || monitoredTextExtraction(source, post.text);
       if (!textExtraction && !likelyPick(post.text) && postMediaUrls.length > 0) {
         mediaOnlyCandidates += 1;
         if (mediaOnlyCandidates > mediaOnlyLimit) {
@@ -884,7 +924,7 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
       // of the 38-account scan.
       packet.analysis = textExtraction ? { status: 'SOURCE_EXTRACTED', source_only: true,
         extraction: textExtraction, extracted_at: new Date().toISOString(), model: null,
-        detail: 'Lossless exclusive source-text extraction; no model or research.' } : await enrichPacket(packet, {
+        detail: 'Lossless source-text extraction; no model or research.' } : await enrichPacket(packet, {
         research: false,
         beforeOpenAIRequest: () => sourceModelReservation.tryStart()
       });
@@ -961,25 +1001,26 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
       // not started. For regular multi-play cards, keep the valid upcoming
       // legs and split them into separate cards instead of losing the whole
       // post because one leg is stale or ambiguous. Exclusives stay grouped.
-      const timing = await upcomingEventStatuses(packet);
-      packet.verification.event_start = timing.eventStart || null;
-      packet.verification.event_timezone = timing.source || null;
-      packet.verification.verified_events = (timing.playStatuses || []).map(result => ({
+      const extractedPlays = Array.isArray(packet.analysis.extraction.plays)
+        ? packet.analysis.extraction.plays
+        : [];
+      const verifiedTiming = await candidateEventTiming(packet);
+      packet.verification.event_start = verifiedTiming.eventStart || null;
+      packet.verification.event_timezone = verifiedTiming.source || null;
+      packet.verification.verified_events = (verifiedTiming.playStatuses || []).map(result => ({
         selection: result.play?.selection, status: result.status,
         event: result.verifiedEvent || null, event_id: result.verifiedEventId || null,
         event_start: result.eventStart || null
       }));
-      const extractedPlays = Array.isArray(packet.analysis.extraction.plays)
-        ? packet.analysis.extraction.plays
-        : [];
-      const validPlayStatuses = Array.isArray(timing.playStatuses)
-        ? timing.playStatuses.filter((result) => result.status === 'UPCOMING')
+      const validPlayStatuses = Array.isArray(verifiedTiming.playStatuses)
+        ? verifiedTiming.playStatuses.filter((result) => result.status === 'UPCOMING')
         : [];
       if (packet.source?.publish_mode !== 'terms_only' && extractedPlays.length > 1 && validPlayStatuses.length > 0) {
         const evidencePlays = structuredClone(extractedPlays);
         const validPlays = validPlayStatuses.map((result) => result.play);
         for (let index = 0; index < validPlayStatuses.length; index += 1) {
           const status = validPlayStatuses[index];
+          if (!status.play.event && status.verifiedEvent) status.play.event = status.verifiedEvent;
           if (status.playerTeam) status.play.verified_team_name = status.playerTeam;
           const single = isolatePlayPacket(packet, status.play, evidencePlays);
           await fillMissingEvidence(single, {
@@ -1001,7 +1042,7 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
         if (validPlays.length === 1 && validPlays[0].event) {
           packet.analysis.extraction.event = validPlays[0].event;
         }
-        const firstRejected = timing.playStatuses.find((result) => result.status !== 'UPCOMING');
+        const firstRejected = verifiedTiming.playStatuses.find((result) => result.status !== 'UPCOMING');
         if (firstRejected) {
           await recordWorkflowEvent(packet, {
             eventType: 'MULTIPLAY_FILTERED',
@@ -1009,7 +1050,7 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
             afterState: 'PARTIALLY_ELIGIBLE',
             details: {
               kept_play_count: validPlays.length,
-              rejected_play_count: timing.playStatuses.length - validPlays.length,
+              rejected_play_count: verifiedTiming.playStatuses.length - validPlays.length,
               first_rejection_status: firstRejected.status,
               first_rejection_reason: firstRejected.reason || null
             }
@@ -1022,28 +1063,31 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
         handledPostIds.add(post.id);
         continue;
       }
-      if (timing.status !== 'UPCOMING') {
-        const timingCode = timing.status === 'STARTED_OR_FINISHED'
+      if (verifiedTiming.status !== 'UPCOMING') {
+        const timingCode = verifiedTiming.status === 'STARTED_OR_FINISHED'
           ? 'STALE_EVENT'
-          : timing.status === 'PLAYER_NOT_ON_EVENT_TEAM'
+          : verifiedTiming.status === 'PLAYER_NOT_ON_EVENT_TEAM'
             ? 'PLAYER_NOT_ON_EVENT_TEAM'
             : 'EVENT_NOT_VERIFIED';
-        await recordGateDecision(packet, { code: timingCode, reason: timing.reason || timing.status });
-        console.log(`Skipped @${source.handle} post ${post.id}; ${timing.reason || 'the event is not an upcoming game scheduled today'}.`);
+        await recordGateDecision(packet, { code: timingCode, reason: verifiedTiming.reason || verifiedTiming.status });
+        console.log(`Skipped @${source.handle} post ${post.id}; ${verifiedTiming.reason || 'the event is not an upcoming game scheduled today'}.`);
         skipped += 1;
         lastProcessedId = post.id;
         handledPostIds.add(post.id);
         continue;
       }
 
-      const verifiedPlayStatus = timing.playStatuses?.find((result) => result.status === 'UPCOMING');
+      const verifiedPlayStatus = verifiedTiming.playStatuses?.find((result) => result.status === 'UPCOMING');
       if (verifiedPlayStatus?.playerTeam) {
         if (Array.isArray(packet.analysis.extraction.plays) && packet.analysis.extraction.plays.length === 1) {
           packet.analysis.extraction.plays[0].verified_team_name = verifiedPlayStatus.playerTeam;
         }
         packet.analysis.extraction.verified_team_name = verifiedPlayStatus.playerTeam;
       }
-      await fillMissingEvidence(packet, { timing });
+      if (!packet.analysis.extraction.event && verifiedPlayStatus?.verifiedEvent) {
+        packet.analysis.extraction.event = verifiedPlayStatus.verifiedEvent;
+      }
+      await fillMissingEvidence(packet, { timing: verifiedTiming });
 
       await recordGateDecision(packet, { code: 'ELIGIBLE', reason: 'Source extraction and event gates passed.', status: 'ELIGIBLE' });
       acceptedPackets.push({ packet, postId: String(post.id), source, post });
@@ -1342,10 +1386,12 @@ module.exports = {
   footballGamesScheduledToday,
   footballPriority,
   basketballPriority,
+  candidateEventTiming,
   nbaGamesScheduledToday,
   intakePriority,
   isSinglePlayPacket,
   mediaCaptionHasBetSignal,
+  monitoredTextExtraction,
   nflGamesScheduledToday,
   notifyApprovalChannel,
   packetApprovalOddsEligible,
