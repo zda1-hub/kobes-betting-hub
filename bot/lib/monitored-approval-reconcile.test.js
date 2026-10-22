@@ -54,3 +54,20 @@ test('replaces separate pending cards from one X capper with one actionable appr
   assert.deepEqual(await consolidatePendingMonitoredApprovals({ directory, channel, paidLabel: 'Post to #expert-picks' }),
     { groups: 0, retired: 0 });
 });
+
+test('treats an already removed duplicate as retired after saving the group', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-cappertopics-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const first = packet(73, 'PeakyProps', "D'Andre Swift o14.5 Rush Attempts (-110)", 'post-a');
+  const second = packet(74, 'PeakyProps', 'Aaron Gordon o5.5 Rebounds (-120)', 'post-b');
+  for (const row of [first, second]) await fs.writeFile(path.join(directory, `${row.pick_id}.json`), JSON.stringify(row));
+  const primary = { async edit() {} };
+  const missing = { async edit() {}, async delete() { const error = new Error('Unknown Message'); error.code = 10008; throw error; } };
+  const messages = new Map([[first.discord_review_message_id, primary], [second.discord_review_message_id, missing]]);
+  const receipt = await consolidatePendingMonitoredApprovals({ directory,
+    channel: { messages: { fetch: async id => messages.get(id) } },
+    paidLabel: 'Post to #expert-picks' });
+  assert.deepEqual(receipt, { groups: 1, retired: 1 });
+  const saved = JSON.parse(await fs.readFile(path.join(directory, `${first.pick_id}.json`), 'utf8'));
+  assert.equal(saved.analysis.extraction.plays.length, 2);
+});
