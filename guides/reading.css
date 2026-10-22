@@ -17,3 +17,5 @@
 
 .arbitrage-reading .chapter-content a{text-decoration:underline!important;text-underline-offset:3px;overflow-wrap:anywhere}
 .arbitrage-reading #arbitrage-questions{grid-column:1/-1}
+
+.sourced-guide .chapter-content a{text-decoration:underline!important;text-underline-offset:3px;overflow-wrap:anywhere}
