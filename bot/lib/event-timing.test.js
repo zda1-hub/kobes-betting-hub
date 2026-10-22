@@ -52,6 +52,32 @@ test('resolves one named player to a unique upcoming same-day game from official
   assert.equal(result.playerTeam, 'Denver Nuggets');
 });
 
+test('one monitored capper approval checks NFL and NBA legs against their own games', async () => {
+  const calls = [];
+  const grouped = { pick_id: 'grouped-expert', source: { publish_mode: 'monitored_terms', text: 'NFL and NBA picks' },
+    analysis: { extraction: { event: '', plays: [
+      { selection: "D'Andre Swift o14.5 Rush Attempts (-110)", player_name: "D'Andre Swift", event: 'New England Patriots at Chicago Bears' },
+      { selection: 'Aaron Gordon o5.5 Rebounds (-120)', player_name: 'Aaron Gordon', event: 'Denver Nuggets at Oklahoma City Thunder' }
+    ] } } };
+  const event = (date, name, first, second) => ({ date, name, competitions: [{ competitors: [
+    { team: { id: '1', displayName: first } }, { team: { id: '2', displayName: second } }
+  ] }] });
+  const fetchImpl = async url => {
+    calls.push(String(url));
+    if (url.includes('/scoreboard?')) return new Response(JSON.stringify({ events: url.includes('dates=20261022')
+      ? url.includes('/football/nfl/')
+        ? [event('2026-10-23T00:15:00.000Z', 'Patriots at Bears', 'New England Patriots', 'Chicago Bears')]
+        : [event('2026-10-23T01:30:00.000Z', 'Nuggets at Thunder', 'Denver Nuggets', 'Oklahoma City Thunder')]
+      : [] }), { status: 200 });
+    return new Response(JSON.stringify({ athletes: [{ items: [{ displayName: url.includes('/football/') ? "D'Andre Swift" : 'Aaron Gordon' }] }] }), { status: 200 });
+  };
+  const result = await upcomingEventStatus(grouped, { now: new Date('2026-10-22T17:00:00.000Z'), fetchImpl });
+  assert.equal(result.status, 'UPCOMING');
+  assert.equal(result.playStatuses.length, 2);
+  assert.ok(calls.some(url => url.includes('/football/nfl/scoreboard')));
+  assert.ok(calls.some(url => url.includes('/basketball/nba/scoreboard')));
+});
+
 test('keeps a matching ESPN event only while it is upcoming', async () => {
   const result = await upcomingEventStatus(packet, {
     now: new Date('2026-08-30T18:00:00.000Z'),

@@ -291,6 +291,23 @@ async function recordApprovalCard(packet, { channelId, messageId, payload }) {
   await recordWorkflowEvent(packet, { eventType: 'APPROVAL_CARD_CREATED', afterState: 'PENDING_APPROVAL', details: { channel_id: channelId, message_id: messageId } });
 }
 
+async function recordApprovalCardRevision(packet, { messageId, payload }) {
+  if (!messageId) return;
+  await upsertPickCandidate(packet, { status: 'READY_FOR_APPROVAL' });
+  await query(`UPDATE approval_cards SET rendered_payload=$2::jsonb, rendered_payload_sha256=$3
+    WHERE discord_message_id=$1 AND status='PENDING'`, [messageId, JSON.stringify(payload), sha256(payload)]);
+  await recordWorkflowEvent(packet, { eventType: 'APPROVAL_CARD_GROUPED', afterState: 'PENDING_APPROVAL',
+    details: { message_id: messageId, grouped_pick_ids: packet.source?.grouped_pick_ids || [] } });
+}
+
+async function recordApprovalCardSuperseded(packet, canonicalPickId) {
+  if (!packet?.discord_review_message_id) return;
+  await query(`UPDATE approval_cards SET status='SUPERSEDED'
+    WHERE discord_message_id=$1 AND status='PENDING'`, [packet.discord_review_message_id]);
+  await recordWorkflowEvent(packet, { eventType: 'APPROVAL_CARD_SUPERSEDED', afterState: 'SUPERSEDED',
+    details: { canonical_pick_id: canonicalPickId, message_id: packet.discord_review_message_id } });
+}
+
 async function recordApprovalAction(packet, { action, actorId, status }) {
   const candidateId = await candidateIdFor(packet);
   if (!candidateId) return !auditConfigured();
@@ -537,6 +554,8 @@ module.exports = {
   recordApprovalAction,
   recordApiCall,
   recordApprovalCard,
+  recordApprovalCardRevision,
+  recordApprovalCardSuperseded,
   recordGradeAttempt,
   recordPublicationAttempt,
   recordPublicationResult,

@@ -69,6 +69,7 @@ const { createMorningDeliveryAlert } = require('./lib/morning-delivery-alert');
 const { recapDeliveryIssues } = require('./lib/recap-delivery-status');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
+const { consolidatePendingMonitoredApprovals: reconcileMonitoredApprovals } = require('./lib/monitored-approval-reconcile');
 const { approvalChannelIdForPacket, exclusiveApprovalChannelId, paidChannelIdForPacket } = require('./lib/approval-routing');
 const { isTrendOnlySource } = require('./lib/trend-only-source');
 const retiredTrendCardIds = new Set(['20260926-167-X']);
@@ -86,6 +87,8 @@ const {
   initializeAuditStore,
   closeAuditStore,
   recordApprovalAction,
+  recordApprovalCardRevision,
+  recordApprovalCardSuperseded,
   recordGradeAttempt,
   recordPublicationAttempt,
   recordPublicationResult,
@@ -1656,6 +1659,7 @@ async function collectXSafely() {
     // for the configured time window; Kobe's buttons control publication only.
     const modelCallLimit = xMonitorModelCallLimit();
     const result = await runCollector({ maxModelCalls: modelCallLimit ?? undefined });
+    await consolidatePendingMonitoredApprovals();
     await reportCollectorHealth(result).catch(error => console.error('Collector health alert failed:', error.message));
     if (modelCallLimit !== null && result.deferred > 0) {
       console.log(`Deferred ${result.deferred} candidate(s) after using ${result.modelCalls}/${modelCallLimit} OpenAI extraction call(s); they remain eligible for the next interval.`);
@@ -2471,6 +2475,17 @@ async function channelLabel(channelId, fallback) {
   }
 }
 
+async function consolidatePendingMonitoredApprovals() {
+  if (!exclusivePickApprovalChannelId) return;
+  const directory = path.join(reviewQueueRoot, pacificClock().date);
+  const channel = await client.channels.fetch(exclusivePickApprovalChannelId);
+  if (!channel?.isTextBased() || !channel.messages) return;
+  const paidLabel = `Post to ${await channelLabel(expertPicksChannelId, '#expert-picks')}`;
+  return reconcileMonitoredApprovals({ directory, channel, paidLabel,
+    recordRevision: recordApprovalCardRevision,
+    recordSuperseded: recordApprovalCardSuperseded });
+}
+
 async function refreshPendingTermsOnlyApprovals() {
   if (!exclusivePickApprovalChannelId) return;
   const directory = path.join(reviewQueueRoot, pacificClock().date);
@@ -2903,6 +2918,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     setInterval(run, 300000);
   }
   try {
+    await consolidatePendingMonitoredApprovals();
     await refreshPendingTermsOnlyApprovals();
     await refreshVisibleTermsOnlyApprovalControls();
     await holdGenericExclusiveApprovalCards();
