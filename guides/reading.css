@@ -19,3 +19,7 @@
 .arbitrage-reading #arbitrage-questions{grid-column:1/-1}
 
 .sourced-guide .chapter-content a{text-decoration:underline!important;text-underline-offset:3px;overflow-wrap:anywhere}
+
+.approach-page #editorial-standards{margin-top:24px}.approach-page #editorial-standards a{text-decoration:underline!important;text-underline-offset:3px;overflow-wrap:anywhere}
+
+.community-reading .sources a,.community-reading .article p a{text-decoration:underline!important;text-underline-offset:3px;color:#2459a8}.community-reading .article .cta h2,.community-reading .article .cta p{color:#171717}
