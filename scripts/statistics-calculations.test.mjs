@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {summarizeValues as summary,formatStatistic} from '../education/statistics-calculations.mjs';
+test('odd sample preserves duplicate observations and sorts numerically',()=>assert.deepEqual(summary('25, 4, 2, 5, 4'),{values:[2,4,4,5,25],count:5,sum:40,mean:8,median:4,range:23}));
+test('even sample averages middle pair',()=>assert.deepEqual(summary('20 6 4 2'),{values:[2,4,6,20],count:4,sum:32,mean:8,median:5,range:18}));
+test('single and constant samples have zero range',()=>{assert.equal(summary('7').median,7);assert.equal(summary('7').range,0);assert.equal(summary('0,0,0').mean,0)});
+test('signed decimals and line-separated inputs',()=>{const s=summary('-.5\n+.5 2');assert.equal(s.median,.5);assert.equal(s.range,2.5);assert.ok(Math.abs(s.mean-2/3)<1e-12)});
+test('blank, malformed, nonfinite and out of domain values reject',()=>{for(const s of ['', ' ', '2 nope 5','2%','Infinity','NaN','1e6','1000001','-1000001','1,2,'])assert.throws(()=>summary(s),undefined,s)});
+test('count and input-length boundaries enforced',()=>{assert.equal(summary(Array(30).fill('1').join(' ')).count,30);assert.throws(()=>summary(Array(31).fill('1').join(' ')));assert.throws(()=>summary('1'.repeat(2001)));assert.equal(summary('-1000000 1000000').range,2000000)});
+test('format rounds display only and normalizes negative zero',()=>{assert.equal(formatStatistic(-0.000001),'0');assert.equal(formatStatistic(2/3),'0.6667');assert.equal(formatStatistic(1000),'1,000');assert.notEqual(summary('0 0 1').mean,Number(formatStatistic(1/3)))});
+test('commas represent observations, not thousands separators',()=>assert.deepEqual(summary('1,000').values,[0,1]));
