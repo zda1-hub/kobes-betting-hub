@@ -3,10 +3,24 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const os=require('node:os');
 const path=require('node:path');
-const {telegramPacket,createTelegramReader}=require('./telegram-reader');
+const {telegramPacket,createTelegramReader,deleteManualReviewNotices}=require('./telegram-reader');
 const {telegramConfig,encryptSession,decryptSession,saveTelegramSession,loadTelegramSession}=require('./telegram-session');
 const now=new Date('2026-09-17T23:00:00Z'),channelId='3593544389',apiHash='a'.repeat(32);
 const message=(id=1,text='AnalyticsCapper\nAngels ML -110 (10U)')=>({id,date:now.getTime()/1000-60,peerId:{channelId},message:text});
+test('cleanup deletes only this bot’s exact October 21 manual notices',async()=>{
+  const deleted=[];
+  const make=(id,authorId,title,footer)=>({id:String(id),author:{id:authorId},embeds:[{title,footer:{text:footer}}],
+    delete:async()=>deleted.push(String(id))});
+  const items=[
+    make(4,'bot','Telegram source needs manual review',`Manual source review tg-20261021-${channelId}-32087`),
+    make(3,'bot','Paid pick approval',`Manual source review tg-20261021-${channelId}-32088`),
+    make(2,'other','Telegram source needs manual review',`Manual source review tg-20261021-${channelId}-32089`),
+    make(1,'bot','Telegram source needs manual review',`Manual source review tg-20261020-${channelId}-32090`)
+  ];
+  const channel={client:{user:{id:'bot'}},messages:{fetch:async()=>new Map(items.map(item=>[item.id,item]))}};
+  assert.equal(await deleteManualReviewNotices(channel,channelId),1);
+  assert.deepEqual(deleted,['4']);
+});
 test('Telegram packet accepts only selected current-day channel, rejects old results and advertisements',()=>{
   assert.equal(telegramPacket(message(),channelId,now).source.platform,'Telegram');
   assert.throws(()=>telegramPacket({...message(),peerId:{channelId:'other'}},channelId,now));
