@@ -12,4 +12,4 @@ Verification: Local preview at `127.0.0.1:4173/join.html` displayed the updated 
 
 Limitations: This copy removes a surprise but does not establish that Discord authorization caused the lack of purchases. The current ad's low click volume must be assessed separately. Production checkout completion and VIP activation were not performed in this review.
 
-Release status: Local preview; production status to be appended after publication and live verification.
+Release status: The site change merged as [PR #294](https://github.com/zda1-hub/kobes-betting-hub/pull/294), commit `e85284b`. A production build from that exact `origin/main` prepared 108 public entries, and Wrangler uploaded only the four changed public assets (`index.html`, `join.html`, `membership.html`, `membership-scene.js`) with `--keep-vars`. Cloudflare reported version `5c407440-f89a-44e9-99cc-a3db6ac40b7c`. The live tagged `/join` route then displayed the new benefit and Discord-first text alongside the unchanged monthly trial terms in the browser. Live payment and VIP activation were not attempted.
