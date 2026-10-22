@@ -358,12 +358,29 @@ test('formats leaked-capper picks as terms only, without the source image', () =
   assert.equal(embed.image, undefined);
 });
 
-test('publishes monitoring-only candidates as wager terms without source identity, evidence, or media', () => {
+test('shows the monitored X author above the wager without copying evidence or media', () => {
   const monitored = require('./source-review').monitoredTermsPacket(packet);
   const embed = buildSourcePickEmbed(monitored, 'PAID PICK');
-  assert.equal(embed.description, '• Jacob Misiorowski OVER 6.5 strikeouts -115 (1u)\n• Team ML +120');
+  assert.equal(embed.description, '@ExampleSource\n• Jacob Misiorowski OVER 6.5 strikeouts -115 (1u)\n• Team ML +120');
   assert.equal(embed.image, undefined);
   assert.throws(() => assertFreePickEligible(monitored), /Kobe’s original writeup/);
+});
+
+test('monitored X approval and paid post keep the exact posting capper handle', () => {
+  const monitored = require('./source-review').monitoredTermsPacket({
+    ...packet,
+    source: { handle: 'PeakyProps', display_name: 'Peaky Props' },
+    analysis: { status: 'SOURCE_EXTRACTED', extraction: {
+      is_pick_candidate: true, source_capper_name: '',
+      plays: [{ selection: "D'Andre Swift o14.5 Rush Attempts (-110)", player_name: "D'Andre Swift",
+        line: '14.5 Rush Attempts', odds_american: '-110', units: '' }]
+    } }
+  });
+  const approval = buildSourcePickApprovalEmbed(monitored, 'APPROVED PICK');
+  const memberPost = buildSourcePickEmbed(monitored, 'PAID PICK');
+  assert.equal(approval.description, "@PeakyProps\n• D'Andre Swift o14.5 Rush Attempts (-110)");
+  assert.equal(memberPost.description, approval.description);
+  assert.throws(() => assertPublishableExtraction({ ...monitored, source: { publish_mode: 'monitored_terms' } }), /original capper/i);
 });
 
 test('formats an exclusive approval card as capper, bet, and stated stake only', () => {

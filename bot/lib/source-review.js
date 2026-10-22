@@ -443,10 +443,14 @@ function presentationConfidence(packet) {
 }
 
 function sourceCapperName(packet) {
-  // Monitoring-only cards intentionally publish only wager terms. Even when
-  // extraction found a signature, do not expose or imply attribution without
-  // an explicit reuse decision for that source.
-  if (packet.source?.publish_mode === 'monitored_terms' || isIndependentWriteup(packet)) return '';
+  if (isIndependentWriteup(packet)) return '';
+  if (packet.source?.publish_mode === 'monitored_terms') {
+    // This is the author of the monitored X post, not a guessed name from
+    // model extraction. Terms-only repost feeds use the separate original-
+    // capper validation below and must never inherit the feed's handle.
+    const handle = String(packet.source?.handle || '').trim().replace(/^@/, '');
+    return handle ? `@${handle}` : '';
+  }
   const extractedName = packet.analysis?.extraction?.source_capper_name;
   if (visible(extractedName, '')) {
     const name = extractedName.trim();
@@ -479,7 +483,7 @@ function assertPublishableExtraction(packet) {
   if (packet.analysis?.status !== 'SOURCE_EXTRACTED' || !extraction?.is_pick_candidate) {
     throw new Error('This source card is not a verified pick candidate. Reject it or finish manual review first.');
   }
-  if (!sourceCapperName(packet) && packet.source?.publish_mode !== 'monitored_terms' && !isIndependentWriteup(packet)) {
+  if (!sourceCapperName(packet) && !isIndependentWriteup(packet)) {
     throw new Error('The original capper is not clearly visible, so this card cannot be published automatically.');
   }
   if (sourceTerms(packet).length === 0) {
