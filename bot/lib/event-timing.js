@@ -197,6 +197,20 @@ async function resolveNamedPlayerEvent(packet, events, leaguePath, fetchImpl, no
 }
 
 async function upcomingEventStatuses(packet, { now = new Date(), fetchImpl = fetch } = {}) {
+  const groupedPlays = packet.analysis?.extraction?.plays;
+  if (packet.source?.publish_mode === 'monitored_terms' && Array.isArray(groupedPlays) && groupedPlays.length > 1) {
+    // One capper card may contain NFL and NBA wagers from different posts.
+    // Verify each exact leg against its own league, event, and roster.
+    const playStatuses = await Promise.all(groupedPlays.map(async play => {
+      const result = await upcomingEventStatuses(packetForPlay(packet, play), { now, fetchImpl });
+      return { ...(result.playStatuses?.[0] || result), play };
+    }));
+    const firstFailure = playStatuses.find(result => result.status !== 'UPCOMING');
+    if (firstFailure) return { ...firstFailure, playStatuses };
+    return { status: 'UPCOMING', playStatuses,
+      eventStart: new Date(Math.min(...playStatuses.map(result => Date.parse(result.eventStart)))).toISOString(),
+      source: 'ESPN schedule and roster' };
+  }
   const leaguePath = espnLeague(packet);
   if (!leaguePath) return { status: 'UNVERIFIABLE', reason: 'No supported league for current-day schedule check.' };
   const extraction = packet.analysis?.extraction || {};
