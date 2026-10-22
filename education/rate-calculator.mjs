@@ -1,13 +1,18 @@
+import {createCopyResult} from './copy-result.mjs';
 import {calculateRateRecord} from './rate-calculations.mjs';
 import {formatStatistic as fmt} from './statistics-calculations.mjs';
 const form = document.querySelector('[data-rate-form]');
 if (form) {
   const output = document.querySelector('[data-rate-output]');
   const error = document.querySelector('[data-rate-error]');
+  const copyContainer=document.createElement('div');
+  output.after(copyContainer);
+  const copy=createCopyResult(copyContainer);
   const fallback = document.querySelector('[data-rate-fallback]');
   const fields = [...form.querySelectorAll('input')];
   function calculate() {
     output.replaceChildren();
+    copy.set('');
     error.textContent = '';
     fields.forEach(input => input.removeAttribute('aria-invalid'));
     let invalid;
@@ -50,7 +55,10 @@ if (form) {
     const note=document.createElement('p');
     note.textContent='Results describe these inputs, not future performance. Display rounded to four decimal places; calculations use the entered values.';
     output.append(note);
+    copy.set(output.innerText);
   }
+  form.addEventListener('input',()=>{output.replaceChildren();copy.set('');error.textContent='';});
+  form.addEventListener('change',()=>{output.replaceChildren();copy.set('');error.textContent='';});
   form.addEventListener('submit', event => {event.preventDefault(); calculate();});
   form.querySelector('[data-rate-reset]').addEventListener('click', () => {form.reset(); calculate();});
   form.hidden=false;
