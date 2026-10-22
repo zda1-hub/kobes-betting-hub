@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   approvalOddsEligible,
   basketballPriority,
+  candidateEventTiming,
   createModelCallBudget,
   createSourceModelCallReservation,
   configuredMediaOnlyLimit,
@@ -13,6 +14,7 @@ const {
   intakePriority,
   isSinglePlayPacket,
   mediaCaptionHasBetSignal,
+  monitoredTextExtraction,
   nbaGamesScheduledToday,
   nflGamesScheduledToday,
   notifyApprovalChannel,
@@ -141,6 +143,37 @@ test('requires a caption signal for generic media while preserving dedicated pho
   assert.equal(shouldQueueForReview({ monitoring_mode: 'standard' }, { text: '' }, ['https://example.com/pick.png']), false);
   assert.equal(shouldQueueForReview({ monitoring_mode: 'writeup_or_trend' }, { text: 'Tonight\'s ladder card' }, ['https://example.com/ladder.png']), true);
   assert.equal(shouldQueueForReview({ monitoring_mode: 'photo_review' }, { text: '' }, ['https://example.com/card.png']), true);
+});
+
+test('recognizes priced o-line shorthand in a multi-sport picks post', () => {
+  const post = { text: "Peaky's Picks 10/22\n- D'Andre Swift o14.5 Rush Attempts (-110)\n- Aaron Gordon o5.5 Rebounds (-120)",
+    attachments: { media_keys: ['photo'] } };
+  assert.equal(shouldQueueForReview({ monitoring_mode: 'writeup_or_trend' }, post, ['https://example.com/photo.jpg']), true);
+  assert.equal(intakePriority({ monitoring_mode: 'writeup_or_trend' }, post, { prioritizeBasketball: true }), -1);
+  const extracted = monitoredTextExtraction({ publish_mode: 'writeup_review', reuse_permission: 'PENDING_SOURCE_TERMS' },
+    `${post.text}\n- Jaylen Brown o9.5 RA (-122) https://t.co/example`);
+  assert.equal(extracted.plays.length, 2);
+  assert.deepEqual(extracted.plays.map(play => play.odds_american), ['-110', '-120']);
+  assert.equal(extracted.plays[0].player_name, "D'Andre Swift");
+  assert.equal(monitoredTextExtraction({ publish_mode: 'writeup_review', reuse_permission: 'CONFIRMED' }, post.text), null);
+});
+
+test('verifies each unnamed-event leg independently instead of assigning the parent sport', async () => {
+  const packet = { analysis: { extraction: { plays: [
+    { selection: "D'Andre Swift o14.5 Rush Attempts (-110)", player_name: "D'Andre Swift", event: '' },
+    { selection: 'Aaron Gordon o5.5 Rebounds (-120)', player_name: 'Aaron Gordon', event: '' }
+  ] } } };
+  const seen = [];
+  const result = await candidateEventTiming(packet, {
+    verifySingle: async single => {
+      seen.push(single.analysis.extraction.plays[0].selection);
+      return { status: 'UPCOMING', eventStart: '2026-10-23T00:15:00.000Z', verifiedEvent: 'Verified matchup' };
+    },
+    verifyAll: async () => { throw new Error('Mixed card should not use one league check'); }
+  });
+  assert.equal(result.status, 'UPCOMING');
+  assert.equal(result.playStatuses.length, 2);
+  assert.deepEqual(seen, packet.analysis.extraction.plays.map(play => play.selection));
 });
 
 test('prioritizes strong text picks before signaled and image-only media', () => {
@@ -394,7 +427,7 @@ test('model-call deferrals are audited and logged without advancing the source c
   assert.deepEqual(nextState.handled_post_ids, ['150', '200']);
   assert.equal(nextState.handled_post_ids.includes('250'), false);
   assert.equal(nextState.catchup_date, undefined);
-  assert.equal(nextState.image_rescan_version, 'source-routing-image-rescan-v3');
+  assert.equal(nextState.image_rescan_version, 'source-routing-image-rescan-v4');
   assert.equal(nextState.upcoming_slate_rescan_version, 'upcoming-slate-rescan-v1');
 });
 

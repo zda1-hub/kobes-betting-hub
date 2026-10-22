@@ -21,6 +21,35 @@ test('classifies image-extracted sport-specific markets when the league label is
   assert.equal(espnLeague({ analysis: { extraction: { selection: 'Corbin Carroll to hit a home run +470' } } }), 'baseball/mlb');
   assert.equal(espnLeague({ analysis: { extraction: { selection: 'DeMario Douglas over 3.5 receptions' } } }), 'football/nfl');
   assert.equal(espnLeague({ analysis: { extraction: { selection: 'LeBron James over 22.5 points', market: 'player points' } } }), 'basketball/nba');
+  assert.equal(espnLeague({ source: { text: 'Swift rushing, Gordon rebounds' }, analysis: { extraction: {
+    plays: [{ selection: 'Aaron Gordon o5.5 Rebounds (-120)', player_name: 'Aaron Gordon', event: '' }]
+  } } }), 'basketball/nba');
+});
+
+test('resolves one named player to a unique upcoming same-day game from official rosters', async () => {
+  const mixedPostSingle = { pick_id: 'named-player-test', source: { text: 'Swift rush attempts; Gordon rebounds' },
+    analysis: { extraction: { plays: [{ selection: 'Aaron Gordon o5.5 Rebounds (-120)',
+      player_name: 'Aaron Gordon', market: 'rebounds', event: '' }] } } };
+  const events = [
+    { id: 'cavs-sixers', date: '2026-10-22T23:00:00.000Z', name: 'Cleveland Cavaliers at Philadelphia 76ers', competitions: [{ competitors: [
+      { team: { id: '5', displayName: 'Cleveland Cavaliers' } },
+      { team: { id: '20', displayName: 'Philadelphia 76ers' } }
+    ] }] },
+    { id: 'nuggets-thunder', date: '2026-10-23T01:30:00.000Z', name: 'Denver Nuggets at Oklahoma City Thunder', competitions: [{ competitors: [
+      { team: { id: '7', displayName: 'Denver Nuggets' } },
+      { team: { id: '25', displayName: 'Oklahoma City Thunder' } }
+    ] }] }
+  ];
+  const fetchImpl = async url => new Response(JSON.stringify(url.includes('/scoreboard?')
+    ? { events: url.includes('dates=20261022') ? events : [] }
+    : { athletes: [{ items: [{ displayName: url.includes('/teams/7/') ? 'Aaron Gordon' : 'Other Player' }] }] }),
+  { status: 200 });
+  const result = await upcomingEventStatus(mixedPostSingle, {
+    now: new Date('2026-10-22T17:00:00.000Z'), fetchImpl
+  });
+  assert.equal(result.status, 'UPCOMING');
+  assert.equal(result.playStatuses[0].verifiedEvent, 'Denver Nuggets at Oklahoma City Thunder');
+  assert.equal(result.playerTeam, 'Denver Nuggets');
 });
 
 test('keeps a matching ESPN event only while it is upcoming', async () => {
