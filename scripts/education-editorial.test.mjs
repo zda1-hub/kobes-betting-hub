@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {assessTopics,measureSchedule} from './education-editorial.mjs';
+const good=()=>({id:'a',title:'Mean versus median',target:'/education/mean-median',demand:{status:'verified',evidence:'GSC export reference'},verifiedSources:[{url:'https://openstax.org/',checkedOn:'2026-10-21',supports:'Definition of mean'}],humanApproval:{reviewer:'Editor',date:'2026-10-21'}});
+test('complete evidence can reach human publication review',()=>assert.equal(assessTopics([good()],'2026-10-21')[0].readyForPublicationReview,true));
+test('normalized duplicates are held',()=>assert.ok(assessTopics([good(),{...good(),title:'Mean VERSUS median!'}],'2026-10-21').every(x=>x.reasons.includes('DUPLICATE_TITLE'))));
+test('same destination consolidates rather than creates duplicate pages',()=>assert.ok(assessTopics([good(),{...good(),title:'Different title'}],'2026-10-21')[0].reasons.includes('CONSOLIDATE_SHARED_DESTINATION')));
+test('unknown demand, no sources and no approval remain held',()=>assert.equal(assessTopics([{id:'a',title:'Example'}],'2026-10-21')[0].reasons.length,4));
+test('stale and future sources cannot pass',()=>{for(const date of ['2026-01-01','2026-10-22']) {let t=good();t.verifiedSources[0].checkedOn=date;assert.equal(assessTopics([t],'2026-10-21')[0].readyForPublicationReview,false)}});
+const page=()=>({url:'https://example.com',publishedOn:'2026-10-20',checkpoints:[7,14,28].map(day=>({day,clicks:null,impressions:null,averagePosition:null}))});
+test('real publication schedules correct dates without invented metrics',()=>assert.deepEqual(measureSchedule([page()],'2026-10-21')[0].checkpoints.map(c=>[c.dueOn,c.status,c.metrics]),[['2026-10-27','upcoming',null],['2026-11-03','upcoming',null],['2026-11-17','upcoming',null]]));
+test('missing evidence is rejected for metrics',()=>{let p=page();p.checkpoints[0].clicks=1;assert.throws(()=>measureSchedule([p],'2026-10-28'))});
+test('future publication and invalid dates rejected',()=>{assert.throws(()=>measureSchedule([page()],'2026-10-19'));assert.throws(()=>assessTopics([],'2026-02-31'))});

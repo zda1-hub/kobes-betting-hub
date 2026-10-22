@@ -1,0 +1,41 @@
+{
+  "scope": "Page-level Search Console observations; no scheduled job is enabled",
+  "pages": [
+    {
+      "url": "https://kobesbettinghub.com/responsible-gambling",
+      "publishedOn": "2026-10-20",
+      "checkpoints": [
+        {
+          "day": 7,
+          "observedOn": null,
+          "windowStart": null,
+          "windowEnd": null,
+          "clicks": null,
+          "impressions": null,
+          "averagePosition": null,
+          "evidence": null
+        },
+        {
+          "day": 14,
+          "observedOn": null,
+          "windowStart": null,
+          "windowEnd": null,
+          "clicks": null,
+          "impressions": null,
+          "averagePosition": null,
+          "evidence": null
+        },
+        {
+          "day": 28,
+          "observedOn": null,
+          "windowStart": null,
+          "windowEnd": null,
+          "clicks": null,
+          "impressions": null,
+          "averagePosition": null,
+          "evidence": null
+        }
+      ]
+    }
+  ]
+}
