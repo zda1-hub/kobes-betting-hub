@@ -47,6 +47,9 @@ async function consolidatePendingMonitoredApprovals({ directory, channel, paidLa
       await messages[0].edit({ embeds: [embed], components });
       for (let index = 1; index < messages.length; index += 1) {
         await messages[index].delete().catch(async error => {
+          // A moderator or another cleanup pass may already have removed the
+          // old card. Its control was retired in the queue and audit above.
+          if (error.code === 10008 || error.status === 404 || /Unknown Message/i.test(error.message)) return;
           logger.warn(`Could not remove grouped @${capper} approval card ${rows[index].packet.pick_id}: ${error.message}`);
           await messages[index].edit({ embeds: [{ color: 0x8A8A8A,
             description: `Combined into the @${capper} approval card above.` }], components: [] });
