@@ -9,3 +9,11 @@ Before: calculator did not explain the distinction between unweighted group perc
 Verification:12 existing focused calculator/build tests passed; exact fractions independently verified for percentage/rate examples. Built one-H1/canonical/JSON-LD/anchors/source-order/sitemap checks passed. Safari frames for both pages at320/390/1440px showed matching document/viewport widths, header top0 and no checked article/control overflow. Populated mobile percentage/rate tables inspected and table-specific widths improved to prevent broken label words; total row shortened to Total. Anchored URL arrivals render the relevant sections. Full desktop guide shell inspected. Existing exit-intent membership popup appeared during review; it is unchanged by this release and is recorded as a possible future reading-experience improvement, not a new regression or confirmed ranking penalty.
 
 Release status: pending deployment/live verification. Further research remains local. No ranking/indexing gain claimed; no new background task or paid research tool.
+
+## Deployment and follow-up verification
+
+Content release c466028 was merged in PR284 (squash1631bff09b4fddc2c178a1cf11019fa86f7fd03e). Cloudflare version721e6e6f-a989-4cd2-a0df-44d8606ffa4b uploaded exactly five intended public assets. Live article routes, stylesheet, learning hub and sitemap returned200; canonical, structured data and discovery links were present. In-app browser navigation from the new guide to the existing sample-size section and from the calculator note to the new percentage FAQ worked.
+
+A final live screenshot revealed that the anchored h3 could sit partly behind the pinned header. Follow-up: extended the existing statistics heading scroll-margin rule from h2 to h2/h3, preserving all other layout. Local anchored screenshot confirmed the complete heading is visible. All12 focused tests passed again; rebuilt using the explicit whitelist. This narrow repair is part of the authorized release. Further research is in docs/seo/2026-10-22-reading-experience-next.md and remains unpublished.
+
+Follow-up Cloudflare version: f55ba45b-351f-4dea-8265-6ec8875d2701, one stylesheet uploaded. Initial upload-session request returned a transient API10013 error; retry succeeded.
