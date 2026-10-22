@@ -1,6 +1,7 @@
 (() => {
   const pageName = location.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
   const promote = !['/refer','/support','/terms','/privacy','/responsible-gambling','/cancel','/managemembership','/welcome','/member','/partner','/creator','/404','/admin-analytics'].includes(pageName);
+  const educationReadingPage = pageName === '/education' || pageName.startsWith('/education/');
   const main = document.querySelector('main');
   if (main) { main.id ||= 'main-content'; const skip = document.createElement('a'); skip.className='skip-link'; skip.href='#'+main.id; skip.textContent='Skip to content'; document.body.prepend(skip); }
   const localPreview = ['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) || location.protocol === 'file:';
@@ -66,7 +67,7 @@
     if(event.key==='Tab' && exitDialog) { const focusable=[...exitDialog.querySelectorAll('button,a[href]')]; const first=focusable[0], last=focusable.at(-1); if(event.shiftKey && document.activeElement===first){event.preventDefault();last.focus();} else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first.focus();} }
   };
   const showExitDialog = () => {
-    if (document.querySelector('.membership-scene[data-open="true"]') || !promote || prompted || checkoutState || !document.querySelector('.site-header')) return;
+    if (document.querySelector('.membership-scene[data-open="true"]') || educationReadingPage || !promote || prompted || checkoutState || !document.querySelector('.site-header')) return;
     try {
       if (sessionStorage.getItem('kbh.referral.exit.prompted')) return;
       sessionStorage.setItem('kbh.referral.exit.prompted', '1');
