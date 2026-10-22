@@ -456,7 +456,8 @@ function sourceCapperName(packet) {
     // A terms-only monitor/repost account is never a valid substitute for the
     // individual capper. Treat an extraction that merely echoed that account
     // as unidentified rather than displaying misleading attribution.
-    if (isTermsOnlyMode(packet) && (genericCapperHeading(name) || sourceIdentities.includes(normalizedText(name)))) return '';
+    if (isTermsOnlyMode(packet) && (genericCapperHeading(name) || /^(?:anon(?:ymous)?|admin|moderator|unknown)$/i.test(name)
+      || sourceIdentities.includes(normalizedText(name)))) return '';
     return name;
   }
 
