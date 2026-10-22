@@ -1,3 +1,4 @@
+import { checkPublicSeo } from './check-public-seo.mjs';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -260,6 +261,9 @@ export async function preparePublicSite({ env = process.env } = {}) {
     path.join(projectRoot, 'data', 'exclusive-directory.json'),
     path.join(outputRoot, 'data', 'exclusive-directory.json')
   );
+
+  const seo = await checkPublicSeo(outputRoot);
+  if (seo.errors.length) throw new Error(`Public SEO validation failed:\n${seo.errors.join('\n')}`);
 
   console.log(`Prepared ${publicFiles.length + guideFiles.length + 2} public site entries in ${outputRoot} for ${membershipConfig.environment}.`);
 }

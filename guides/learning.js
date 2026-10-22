@@ -85,10 +85,10 @@
     }
     if (current !== navigation) return;
     const target = document.getElementById(id);
-    if (!target?.matches('.guide-chapter')) return;
-    target.open = true;
-    const summary = target.querySelector('summary');
-    summary.focus({ preventScroll: true });
+    if (!target?.matches('.guide-chapter,[data-reading-section]')) return;
+    if (target.matches('.guide-chapter')) target.open = true;
+    const summary = target.querySelector('summary,h2');
+    summary?.focus({ preventScroll: true });
     // Let native disclosure layout settle before measuring the header inset.
     requestAnimationFrame(() => {
       if (current !== navigation) return;
