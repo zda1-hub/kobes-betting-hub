@@ -17,7 +17,7 @@ const {
 const { auditedFetch } = require('./api-client');
 const { reviewQueuePath } = require('../bot/lib/review-queue-path');
 const { approvalChannelIdForPacket, paidChannelIdForPacket } = require('../bot/lib/approval-routing');
-const { isSupportedSportPick, upcomingEventStatuses } = require('../bot/lib/event-timing');
+const { isSupportedSportPick, upcomingEventStatus, upcomingEventStatuses } = require('../bot/lib/event-timing');
 const { fillMissingEvidence } = require('../bot/lib/espn-pick-research');
 const { isolatePlayPacket } = require('../bot/lib/play-evidence');
 const {
@@ -25,6 +25,7 @@ const {
   assertCompleteWriteup,
   buildSourcePickApprovalEmbed,
   independentWriteupPacket,
+  monitoredTermsPacket,
   reviewButtons,
   sourceCapperName,
   sourceEvidence,
@@ -523,17 +524,29 @@ async function discordChannelLabel(channelId, fallback) {
 async function approvalButtonLabels(packet) {
   const free = await discordChannelLabel(process.env.FREE_PICK_CHANNEL_ID, '#daily-free-play');
   const paidChannelId = paidChannelIdForPacket(packet);
-  const paidFallback = packet.source?.publish_mode === 'terms_only' ? '#expert-picks' : '#paid-sport';
+  const termsOnly = ['terms_only', 'monitored_terms'].includes(packet.source?.publish_mode);
+  const paidFallback = termsOnly ? '#expert-picks' : '#paid-sport';
   const paid = await discordChannelLabel(paidChannelId, paidFallback);
   return {
-    paidOnly: packet.source?.publish_mode === 'terms_only',
-    freeDisabled: packet.source?.publish_mode === 'terms_only',
-    freeLabel: packet.source?.publish_mode === 'terms_only' ? 'Free unavailable for expert picks' : `Post to ${free}`,
+    paidOnly: termsOnly,
+    freeDisabled: termsOnly,
+    freeLabel: termsOnly ? 'Free unavailable for expert picks' : `Post to ${free}`,
     paidLabel: `Post to ${paid}`
   };
 }
 
 async function notifyApprovalChannel(packet) {
+  const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED'
+    && !['terms_only', 'monitored_terms'].includes(packet.source?.publish_mode)
+    && process.env.X_SOURCE_PUBLISHING_ENABLED !== 'true';
+  // If a monitored source supplies a complete wager but too few independent
+  // facts for a writeup, Kobe can still review its exact terms for expert picks.
+  // Keep one play per card and never turn source text or media into a writeup.
+  if (monitoringOnly && sourceEvidence(packet).length < 4 && isSinglePlayPacket(packet)) {
+    packet.source = { ...packet.source, original_publish_mode: packet.source.publish_mode,
+      publish_mode: 'monitored_terms' };
+    packet.approval = { ...packet.approval, image_url: null };
+  }
   const channelId = approvalChannelIdForPacket(packet);
   const token = process.env.DISCORD_TOKEN;
   if (!channelId || !token) {
@@ -555,11 +568,9 @@ async function notifyApprovalChannel(packet) {
     // including sides and totals, and the source may omit optional units or odds. Free-pick
     // eligibility is enforced only when Kobe clicks the Free button; the
     // paid/NFL action remains available for regular picks.
-    const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED'
-      && packet.source?.publish_mode !== 'terms_only'
-      && process.env.X_SOURCE_PUBLISHING_ENABLED !== 'true';
-    const presentationPacket = monitoringOnly ? independentWriteupPacket(packet) : packet;
-    if (packet.source?.publish_mode !== 'terms_only') {
+    const presentationPacket = monitoringOnly && packet.source?.publish_mode !== 'monitored_terms'
+      ? independentWriteupPacket(packet) : packet;
+    if (!['terms_only', 'monitored_terms'].includes(packet.source?.publish_mode)) {
       assertCompleteWriteup(presentationPacket);
       const exactFinalCopy = writeupDescription(presentationPacket);
       packet.approval.exact_final_copy = exactFinalCopy;
@@ -1163,6 +1174,55 @@ async function deliverRecoveredApproval(packet, packetPath) {
   return { status: packet.status, pick: packet.pick_id, post: packet.source.post_id, message: packet.discord_review_message_id };
 }
 
+function heldMonitoredXCandidate(packet, date, now = new Date()) {
+  if (packet?.source?.platform !== 'Twitter/X' || packet.source?.reuse_permission === 'CONFIRMED'
+    || !['writeup_review', 'writeup', 'independent_writeup', 'monitored_terms'].includes(packet.source?.publish_mode)
+    || packet.status !== 'HELD_NOT_READY' || packet.discord_review_message_id || packet.approval?.decision
+    || !packet.pick_id?.startsWith(date.replaceAll('-', ''))
+    || !packet.source?.posted_at || pacificDate(new Date(packet.source.posted_at)) !== date
+    || !isSinglePlayPacket(packet) || !packetApprovalOddsEligible(packet)
+    || sourceEvidence(packet).length >= 4 || !isSupportedSportPick(packet)) return false;
+  const eventStart = Date.parse(packet.verification?.event_start || '');
+  return !Number.isFinite(eventStart) || eventStart > now.getTime();
+}
+
+// One bounded startup pass reuses today's held, already-extracted X wagers.
+// An uncertain send is quarantined by deliverRecoveredApproval, never retried.
+async function recoverHeldMonitoredXApprovals({ now = new Date(), max = 12 } = {}) {
+  if (process.env.X_MONITOR_ENABLED !== 'true' || await pickWorkflowPaused()) return { sent: 0, held: 0, skipped: 0 };
+  const date = pacificDate(now);
+  const directory = path.join(QUEUE_ROOT, date);
+  let files;
+  try { files = (await fs.readdir(directory)).filter(file => file.endsWith('.json')); }
+  catch (error) { if (error.code === 'ENOENT') return { sent: 0, held: 0, skipped: 0 }; throw error; }
+  const candidates = [];
+  for (const file of files) {
+    const packetPath = path.join(directory, file);
+    const packet = await readJson(packetPath, null);
+    if (heldMonitoredXCandidate(packet, date, now)) candidates.push({ packet, packetPath });
+  }
+  candidates.sort((a, b) => Date.parse(b.packet.source.posted_at) - Date.parse(a.packet.source.posted_at));
+  let sent = 0;
+  let held = 0;
+  for (const { packet, packetPath } of candidates.slice(0, Math.max(0, max))) {
+    const presentation = monitoredTermsPacket(packet);
+    presentation.source.original_publish_mode ||= packet.source.publish_mode;
+    try {
+      buildSourcePickApprovalEmbed(presentation, 'APPROVED PICK');
+      const timing = await upcomingEventStatus(presentation);
+      if (timing.status !== 'UPCOMING') { held += 1; continue; }
+      presentation.verification.event_start = timing.eventStart || presentation.verification.event_start;
+      const receipt = await deliverRecoveredApproval(presentation, packetPath);
+      if (receipt.message) sent += 1;
+      else held += 1;
+    } catch (error) {
+      held += 1;
+      console.warn(`Held recovered X pick ${packet.pick_id}: ${error.message}`);
+    }
+  }
+  return { sent, held, skipped: Math.max(0, candidates.length - Math.max(0, max)) };
+}
+
 async function recoverAuditedExclusive(row) {
   if (await pickWorkflowPaused()) throw new Error('Pick workflow is paused.');
   const source = (await readJson(SOURCES_PATH, [])).find(entry => entry.enabled && entry.handle === row.source_handle && entry.publish_mode === 'terms_only');
@@ -1289,8 +1349,10 @@ module.exports = {
   nflGamesScheduledToday,
   notifyApprovalChannel,
   packetApprovalOddsEligible,
+  heldMonitoredXCandidate,
   recordModelCallDeferral,
   recoverAuditedExclusive,
+  recoverHeldMonitoredXApprovals,
   rotateSources,
   runCollector,
   shouldQueueForReview,

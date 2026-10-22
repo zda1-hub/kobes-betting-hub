@@ -13,7 +13,7 @@ function approvalChannelIdForPacket(packet, env = process.env) {
   if (isHockeyPacket(packet) && env.HOCKEY_PICK_APPROVAL_CHANNEL_ID) {
     return env.HOCKEY_PICK_APPROVAL_CHANNEL_ID;
   }
-  if (packet?.source?.publish_mode === 'terms_only') {
+  if (['terms_only', 'monitored_terms'].includes(packet?.source?.publish_mode)) {
     return exclusiveApprovalChannelId(env);
   }
   return env.PICK_APPROVAL_CHANNEL_ID || '';
@@ -21,7 +21,7 @@ function approvalChannelIdForPacket(packet, env = process.env) {
 
 function paidChannelIdForPacket(packet, env = process.env) {
   if (isHockeyPacket(packet) && env.HOCKEY_PICK_CHANNEL_ID) return env.HOCKEY_PICK_CHANNEL_ID;
-  if (packet?.source?.publish_mode === 'terms_only') {
+  if (['terms_only', 'monitored_terms'].includes(packet?.source?.publish_mode)) {
     return env.EXPERT_PICKS_CHANNEL_ID || env.PUBLISH_CHANNEL_ID || '';
   }
   const extraction = packet?.analysis?.extraction || {};

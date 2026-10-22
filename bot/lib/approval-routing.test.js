@@ -23,6 +23,10 @@ test('routes terms-only X and Telegram exclusives to the exclusive review channe
   };
   assert.equal(approvalChannelIdForPacket({ source: { publish_mode: 'terms_only' } }, env), 'exclusive-approvals');
   assert.equal(exclusiveApprovalChannelId(env), 'exclusive-approvals');
+  assert.equal(approvalChannelIdForPacket({ source: { publish_mode: 'monitored_terms' } }, env), 'exclusive-approvals');
+  assert.equal(paidChannelIdForPacket({ source: { publish_mode: 'monitored_terms' } }, {
+    ...env, EXPERT_PICKS_CHANNEL_ID: 'expert-vip'
+  }), 'expert-vip');
 });
 
 test('falls back to the standard channel during a staged deployment', () => {

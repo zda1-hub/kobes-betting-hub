@@ -79,7 +79,7 @@ const { isSupportedSportPick, upcomingEventStatus } = require('./lib/event-timin
 const { exclusiveSourceIsCurrent, genericCapperHeading } = require('../pipeline/exclusive-text');
 const { alreadyPublishedTrend, generateTrendReport, markTrendPublished, reportEmbeds, saveTrendReport } = require('./lib/espn-trends');
 const { enrichPacket } = require('../pipeline/enrich-pick');
-const { runCollector } = require('../pipeline/collect-x');
+const { recoverHeldMonitoredXApprovals, runCollector } = require('../pipeline/collect-x');
 const { attachDiscordRestAudit, auditedFetch, recordDiscordPreResponseFailure } = require('../pipeline/api-client');
 const {
   auditConfigured,
@@ -2251,8 +2251,9 @@ async function handleSourceReviewButton(interaction) {
 
   try {
     const configuredTermsOnly = packet.source?.publish_mode === 'terms_only';
+    const monitoredTerms = packet.source?.publish_mode === 'monitored_terms';
     const sourcePostingEnabled = process.env.X_SOURCE_PUBLISHING_ENABLED === 'true';
-    const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED' && !configuredTermsOnly && !sourcePostingEnabled;
+    const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED' && !configuredTermsOnly && !monitoredTerms && !sourcePostingEnabled;
     const publicationPacket = monitoringOnly ? independentWriteupPacket(packet) : packet;
     const termsOnly = isTermsOnlyMode(publicationPacket);
     assertPublishableExtraction(publicationPacket);
@@ -2492,7 +2493,7 @@ async function refreshPendingTermsOnlyApprovals() {
       continue;
     }
     if (
-      packet.source?.publish_mode !== 'terms_only'
+      !isTermsOnlyMode(packet)
       || !packet.discord_review_message_id
       || packet.approval?.decision
     ) continue;
@@ -2574,7 +2575,7 @@ async function removeIncompleteWriteupApprovals() {
   for (const file of files) {
     const packetPath = path.join(directory, file);
     const packet = JSON.parse(await fs.readFile(packetPath, 'utf8'));
-    if (!packet.discord_review_message_id || packet.approval?.decision || packet.source?.publish_mode === 'terms_only') continue;
+    if (!packet.discord_review_message_id || packet.approval?.decision || isTermsOnlyMode(packet)) continue;
     if (packet.approval_ready && sourceEvidence(packet).length >= 4) continue;
     const message = await channel.messages.fetch(packet.discord_review_message_id).catch(() => null);
     if (!message || message.author?.id !== client.user.id) continue;
@@ -2687,7 +2688,7 @@ async function refreshPendingResearchApprovals() {
       continue;
     }
     const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED'
-      && packet.source?.publish_mode !== 'terms_only'
+      && !isTermsOnlyMode(packet)
       && process.env.X_SOURCE_PUBLISHING_ENABLED !== 'true';
     if (!monitoringOnly || !packet.discord_review_message_id || packet.approval?.decision) continue;
     const research = await fillMissingEvidence(packet);
@@ -2800,6 +2801,12 @@ client.once(Events.ClientReady, async (readyClient) => {
   // Independent boards/readers must not wait behind historical card research.
   startInjuryReports();
   startTelegramReader();
+  try {
+    const receipt = await recoverHeldMonitoredXApprovals();
+    console.log('Held X expert approval recovery:', JSON.stringify(receipt));
+  } catch (error) {
+    console.error('Held X expert approval recovery failed:', error);
+  }
   startXMonitor();
   startTrendsSchedule();
   startTrendInbox();

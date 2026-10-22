@@ -9,6 +9,7 @@ const {
   configuredPerSourceModelCallLimit,
   footballGamesScheduledToday,
   footballPriority,
+  heldMonitoredXCandidate,
   intakePriority,
   isSinglePlayPacket,
   mediaCaptionHasBetSignal,
@@ -33,6 +34,69 @@ test('only plays strictly better than -200 enter approvals', () => {
     source: { publish_mode: 'terms_only' },
     analysis: { extraction: { plays: [{ selection: 'A', odds_american: '-110' }, { selection: 'B', odds_american: '-250' }] } } };
   assert.equal(packetApprovalOddsEligible(packet), false);
+});
+
+test('recovers only a current, complete, better-than-minus-200 held X wager', () => {
+  const packet = {
+    pick_id: '20261022-143-01-X', status: 'HELD_NOT_READY', approval: {},
+    source: { platform: 'Twitter/X', publish_mode: 'writeup_review', reuse_permission: 'NOT_CONFIRMED',
+      posted_at: '2026-10-22T16:00:00.000Z' },
+    analysis: { status: 'SOURCE_EXTRACTED', extraction: {
+      is_pick_candidate: true, sport: 'Basketball', league: 'NBA', event: 'Celtics at Knicks',
+      plays: [{ selection: 'Jayson Tatum OVER 5.5 assists -115', player_name: 'Jayson Tatum',
+        market: 'assists', odds_american: '-115' }], source_claims: []
+    } },
+    verification: { event_start: '2026-10-23T01:00:00.000Z' }
+  };
+  const now = new Date('2026-10-22T17:00:00.000Z');
+  assert.equal(heldMonitoredXCandidate(packet, '2026-10-22', now), true);
+  assert.equal(heldMonitoredXCandidate({ ...packet, discord_review_message_id: 'sent' }, '2026-10-22', now), false);
+  assert.equal(heldMonitoredXCandidate({ ...packet, analysis: { ...packet.analysis, extraction: {
+    ...packet.analysis.extraction, plays: [{ ...packet.analysis.extraction.plays[0], odds_american: '-200' }]
+  } } }, '2026-10-22', now), false);
+  assert.equal(heldMonitoredXCandidate({ ...packet, verification: { event_start: '2026-10-22T16:30:00.000Z' } }, '2026-10-22', now), false);
+  assert.equal(heldMonitoredXCandidate({ ...packet, source: { ...packet.source, posted_at: '2026-10-21T16:00:00.000Z' } }, '2026-10-22', now), false);
+});
+
+test('a complete monitored X wager uses the exact expert card and paid-only control', async () => {
+  const before = { token: process.env.DISCORD_TOKEN, standard: process.env.PICK_APPROVAL_CHANNEL_ID,
+    exclusive: process.env.EXCLUSIVE_PICK_APPROVAL_CHANNEL_ID, expert: process.env.EXPERT_PICKS_CHANNEL_ID,
+    fetch: global.fetch };
+  process.env.DISCORD_TOKEN = 'test-token';
+  process.env.PICK_APPROVAL_CHANNEL_ID = 'standard-approvals';
+  process.env.EXCLUSIVE_PICK_APPROVAL_CHANNEL_ID = 'exclusive-approvals';
+  process.env.EXPERT_PICKS_CHANNEL_ID = 'expert-vip';
+  const calls = [];
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return new Response(JSON.stringify(options.method === 'POST' ? { id: 'review-123' } : { name: 'expert-picks' }),
+      { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const packet = {
+    pick_id: '20261022-143-01-X', approval_number: 143, status: 'ELIGIBLE', approval: {},
+    source: { platform: 'Twitter/X', post_id: '123', post_url: 'https://x.com/example/status/123',
+      posted_at: '2026-10-22T16:00:00.000Z', handle: 'example', text: 'NBA pick',
+      publish_mode: 'writeup_review', reuse_permission: 'NOT_CONFIRMED' },
+    analysis: { status: 'SOURCE_EXTRACTED', extraction: { is_pick_candidate: true, sport: 'Basketball', league: 'NBA',
+      event: 'Celtics at Knicks', plays: [{ selection: 'Jayson Tatum OVER 5.5 assists -115',
+        player_name: 'Jayson Tatum', market: 'assists', odds_american: '-115' }], source_claims: [] } }
+  };
+  try {
+    assert.equal(await notifyApprovalChannel(packet), 'review-123');
+    assert.equal(packet.source.publish_mode, 'monitored_terms');
+    const sent = calls.find(call => call.url.endsWith('/channels/exclusive-approvals/messages'));
+    assert.ok(sent);
+    const payload = JSON.parse(sent.options.body);
+    assert.equal(payload.embeds[0].description, '• Jayson Tatum OVER 5.5 assists -115');
+    assert.equal(payload.components[0].components.some(button => button.custom_id?.endsWith(':free')), false);
+    assert.equal(payload.components[0].components.find(button => button.custom_id?.endsWith(':paid')).label, 'Post to #expert-picks');
+  } finally {
+    global.fetch = before.fetch;
+    for (const [key, value] of [['DISCORD_TOKEN', before.token], ['PICK_APPROVAL_CHANNEL_ID', before.standard],
+      ['EXCLUSIVE_PICK_APPROVAL_CHANNEL_ID', before.exclusive], ['EXPERT_PICKS_CHANNEL_ID', before.expert]]) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
 });
 
 test('holds a zero-fact writeup before any Discord approval request', async () => {
