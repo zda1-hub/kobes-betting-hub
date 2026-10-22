@@ -71,6 +71,8 @@ const publicFiles = [
   'responsible-gambling.html',
   'education/mean-versus-median.html',
   'education/statistics.css',
+  'education/statistics-calculator.mjs',
+  'education/statistics-calculations.mjs',
   '404.html',
   'styles.css',
   'social-links.css',
