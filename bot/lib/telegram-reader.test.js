@@ -84,6 +84,47 @@ test('unknown capper or missing market is held, not published as slop',async t=>
   const held=JSON.parse(await fs.readFile(path.join(h.root,'reader-state.json'),'utf8'));
   assert.equal(held.records['1'].hold_code,'ORIGINAL_CAPPER_MISSING');
 });
+test('signed Telegram author supplies missing original capper without changing wager terms',async t=>{
+  const h=await harness(t);
+  h.messages[0]={...message(1,'Kleos'),postAuthor:'Kleos Sports Premium',photo:{}};
+  h.telegram.downloadMedia=async()=>require('sharp')({create:{width:32,height:32,channels:3,background:'white'}}).png().toBuffer();
+  h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:{is_pick_candidate:true,
+    source_capper_name:'',selection:'Atlanta/Golden State over 153 (-110)',
+    plays:[{selection:'Atlanta/Golden State over 153 (-110)'}],
+    missing_or_ambiguous:['Original capper name is not on the graphic']}});
+  const result=await createTelegramReader(h.options).run();
+  assert.equal(result[0].status,'PRIVATE_APPROVAL_DELIVERED');
+  assert.equal(h.sent[0].embeds[0].description,'Kleos Sports Premium\n• Atlanta/Golden State over 153 (-110)');
+});
+test('a held signed Telegram extraction recovers once from disk with no new model call',async t=>{
+  const h=await harness(t);
+  h.messages[0]={...message(1,'Kleos'),postAuthor:'Kleos',photo:{}};
+  h.telegram.getMessages=async(_,params)=>h.messages.filter(m=>params.ids?params.ids.includes(m.id):m.id>(params.minId||0));
+  await fs.writeFile(path.join(h.root,'reader-state.json'),JSON.stringify({channelId,cursor:1,
+    records:{'1':{status:'HELD_UNCLEAR_TERMS',hold_code:'ORIGINAL_CAPPER_MISSING',capper_prompt_version:1,terms_parse_version:2}}}));
+  const packet=telegramPacket(h.messages[0],channelId,now);
+  packet.analysis={status:'SOURCE_EXTRACTED',extraction:{is_pick_candidate:true,source_capper_name:'',
+    selection:'Panthers ML -110',plays:[{selection:'Panthers ML -110'}],
+    missing_or_ambiguous:['Original capper identity unclear']}};
+  await fs.mkdir(path.join(h.root,'queue','2026-09-17'),{recursive:true});
+  await fs.writeFile(path.join(h.root,'queue','2026-09-17',packet.pick_id+'.json'),JSON.stringify(packet));
+  h.options.enrich=async()=>{throw Error('recovery must not call the model');};
+  const result=await createTelegramReader(h.options).run();
+  assert.equal(result[0].status,'PRIVATE_APPROVAL_DELIVERED');
+  assert.equal(h.sent.length,1);
+  await createTelegramReader(h.options).run();
+  assert.equal(h.sent.length,1);
+});
+test('anonymous Telegram signatures never identify an original capper',async t=>{
+  const h=await harness(t);
+  h.messages[0]={...message(1,'Kleos'),postAuthor:'Anon',photo:{}};
+  h.telegram.downloadMedia=async()=>require('sharp')({create:{width:32,height:32,channels:3,background:'white'}}).png().toBuffer();
+  h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:{is_pick_candidate:true,
+    source_capper_name:'Anon',selection:'Panthers ML -110',plays:[{selection:'Panthers ML -110'}],missing_or_ambiguous:[]}});
+  const result=await createTelegramReader(h.options).run();
+  assert.equal(result[0].holdCode,'ORIGINAL_CAPPER_MISSING');
+  assert.equal(h.sent.length,0);
+});
 test('diagnoses a saved current-day hold without a new model call or approval send',async t=>{
   const h=await harness(t);h.messages[0]=message(1,'Some text with Over 44');
   h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:{is_pick_candidate:true,selection:'Over 44',source_capper_name:'',plays:[]}});

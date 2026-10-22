@@ -5,7 +5,7 @@ const { spawn } = require('node:child_process');
 const os = require('node:os');
 const sharp = require('sharp');
 const { pacificOperatingDate } = require('./pick-log');
-const { exclusiveTextExtraction } = require('../../pipeline/exclusive-text');
+const { exclusiveTextExtraction, genericCapperHeading } = require('../../pipeline/exclusive-text');
 const { assertPublishableExtraction, buildSourcePickEmbed, reviewButtons, approvalCopySha256 } = require('./source-review');
 const { telegramConfig, loadTelegramSession } = require('./telegram-session');
 const { reviewQueuePath } = require('./review-queue-path');
@@ -14,7 +14,29 @@ const { recordSourcePost, upsertPickCandidate, recordApprovalCard, recordWorkflo
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const TERMS_PARSE_VERSION=2;
 const MEDIA_SCAN_VERSION=1;
-const CAPPER_PROMPT_VERSION=1;
+const CAPPER_PROMPT_VERSION=2;
+
+function signedOriginalCapper(source) {
+  const signature=String(source?.author_signature||'').trim();
+  if(!signature || signature.length>60 || !/^[\p{L}\p{N} .’'&_-]+$/u.test(signature)
+    || /^(?:anon(?:ymous)?|admin|moderator|unknown)$/i.test(signature)
+    || genericCapperHeading(signature)
+    || [source?.handle,source?.display_name].some(name=>String(name||'').trim().toLowerCase()===signature.toLowerCase()))return '';
+  return signature;
+}
+
+function applySignedCapper(packet) {
+  const extraction=packet.analysis?.extraction;
+  const signature=signedOriginalCapper(packet.source);
+  if(!signature || !extraction || !extraction.is_pick_candidate)return false;
+  const name=String(extraction.source_capper_name||'').trim();
+  if(name && !/^(?:anon(?:ymous)?|admin|moderator|unknown)$/i.test(name)
+    && !genericCapperHeading(name))return false;
+  extraction.source_capper_name=signature;
+  extraction.missing_or_ambiguous=(extraction.missing_or_ambiguous||[])
+    .filter(item=>!/^original capper(?: name| identity)?\b/i.test(String(item).trim()));
+  return true;
+}
 async function save(file,value){await fs.mkdir(path.dirname(file),{recursive:true,mode:0o700});await fs.writeFile(`${file}.tmp`,JSON.stringify(value),{mode:0o600});await fs.rename(`${file}.tmp`,file);}
 
 function telegramMediaKind(message) {
@@ -237,6 +259,22 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
       }
       const date=pacificOperatingDate(now()),packetFile=path.join(queueRoot,date,`${packet.pick_id}.json`);
       let previous=state.records[String(message.id)];
+      let recoveredAnalysis=null;
+      if(previous?.status==='HELD_UNCLEAR_TERMS'&&previous.hold_code==='ORIGINAL_CAPPER_MISSING'){
+        // A signed channel post is direct source credit. Reuse the saved
+        // extraction instead of paying for another model call or guessing from
+        // the relay channel. Only never-delivered current-day holds qualify.
+        try{
+          const saved=JSON.parse(await fs.readFile(packetFile,'utf8'));
+          saved.source.author_signature=packet.source.author_signature;
+          if(applySignedCapper(saved)){
+            validateApprovalPacket(saved);
+            recoveredAnalysis=saved.analysis;
+            delete state.records[String(message.id)];previous=undefined;
+            await save(file,state);
+          }
+        }catch(error){if(error.code!=='ENOENT')logger.info?.(`Telegram signed-source recovery ${message.id}: ${approvalHoldCode(error)}`);}
+      }
       if(previous?.status==='HELD_EXTRACTION_FAILED' && previous.media_download_version!==2 && (message.photo||message.media?.photo)){
         // Recover only never-delivered image extractions affected by the old
         // negative thumbnail index. Delivered/uncertain cards are untouched.
@@ -273,8 +311,9 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         previous=state.records[String(message.id)]={status:'DELIVERED',messageId:matches[0].id};await save(file,state);
       }
       if(previous){state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);state.cursor=Math.max(state.cursor,message.id);await save(file,state);continue;}
-      let analysis=exclusiveTextExtraction(packet.source,packet.source.text);
-      if(analysis)packet.analysis={status:'SOURCE_EXTRACTED',source_only:true,extraction:analysis};
+      let analysis=recoveredAnalysis?null:exclusiveTextExtraction(packet.source,packet.source.text);
+      if(recoveredAnalysis)packet.analysis=recoveredAnalysis;
+      else if(analysis)packet.analysis={status:'SOURCE_EXTRACTED',source_only:true,extraction:analysis};
       else {
         if(modelCalls>=maxModelCalls){results.push({status:'DEFERRED_MODEL_CAP',messageId:message.id});break;}
         if(telegramMediaKind(message)){
@@ -294,6 +333,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         }
         packet.analysis=await enrich(packet,{beforeOpenAIRequest:()=>{if(modelCalls>=maxModelCalls)return false;modelCalls++;return true;}});
         packet.source.media_urls=[]; // no source image in private/public cards or saved packets.
+        if(packet.analysis.status==='SOURCE_EXTRACTED')applySignedCapper(packet);
         if(packet.analysis.status!=='SOURCE_EXTRACTED'){
           const extractionStatus=['EXTRACTION_FAILED','ENRICHMENT_OFF','WAITING_FOR_OPENAI_API_KEY','BUDGET_EXCEEDED','MODEL_CALL_LIMIT_REACHED'].includes(packet.analysis.status)?packet.analysis.status:'UNKNOWN';
           // Configuration and spending limits are not bad source content.
@@ -336,9 +376,11 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         previous={status:'RESERVED',fingerprint,payload};
       }catch(error){
         const holdCode=approvalHoldCode(error);
-        packet.status='HELD_UNCLEAR_TERMS';packet.hold_code=holdCode;await save(packetFile,packet);
+        packet.status='HELD_UNCLEAR_TERMS';packet.hold_code=holdCode;
+        packet.hold_reason=String(error?.message||'Validation failed.');await save(packetFile,packet);
         state.records[String(message.id)]={status:'HELD_UNCLEAR_TERMS',terms_parse_version:TERMS_PARSE_VERSION,
           capper_prompt_version:CAPPER_PROMPT_VERSION,hold_code:holdCode};state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);state.cursor=Math.max(state.cursor,message.id);await save(file,state);
+        logger.info?.(`Telegram held message ${message.id}: ${holdCode} (${packet.hold_reason})`);
         results.push({status:'HELD_UNCLEAR_TERMS',messageId:message.id,holdCode});continue;
       }
       await audit.upsertPickCandidate(packet,{status:'READY_FOR_APPROVAL'});
