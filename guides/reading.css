@@ -14,3 +14,6 @@
 .guide-chapter[id$="sources-and-scope"] .chapter-content a{color:#2459a8;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
 
 #sports-statistics .calculator-links{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:4px}#sports-statistics .calculator-links li{min-width:0}#sports-statistics .calculator-links a{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:44px;max-width:100%;padding:6px 0;color:#2459a8;text-decoration:underline;text-underline-offset:3px;white-space:normal;overflow-wrap:anywhere}#sports-statistics .calculator-links a:focus-visible{outline:3px solid #2459a8;outline-offset:3px;border-radius:4px}
+
+.arbitrage-reading .chapter-content a{text-decoration:underline!important;text-underline-offset:3px;overflow-wrap:anywhere}
+.arbitrage-reading #arbitrage-questions{grid-column:1/-1}

@@ -21,7 +21,7 @@ function page(pathname, { coarse = false, search = '', seen = false } = {}) {
   vm.runInNewContext(source, context);
   return { overlays, banners, storage, exit: () => handlers.mouseout({ relatedTarget: null, clientY: 0 }), reverseScroll: () => { context.scrollY = 1300; handlers.scroll(); context.scrollY = 800; handlers.scroll(); } };
 }
-for (const path of ['/education', '/education/', '/education/mean-versus-median', '/education/per-game-versus-per-minute.html', '/education/mean-versus-median/']) {
+for (const path of [...['/guides/how-to-read-betting-odds-and-line-movement', '/guides/how-to-read-betting-odds-and-line-movement.html', '/guides/how-to-read-betting-odds-and-line-movement/', '/guides/bankroll-management-for-sports-betting', '/guides/bankroll-management-for-sports-betting.html', '/guides/bankroll-management-for-sports-betting/', '/guides/what-a-sports-betting-writeup-should-include', '/guides/what-a-sports-betting-writeup-should-include.html', '/guides/what-a-sports-betting-writeup-should-include/', '/guides/how-to-choose-a-sports-betting-discord', '/guides/how-to-choose-a-sports-betting-discord.html', '/guides/how-to-choose-a-sports-betting-discord/', '/guides/sports-betting-arbitrage-explained', '/guides/sports-betting-arbitrage-explained.html', '/guides/sports-betting-arbitrage-explained/'], '/education', '/education/', '/education/mean-versus-median', '/education/per-game-versus-per-minute.html', '/education/mean-versus-median/']) {
   test(`${path} stays readable on desktop exit and mobile reverse scroll`, () => {
     for (const coarse of [false, true]) {
       const p = page(path, { coarse });
