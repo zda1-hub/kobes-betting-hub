@@ -13,3 +13,7 @@ Sources read: DraftKings KB0010466, KB0010398, KB0010798; OpenStax Introductory 
 Verification: 26 focused tests pass including public whitelist and long-guide popup regression. Both populated source sections inspected at320,390,1440px, no horizontal document overflow; header top0 and citations readable. New bankroll Units navigation opens/focuses chapter with~20px clearance below64px mobile header. IDs/jump targets unique/valid; Article JSON parses. Arithmetic checked110/210*100=52.38% rounded,100/250*100=40%;1000*.01=10 and0.5unit=5. No backend/checkout integration changes, no paid tools. Production and live verification recorded below after release.
 
 Limitations: citations do not certify safe betting or predict outcomes. Sources and provider support information can change. Indexing and ranking are separate, externally controlled outcomes.
+
+Published: PR291 merged49e45e61cb39532d7f3799aa3d8f29f00732f4ff. Cloudflare version1ed19bc2-a871-4091-adf5-525ddf43b33c. Three public assets uploaded; backend/checkout config preserved.
+
+Indexing follow-up: found a concrete freshness defect: sitemap lastmod still listed October17/18 and the older bankroll date despite substantial October22 source updates. Correct only the three materially changed guides (arbitrage, odds, bankroll) to October22. This is truthful crawl metadata, not an indexing or ranking guarantee. Sitemap XML validity and exact three-entry diff checked; no unrelated URL/date changes.
