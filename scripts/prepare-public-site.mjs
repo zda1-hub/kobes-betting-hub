@@ -74,6 +74,8 @@ const publicFiles = [
   'education/statistics.css',
   'education/statistics-calculator.mjs',
   'education/statistics-calculations.mjs',
+  'education/rate-calculator.mjs',
+  'education/rate-calculations.mjs',
   '404.html',
   'styles.css',
   'social-links.css',
