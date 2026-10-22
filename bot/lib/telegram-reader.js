@@ -15,6 +15,7 @@ const hash=value=>createHash('sha256').update(value).digest('hex');
 const TERMS_PARSE_VERSION=2;
 const MEDIA_SCAN_VERSION=1;
 const CAPPER_PROMPT_VERSION=2;
+const AMBIGUITY_REVIEW_VERSION=1;
 
 function signedOriginalCapper(source) {
   const signature=String(source?.author_signature||'').trim();
@@ -89,9 +90,19 @@ function approvalHoldCode(error) {
   return 'VALIDATION_FAILED';
 }
 
+function optionalDetailNotShown(detail) {
+  const text=String(detail||'').trim().toLowerCase().replace(/[.?!]+$/,'').replace(/\s+/g,' ');
+  return /^(?:(?:the )?(?:sportsbook|bookmaker|book|betting app|league|sport|game time|start time|tipoff time|kickoff time|odds|unit size|stake)(?: (?:is|are))? (?:not shown|not stated|not provided|not visible|unknown|unavailable)|(?:no|missing) (?:sportsbook|bookmaker|book|league|sport|game time|start time|odds|unit size|stake))$/.test(text);
+}
+
+function materialSourceAmbiguities(packet) {
+  return (packet.analysis?.extraction?.missing_or_ambiguous||[])
+    .filter(detail=>!optionalDetailNotShown(detail));
+}
+
 function validateApprovalPacket(packet) {
   assertPublishableExtraction(packet);
-  if(packet.analysis.extraction.missing_or_ambiguous?.length)throw new Error('Unclear source terms.');
+  if(materialSourceAmbiguities(packet).length)throw new Error('Unclear source terms.');
   const embed=buildSourcePickEmbed(packet,'PAID PICK');
   if((embed.description||'').length>4000)throw new Error('Oversized capper card.');
   return embed;
@@ -224,13 +235,21 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         (record.status==='HELD_EXTRACTION_FAILED'&&record.media_download_version!==2)
         || (record.status==='HELD_UNCLEAR_TERMS'&&record.terms_parse_version!==TERMS_PARSE_VERSION)
         || (record.status==='HELD_UNCLEAR_TERMS'&&record.hold_code==='ORIGINAL_CAPPER_MISSING'
-          &&record.capper_prompt_version!==CAPPER_PROMPT_VERSION))
+          &&record.capper_prompt_version!==CAPPER_PROMPT_VERSION)
+        || (record.status==='HELD_UNCLEAR_TERMS'&&record.hold_code==='AMBIGUOUS_SOURCE_TERMS'
+          &&record.ambiguity_review_version!==AMBIGUITY_REVIEW_VERSION))
         .map(([id])=>Number(id)).filter(Number.isSafeInteger).sort((a,b)=>b-a).slice(0,50);
       if(recoverIds.length){
         const held=await telegram.getMessages(entity,{ids:recoverIds});
         messages=[...new Map([...held,...messages].filter(Boolean).map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
       }
       messages=[...new Map(messages.filter(Boolean).map(message=>[message.id,message])).values()].sort((a,b)=>{
+        const localRecovery=message=>{
+          const record=state.records[String(message.id)];
+          return record?.status==='HELD_UNCLEAR_TERMS'&&
+            ['ORIGINAL_CAPPER_MISSING','AMBIGUOUS_SOURCE_TERMS'].includes(record.hold_code);
+        };
+        if(localRecovery(a)!==localRecovery(b))return localRecovery(a)?-1:1;
         const aFresh=a.id>cursorAtStart,bFresh=b.id>cursorAtStart;
         if(aFresh!==bFresh)return aFresh?-1:1;
         // Fresh items stay oldest-first so the cursor cannot pass a deferred
@@ -274,6 +293,20 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
             await save(file,state);
           }
         }catch(error){if(error.code!=='ENOENT')logger.info?.(`Telegram signed-source recovery ${message.id}: ${approvalHoldCode(error)}`);}
+      }
+      if(previous?.status==='HELD_UNCLEAR_TERMS'&&previous.hold_code==='AMBIGUOUS_SOURCE_TERMS'
+        &&previous.ambiguity_review_version!==AMBIGUITY_REVIEW_VERSION){
+        try{
+          const saved=JSON.parse(await fs.readFile(packetFile,'utf8'));
+          validateApprovalPacket(saved);
+          recoveredAnalysis=saved.analysis;
+          delete state.records[String(message.id)];previous=undefined;
+          await save(file,state);
+        }catch(error){
+          previous.ambiguity_review_version=AMBIGUITY_REVIEW_VERSION;
+          await save(file,state);
+          if(error.code!=='ENOENT')logger.info?.(`Telegram optional-detail recovery ${message.id}: ${approvalHoldCode(error)}`);
+        }
       }
       if(previous?.status==='HELD_EXTRACTION_FAILED' && previous.media_download_version!==2 && (message.photo||message.media?.photo)){
         // Recover only never-delivered image extractions affected by the old
@@ -379,7 +412,7 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         packet.status='HELD_UNCLEAR_TERMS';packet.hold_code=holdCode;
         packet.hold_reason=String(error?.message||'Validation failed.');await save(packetFile,packet);
         state.records[String(message.id)]={status:'HELD_UNCLEAR_TERMS',terms_parse_version:TERMS_PARSE_VERSION,
-          capper_prompt_version:CAPPER_PROMPT_VERSION,hold_code:holdCode};state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);state.cursor=Math.max(state.cursor,message.id);await save(file,state);
+          capper_prompt_version:CAPPER_PROMPT_VERSION,ambiguity_review_version:AMBIGUITY_REVIEW_VERSION,hold_code:holdCode};state.media_backfill_ids=state.media_backfill_ids?.filter(id=>id!==message.id);state.cursor=Math.max(state.cursor,message.id);await save(file,state);
         logger.info?.(`Telegram held message ${message.id}: ${holdCode} (${packet.hold_reason})`);
         results.push({status:'HELD_UNCLEAR_TERMS',messageId:message.id,holdCode});continue;
       }

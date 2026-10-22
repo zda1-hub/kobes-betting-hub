@@ -125,6 +125,39 @@ test('anonymous Telegram signatures never identify an original capper',async t=>
   assert.equal(result[0].holdCode,'ORIGINAL_CAPPER_MISSING');
   assert.equal(h.sent.length,0);
 });
+test('unstated optional details do not block a complete wager, but uncertain lines do',async t=>{
+  const h=await harness(t);
+  h.messages[0]={...message(1,'Kleos'),postAuthor:'Kleos',photo:{}};
+  h.telegram.downloadMedia=async()=>require('sharp')({create:{width:32,height:32,channels:3,background:'white'}}).png().toBuffer();
+  h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:{is_pick_candidate:true,
+    source_capper_name:'Kleos',selection:'Panthers ML -110',plays:[{selection:'Panthers ML -110'}],
+    missing_or_ambiguous:['Sportsbook not shown','odds not provided']}});
+  assert.equal((await createTelegramReader(h.options).run())[0].status,'PRIVATE_APPROVAL_DELIVERED');
+  h.messages.push({...message(2,'Kleos'),postAuthor:'Kleos',photo:{}});
+  h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:{is_pick_candidate:true,
+    source_capper_name:'Kleos',selection:'Lions +4.5 (-110)',plays:[{selection:'Lions +4.5 (-110)'}],
+    missing_or_ambiguous:['The line could be +4.5 or +5.5']}});
+  const result=await createTelegramReader(h.options).run();
+  assert.equal(result[0].holdCode,'AMBIGUOUS_SOURCE_TERMS');
+  assert.equal(h.sent.length,1);
+});
+test('old optional-detail hold is recovered once from saved extraction',async t=>{
+  const h=await harness(t);
+  h.messages[0]={...message(1,'Kleos'),postAuthor:'Kleos',photo:{}};
+  h.telegram.getMessages=async(_,params)=>h.messages.filter(m=>params.ids?params.ids.includes(m.id):m.id>(params.minId||0));
+  await fs.writeFile(path.join(h.root,'reader-state.json'),JSON.stringify({channelId,cursor:1,
+    records:{'1':{status:'HELD_UNCLEAR_TERMS',hold_code:'AMBIGUOUS_SOURCE_TERMS',terms_parse_version:2}}}));
+  const packet=telegramPacket(h.messages[0],channelId,now);
+  packet.analysis={status:'SOURCE_EXTRACTED',extraction:{is_pick_candidate:true,source_capper_name:'Kleos',
+    selection:'Panthers ML -110',plays:[{selection:'Panthers ML -110'}],
+    missing_or_ambiguous:['Sportsbook not shown']}};
+  await fs.mkdir(path.join(h.root,'queue','2026-09-17'),{recursive:true});
+  await fs.writeFile(path.join(h.root,'queue','2026-09-17',packet.pick_id+'.json'),JSON.stringify(packet));
+  h.options.enrich=async()=>{throw Error('recovery must not call the model');};
+  assert.equal((await createTelegramReader(h.options).run())[0].status,'PRIVATE_APPROVAL_DELIVERED');
+  await createTelegramReader(h.options).run();
+  assert.equal(h.sent.length,1);
+});
 test('diagnoses a saved current-day hold without a new model call or approval send',async t=>{
   const h=await harness(t);h.messages[0]=message(1,'Some text with Over 44');
   h.options.enrich=async()=>({status:'SOURCE_EXTRACTED',extraction:{is_pick_candidate:true,selection:'Over 44',source_capper_name:'',plays:[]}});
