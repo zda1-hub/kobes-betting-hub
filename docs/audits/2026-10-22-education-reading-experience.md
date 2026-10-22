@@ -13,3 +13,9 @@ Verification: 7 behavioral tests exercise actual initializer/event handlers usin
 Rendered hub checks at320px/390px/1440px: no document horizontal overflow, shared header top0, populated statistics links and summaries fit; both links navigate to the expected articles. No browser console errors in the checked navigation. Mobile gesture verification uses a scripted real-DOM event/media fixture, not a physical touch-device run. Local test fixtures are excluded by the explicit public whitelist. No paid scans or messages.
 
 Release: pending publication and live verification. New research proposal remains unpublished public-site work. No ranking increase or index status claimed.
+
+## Published receipt
+
+Cloudflare version60e29e2a-bca5-41c3-9e76-427d6e222824 deployed successfully with exactly4 intended public assets: site.js, guides/index.html and the two education HTML pages. Tests, audits and fixtures were excluded. PR286 carries the release. Live curl checks found both guide script versions and the new hub text; live script bytes matched tested source exactly. Python urllib returned403 but ordinary curl and in-app browser requests succeeded; no browser security warning was bypassed. Live browser showed the updated links and first-guide navigation, matching script version and no open dialog on article arrival. Local real-page gesture verification supplies behavior evidence; no physical-device claim. Screenshot: /tmp/kbh-reading-experience-live-20261022.png.
+
+Next proposals: docs/seo/2026-10-22-next-statistics-tools.md. Those are research-only and are not public changes. Ranking/indexing effect remains unmeasured.
