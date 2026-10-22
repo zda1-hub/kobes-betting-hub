@@ -75,6 +75,25 @@ function validateApprovalPacket(packet) {
   return embed;
 }
 
+async function deleteManualReviewNotices(channel, channelId) {
+  const marker=new RegExp(`^Manual source review tg-20261021-${channelId}-\\d+$`);
+  let before,deleted=0;
+  for(let pageNumber=0;pageNumber<10;pageNumber++){
+    const page=await channel.messages.fetch(before?{limit:100,before}:{limit:100});
+    const messages=[...page.values()];
+    if(!messages.length)return deleted;
+    for(const message of messages){
+      if(message.author?.id!==channel.client.user.id)continue;
+      if(!message.embeds?.some(embed=>embed.title==='Telegram source needs manual review'
+        &&marker.test(embed.footer?.text||'')))continue;
+      await message.delete();deleted++;
+    }
+    if(messages.length<100)return deleted;
+    before=messages.reduce((oldest,message)=>BigInt(message.id)<BigInt(oldest)?message.id:oldest,messages[0].id);
+  }
+  throw new Error('Manual Telegram notice cleanup exceeded its bounded channel scan.');
+}
+
 function telegramPacket(message, channelId, now=new Date()) {
   if (String(message.peerId?.channelId || '') !== channelId || !Number.isSafeInteger(message.id)) throw new Error('Unexpected Telegram peer.');
   const posted=new Date(Number(message.date)*1000);
@@ -194,7 +213,13 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
         return aFresh?a.id-b.id:b.id-a.id;
       });
     }
-    const channel=await channelFor();const results=[];let modelCalls=0;
+    const channel=await channelFor();
+    if(pacificOperatingDate(now())>='2026-10-21'&&state.manual_notice_cleanup_version!==1){
+      const removed=await deleteManualReviewNotices(channel,config.channelId);
+      state.manual_notice_cleanup_version=1;await save(file,state);
+      logger.info?.(`Removed ${removed} bot-generated Telegram manual-review notices from private approvals.`);
+    }
+    const results=[];let modelCalls=0;
     for(const message of messages){
       if(stopping)break;
       const packet=telegramPacket(message,config.channelId,now());
@@ -331,4 +356,4 @@ function createTelegramReader({config, channelFor, now=()=>new Date(), logger=co
     }).finally(()=>{running=null;});return running||Promise.resolve([]);},
     async stop(){stopping=true;if(running)await running;if(telegram)await telegram.disconnect();}};
 }
-module.exports={telegramPacket,createTelegramReader};
+module.exports={telegramPacket,createTelegramReader,deleteManualReviewNotices};
