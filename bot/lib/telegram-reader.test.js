@@ -9,7 +9,8 @@ const now=new Date('2026-09-17T23:00:00Z'),channelId='3593544389',apiHash='a'.re
 const message=(id=1,text='AnalyticsCapper\nAngels ML -110 (10U)')=>({id,date:now.getTime()/1000-60,peerId:{channelId},message:text});
 test('cleanup deletes only this bot’s exact October 21 manual notices',async()=>{
   const deleted=[];
-  const make=(id,authorId,title,footer)=>({id:String(id),author:{id:authorId},embeds:[{title,footer:{text:footer}}],
+  const base=BigInt(Date.parse('2026-10-21T23:00:00Z')-1420070400000)<<22n;
+  const make=(id,authorId,title,footer)=>({id:String(base+BigInt(id)),author:{id:authorId},embeds:[{title,footer:{text:footer}}],
     delete:async()=>deleted.push(String(id))});
   const items=[
     make(4,'bot','Telegram source needs manual review',`Manual source review tg-20261021-${channelId}-32087`),

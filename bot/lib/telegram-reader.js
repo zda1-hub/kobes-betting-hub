@@ -77,18 +77,22 @@ function validateApprovalPacket(packet) {
 
 async function deleteManualReviewNotices(channel, channelId) {
   const marker=new RegExp(`^Manual source review tg-20261021-${channelId}-\\d+$`);
+  // The unwanted notices began after 16:00 Arizona time. Stop before the
+  // previous hour instead of traversing the whole approvals history.
+  const cutoffId=BigInt(Date.parse('2026-10-21T22:00:00Z')-1420070400000)<<22n;
   let before,deleted=0;
-  for(let pageNumber=0;pageNumber<10;pageNumber++){
+  for(let pageNumber=0;pageNumber<50;pageNumber++){
     const page=await channel.messages.fetch(before?{limit:100,before}:{limit:100});
     const messages=[...page.values()];
     if(!messages.length)return deleted;
     for(const message of messages){
+      if(BigInt(message.id)<cutoffId)continue;
       if(message.author?.id!==channel.client.user.id)continue;
       if(!message.embeds?.some(embed=>embed.title==='Telegram source needs manual review'
         &&marker.test(embed.footer?.text||'')))continue;
       await message.delete();deleted++;
     }
-    if(messages.length<100)return deleted;
+    if(messages.length<100||messages.some(message=>BigInt(message.id)<cutoffId))return deleted;
     before=messages.reduce((oldest,message)=>BigInt(message.id)<BigInt(oldest)?message.id:oldest,messages[0].id);
   }
   throw new Error('Manual Telegram notice cleanup exceeded its bounded channel scan.');
