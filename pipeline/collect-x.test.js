@@ -89,7 +89,7 @@ test('a complete monitored X wager uses the exact expert card and paid-only cont
     const sent = calls.find(call => call.url.endsWith('/channels/exclusive-approvals/messages'));
     assert.ok(sent);
     const payload = JSON.parse(sent.options.body);
-    assert.equal(payload.embeds[0].description, '• Jayson Tatum OVER 5.5 assists -115');
+    assert.equal(payload.embeds[0].description, '@example\n• Jayson Tatum OVER 5.5 assists -115');
     assert.equal(payload.components[0].components.some(button => button.custom_id?.endsWith(':free')), false);
     assert.equal(payload.components[0].components.find(button => button.custom_id?.endsWith(':paid')).label, 'Post to #expert-picks');
   } finally {

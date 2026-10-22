@@ -2510,6 +2510,7 @@ async function refreshPendingTermsOnlyApprovals() {
         continue;
       }
       await message.edit({
+        embeds: [buildSourcePickApprovalEmbed(packet, 'APPROVED PICK')],
         components: reviewButtons(packet.pick_id, {
           paidOnly: true,
           paidLabel
