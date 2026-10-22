@@ -70,6 +70,7 @@ const publicFiles = [
   'privacy.html',
   'responsible-gambling.html',
   'education/mean-versus-median.html',
+  'education/per-game-versus-per-minute.html',
   'education/statistics.css',
   'education/statistics-calculator.mjs',
   'education/statistics-calculations.mjs',
@@ -231,7 +232,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
     'index.html', 'exclusives.html', 'join.html', 'membership.html',
     'cancel.html', 'welcome.html', 'recaps.html', 'results.html', 'free-pick.html',
     'faq.html', 'support.html', 'terms.html', 'privacy.html',
-    'responsible-gambling.html', 'education/mean-versus-median.html', 'refer.html', '404.html',
+    'responsible-gambling.html', 'education/mean-versus-median.html', 'education/per-game-versus-per-minute.html', 'refer.html', '404.html',
     ...guideFiles.filter(file => file.endsWith('.html'))
   ]);
   await Promise.all([...metaPixelFiles].map(async file => {
