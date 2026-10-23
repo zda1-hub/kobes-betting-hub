@@ -21,6 +21,7 @@ function fixture() {
 test('free access requires the exact two-day monthly trial and matching authoritative Stripe identity', () => {
   const { association, session, subscription } = fixture();
   assert.equal(api.verifiedMonthlyTrial(session, subscription, association, env, now), true);
+  assert.equal(api.verifiedMonthlyTrial({ ...session, payment_status: 'paid' }, subscription, association, env, now), true);
   for (const change of [{ status: 'open' }, { payment_status: 'unpaid' }, { amount_total: 100 },
     { customer: 'cus_other' }, { subscription: 'sub_other' }, { metadata: { ...session.metadata, offer: 'annual' } }])
     assert.equal(api.verifiedMonthlyTrial({ ...session, ...change }, subscription, association, env, now), false);
@@ -42,6 +43,7 @@ function mock(t, state) {
         if (method === 'POST') state.subscription.metadata.discord_user_id = 'member';
         return Response.json(state.subscription);
       }
+      if (u.pathname.endsWith('/subscriptions/sub_existing')) return Response.json({ id: 'sub_existing', status: 'active' });
       if (u.pathname.endsWith('/invoices/in_paid')) return Response.json(state.invoice);
       throw new Error('Unexpected Stripe route: ' + u.pathname);
     }
@@ -53,7 +55,7 @@ function mock(t, state) {
     const table = u.pathname.replace('/rest/v1/', '');
     if (method === 'GET') {
       if (table === 'membership_checkout_associations') return Response.json([state.association]);
-      if (table === 'membership_customers') return Response.json([{ stripe_customer_id: 'cus_trial', discord_user_id: 'member' }]);
+      if (table === 'membership_customers') return Response.json([{ stripe_customer_id: 'cus_trial', discord_user_id: 'member', current_subscription_id: state.linkedSubscriptionId || null }]);
       if (table === 'membership_subscriptions') return Response.json([{ entitlement_blocked: false }]);
       if (table === 'stripe_webhook_events') {
         const id = u.searchParams.get('event_id')?.slice(3);
@@ -95,6 +97,33 @@ test('signed trial checkout activates VIP immediately without recording payment;
   state.subscription.status = 'canceled';
   assert.equal((await signed({ ...event, id: 'evt_cancel', type: 'customer.subscription.deleted', data: { object: state.subscription } })).status, 200);
   assert.deepEqual(state.roles, ['PUT', 'DELETE']);
+});
+test('Stripe paid status on a zero-dollar trial activates VIP without counting revenue', async t => {
+  const state = fixture(); mock(t, state);
+  state.session.payment_status = 'paid';
+  const event = { id: 'evt_paid_zero_trial', type: 'checkout.session.completed', created: now, livemode: false, data: { object: state.session } };
+  assert.equal((await signed(event)).status, 200);
+  assert.equal(state.association.status, 'VIP_ACTIVE');
+  assert.deepEqual(state.roles, ['PUT']);
+  assert.equal(state.analytics.filter(e => e.event_name === 'trial_started').length, 1);
+  assert.equal(state.analytics.filter(e => e.event_name === 'payment_completed').length, 0);
+});
+test('recovery activates a previously recorded zero-dollar trial without counting revenue', async t => {
+  const state = fixture(); mock(t, state);
+  state.session.payment_status = 'paid';
+  const result = await api.recoverCompletedZeroDollarTrials(env);
+  assert.deepEqual(result, { checked: 1, activated: 1, duplicateSkipped: 0, failed: 0 });
+  assert.equal(state.association.status, 'VIP_ACTIVE');
+  assert.deepEqual(state.roles, ['PUT']);
+  assert.equal(state.analytics.filter(e => e.event_name === 'payment_completed').length, 0);
+});
+test('trial recovery does not attach a duplicate subscription to an already active Discord member', async t => {
+  const state = fixture(); mock(t, state);
+  state.session.payment_status = 'paid';
+  state.linkedSubscriptionId = 'sub_existing';
+  assert.deepEqual(await api.recoverCompletedZeroDollarTrials(env), { checked: 1, activated: 0, duplicateSkipped: 1, failed: 0 });
+  assert.equal(state.association.status, 'CHECKOUT_STARTED');
+  assert.deepEqual(state.roles, []);
 });
 test('unpaid or expired checkout never grants VIP', async t => {
   const state = fixture(); mock(t, state);
