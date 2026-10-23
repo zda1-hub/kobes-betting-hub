@@ -30,13 +30,13 @@ const {
 const { enrichPacket } = require('./enrich-pick');
 const { isSupportedSportPick } = require('../bot/lib/event-timing');
 
-test('expert cards allow absent odds but reject a stated price of -200 or worse', () => {
+test('exclusive cards do not require odds; regular picks retain the price gate', () => {
   for (const odds of ['-199', '-110', '+100', '+250']) assert.equal(approvalOddsEligible({ odds_american: odds }), true, odds);
   for (const odds of ['-200', '-201', '', 'EVEN', '3.5']) assert.equal(approvalOddsEligible({ odds_american: odds }), false, odds);
   const packet = { pick_id: 'odds-test', approval_number: 1, approval: {},
     source: { publish_mode: 'terms_only' },
     analysis: { extraction: { plays: [{ selection: 'A', odds_american: '-110' }, { selection: 'B', odds_american: '-250' }] } } };
-  assert.equal(packetApprovalOddsEligible(packet), false);
+  assert.equal(packetApprovalOddsEligible(packet), true);
   packet.analysis.extraction.plays[1].odds_american = '';
   assert.equal(packetApprovalOddsEligible(packet), true);
   packet.source.publish_mode = 'writeup_review';

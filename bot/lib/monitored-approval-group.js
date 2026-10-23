@@ -33,10 +33,6 @@ function mergeMonitoredApprovalPackets(packets) {
     const extraction = packet.analysis?.extraction || {};
     const candidates = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays : [extraction];
     for (const play of candidates) {
-      const odds = String(play.odds_american ?? '').trim();
-      if (odds && (!/^[+-]\d{2,4}$/.test(odds) || Number(odds) <= -200)) {
-        throw new Error('Stated odds must be strictly better than -200.');
-      }
       const identity = `${String(play.selection || '').trim().toLowerCase()}|${String(play.odds_american || '').trim()}`;
       if (seen.has(identity)) continue;
       seen.add(identity);

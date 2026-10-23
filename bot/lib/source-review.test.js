@@ -57,6 +57,15 @@ test('formats a writeup source in Kobe’s pick-first layout', () => {
   assert.equal(embed.image.url, 'https://example.com/player-photo.png');
 });
 
+test('does not turn Cody’s season-long hit list into expert picks', () => {
+  const historical = structuredClone(packet);
+  historical.source = { handle: 'CodyBrownBets', publish_mode: 'monitored_terms',
+    text: 'There are 52 NFL props that have cashed in every single game this season.\nAaron Rodgers 175+ Passing Yards' };
+  historical.analysis.extraction.plays = [{ selection: 'Aaron Rodgers 175+ Passing Yards',
+    player_name: 'Aaron Rodgers', market: 'passing yards', odds_american: '' }];
+  assert.throws(() => assertPublishableExtraction(historical), /historical prop list/);
+});
+
 test('places a verified player team directly under the player name without guessing from the matchup', () => {
   const teamPacket = structuredClone(packet);
   teamPacket.analysis.extraction.plays = [{
