@@ -54,24 +54,20 @@ test('welcome queue is private and cannot create arbitrary recipient messages', 
   const response = await worker.fetch(new Request('https://worker.test/ops/member-welcomes'), {});
   assert.equal(response.status, 401);
   const create = await worker.fetch(new Request('https://worker.test/ops/member-welcomes', { method: 'POST', headers: { authorization: 'Bearer test-secret' }, body: JSON.stringify({ recipient: 'attacker@example.com' }) }), { MEMBER_WELCOME_QUEUE_SECRET: 'test-secret' });
-  assert.equal(create.status, 404);
+  assert.equal(create.status, 410);
 });
-test('welcome claim is atomic; a second claim cannot return the private message', async t => {
+test('legacy Gmail poller cannot read or claim member emails without Resend', async t => {
   const saved = globalThis.fetch;
   t.after(() => { globalThis.fetch = saved; });
-  let claimed = false;
-  globalThis.fetch = async (url, options) => {
-    assert.match(url, /status=eq.QUEUED/);
-    assert.equal(options.method, 'PATCH');
-    if (claimed) return Response.json([]);
-    claimed = true;
-    return Response.json([{ id: '12345678-1234-4234-8234-123456789012', recipient: 'member@example.com', subject: 'Welcome', body: 'Private connection link' }]);
-  };
+  globalThis.fetch = () => { throw new Error('Retired queue must not access member data'); };
   const config = { MEMBER_WELCOME_QUEUE_SECRET: 'test-secret', SUPABASE_URL: 'https://database.test', SUPABASE_SECRET_KEY: 'test-database' };
-  const request = () => new Request('https://worker.test/ops/member-welcomes/claim', { method: 'POST', headers: { authorization: 'Bearer test-secret' }, body: JSON.stringify({ id: '12345678-1234-4234-8234-123456789012' }) });
-  assert.equal((await worker.fetch(request(), config)).status, 200);
-  assert.equal((await worker.fetch(request(), config)).status, 409);
+  const auth = { authorization: 'Bearer test-secret' };
+  const poll = await worker.fetch(new Request('https://worker.test/ops/member-welcomes', { headers: auth }), config);
+  assert.equal(poll.status, 410);
+  const claim = await worker.fetch(new Request('https://worker.test/ops/member-welcomes/claim', { method: 'POST', headers: auth, body: JSON.stringify({ id: '12345678-1234-4234-8234-123456789012' }) }), config);
+  assert.equal(claim.status, 410);
 });
+
 test('new monthly trial welcome shows zero today and the recurring price', () => {
   const { session, subscription } = example('monthly');
   session.payment_status = 'no_payment_required'; session.amount_total = 0;

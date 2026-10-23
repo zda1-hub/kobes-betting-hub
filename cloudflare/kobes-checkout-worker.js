@@ -2586,49 +2586,12 @@ async function handleMemberWelcomeQueue(request, env) {
   if (!expected || !await secureEqual(request.headers.get('authorization') || '', `Bearer ${expected}`)) {
     return Response.json({ error: 'Unauthorized.' }, { status: 401 });
   }
-  const path = new URL(request.url).pathname;
-  const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
-  try {
-    if (request.method === 'GET' && path === '/ops/member-welcomes') {
-      // Once the domain sender is configured, scheduled Worker delivery owns
-      // this queue. The legacy Gmail poller receives an empty list.
-      if (env.RESEND_API_KEY) return reply({ notifications: [] });
-      // List identities only. Content is returned once, after an atomic claim.
-      const [welcome, lifecycle] = await Promise.all([
-        supabase(env, 'member_welcome_outbox?status=eq.QUEUED&select=id,created_at&order=created_at.asc&limit=10'),
-        supabase(env, 'member_lifecycle_outbox?status=eq.QUEUED&email_type=neq.PAYMENT_FAILED&select=id,created_at&order=created_at.asc&limit=10'),
-      ]);
-      return reply({ notifications: [...(welcome || []), ...(lifecycle || [])].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).slice(0,10).map(({id})=>({id})) });
-    }
-    if (request.method !== 'POST' || !['/ops/member-welcomes/claim', '/ops/member-welcomes/deliver', '/ops/member-welcomes/hold'].includes(path)) return reply({ error: 'Not found.' }, 404);
-    const data = JSON.parse(await readTextWithLimit(request, 1000));
-    const uuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value || '');
-    if (!uuid(data.id)) return reply({ error: 'Invalid notification.' }, 400);
-    if (path.endsWith('/claim')) {
-      const token = crypto.randomUUID();
-      let row = null;
-      for (const table of ['member_welcome_outbox','member_lifecycle_outbox']) {
-        const filter = table === 'member_lifecycle_outbox' ? '&email_type=neq.PAYMENT_FAILED' : '';
-        const rows = await supabase(env, `${table}?id=eq.${data.id}&status=eq.QUEUED${filter}`, { method: 'PATCH', prefer: 'return=representation', body: { status: 'SEND_STARTED', claim_token: token, send_started_at: new Date().toISOString() } });
-        if (rows?.[0]) { row = rows[0]; break; }
-      }
-      if (!row) return reply({ error: 'Already claimed.' }, 409);
-      return reply({ id: row.id, claimToken: token, recipient: row.recipient, subject: row.subject, body: row.body });
-    }
-    if (!uuid(data.claimToken)) return reply({ error: 'Invalid claim.' }, 400);
-    const delivered = path.endsWith('/deliver');
-    let acknowledged = false;
-    for (const table of ['member_welcome_outbox','member_lifecycle_outbox']) {
-      const rows = await supabase(env, `${table}?id=eq.${data.id}&claim_token=eq.${data.claimToken}&status=eq.SEND_STARTED`, { method: 'PATCH', prefer: 'return=representation', body: { status: delivered ? 'DELIVERED' : 'REVIEW_REQUIRED', ...(delivered ? { delivered_at: new Date().toISOString() } : {}) } });
-      if (rows?.length) { acknowledged = true; break; }
-    }
-    if (!acknowledged) return reply({ error: 'Claim cannot be acknowledged.' }, 409);
-    return reply({ ok: true });
-  } catch {
-    // Never leak customer addresses, private links, or credentials into responses/logs.
-    console.error(JSON.stringify({ message: 'Member welcome queue operation failed', path }));
-    return reply({ error: 'Notification operation failed safely.' }, 503);
-  }
+  // The retired Google Apps Script sends from the operator's Gmail account.
+  // Keep queued member messages for the support-domain Resend sender only,
+  // including while Resend is unavailable.
+  return Response.json({ error: 'Legacy member email delivery is retired.' }, {
+    status: 410, headers: { 'Cache-Control': 'no-store' },
+  });
 }
 
 async function deliverMemberEmailsFromDomain(env) {
