@@ -264,6 +264,11 @@ function approvalOddsEligible(play) {
 function packetApprovalOddsEligible(packet) {
   const extraction = packet.analysis?.extraction || {};
   const plays = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays : [extraction];
+  // Expert terms may omit a price. Preserve the existing -200 limit when
+  // the source does state one, without inventing a price for an unpriced play.
+  if (['terms_only', 'monitored_terms'].includes(packet.source?.publish_mode)) {
+    return plays.every(play => !String(play.odds_american ?? '').trim() || approvalOddsEligible(play));
+  }
   return plays.every(approvalOddsEligible);
 }
 
@@ -1224,8 +1229,17 @@ function heldMonitoredXCandidate(packet, date, now = new Date()) {
     || packet.status !== 'HELD_NOT_READY' || packet.discord_review_message_id || packet.approval?.decision
     || !packet.pick_id?.startsWith(date.replaceAll('-', ''))
     || !packet.source?.posted_at || pacificDate(new Date(packet.source.posted_at)) !== date
-    || !isSinglePlayPacket(packet) || !packetApprovalOddsEligible(packet)
+    || !isSinglePlayPacket(packet) || !packetApprovalOddsEligible(monitoredTermsPacket(packet))
     || sourceEvidence(packet).length >= 4 || !isSupportedSportPick(packet)) return false;
+  const eventStart = Date.parse(packet.verification?.event_start || '');
+  return !Number.isFinite(eventStart) || eventStart > now.getTime();
+}
+
+function heldExpertTermsCandidate(packet, date, now = new Date()) {
+  if (packet?.source?.platform !== 'Twitter/X' || packet.source?.publish_mode !== 'terms_only'
+    || packet.status !== 'HELD_NOT_READY' || packet.discord_review_message_id || packet.approval?.decision
+    || !packet.pick_id?.startsWith(date.replaceAll('-', ''))
+    || !packet.source?.posted_at || pacificDate(new Date(packet.source.posted_at)) !== date) return false;
   const eventStart = Date.parse(packet.verification?.event_start || '');
   return !Number.isFinite(eventStart) || eventStart > now.getTime();
 }
@@ -1243,17 +1257,19 @@ async function recoverHeldMonitoredXApprovals({ now = new Date(), max = 12 } = {
   for (const file of files) {
     const packetPath = path.join(directory, file);
     const packet = await readJson(packetPath, null);
-    if (heldMonitoredXCandidate(packet, date, now)) candidates.push({ packet, packetPath });
+    if (heldMonitoredXCandidate(packet, date, now) || heldExpertTermsCandidate(packet, date, now))
+      candidates.push({ packet, packetPath });
   }
   candidates.sort((a, b) => Date.parse(b.packet.source.posted_at) - Date.parse(a.packet.source.posted_at));
   let sent = 0;
   let held = 0;
   for (const { packet, packetPath } of candidates.slice(0, Math.max(0, max))) {
-    const presentation = monitoredTermsPacket(packet);
-    presentation.source.original_publish_mode ||= packet.source.publish_mode;
+    const presentation = packet.source.publish_mode === 'terms_only' ? structuredClone(packet) : monitoredTermsPacket(packet);
+    if (presentation.source.publish_mode === 'monitored_terms')
+      presentation.source.original_publish_mode ||= packet.source.publish_mode;
     try {
       buildSourcePickApprovalEmbed(presentation, 'APPROVED PICK');
-      const timing = await upcomingEventStatus(presentation);
+      const timing = await candidateEventTiming(presentation);
       if (timing.status !== 'UPCOMING') { held += 1; continue; }
       presentation.verification.event_start = timing.eventStart || presentation.verification.event_start;
       const receipt = await deliverRecoveredApproval(presentation, packetPath);
@@ -1396,6 +1412,7 @@ module.exports = {
   notifyApprovalChannel,
   packetApprovalOddsEligible,
   heldMonitoredXCandidate,
+  heldExpertTermsCandidate,
   recordModelCallDeferral,
   recoverAuditedExclusive,
   recoverHeldMonitoredXApprovals,
