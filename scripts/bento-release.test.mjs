@@ -77,7 +77,7 @@ test('production email form supplies age, consent and honeypot to the existing h
   assert.match(source, /legalAge/); assert.match(source, /consent/);
 });
 
-test('landing wins retain their qualified historical estimate and proof retains unique inline reviews', async () => {
+test('landing wins retain their qualified historical estimate and proof retains the original review gallery', async () => {
   const home = await read('index.html');
   assert.match(home, /KOBE’S HISTORICAL 65% WIN RATE/); assert.match(home, /data-wins-track/);
   assert.match(home, /href="\/?results(?:\.html)?"[^>]*>See winning plays/);
@@ -85,14 +85,25 @@ test('landing wins retain their qualified historical estimate and proof retains 
   assert.doesNotMatch(proof, /data-verified-results-track/);
   assert.match(proof, /Historical member slips/);
   assert.equal((proof.match(/class="media-card slideshow-card slip-card"/g)||[]).length,4);
-  const reviewTags = [...proof.matchAll(/<figure\b[^>]*class="[^"]*review-card[^>]*data-image="([^"]+)"/g)];
-  assert.equal(reviewTags.length, 14);
-  assert.doesNotMatch(proof, /<button\b[^>]*class="[^"]*review-card/);
-  const hashes = await Promise.all(reviewTags.map(async ([, file]) => createHash('sha256').update(await readFile(new URL(file, built))).digest('hex')));
-  assert.equal(new Set(hashes).size, 13);
-  const records=JSON.parse(await readFile(new URL('docs/reviews/2026-10-10-quote-transcriptions.json',repository),'utf8'));
-  assert.equal(new Set(records.map(record=>record.quote)).size,14);
-  assert.equal(new Set(records.map(record=>record.id)).size,14);
+  // October 13 replaced the quote renderings with 17 supplied screenshots
+  // and retained five distinct earlier screenshots (see the release audit).
+  const reviews = [...proof.matchAll(/<button\b([^>]*\bdata-review-source[^>]*)>([\s\S]*?)<\/button>/g)];
+  assert.equal(reviews.length, 22, 'retain the complete approved source gallery');
+  const attributes = tag => Object.fromEntries([...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map(m => [m[1], m[2]]));
+  const sources = reviews.map(([, tag, body]) => {
+    const attrs = attributes(tag);
+    assert.match(attrs.class, /\breview-card\b/);
+    assert.equal(attrs.type, 'button');
+    assert.ok(attrs['aria-label']?.trim(), 'image enlargement needs an accessible label');
+    assert.ok(attrs['data-review-id'], 'review source needs a stable identity');
+    assert.equal(attributes(body.match(/<img\b[^>]*>/)?.[0] || '').src, attrs['data-image'], 'thumbnail and full-size viewer must use the same original');
+    return attrs;
+  });
+  assert.equal(new Set(sources.map(item => item['data-review-id'])).size, 22);
+  assert.equal(new Set(sources.map(item => item['data-image'])).size, 22, 'use every unique image before rail cloning');
+  const hashes = await Promise.all(sources.map(async item => createHash('sha256').update(await readFile(new URL(item['data-image'], built))).digest('hex')));
+  assert.equal(new Set(hashes).size, 22, 'different filenames must not hide duplicate images');
+
 });
 
 test('public highlights render verified wins and exclude all other outcomes', async () => {
@@ -151,10 +162,11 @@ test('legal and portal artifacts retain current approved operator and secure acc
   assert.equal(portal, await read('managemembership.html'));
 });
 
-test('wins motion respects reduced motion, focus, manual browsing and four-second idle', async () => {
+test('wins motion respects reduced motion, focus, hover, manual browsing and four-second idle', async () => {
   const source = await read('home-results.js');
   for (const reduce of [false,true]) {
-    const frames=[], listeners={}, controlsListeners={}, buttons={}, timers=[];
+    const frames=[], listeners={}, controlsListeners={}, buttons={};
+    const timers=new Map(); let timerId=0, now=0;
     for(const name of ['previous','next']) buttons[name]={addEventListener(type,fn){this[type]=fn;}};
     let focused=false,scroll=0;
     const controls={contains(){return focused;},addEventListener(type,fn){controlsListeners[type]=fn;},querySelector(selector){return buttons[selector.match(/wins-(\w+)/)[1]];}};
@@ -162,12 +174,21 @@ test('wins motion respects reduced motion, focus, manual browsing and four-secon
     const track={parentElement:rail,children:[],hasAttribute(name){return name==='data-wins-only';},replaceChildren(...cards){this.children=cards;this.layout();},prepend(...cards){this.children.unshift(...cards);this.layout();},append(...cards){this.children.push(...cards);this.layout();},layout(){this.children.forEach((card,i)=>card.offsetLeft=i*262);}};
     const create=()=>({children:[],append(...nodes){this.children.push(...nodes);},setAttribute(){},cloneNode(){return create();},getBoundingClientRect(){return {width:250};}});
     const document={hidden:false,activeElement:{},querySelector(selector){return selector==='[data-verified-results-track]'?track:null;},querySelectorAll(){return [];},createElement:create};
-    vm.runInNewContext(source,{KBHResultMetadata:{publicMetadata:item=>item},document,location:{hostname:'kobesbettinghub.com'},fetch:async()=>({ok:true,json:async()=>({recent:[{result:'W',selection:'A'},{result:'W',selection:'B'}]})}),matchMedia:()=>({matches:reduce,addEventListener(){}}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>frames.push(fn),setTimeout(fn,delay){assert.equal(delay,4000);timers.push(fn);},clearTimeout(){},innerHeight:844});
+    vm.runInNewContext(source,{KBHResultMetadata:{publicMetadata:item=>item},document,location:{hostname:'kobesbettinghub.com'},fetch:async()=>({ok:true,json:async()=>({recent:[{result:'W',selection:'A'},{result:'W',selection:'B'}]})}),performance:{now:()=>now},matchMedia:query=>({matches:query.includes('prefers-reduced-motion') && reduce,addEventListener(){}}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>frames.push(fn),setTimeout(fn,delay){assert.equal(delay,4000);const id=++timerId;timers.set(id,{fn,at:now+delay});return id;},clearTimeout:id=>timers.delete(id),innerHeight:844});
     await new Promise(resolve=>setImmediate(resolve));
-    const tick=start=>{for(let time=start;time<start+800;time+=8)frames.shift()(time);};
-    const initial=scroll;tick(8);if(reduce)assert.equal(scroll,initial);else assert.ok(scroll>initial+40);
-    let prevented=false;listeners.wheel({deltaX:0,deltaY:25,preventDefault(){prevented=true;}});assert.equal(prevented,false);
-    focused=true;controlsListeners.focusin();timers.at(-1)();const stopped=scroll;tick(808);assert.equal(scroll,stopped);
-    focused=false;controlsListeners.focusout();timers.at(-1)();tick(1608);if(reduce)assert.equal(scroll,stopped);else assert.ok(scroll>stopped+40);
+    assert.equal(frames.length,1,'carousel must initialize without a swallowed browser API error');
+    const advance=duration=>{const end=now+duration;while(now<end){now=Math.min(now+16,end);for(const [id,timer] of [...timers]){if(timer.at<=now){timers.delete(id);timer.fn();}}const frame=frames.shift();assert.equal(typeof frame,'function');frame(now);}};
+    const initial=scroll;
+    advance(5900);assert.equal(scroll,initial,'do not advance before the six-second reading interval');
+    advance(200);assert.equal(scroll,reduce?initial:initial+262,'advance one card unless reduced motion is requested');
+    let prevented=false;listeners.wheel({deltaX:0,deltaY:25,preventDefault(){prevented=true;}});assert.equal(prevented,false,'vertical wheel must remain page scrolling');
+    const manuallyPaused=scroll;advance(3990);assert.equal(scroll,manuallyPaused,'manual browsing pauses for four seconds');
+    advance(20);advance(5900);assert.equal(scroll,manuallyPaused,'resume starts a fresh reading interval');
+    advance(200);assert.equal(scroll,reduce?manuallyPaused:initial,'normal motion resumes and wraps after idle');
+    focused=true;controlsListeners.focusin();const focusPosition=scroll;advance(12000);assert.equal(scroll,focusPosition,'focus must hold the pause even after the idle timer');
+    focused=false;controlsListeners.focusout();advance(10100);const resumed=scroll;assert.equal(resumed,reduce?focusPosition:focusPosition===initial?initial+262:initial);
+    listeners.mouseenter();advance(12000);assert.equal(scroll,resumed,'hover must pause automatic movement');
+    listeners.mouseleave();advance(3990);assert.equal(scroll,resumed);
+    buttons.next.click();assert.notEqual(scroll,resumed,'manual next remains usable with reduced motion');
   }
 });
