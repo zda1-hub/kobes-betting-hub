@@ -1659,6 +1659,13 @@ async function collectXSafely() {
     // for the configured time window; Kobe's buttons control publication only.
     const modelCallLimit = xMonitorModelCallLimit();
     const result = await runCollector({ maxModelCalls: modelCallLimit ?? undefined });
+    const recovery = await recoverHeldMonitoredXApprovals().catch(error => {
+      console.error('Held X expert approval recovery failed:', error);
+      return null;
+    });
+    if (recovery && (recovery.sent || recovery.skipped)) {
+      console.log('Held X expert approval recovery:', JSON.stringify(recovery));
+    }
     await consolidatePendingMonitoredApprovals();
     await reportCollectorHealth(result).catch(error => console.error('Collector health alert failed:', error.message));
     if (modelCallLimit !== null && result.deferred > 0) {
