@@ -29,7 +29,7 @@ test('dashboard opens on Today and isolates executive totals from filtered metri
   h.context.d={scoreboard:{activePaid:9,mrrCents:29691,newPaidToday:0,cancelledToday:0,netAddsToday:0,newPaidLast7:1}};
   h.run('renderExecutive(d)');
   assert.equal(h.element('[data-primary]').innerHTML,'filtered result');
-  assert.match(h.element('[data-current]').innerHTML,/Paid access · now/);
+  assert.match(h.element('[data-current]').innerHTML,/Paid subscriptions · now/);
 });
 test('custom same-day range includes the whole Phoenix day with exclusive next midnight',()=>{
   const h=harness();const p=h.run("customRangeParams('2026-09-26','2026-09-26')");
@@ -54,6 +54,18 @@ test('membership date filter respects midnight, missing dates, all-dates overrid
  h.element('[data-member-search]').value='unknown';h.run('renderMembers()');
  assert.match(h.element('[data-members]').innerHTML,/Unknown date/);
  assert.ok(!h.element('[data-members]').innerHTML.includes('Today member'));
+});
+test('member audit shows an active VIP trial and a canceled $0 checkout without suggesting another purchase',()=>{
+ const h=harness();h.context.d={range,membership:{members:[
+  {name:'Trial member',plan:'monthly',joinedAt:'2026-09-26T08:00:00Z',status:'trialing',discordUserId:'discord_1',vipStatus:'VIP_ACTIVE',hasPositivePayment:false,purchaseAt:'2026-09-26T08:00:00Z'},
+  {name:'Trial member',plan:'monthly',joinedAt:'2026-09-26T08:05:00Z',status:'canceled',vipStatus:'CHECKOUT_STARTED',hasPositivePayment:false,purchaseAt:'2026-09-26T08:05:00Z'}
+ ]}};
+ h.run('lastData=d;renderMembers()');
+ const html=h.element('[data-members]').innerHTML;
+ assert.match(html,/trialing.*discord_1.*VIP_ACTIVE/);
+ assert.match(html,/canceled trial.*Ended/);
+ assert.match(html,/Checkout 9\/26\/2026/);
+ assert.doesNotMatch(html,/Purchased|Possible duplicate/);
 });
 test('range summary retains the Phoenix date after UTC midnight',()=>{
  const h=harness();h.context.range=range;
@@ -94,12 +106,12 @@ test('invalid custom dates release a superseded refresh',async()=>{
 test('bento overview distinguishes current totals from selected-date payments and keeps unknown values unavailable',()=>{
  const h=harness();h.context.d={scoreboard:{activePaid:8,mrrCents:26392},revenue:{collectedCents:1999,openFailedInvoices:2},traffic:{uniqueVisitors:12},conversion:{successfulPayments:1,checkoutStarts:4,checkoutPurchaseConversionRate:.25,funnel:[]},discord:{paidWithoutVip:3,roleCheckUnavailable:1},operations:{}};
  h.run('renderOverview(d)');
- assert.match(h.element('[data-summary]').innerHTML,/Paid access.*8.*unpaid trials/);
+ assert.match(h.element('[data-summary]').innerHTML,/Active subscriptions.*Unavailable.*8 paid/);
  assert.match(h.element('[data-summary]').innerHTML,/Collected revenue.*\$19\.99.*Selected dates/);
  assert.match(h.element('[data-summary]').innerHTML,/Matured trial → paid.*Unavailable/);
  assert.match(h.element('[data-priority-alerts]').innerHTML,/data-open-section="membership-report"/);
  h.context.d.scoreboard.activePaid=null;h.context.d.conversion.checkoutPurchaseConversionRate=null;h.run('renderOverview(d)');
- assert.match(h.element('[data-summary]').innerHTML,/Paid access.*Unavailable/);
+ assert.match(h.element('[data-summary]').innerHTML,/Active subscriptions.*Unavailable/);
  assert.match(h.element('[data-summary]').innerHTML,/Matured trial → paid.*Unavailable/);
 });
 test('custom dates appear only for Custom without changing range boundaries',()=>{
@@ -137,9 +149,9 @@ test('matured trial renderer waits for expiry and preserves unavailable history'
  assert.match(h.element('[data-trial-note]').textContent,/not automatically a failed payment/);
 });
 test('overview never diagnoses period event totals as lost buyers and separates trial recurring value',()=>{
- const h=harness();h.context.d={scoreboard:{activePaid:9,activeTrials:1,mrrCents:29691,potentialTrialMrrCents:3299},revenue:{collectedCents:0,openFailedInvoices:0},traffic:{uniqueVisitors:4},conversion:{successfulPayments:0,checkoutStarts:1,trialConversion:{matured:0,pendingMaturation:1,trialToPaidRate:null},funnel:[{name:'payment_completed',dropoff:1,dropoffRate:1}]},discord:{paidWithoutVip:0,trialWithoutVip:1,roleCheckUnavailable:0},operations:{}};
+ const h=harness();h.context.d={scoreboard:{entitled:10,activePaid:9,activeTrials:1,mrrCents:29691,potentialTrialMrrCents:3299},revenue:{collectedCents:0,openFailedInvoices:0},traffic:{uniqueVisitors:4},conversion:{successfulPayments:0,checkoutStarts:1,trialConversion:{matured:0,pendingMaturation:1,trialToPaidRate:null},funnel:[{name:'payment_completed',dropoff:1,dropoffRate:1}]},discord:{paidWithoutVip:0,trialWithoutVip:1,roleCheckUnavailable:0},operations:{}};
  h.run('renderOverview(d)');
- assert.match(h.element('[data-summary]').innerHTML,/Paid access.*9.*1 unpaid trials/);
+ assert.match(h.element('[data-summary]').innerHTML,/Active subscriptions.*10.*9 paid · 1 unpaid trial/);
  assert.match(h.element('[data-summary]').innerHTML,/Paid recurring MRR.*\$296.91.*\$32.99 potential/);
  assert.match(h.element('[data-conversion-signal]').textContent,/still in the two-day window/);
  assert.doesNotMatch(h.element('[data-conversion-signal]').textContent,/drop-off/);
