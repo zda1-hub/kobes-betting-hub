@@ -1254,21 +1254,28 @@ async function recoverHeldMonitoredXApprovals({ now = new Date(), max = 12 } = {
   try { files = (await fs.readdir(directory)).filter(file => file.endsWith('.json')); }
   catch (error) { if (error.code === 'ENOENT') return { sent: 0, held: 0, skipped: 0 }; throw error; }
   const candidates = [];
+  let held = 0;
   for (const file of files) {
     const packetPath = path.join(directory, file);
     const packet = await readJson(packetPath, null);
-    if (heldMonitoredXCandidate(packet, date, now) || heldExpertTermsCandidate(packet, date, now))
-      candidates.push({ packet, packetPath });
-  }
-  candidates.sort((a, b) => Date.parse(b.packet.source.posted_at) - Date.parse(a.packet.source.posted_at));
-  let sent = 0;
-  let held = 0;
-  for (const { packet, packetPath } of candidates.slice(0, Math.max(0, max))) {
+    if (!heldMonitoredXCandidate(packet, date, now) && !heldExpertTermsCandidate(packet, date, now)) continue;
     const presentation = packet.source.publish_mode === 'terms_only' ? structuredClone(packet) : monitoredTermsPacket(packet);
     if (presentation.source.publish_mode === 'monitored_terms')
       presentation.source.original_publish_mode ||= packet.source.publish_mode;
     try {
       buildSourcePickApprovalEmbed(presentation, 'APPROVED PICK');
+      if (!packetApprovalOddsEligible(presentation)) throw new Error('Stated odds must be strictly better than -200.');
+      candidates.push({ packet, packetPath, presentation });
+    } catch {
+      // An old incomplete extraction must not use one of the bounded live
+      // recovery slots. The original held packet remains available for audit.
+      held += 1;
+    }
+  }
+  candidates.sort((a, b) => Date.parse(b.packet.source.posted_at) - Date.parse(a.packet.source.posted_at));
+  let sent = 0;
+  for (const { packet, packetPath, presentation } of candidates.slice(0, Math.max(0, max))) {
+    try {
       const timing = await candidateEventTiming(presentation);
       if (timing.status !== 'UPCOMING') { held += 1; continue; }
       presentation.verification.event_start = timing.eventStart || presentation.verification.event_start;
