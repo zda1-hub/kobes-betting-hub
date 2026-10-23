@@ -98,6 +98,7 @@ const publicFiles = [
   'consent.js',
   'analytics-integrations.js',
   'meta-pixel.js',
+  'x-pixel.js',
   'hub-slip-backdrop.css',
   'hub-slip-backdrop.js',
   'slip-layout-fix.css',
@@ -230,7 +231,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
     await writeFile(outputPath, useCanonicalPageLinks(withAnalytics, file));
   }));
 
-  // Meta campaign measurement belongs only on public marketing and checkout
+  // Advertising campaign measurement belongs only on public marketing and checkout
   // pages. Keep it out of private admin, member, creator and partner portals
   // so internal activity cannot contaminate ad results.
   const metaPixelFiles = new Set([
@@ -247,6 +248,9 @@ export async function preparePublicSite({ env = process.env } = {}) {
     source = source.replace(/view-continuity\.css\?v=[^"']+/g, 'view-continuity.css?v=20261015-header-right');
     if (!source.includes('src="/meta-pixel.js')) {
       source = source.replace('</head>', '  <script src="/meta-pixel.js?v=20261015-kobe-pixel" defer></script>\n</head>');
+    }
+    if (!source.includes('src="/x-pixel.js')) {
+      source = source.replace('</head>', '  <script src="/x-pixel.js?v=20261022-consent" defer></script>\n</head>');
     }
     // A noscript pixel would bypass the visitor's tracking choice.
     await writeFile(outputPath, source);

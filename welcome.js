@@ -23,10 +23,15 @@ async function check() {
     const response = await fetch(`${config.workerOrigin}/onboarding/status?state=${encodeURIComponent(state)}`);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Unable to verify activation.');
+    if (data.trialActive && data.trial) {
+      window.__KBH_VERIFIED_TRIAL__ = data.trial;
+      try { window.KBHX?.trackTrial(data.trial); } catch { /* Optional measurement. */ }
+    }
     // Only the private status endpoint's Stripe-verified paid receipt can report a purchase.
     if (data.paymentConfirmed && data.purchase) {
       window.__KBH_VERIFIED_PURCHASE__ = data.purchase;
       try { window.KBHMeta?.trackPurchase(data.purchase); } catch { /* Advertising must never block membership confirmation. */ }
+      try { window.KBHX?.trackPurchase(data.purchase); } catch { /* Optional measurement. */ }
       try { window.KBHGoogle?.track('purchase', { transaction_id: data.purchase.eventId, value: data.purchase.value, currency: data.purchase.currency }); } catch { /* Optional measurement. */ }
     }
     payment.textContent = data.trialActive ? 'Free trial: Active · $0 today' : `Payment: ${data.paymentConfirmed ? 'Confirmed ✅' : 'Waiting'}`;
