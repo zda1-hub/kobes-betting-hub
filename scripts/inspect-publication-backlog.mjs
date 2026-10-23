@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { operationCheckConfig } from './check-membership-operations.mjs';
 
 const require = createRequire(import.meta.url);
@@ -16,7 +17,7 @@ try {
              p.ledger_entry->>'destination' AS destination,
              p.ledger_entry->>'selection' AS selection,
              p.ledger_entry->>'market' AS market,
-             p.post_reference, p.discord_channel_id, p.discord_message_id,
+             p.exact_payload, p.post_reference, p.discord_channel_id, p.discord_message_id,
              a.status AS approval_status, a.action_at,
              (SELECT COUNT(*)::int FROM workflow_events e
                WHERE e.candidate_id = p.candidate_id AND e.event_type = 'PUBLICATION_SUCCEEDED') AS success_events
@@ -30,7 +31,11 @@ try {
        LIMIT 100
     `);
     await client.query('COMMIT');
-    console.log(JSON.stringify({ count: rows.length, rows }));
+    const safeRows = rows.map(({ exact_payload: payload, ...row }) => ({
+      ...row,
+      description_sha256: createHash('sha256').update(String(payload?.embeds?.[0]?.description || '')).digest('hex'),
+    }));
+    console.log(JSON.stringify({ count: safeRows.length, rows: safeRows }));
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
