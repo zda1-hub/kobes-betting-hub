@@ -62,7 +62,8 @@ test('member audit shows an active VIP trial and a canceled $0 checkout without 
  ]}};
  h.run('lastData=d;renderMembers()');
  const html=h.element('[data-members]').innerHTML;
- assert.match(html,/trialing.*discord_1.*VIP_ACTIVE/);
+ assert.match(html,/trialing.*Connected.*Active/);
+ assert.match(html,/Discord: discord_1/);
  assert.match(html,/canceled trial.*Ended/);
  assert.match(html,/Checkout 9\/26\/2026/);
  assert.doesNotMatch(html,/Purchased|Possible duplicate/);
