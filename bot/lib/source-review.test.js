@@ -465,6 +465,29 @@ test('does not treat a leaked-source account as the original capper', () => {
   assert.equal(sourceCapperName(echoedSource), '');
 });
 
+test('credits the named original capper when Cody supplies an exclusive', () => {
+  const supplier = {
+    ...packet,
+    source: { ...packet.source, handle: 'CodyBrownBets', display_name: 'Cody Brown Bets',
+      original_capper_required: true, publish_mode: 'monitored_terms' },
+    analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction,
+      source_capper_name: 'Original Capper' } }
+  };
+  assert.equal(sourceCapperName(supplier), 'Original Capper');
+  const approval = buildSourcePickApprovalEmbed(supplier, 'APPROVED PICK');
+  assert.match(approval.description, /^Original Capper\n/);
+  assert.doesNotMatch(approval.description, /CodyBrownBets/);
+  assert.equal(sourceCapperName({ ...supplier, analysis: { ...supplier.analysis, extraction: {
+    ...supplier.analysis.extraction, source_capper_name: '@CodyBrownBets' } } }), '');
+  assert.equal(sourceCapperName({ ...supplier, source: { ...supplier.source, original_capper_required: undefined },
+    analysis: { ...supplier.analysis, extraction: { ...supplier.analysis.extraction,
+      source_capper_name: '@CodyBrownBets' } } }), '');
+  assert.equal(sourceCapperName({ ...supplier, analysis: { ...supplier.analysis, extraction: {
+    ...supplier.analysis.extraction, source_capper_name: '' } } }), '');
+  assert.throws(() => assertPublishableExtraction({ ...supplier, analysis: { ...supplier.analysis, extraction: {
+    ...supplier.analysis.extraction, source_capper_name: '' } } }), /original capper/);
+});
+
 test('does not allow unclear capper or non-pick extraction to publish', () => {
   const noCapper = { ...packet, source: {}, analysis: { ...packet.analysis, extraction: { ...packet.analysis.extraction, source_capper_name: '' } } };
   assert.throws(() => assertPublishableExtraction(noCapper), /original capper/);

@@ -441,6 +441,7 @@ function createPacket({ date, sequence, source, post, media }) {
       post_url: `https://x.com/${source.handle}/status/${post.id}`,
       posted_at: post.created_at,
       credit_line: source.credit_line,
+      original_capper_required: source.original_capper_required === true,
       reuse_permission: source.reuse_permission,
       publish_mode: source.publish_mode || 'writeup_review',
       text: post.text,
