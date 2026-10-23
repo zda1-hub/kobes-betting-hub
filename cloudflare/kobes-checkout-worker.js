@@ -194,8 +194,7 @@ async function auditExternalCall(env, values) {
     await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/api_call_events`, {
       method: 'POST',
       headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
+        ...supabaseAuthHeaders(key),
         'Content-Type': 'application/json',
         Prefer: 'return=minimal',
       },
@@ -318,6 +317,14 @@ function supabaseKey(env) {
   return env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '';
 }
 
+function supabaseAuthHeaders(key) {
+  // New sb_secret_* keys authenticate through apikey. They are not JWTs and
+  // must not be sent as bearer tokens. Legacy service-role JWTs need both.
+  return key.startsWith('sb_secret_')
+    ? { apikey: key }
+    : { apikey: key, Authorization: `Bearer ${key}` };
+}
+
 function supabaseReady(env) {
   return Boolean(env.SUPABASE_URL && supabaseKey(env));
 }
@@ -329,8 +336,7 @@ async function supabase(env, path, { method = 'GET', body, prefer } = {}) {
     method,
     signal: AbortSignal.timeout(15_000),
     headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
+      ...supabaseAuthHeaders(key),
       'Content-Type': 'application/json',
       ...(prefer ? { Prefer: prefer } : {}),
     },
@@ -3888,6 +3894,7 @@ export default {
 };
 
 export const __test = {
+  supabaseAuthHeaders,
   discordSetupAlertExceptions,
   adminDiscordSetupAlert,
   websitePageViewSummary,

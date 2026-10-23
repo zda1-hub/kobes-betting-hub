@@ -7,6 +7,12 @@ const now = Math.floor(Date.now() / 1000);
 const env = { STRIPE_SECRET_KEY: 'test', STRIPE_MONTHLY_PRICE_ID: 'price_month',
   SUPABASE_URL: 'https://db.test', SUPABASE_SECRET_KEY: 'test', STRIPE_WEBHOOK_SECRET: 'whsec_test',
   DISCORD_BOT_TOKEN: 'test', DISCORD_GUILD_ID: 'guild', DISCORD_MEMBER_ROLE_ID: 'vip' };
+test('opaque Supabase secret keys are not sent as bearer JWTs', () => {
+  assert.deepEqual(api.supabaseAuthHeaders('sb_secret_example'), { apikey: 'sb_secret_example' });
+  assert.deepEqual(api.supabaseAuthHeaders('legacy.jwt.key'), {
+    apikey: 'legacy.jwt.key', Authorization: 'Bearer legacy.jwt.key',
+  });
+});
 function fixture() {
   const association = { id: '12345678-1234-4234-8234-123456789012', offer: 'monthly', status: 'CHECKOUT_STARTED',
     discord_user_id: 'member', stripe_checkout_session_id: 'cs_live_trial', stripe_subscription_id: 'sub_trial', stripe_customer_id: 'cus_trial' };
