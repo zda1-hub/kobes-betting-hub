@@ -2679,7 +2679,11 @@ function verifiedMonthlyTrial(session, subscription, association, env, now = Dat
   return ['monthly', 'trial_2_day', 'referral_trial'].includes(association?.offer)
     && session?.id === association.stripe_checkout_session_id
     && session.mode === 'subscription' && session.status === 'complete'
-    && session.payment_status === 'no_payment_required' && session.amount_total === 0 && session.currency === 'usd'
+    // Stripe can mark a completed $0 trial Checkout as "paid" even though no
+    // money was collected. The amount and exact subscription trial remain the
+    // authority; payment_status alone is not evidence of a charge.
+    && ['paid', 'no_payment_required'].includes(session.payment_status)
+    && session.amount_total === 0 && session.currency === 'usd'
     && session.metadata?.checkout_association_id === association.id && session.metadata?.offer === association.offer
     && subscription?.metadata?.checkout_association_id === association.id && subscription.metadata?.offer === association.offer
     && stripeId(session.subscription) === subscription?.id
@@ -2831,6 +2835,34 @@ async function retryPendingActivations(env) {
     summary.checked += 1;
     try { await activateCheckoutAssociation(env, association); summary.activated += 1; }
     catch { summary.failed += 1; }
+  }
+  return summary;
+}
+
+async function recoverCompletedZeroDollarTrials(env) {
+  const since = new Date(Date.now() - 3 * 86400000).toISOString();
+  const rows = await supabase(env, `membership_checkout_associations?status=eq.CHECKOUT_STARTED&discord_user_id=not.is.null&stripe_checkout_session_id=not.is.null&stripe_subscription_id=not.is.null&created_at=gte.${encodeURIComponent(since)}&select=*&order=created_at.asc&limit=25`);
+  const summary = { checked: 0, activated: 0, duplicateSkipped: 0, failed: 0 };
+  for (const association of rows || []) {
+    if (!['monthly', 'trial_2_day', 'referral_trial'].includes(association.offer)) continue;
+    summary.checked += 1;
+    try {
+      const linked = await membershipCustomerForDiscord(env, association.discord_user_id);
+      if (linked?.current_subscription_id && linked.current_subscription_id !== association.stripe_subscription_id) {
+        const current = await stripeGet(env, `/subscriptions/${encodeURIComponent(linked.current_subscription_id)}`);
+        if (ACTIVE_SUBSCRIPTION_STATUSES.has(current.status)) {
+          summary.duplicateSkipped += 1;
+          continue;
+        }
+      }
+      const session = await stripeGet(env, `/checkout/sessions/${encodeURIComponent(association.stripe_checkout_session_id)}`);
+      if (session.status !== 'complete' || session.amount_total !== 0) continue;
+      await activateCheckoutAssociation(env, association);
+      summary.activated += 1;
+    } catch (error) {
+      summary.failed += 1;
+      console.error('Zero-dollar trial recovery needs review', { associationId: association.id, error: safeActivationError(error) });
+    }
   }
   return summary;
 }
@@ -3672,7 +3704,7 @@ async function handleWebhook(request, env) {
         const association = rows?.[0];
         if (!association || association.stripe_checkout_session_id !== session.id) throw new Error('Stripe checkout association did not match the verified pending identity.');
         if (association.status === 'VIP_ACTIVE') outcome = 'PAYMENT_CONFIRMED_VIP_ALREADY_ACTIVE';
-        else if (session.payment_status === 'no_payment_required' && session.amount_total === 0
+        else if (['paid', 'no_payment_required'].includes(session.payment_status) && session.amount_total === 0
             && ['monthly', 'trial_2_day', 'referral_trial'].includes(association.offer)) {
           await activateCheckoutAssociation(env, association, event.id);
           outcome = 'TRIAL_VIP_ACTIVATED';
@@ -3845,7 +3877,7 @@ export default {
     return json({ error: 'Not found.' }, 404, origin);
   },
   scheduled(controller, env, ctx) {
-    const frequent = Promise.all([retryPendingActivations(env), expireCreatorTrials(env), activateReadyCreators(env), reconcileRecentMemberWelcomes(env).then(summary => { console.log('Member welcome reconciliation', summary); }), deliverMemberEmailsFromDomain(env).then(summary => { console.log('Member email delivery', summary); })]);
+    const frequent = Promise.all([retryPendingActivations(env), recoverCompletedZeroDollarTrials(env).then(summary => { if (summary.checked) console.log('Zero-dollar trial recovery', summary); }), expireCreatorTrials(env), activateReadyCreators(env), reconcileRecentMemberWelcomes(env).then(summary => { console.log('Member welcome reconciliation', summary); }), deliverMemberEmailsFromDomain(env).then(summary => { console.log('Member email delivery', summary); })]);
     const daily = controller.cron === '15 16 * * *'
       ? Promise.all([reconcileMemberships(env), processReferralPayouts(env), queueLifecycleReminders(env)]) : Promise.resolve();
     const eveningScan = controller.cron === '*/5 * * * *' && new Date(controller.scheduledTime).getUTCHours() === 2 && new Date(controller.scheduledTime).getUTCMinutes() === 15;
@@ -3861,6 +3893,7 @@ export const __test = {
   websitePageViewSummary,
   loadEmailStats,
   verifiedMonthlyTrial,
+  recoverCompletedZeroDollarTrials,
   subscriptionRevenueSummary,
   partitionMissingVipDetails,
   reportedVipStatus,
