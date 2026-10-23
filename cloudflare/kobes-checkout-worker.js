@@ -2436,7 +2436,6 @@ function memberWelcomeMessage(session, subscription, env) {
   const money = cents => '$' + (cents / 100).toFixed(2);
   const date = new Date(nextAt * 1000).toLocaleDateString('en-US', { timeZone: 'America/Phoenix', month: 'long', day: 'numeric', year: 'numeric' });
   const connection = `${siteOrigin(env)}/join?checkout=success&session_id=${encodeURIComponent(session.id)}#connect-discord`;
-  const automaticActivation = Boolean(session.metadata?.checkout_association_id);
   const period = months === 1 ? 'month' : months === 12 ? 'year' : '6 months';
   return {
     recipient: email,
@@ -2448,9 +2447,8 @@ function memberWelcomeMessage(session, subscription, env) {
       `Next billing date: ${date} (Arizona time).`,
       `Standard renewal price: ${money(price.unit_amount)} every ${period}. Any applicable tax or discount is shown on your Stripe invoice.`,
       'Your subscription automatically renews unless canceled before the next billing date.', '',
-      automaticActivation ? 'Your verified Discord account is being activated automatically.' : 'One more step to unlock the member channels:',
-      automaticActivation ? 'Open your member dashboard to review access and billing status.' : 'Open your private checkout confirmation below, tap Connect Discord, and authorize the Discord account you want to use.',
-      automaticActivation ? `${siteOrigin(env)}/member` : connection, '',
+      'To check or finish your Discord access, open your private checkout confirmation below, tap Connect Discord, and authorize the Discord account you want to use.',
+      connection, '',
       'Already connected? Use that same Discord account in Kobe’s server. Do not buy another membership to fix missing access.',
       'Keep this connection link private — it belongs to your membership.', '',
       'Manage billing or cancel: ' + siteOrigin(env) + '/managemembership',
@@ -2484,6 +2482,36 @@ async function queueMemberWelcome(env, event) {
       stripe_checkout_session_id: session.id, stripe_customer_id: stripeId(session.customer) },
   });
   return true;
+}
+
+async function reconcileRecentMemberWelcomes(env, hours = 2) {
+  const start = Date.parse(env.MEMBER_WELCOME_RECONCILE_START_AT || '');
+  if (!Number.isFinite(start) || env.APP_ENV === 'staging' || !env.RESEND_API_KEY || !supabaseReady(env)) return { skipped: true };
+  const since = Math.floor(Math.max(start, Date.now() - hours * 3600000) / 1000);
+  let cursor = '';
+  let scanned = 0;
+  let queued = 0;
+  for (let page = 0; page < 5; page += 1) {
+    const params = new URLSearchParams({ limit: '100', status: 'complete', 'created[gte]': String(since) });
+    if (cursor) params.set('starting_after', cursor);
+    const response = await stripeGet(env, `/checkout/sessions?${params}`);
+    for (const session of response.data || []) {
+      scanned += 1;
+      if (session.livemode !== true || session.mode !== 'subscription' || !session.subscription
+          || !Number.isFinite(session.created) || session.created * 1000 < start) continue;
+      const existing = await supabase(env, `member_welcome_outbox?stripe_subscription_id=eq.${encodeURIComponent(stripeId(session.subscription))}&select=id&limit=1`);
+      if (existing?.length) continue;
+      try {
+        if (await queueMemberWelcome(env, { livemode: true, created: session.created, data: { object: session } })) queued += 1;
+      } catch (error) {
+        console.error('Member welcome reconciliation needs review', { checkoutSessionId: session.id, error: String(error) });
+      }
+    }
+    if (!response.has_more) return { scanned, queued };
+    cursor = response.data?.at(-1)?.id;
+    if (!cursor) throw new Error('Member welcome scan pagination stopped unexpectedly.');
+  }
+  throw new Error('Member welcome scan exceeded five pages.');
 }
 
 async function queuePaidAssociationWelcome(env, association, event, invoice) {
@@ -3635,7 +3663,10 @@ async function handleWebhook(request, env) {
       const subscriptionId = stripeId(session?.subscription);
       await persistCustomer(env, customerId, { subscriptionId });
       const associationId = String(session?.metadata?.checkout_association_id || '');
-      if (!associationId || (session.payment_status === 'paid' && Number(session.amount_total || 0) > 0)) await queueMemberWelcome(env, event);
+      // Queue transactional setup instructions independently of Discord activation.
+      // A completed trial can otherwise be left without both VIP access and help.
+      try { await queueMemberWelcome(env, event); }
+      catch (error) { console.error('Member welcome queue needs reconciliation', { checkoutSessionId: session?.id, error: String(error) }); }
       if (/^[0-9a-f-]{36}$/i.test(associationId)) {
         const rows = await supabase(env, `membership_checkout_associations?id=eq.${encodeURIComponent(associationId)}&select=*&limit=1`);
         const association = rows?.[0];
@@ -3644,7 +3675,6 @@ async function handleWebhook(request, env) {
         else if (session.payment_status === 'no_payment_required' && session.amount_total === 0
             && ['monthly', 'trial_2_day', 'referral_trial'].includes(association.offer)) {
           await activateCheckoutAssociation(env, association, event.id);
-          await queueMemberWelcome(env, event);
           outcome = 'TRIAL_VIP_ACTIVATED';
         }
         else if (session.payment_status !== 'paid' || Number(session.amount_total || 0) <= 0) {
@@ -3815,7 +3845,7 @@ export default {
     return json({ error: 'Not found.' }, 404, origin);
   },
   scheduled(controller, env, ctx) {
-    const frequent = Promise.all([retryPendingActivations(env), expireCreatorTrials(env), activateReadyCreators(env), deliverMemberEmailsFromDomain(env).then(summary => { console.log('Member email delivery', summary); })]);
+    const frequent = Promise.all([retryPendingActivations(env), expireCreatorTrials(env), activateReadyCreators(env), reconcileRecentMemberWelcomes(env).then(summary => { console.log('Member welcome reconciliation', summary); }), deliverMemberEmailsFromDomain(env).then(summary => { console.log('Member email delivery', summary); })]);
     const daily = controller.cron === '15 16 * * *'
       ? Promise.all([reconcileMemberships(env), processReferralPayouts(env), queueLifecycleReminders(env)]) : Promise.resolve();
     const eveningScan = controller.cron === '*/5 * * * *' && new Date(controller.scheduledTime).getUTCHours() === 2 && new Date(controller.scheduledTime).getUTCMinutes() === 15;
@@ -3858,6 +3888,7 @@ export const __test = {
   supabasePages,
   memberWelcomeMessage,
   queueMemberWelcome,
+  reconcileRecentMemberWelcomes,
   REFERRAL_REWARD_CENTS,
   authorizedOperationsRequest,
   claimDiscordLink,
