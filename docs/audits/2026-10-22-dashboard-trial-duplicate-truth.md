@@ -14,3 +14,9 @@ After a member completed a $0 two-day trial, the checkout recovery linked his Di
 
 - Local: 91 focused checkout/worker tests and 26 dashboard/reporting tests passed; JavaScript syntax and `git diff --check` passed. The explicit public build prepared 108 entries for production.
 - Rendered dashboard and production verification: pending at the time of this note; append the actual result after release. No billing, Discord permissions, or member records are changed by this dashboard correction.
+
+## Released correction and follow-up
+
+- PR #299 merged as `d8b79b1`. The checkout Worker deployed as version `a2d1fb4f-af23-4f7c-a100-903e38839855` and the public site as `6b57c86f-d3c3-4e3c-ac9c-97ee5c2ce706`.
+- Live private dashboard at 6:53 PM MST showed 9 active subscriptions: 8 paid and 1 unpaid trial, $263.92 paid recurring MRR, 0 paid cancellations and 0 net paid adds today. Max's active trial showed `VIP_ACTIVE` with a Discord ID; his canceled $0 checkout showed “canceled trial,” “Ended,” no future renewal, and no duplicate alert. It was not counted as a paid member or payment.
+- Follow-up presentation: shorten the visible Discord/VIP cells to “Connected” and “Active” for readability, preserving the actual Discord ID under View IDs. This changes display only. The 17 dashboard tests, JavaScript syntax, and diff check passed; new public-site deployment and responsive visual verification are recorded below when complete.
