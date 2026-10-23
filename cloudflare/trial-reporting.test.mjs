@@ -82,6 +82,23 @@ test('trialing recurring value is potential only; paid starter access remains pa
   assert.deepEqual(missing.paid.map(r => r.subscriptionId), ['sub_active', 'sub_starter']);
   assert.deepEqual(missing.trial.map(r => r.subscriptionId), ['sub_free']);
 });
+test('canceling a duplicate free trial is neither paid churn nor lost paid membership', () => {
+  const events = [
+    { event_name: 'cancellation_completed', stripe_subscription_id: 'sub_duplicate_trial' },
+    { event_name: 'cancellation_completed', stripe_subscription_id: 'sub_paid' },
+  ];
+  assert.deepEqual(api.paidCancellationEvents(events, new Set(['sub_paid'])), [events[1]]);
+  const members = [
+    { name: 'Max', email: 'max@example.com', status: 'trialing', subscriptionId: 'sub_original', stripeCustomerId: 'cus_1', discordUserId: 'discord_1' },
+    { name: 'Max', email: 'max@example.com', status: 'canceled', subscriptionId: 'sub_duplicate_trial', stripeCustomerId: 'cus_2' },
+  ];
+  assert.deepEqual(api.activeDuplicateGroups(members), []);
+  members[1].status = 'trialing';
+  const overlapping = api.activeDuplicateGroups(members);
+  assert.equal(overlapping.length, 1);
+  assert.equal(overlapping[0].risk, 'high');
+  assert.equal(overlapping[0].activeSubscriptions, 2);
+});
 test('trial event migration retains previously accepted analytics names', async () => {
   const previous = await readFile(new URL('../pipeline/migrations/016_discord_join_attribution.sql', import.meta.url), 'utf8');
   const next = await readFile(new URL('../pipeline/migrations/019_trial_conversion_reporting.sql', import.meta.url), 'utf8');
