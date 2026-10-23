@@ -1,5 +1,7 @@
 'use strict';
 
+const { assertPublishableExtraction } = require('./source-review');
+
 function monitoredCapperKey(packet) {
   if (packet?.source?.publish_mode !== 'monitored_terms'
     || packet.source?.platform !== 'Twitter/X') return '';
@@ -21,6 +23,7 @@ function mergeMonitoredApprovalPackets(packets) {
   const pickIds = new Set();
   const starts = [];
   for (const packet of ordered) {
+    assertPublishableExtraction(packet);
     pickIds.add(packet.pick_id);
     for (const id of packet.source.grouped_pick_ids || []) if (id) pickIds.add(String(id));
     for (const id of [...(packet.source.post_ids || []), packet.source.post_id]) if (id) postIds.add(String(id));
@@ -30,9 +33,9 @@ function mergeMonitoredApprovalPackets(packets) {
     const extraction = packet.analysis?.extraction || {};
     const candidates = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays : [extraction];
     for (const play of candidates) {
-      const odds = String(play.odds_american || '').trim();
-      if (!/^[+-]\d{2,4}$/.test(odds) || Number(odds) <= -200) {
-        throw new Error('Every grouped wager needs stated odds strictly better than -200.');
+      const odds = String(play.odds_american ?? '').trim();
+      if (odds && (!/^[+-]\d{2,4}$/.test(odds) || Number(odds) <= -200)) {
+        throw new Error('Stated odds must be strictly better than -200.');
       }
       const identity = `${String(play.selection || '').trim().toLowerCase()}|${String(play.odds_american || '').trim()}`;
       if (seen.has(identity)) continue;
@@ -50,6 +53,7 @@ function mergeMonitoredApprovalPackets(packets) {
   merged.source.grouped_pick_ids = [...pickIds];
   merged.approval.image_url = null;
   if (starts.length) merged.verification.event_start = new Date(Math.min(...starts)).toISOString();
+  assertPublishableExtraction(merged);
   return merged;
 }
 

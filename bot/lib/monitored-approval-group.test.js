@@ -37,7 +37,10 @@ test('a later scan adds a new play once and never mixes cappers', () => {
   assert.deepEqual(next.source.post_ids, ['100', '101', '102']);
   assert.equal(monitoredCapperKey(card('20261022-074-01-X', '104', 'Other Pick (-110)', '', 'OtherCapper')), 'othercapper');
   assert.throws(() => mergeMonitoredApprovalPackets([first, card('20261022-074-01-X', '104', 'Other Pick (-110)', '', 'OtherCapper')]), /one capper/);
-  const unpriced = card('20261022-075-01-X', '105', 'Other Pick', 'Nuggets at Thunder');
+  const unpriced = card('20261022-075-01-X', '105', 'Nikola Jokic over 10.5 rebounds', 'Nuggets at Thunder');
   unpriced.analysis.extraction.plays[0].odds_american = '';
-  assert.throws(() => mergeMonitoredApprovalPackets([first, unpriced]), /better than -200/);
+  assert.equal(mergeMonitoredApprovalPackets([first, unpriced]).analysis.extraction.plays.length, 2);
+  const unclear = card('20261022-076-01-X', '106', 'Other Pick', 'Nuggets at Thunder');
+  unclear.analysis.extraction.plays[0].odds_american = '';
+  assert.throws(() => mergeMonitoredApprovalPackets([first, unclear]), /explicit betting market/);
 });
