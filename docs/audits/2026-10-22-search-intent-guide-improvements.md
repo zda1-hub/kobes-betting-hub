@@ -33,3 +33,9 @@ Preserved canonical URLs, shared design, existing checkout/Discord/referral/emai
 ## Release status
 
 Local verified; publication and live checks pending below. Authority, earned mentions/links and a complete independently assessable record remain separate work. Top-three or number-one placement is a goal, not a verified result or guaranteed outcome.
+
+## Published follow-up
+
+PR #305 merged as bbf1b02. Built from the latest main, including the current X conversion tracking release; no stale backend deployment. Cloudflare production version a6358b91-635f-4abe-b4b4-051c6b4691bf uploaded only the four changed public assets (199 whitelisted build files total).
+
+Live checks: all 20 sitemap pages fetched successfully and passed the same SEO metadata/JSON-LD guard; both target pages contained their new sections. Browser confirmed the production arbitrage disclosure opened and the Discord comparison/evidence sections were present, with header top 0 and no horizontal page overflow. Live screenshots: /tmp/kbh-intent-arbitrage-live.png and /tmp/kbh-intent-discord-live.png. Responsive tests at 320/390/1440 were performed on the local production-source preview; live confirmation used the normal desktop browser viewport. No current ranking improvement is asserted and no repeated same-day indexing requests were submitted.
