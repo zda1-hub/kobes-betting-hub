@@ -72,6 +72,7 @@ const { reviewQueuePath } = require('./lib/review-queue-path');
 const { consolidatePendingMonitoredApprovals: reconcileMonitoredApprovals } = require('./lib/monitored-approval-reconcile');
 const { approvalChannelIdForPacket, exclusiveApprovalChannelId, paidChannelIdForPacket } = require('./lib/approval-routing');
 const { isTrendOnlySource } = require('./lib/trend-only-source');
+const { isRetrospectivePropsList } = require('./lib/source-intent');
 const retiredTrendCardIds = new Set(['20260926-167-X']);
 const { datedTimeOverride, nextArizonaDailyStartMs } = require('./lib/daily-window');
 const { createDiscordJoinAttribution, parseCampaigns } = require('./lib/discord-join-attribution');
@@ -2221,6 +2222,10 @@ async function handleSourceReviewButton(interaction) {
     return;
   }
   const { packet, packetPath } = found;
+  if (isRetrospectivePropsList(packet.source?.text) && action !== 'reject') {
+    await interaction.editReply('This is a historical prop list, not picks to place. It cannot be posted to members.');
+    return;
+  }
   if (packet.approval?.decision) {
     await interaction.editReply(`This draft was already marked ${packet.approval.decision.toLowerCase()}.`);
     return;
@@ -2524,10 +2529,17 @@ async function refreshPendingTermsOnlyApprovals() {
       try {
         assertPublishableExtraction(packet);
       } catch (error) {
+        const retrospective = isRetrospectivePropsList(packet.source?.text);
         await message.edit({
-          embeds: [{ color: 0xD74A49, description: 'Held — incomplete source extraction. The wager selection must be verified from the original source before a new approval card is created.' }],
+          embeds: [{ color: 0xD74A49, description: retrospective
+            ? 'Held — source post is a historical prop list, not an approved pick. No member post from this card.'
+            : 'Held — incomplete source extraction. The wager selection must be verified from the original source before a new approval card is created.' }],
           components: []
         });
+        packet.status = 'HELD_NOT_READY';
+        packet.approval_ready = false;
+        packet.hold_reason = error.message;
+        await fs.writeFile(path.join(directory, file), `${JSON.stringify(packet, null, 2)}\n`);
         console.warn(`Held invalid expert-picks approval card ${packet.pick_id}: ${error.message}`);
         continue;
       }

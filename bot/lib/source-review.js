@@ -2,6 +2,7 @@ const { genericCapperHeading } = require('../../pipeline/exclusive-text');
 const { ButtonStyle, ComponentType } = require('discord.js');
 const crypto = require('node:crypto');
 const { isLegacySplit, legacyClaimAllowed } = require('./play-evidence');
+const { isRetrospectivePropsList } = require('./source-intent');
 
 const MIN_WRITEUP_EVIDENCE = 4;
 const MAX_WRITEUP_EVIDENCE = 8;
@@ -482,6 +483,9 @@ function assertPublishableExtraction(packet) {
   const extraction = packet.analysis?.extraction;
   if (packet.analysis?.status !== 'SOURCE_EXTRACTED' || !extraction?.is_pick_candidate) {
     throw new Error('This source card is not a verified pick candidate. Reject it or finish manual review first.');
+  }
+  if (isRetrospectivePropsList(packet.source?.text)) {
+    throw new Error('This source is a historical prop list, not picks to place.');
   }
   if (!sourceCapperName(packet) && !isIndependentWriteup(packet)) {
     throw new Error('The original capper is not clearly visible, so this card cannot be published automatically.');

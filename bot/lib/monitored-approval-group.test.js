@@ -40,6 +40,8 @@ test('a later scan adds a new play once and never mixes cappers', () => {
   const unpriced = card('20261022-075-01-X', '105', 'Nikola Jokic over 10.5 rebounds', 'Nuggets at Thunder');
   unpriced.analysis.extraction.plays[0].odds_american = '';
   assert.equal(mergeMonitoredApprovalPackets([first, unpriced]).analysis.extraction.plays.length, 2);
+  const longOdds = card('20261022-077-01-X', '107', 'Jayson Tatum over 5.5 assists (-250)', 'Celtics at Knicks');
+  assert.equal(mergeMonitoredApprovalPackets([first, longOdds]).analysis.extraction.plays.length, 2);
   const unclear = card('20261022-076-01-X', '106', 'Other Pick', 'Nuggets at Thunder');
   unclear.analysis.extraction.plays[0].odds_american = '';
   assert.throws(() => mergeMonitoredApprovalPackets([first, unclear]), /explicit betting market/);

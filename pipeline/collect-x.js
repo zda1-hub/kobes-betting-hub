@@ -20,6 +20,7 @@ const { approvalChannelIdForPacket, paidChannelIdForPacket } = require('../bot/l
 const { isSupportedSportPick, upcomingEventStatus, upcomingEventStatuses } = require('../bot/lib/event-timing');
 const { fillMissingEvidence } = require('../bot/lib/espn-pick-research');
 const { isolatePlayPacket } = require('../bot/lib/play-evidence');
+const { isRetrospectivePropsList } = require('../bot/lib/source-intent');
 const {
   approvalCopySha256,
   assertCompleteWriteup,
@@ -264,11 +265,9 @@ function approvalOddsEligible(play) {
 function packetApprovalOddsEligible(packet) {
   const extraction = packet.analysis?.extraction || {};
   const plays = Array.isArray(extraction.plays) && extraction.plays.length ? extraction.plays : [extraction];
-  // Expert terms may omit a price. Preserve the existing -200 limit when
-  // the source does state one, without inventing a price for an unpriced play.
-  if (['terms_only', 'monitored_terms'].includes(packet.source?.publish_mode)) {
-    return plays.every(play => !String(play.odds_american ?? '').trim() || approvalOddsEligible(play));
-  }
+  // Exclusive review is about an exact, actionable wager. The source may
+  // omit its price; any stated price stays visible for Kobe's review.
+  if (['terms_only', 'monitored_terms'].includes(packet.source?.publish_mode)) return true;
   return plays.every(approvalOddsEligible);
 }
 
@@ -899,6 +898,14 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
         lastProcessedId = post.id;
         continue;
       }
+      if (isRetrospectivePropsList(post.text)) {
+        await recordGateDecision(packet, { code: 'RETROSPECTIVE_RESEARCH',
+          reason: 'Season-long historical prop list is not a source pick.' });
+        skipped += 1;
+        lastProcessedId = post.id;
+        handledPostIds.add(post.id);
+        continue;
+      }
       if (!shouldQueueForReview(source, post, postMediaUrls)) {
         await recordGateDecision(packet, { code: 'NO_BET_SIGNAL', reason: 'No deterministic betting signal was found before model extraction.' });
         console.log(`Skipped @${source.handle} post ${post.id}; no recognizable pick signal.`);
@@ -1264,7 +1271,6 @@ async function recoverHeldMonitoredXApprovals({ now = new Date(), max = 12 } = {
       presentation.source.original_publish_mode ||= packet.source.publish_mode;
     try {
       buildSourcePickApprovalEmbed(presentation, 'APPROVED PICK');
-      if (!packetApprovalOddsEligible(presentation)) throw new Error('Stated odds must be strictly better than -200.');
       candidates.push({ packet, packetPath, presentation });
     } catch {
       // An old incomplete extraction must not use one of the bounded live
