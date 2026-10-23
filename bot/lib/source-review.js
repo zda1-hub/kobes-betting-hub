@@ -443,9 +443,16 @@ function presentationConfidence(packet) {
   return 7;
 }
 
+function originalCapperRequired(packet) {
+  // Older queued Cody packets predate the source setting. Apply the same
+  // attribution gate to them when approvals are refreshed after deploy.
+  return packet.source?.original_capper_required === true
+    || normalizedText(packet.source?.handle) === 'codybrownbets';
+}
+
 function sourceCapperName(packet) {
   if (isIndependentWriteup(packet)) return '';
-  if (packet.source?.publish_mode === 'monitored_terms') {
+  if (packet.source?.publish_mode === 'monitored_terms' && !originalCapperRequired(packet)) {
     // This is the author of the monitored X post, not a guessed name from
     // model extraction. Terms-only repost feeds use the separate original-
     // capper validation below and must never inherit the feed's handle.
@@ -461,14 +468,15 @@ function sourceCapperName(packet) {
     // A terms-only monitor/repost account is never a valid substitute for the
     // individual capper. Treat an extraction that merely echoed that account
     // as unidentified rather than displaying misleading attribution.
-    if (isTermsOnlyMode(packet) && (genericCapperHeading(name) || /^(?:anon(?:ymous)?|admin|moderator|unknown)$/i.test(name)
+    if ((isTermsOnlyMode(packet) || originalCapperRequired(packet))
+      && (genericCapperHeading(name) || /^(?:anon(?:ymous)?|admin|moderator|unknown)$/i.test(name)
       || sourceIdentities.includes(normalizedText(name)))) return '';
     return name;
   }
 
   // A leak/repost feed is not the original capper. Its cards must hold rather
   // than falsely crediting the account that surfaced the image.
-  if (isTermsOnlyMode(packet)) return '';
+  if (isTermsOnlyMode(packet) || originalCapperRequired(packet)) return '';
 
   // Direct writeup sources are the original author, so their configured
   // display name remains an accurate fallback when no separate signature is

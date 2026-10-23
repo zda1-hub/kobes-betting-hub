@@ -356,6 +356,7 @@
   {
     "handle": "CodyBrownBets",
     "display_name": "Cody Brown Bets",
+    "original_capper_required": true,
     "enabled": true,
     "monitoring_mode": "writeup_or_trend",
     "credit_line": "Source: @CodyBrownBets",
