@@ -15,3 +15,14 @@ test('rejects duplicated descriptions and malformed structured data', () => {
   assert.ok(errors.includes('needs one nonempty description'));
   assert.ok(errors.includes('invalid structured data JSON'));
 });
+
+test('does not mistake inert fallback or script text for an initial HTML heading', () => {
+  for (const tag of ['noscript', 'script', 'template', 'style']) {
+    const html = good.replace('<h1>Guide</h1>', `<${tag}><h1>Fallback only</h1></${tag}>`);
+    assert.ok(checkSeoPage(html, canonical).includes('missing H1 in initial page content'));
+  }
+});
+
+test('accepts an initial heading with inline formatting', () => {
+  assert.deepEqual(checkSeoPage(good.replace('<h1>Guide</h1>', '<h1><span>Guide</span></h1>'), canonical), []);
+});

@@ -13,7 +13,9 @@ export function checkSeoPage(html, canonical) {
   const canonicals = links.filter(l => l.rel?.toLowerCase() === 'canonical');
   if (canonicals.length !== 1 || canonicals[0].href !== canonical) errors.push('canonical differs from sitemap URL');
   if (meta.some(m => ['robots', 'googlebot'].includes(m.name?.toLowerCase()) && /\b(noindex|none)\b/i.test(m.content || ''))) errors.push('sitemap page is noindex');
-  if (!/<h1\b/i.test(html)) errors.push('missing H1');
+  const primaryHtml = html.replace(/<(script|style|noscript|template)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+  const headings = [...primaryHtml.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)];
+  if (!headings.some(m => m[1].replace(/<[^>]*>/g, '').trim())) errors.push('missing H1 in initial page content');
   for (const block of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
     try { JSON.parse(block[1]); } catch { errors.push('invalid structured data JSON'); }
   }

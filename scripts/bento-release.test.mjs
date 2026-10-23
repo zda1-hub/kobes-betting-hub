@@ -14,6 +14,7 @@ const isolated = await mkdtemp(path.join(tmpdir(), 'kbh-bento-release-'));
 const preparation = await readFile(new URL('scripts/prepare-public-site.mjs', repository), 'utf8');
 await mkdir(path.join(isolated, 'scripts'));
 await cp(new URL('scripts/prepare-public-site.mjs', repository), path.join(isolated, 'scripts/prepare-public-site.mjs'));
+await cp(new URL('scripts/check-public-seo.mjs', repository), path.join(isolated, 'scripts/check-public-seo.mjs'));
 const publicPaths = ['publicFiles', 'guideFiles'].flatMap(name => vm.runInNewContext(preparation.match(new RegExp(`const ${name} = (\\[[\\s\\S]*?\\]);`))[1]));
 for (const file of [...publicPaths, 'assets', 'data/exclusive-directory.json']) {
   const destination = path.join(isolated, file);
