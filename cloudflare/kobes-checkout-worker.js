@@ -2817,11 +2817,15 @@ async function onboardingStatus(request, env, origin) {
   try { purchase = await verifiedPurchaseReceipt(env, association); }
   catch { console.warn('Verified purchase receipt temporarily unavailable.'); }
   let trialActive = false;
+  let trial = null;
   if (association.stripe_subscription_id && ['monthly','trial_2_day','referral_trial'].includes(association.offer)) {
     const memberships = await supabase(env, `membership_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(association.stripe_subscription_id)}&select=status,trial_end&limit=1`);
     trialActive = memberships?.[0]?.status === 'trialing' && Date.parse(memberships[0].trial_end) > Date.now();
+    if (trialActive && ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_ACTIVE','VIP_FAILED'].includes(association.status)) {
+      trial = { eventId: `trial:${await sha256Text(association.stripe_subscription_id)}` };
+    }
   }
-  return json({ state, trialActive, paymentConfirmed: !trialActive && ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_ACTIVE','VIP_FAILED'].includes(association.status), discordConnected: Boolean(association.discord_user_id), vipActive: association.status === 'VIP_ACTIVE', retryAvailable: ['VIP_PENDING','VIP_FAILED'].includes(association.status), errorCode: association.last_error_code || null, purchase }, 200, origin);
+  return json({ state, trialActive, trial, paymentConfirmed: !trialActive && ['PAYMENT_CONFIRMED','VIP_PENDING','VIP_ACTIVE','VIP_FAILED'].includes(association.status), discordConnected: Boolean(association.discord_user_id), vipActive: association.status === 'VIP_ACTIVE', retryAvailable: ['VIP_PENDING','VIP_FAILED'].includes(association.status), errorCode: association.last_error_code || null, purchase }, 200, origin);
 }
 
 async function retryOnboarding(request, env, origin) {

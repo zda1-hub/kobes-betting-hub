@@ -68,6 +68,10 @@ test('production site preparation includes every declared public asset', async (
   const home = await readFile(new URL('../.public-site/index.html', import.meta.url), 'utf8');
   assert.match(home, /\/consent\.js/);
   assert.match(home, /\/analytics-integrations\.js/);
+  assert.match(home, /\/x-pixel\.js/);
+  assert.match(await readFile(new URL('../.public-site/x-pixel.js', import.meta.url), 'utf8'), /tw-rht3t-rhuz6/);
+  const privatePage = await readFile(new URL('../.public-site/admin-analytics.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(privatePage, /\/x-pixel\.js/);
   assert.doesNotMatch(home, /facebook\.com\/tr\?/);
   const redirects = await readFile(new URL('../.public-site/_redirects', import.meta.url), 'utf8');
   assert.match(redirects, /^\/cancel \/managemembership 301/m);

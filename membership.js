@@ -149,6 +149,7 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
     // The confirmed preparation starts the Discord-first checkout journey.
     // This intent event does not report a purchase or grant membership access.
     try { window.KBHMeta?.trackCheckout(offer, requestId); } catch { /* Advertising must never block checkout. */ }
+    try { window.KBHX?.trackCheckout(offer, requestId); } catch { /* Advertising must never block checkout. */ }
     clearCheckoutRequestId(requestKey);
     window.location.assign(result.url);
   } catch (error) {
