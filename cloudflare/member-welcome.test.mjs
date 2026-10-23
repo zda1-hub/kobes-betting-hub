@@ -54,24 +54,20 @@ test('welcome queue is private and cannot create arbitrary recipient messages', 
   const response = await worker.fetch(new Request('https://worker.test/ops/member-welcomes'), {});
   assert.equal(response.status, 401);
   const create = await worker.fetch(new Request('https://worker.test/ops/member-welcomes', { method: 'POST', headers: { authorization: 'Bearer test-secret' }, body: JSON.stringify({ recipient: 'attacker@example.com' }) }), { MEMBER_WELCOME_QUEUE_SECRET: 'test-secret' });
-  assert.equal(create.status, 404);
+  assert.equal(create.status, 410);
 });
-test('welcome claim is atomic; a second claim cannot return the private message', async t => {
+test('legacy Gmail poller cannot read or claim member emails without Resend', async t => {
   const saved = globalThis.fetch;
   t.after(() => { globalThis.fetch = saved; });
-  let claimed = false;
-  globalThis.fetch = async (url, options) => {
-    assert.match(url, /status=eq.QUEUED/);
-    assert.equal(options.method, 'PATCH');
-    if (claimed) return Response.json([]);
-    claimed = true;
-    return Response.json([{ id: '12345678-1234-4234-8234-123456789012', recipient: 'member@example.com', subject: 'Welcome', body: 'Private connection link' }]);
-  };
+  globalThis.fetch = () => { throw new Error('Retired queue must not access member data'); };
   const config = { MEMBER_WELCOME_QUEUE_SECRET: 'test-secret', SUPABASE_URL: 'https://database.test', SUPABASE_SECRET_KEY: 'test-database' };
-  const request = () => new Request('https://worker.test/ops/member-welcomes/claim', { method: 'POST', headers: { authorization: 'Bearer test-secret' }, body: JSON.stringify({ id: '12345678-1234-4234-8234-123456789012' }) });
-  assert.equal((await worker.fetch(request(), config)).status, 200);
-  assert.equal((await worker.fetch(request(), config)).status, 409);
+  const auth = { authorization: 'Bearer test-secret' };
+  const poll = await worker.fetch(new Request('https://worker.test/ops/member-welcomes', { headers: auth }), config);
+  assert.equal(poll.status, 410);
+  const claim = await worker.fetch(new Request('https://worker.test/ops/member-welcomes/claim', { method: 'POST', headers: auth, body: JSON.stringify({ id: '12345678-1234-4234-8234-123456789012' }) }), config);
+  assert.equal(claim.status, 410);
 });
+
 test('new monthly trial welcome shows zero today and the recurring price', () => {
   const { session, subscription } = example('monthly');
   session.payment_status = 'no_payment_required'; session.amount_total = 0;
@@ -80,4 +76,37 @@ test('new monthly trial welcome shows zero today and the recurring price', () =>
   assert.match(message.body, /2 days free, then \$32\.99\/month/);
   assert.match(message.body, /Checkout total: \$0\.00/);
   assert.match(message.body, /Standard renewal price: \$32\.99 every month/);
+});
+
+test('a completed trial still receives a Discord setup link when an association exists but activation is pending', () => {
+  const { session, subscription } = example('trial_2_day');
+  session.metadata.checkout_association_id = '12345678-1234-4234-8234-123456789012';
+  const message = api.memberWelcomeMessage(session, subscription, env);
+  assert.match(message.body, /tap Connect Discord/);
+  assert.match(message.body, /session_id=cs_live_verified123/);
+  assert.doesNotMatch(message.body, /being activated automatically/);
+});
+
+test('recovery scan ignores checkouts before cutover and already queued subscriptions', async t => {
+  const saved = globalThis.fetch;
+  t.after(() => { globalThis.fetch = saved; });
+  const now = Math.floor(Date.now() / 1000);
+  const calls = [];
+  globalThis.fetch = async url => {
+    calls.push(String(url));
+    if (String(url).startsWith('https://api.stripe.com/v1/checkout/sessions?')) return Response.json({ data: [
+      { id: 'cs_live_old', livemode: true, mode: 'subscription', subscription: 'sub_old', created: now - 3600 },
+      { id: 'cs_live_existing', livemode: true, mode: 'subscription', subscription: 'sub_existing', created: now },
+    ], has_more: false });
+    if (String(url).includes('/rest/v1/member_welcome_outbox?')) return Response.json([{ id: 'existing' }]);
+    if (String(url).includes('/rest/v1/api_call_events')) return new Response(null, { status: 204 });
+    throw new Error(`Unexpected call: ${url}`);
+  };
+  const result = await api.reconcileRecentMemberWelcomes({
+    MEMBER_WELCOME_RECONCILE_START_AT: new Date((now - 60) * 1000).toISOString(),
+    RESEND_API_KEY: 'configured', SUPABASE_URL: 'https://database.test', SUPABASE_SECRET_KEY: 'test', STRIPE_SECRET_KEY: 'test',
+  });
+  assert.deepEqual(result, { scanned: 2, queued: 0 });
+  assert.equal(calls.filter(url => url.includes('/rest/v1/member_welcome_outbox?')).length, 1);
+  assert.equal(calls.filter(url => url.includes('/subscriptions/')).length, 0);
 });
