@@ -69,3 +69,13 @@ body[data-membership-route] main>.referral-promo-banner{display:none}
 @media(prefers-reduced-motion:reduce){.membership-scene *{animation:none!important;transition:none!important}.membership-scene{scroll-behavior:auto}}
 
 @media(max-width:360px){.site-header .header-join[data-membership-return]{font-size:14px!important}}
+
+/* Persistent HTML overview on /join; leave the approved plan scene intact. */
+.membership-route .membership-overview{box-sizing:border-box;max-width:920px;margin:36px auto 56px;padding:clamp(20px,4vw,36px);border-radius:18px;background:#f7f2e8;color:#171717;min-width:0}
+.membership-overview h1{font-size:clamp(26px,4vw,36px);line-height:1.15;text-align:center;margin:0 0 24px}
+.membership-overview h2{font-size:clamp(20px,3vw,25px);line-height:1.3;margin:30px 0 12px}
+.membership-overview p,.membership-overview li{font-size:16px;line-height:1.7;color:#171717;max-width:75ch}
+.membership-overview ol{padding-left:24px}.membership-overview li+li{margin-top:10px}
+.membership-overview a{color:#2459a8;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.membership-overview a:focus-visible{outline:3px solid #2459a8;outline-offset:3px;border-radius:3px}
+.membership-overview .membership-overview-note{margin-top:28px;font-size:14px}

@@ -14,7 +14,8 @@
   const scene = document.createElement('section'); scene.className='membership-scene'; scene.id='membership-view'; scene.dataset.open='false';
   card.before(scene); scene.append(card); if(bill) scene.append(bill);
   const panel=document.createElement('div'); panel.className='scene-panel'; panel.hidden=true;
-  panel.innerHTML=`<h1 class="scene-sr-only" tabindex="-1" id="membership-heading">KBH membership options</h1>
+  const headingTag=main.querySelector('[data-membership-overview] h1')?'h2':'h1';
+  panel.innerHTML=`<${headingTag} class="scene-sr-only" tabindex="-1" id="membership-heading">KBH membership options</${headingTag}>
   <section class="scene-confirmation" data-membership-confirmation hidden aria-live="polite"><h2 data-connection-title>Connect your Discord.</h2><p data-connection-message></p><a class="button scene-primary" data-discord-connect hidden aria-hidden="true">Connect Discord →</a><a href="/support">Get help</a><p>Already paid? Use the same Discord account. Do not purchase again.</p></section>
   <article class="scene-monthly" data-membership-sales><p class="scene-promise">Cancel Anytime, No Commitment.</p><button class="button scene-primary" type="button" data-checkout="monthly" data-primary-membership-checkout>Start 2 days free →</button><p class="scene-terms" id="monthly-membership-terms" data-primary-membership-terms>2 days free, then $32.99 billed monthly until canceled.</p></article>
   <div class="scene-support"><p class="scene-tools" data-membership-sales>Expert plays with odds · Detailed writeups · Arbitrage tools</p><p class="scene-status" data-checkout-message role="status" aria-live="polite">Sign in with Discord first, then confirm your trial in Stripe. VIP access follows checkout and connection.</p></div>
@@ -124,7 +125,7 @@
       Object.assign(exit.style,{left:billBefore.left+'px',top:billBefore.top+'px',width:billBefore.width+'px'});document.body.append(exit);
       motions.push(animate(exit,[{opacity:1,transform:'none'},{opacity:0,transform:'translateY(24px)'}],{duration:200}).then(()=>exit.remove()));
     }
-    panel.querySelector('h1').focus({preventScroll:true});
+    panel.querySelector('#membership-heading').focus({preventScroll:true});
     await Promise.all(motions);finishProbe();if(current===revision&&opened)scene.dataset.phase='open';
   };
   const close=async()=>{
