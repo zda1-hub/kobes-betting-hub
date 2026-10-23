@@ -33,3 +33,9 @@ Stable intent ownership: /join answers KBH membership and access questions; the 
 ## Status and limits
 
 Local verification complete; release/live checks follow below. Private Search Console observations stay in a local report, outside the public GitHub change. This improves content delivery and explanation; no ranking increase is asserted. Further content changes should follow measured gaps, inaccuracies or broken behavior rather than cosmetic churn. Earned authority and independent outcome evidence cannot be manufactured through page edits.
+
+## Published and live-verified
+
+PR #308 merged as 4670671. Production Cloudflare version ae63475e-aaf0-4e30-8cf8-060134950fe0 deployed five changed public assets from the latest main. All 20 live sitemap pages passed the enhanced initial-HTML/metadata guard. Live /join has the persistent overview, exactly one H1, correct focus and no captured console errors or horizontal overflow. Live arbitrage math chapter contains the new explanation and opens from its navigation link. Screenshot: /tmp/kbh-crawlable-membership-live.png.
+
+Search Console inspections performed for both target guides and /join; detailed crawl dates and request results remain in docs/seo/2026-10-22-crawlable-indexing.local.md (local only). Existing recorded indexing is separate from processing this release. No current ranking improvement or new-version indexing is claimed.
