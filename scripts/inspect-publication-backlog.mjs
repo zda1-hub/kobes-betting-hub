@@ -18,10 +18,11 @@ try {
              p.ledger_entry->>'selection' AS selection,
              p.ledger_entry->>'market' AS market,
              p.exact_payload, p.post_reference, p.discord_channel_id, p.discord_message_id,
-             a.status AS approval_status, a.action_at,
+             a.status AS approval_status, a.action_at, c.status AS candidate_status,
              (SELECT COUNT(*)::int FROM workflow_events e
                WHERE e.candidate_id = p.candidate_id AND e.event_type = 'PUBLICATION_SUCCEEDED') AS success_events
         FROM published_picks p
+        JOIN pick_candidates c ON c.id = p.candidate_id
         LEFT JOIN LATERAL (
           SELECT status, action_at FROM approval_cards
            WHERE candidate_id = p.candidate_id ORDER BY action_at DESC NULLS LAST LIMIT 1

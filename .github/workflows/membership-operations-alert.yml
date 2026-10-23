@@ -6,6 +6,11 @@ on:
     # surfacing paid-without-access and reconciliation problems during beta.
     - cron: "30 */2 * * *"
   workflow_dispatch:
+    inputs:
+      receipts_b64:
+        description: Exact Discord receipt manifest for the guarded historical repair
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -46,3 +51,9 @@ jobs:
       - name: Inspect historical publication backlog on manual run
         if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() && steps.install.outcome == 'success' }}
         run: node scripts/inspect-publication-backlog.mjs
+      - name: Reconcile exact Discord publication receipts
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.receipts_b64 != '' && !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          RECEIPTS_B64: ${{ inputs.receipts_b64 }}
+          APPLY_PUBLICATION_RECONCILIATION: 'true'
+        run: node scripts/reconcile-publication-backlog.mjs
