@@ -13,6 +13,7 @@ const { reviewWindow } = require('./lib/recap-schedule');
 const recapWorkflow = require('../data/recap-workflow.json');
 const referralWorkflow = require('../data/referral-workflow.json');
 const { REFERRAL_CARD_MARKER, referralCardPayload } = require('./lib/referral-card');
+const { COMMUNITY_REFERRAL_ANNOUNCEMENT_MARKER, communityReferralAnnouncementPayload } = require('./lib/referral-announcement');
 const exclusiveRecapWorkflow = { ...recapWorkflow, writeup: undefined };
 const writeupRecapWorkflow = {
   enabled: recapWorkflow.writeup?.enabled === true,
@@ -470,6 +471,27 @@ async function ensureReferralInfoCard() {
   }
   const message = await channel.send(payload);
   return { status: 'CREATED', messageId: message.id };
+}
+
+async function ensureCommunityReferralAnnouncement() {
+  if (process.env.FREE_MEMBER_REFERRALS_ENABLED !== 'true' || !referralWorkflow.announcement_channel_id) return { status: 'DISABLED' };
+  // This is a one-time launch notice, not a standing startup broadcast.
+  if (Date.now() > Date.parse('2026-10-27T07:00:00Z')) return { status: 'EXPIRED' };
+  const channel = await client.channels.fetch(referralWorkflow.announcement_channel_id, { force: true });
+  if (!channel?.isTextBased() || channel.guildId !== process.env.DISCORD_GUILD_ID || !/announcement/i.test(channel.name || '')) {
+    throw new Error('Unexpected referral announcement channel.');
+  }
+  const permissions = channel.permissionsFor(client.user);
+  if (![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory].every((flag) => permissions?.has(flag))) {
+    throw new Error('Kobe Bot cannot post and verify the referral announcement.');
+  }
+  const messages = await channel.messages.fetch({ limit: 100 });
+  const existing = [...messages.values()].find((message) => message.author?.id === client.user.id
+    && message.embeds?.[0]?.footer?.text?.startsWith(COMMUNITY_REFERRAL_ANNOUNCEMENT_MARKER));
+  if (existing) return { status: 'EXISTS', messageId: existing.id };
+  const payload = communityReferralAnnouncementPayload(referralWorkflow.dashboard_url);
+  const sent = await channel.send(payload);
+  return { status: 'POSTED', messageId: sent.id };
 }
 
 async function cachedRecapGroups(date, workflow = exclusiveRecapWorkflow) {
@@ -2867,6 +2889,12 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.log('Referral information card receipt:', JSON.stringify(referralReceipt));
   } catch (error) {
     console.error('Referral information card needs attention:', error.message);
+  }
+  try {
+    const announcementReceipt = await ensureCommunityReferralAnnouncement();
+    console.log('Community referral announcement receipt:', JSON.stringify(announcementReceipt));
+  } catch (error) {
+    console.error('Community referral announcement needs attention:', error.message);
   }
   if (dailyWriteupBoard) {
     void dailyWriteupBoard.refresh()
