@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KBH homepage write-up concepts — local preview</title>
+  <style>
+    :root{--paper:#f5f5f5;--ink:#111;--muted:#626262;--orange:#ff7900;--blue:#2459a8;--line:#d9d9d9}
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:#e9eaec;color:var(--ink);font:16px/1.45 Arial,Helvetica,sans-serif}
+    button{font:inherit}
+    .review{position:relative;z-index:20;background:#101010;color:#fff;padding:18px max(20px,calc((100vw - 1440px)/2));box-shadow:0 4px 14px #0002}
+    .review-top{display:flex;align-items:end;justify-content:space-between;gap:20px}
+    .review h1{font-size:20px;line-height:1.2;margin:0 0 4px}
+    .review p{margin:0;color:#cfcfcf;font-size:13px}
+    .review .notice{font-size:12px;color:#ffb26b;text-align:right}
+    .tabs{display:flex;gap:8px;overflow-x:auto;padding:16px 1px 2px;scrollbar-width:thin}
+    .tabs button{flex:none;min-height:42px;padding:9px 14px;border:1px solid #777;border-radius:12px;background:#222;color:#fff;cursor:pointer;white-space:nowrap}
+    .tabs button[aria-pressed="true"]{border-color:var(--orange);background:var(--orange);color:#111;font-weight:700}
+    .tabs button:focus-visible,.cta:focus-visible{outline:3px solid var(--orange);outline-offset:3px}
+    .stage-note{max-width:1440px;margin:14px auto;padding:0 24px;color:#3e3e3e;font-size:13px}
+    .preview{background:var(--paper);min-height:100vh;overflow:clip}
+    .site-header{position:relative;min-height:152px;background:var(--paper);display:grid;grid-template-rows:92px 58px;align-items:center;padding:8px max(24px,calc((100vw - 1440px)/2));border-bottom:1px solid #eee}
+    .logo{display:block;width:155px;height:76px;object-fit:contain;margin:auto}
+    .header-actions{display:flex;align-items:center;justify-content:space-between}
+    .header-join{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:8px 17px;border-radius:13px;background:var(--blue);color:#fff;text-decoration:none;font-size:13px;font-weight:700;box-shadow:0 4px 8px #0003}
+    .header-icons{display:flex;gap:8px}.header-icons span{display:grid;place-items:center;width:32px;height:32px;border:1px solid #d6d6d6;border-radius:50%;box-shadow:0 3px 7px #0002;font-size:13px}
+    .ticker{height:30px;display:flex;align-items:center;justify-content:center;background:#111;color:var(--orange);font-size:12px;letter-spacing:.04em;white-space:nowrap;overflow:hidden}
+    main{max-width:1440px;margin:auto;padding:30px 24px 80px}
+    .intro{margin:0 0 24px}.intro p{margin:0}.intro .sources{font-size:17px}.intro .sources span{color:#9b9b9b}.intro .vip{color:var(--orange);font-size:18px;font-style:italic}.intro .promise{max-width:890px;margin-top:12px;font-size:18px;font-style:italic;line-height:1.5}
+    .concept-title{display:flex;align-items:center;gap:12px;margin-bottom:16px}.concept-title strong{font-size:13px;letter-spacing:.07em;text-transform:uppercase;color:#474747}.concept-title span{height:1px;flex:1;background:#d7d7d7}
+    .offer-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.9fr);align-items:center;gap:28px;min-height:510px}
+    .offer,.sample{min-width:0}
+    .offer{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px}
+    .member-card{display:block;width:min(100%,610px);height:auto;filter:drop-shadow(0 5px 7px #0003)}
+    .offer .eyebrow{margin:2px 0 0;font-size:16px}
+    .cta{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:11px 21px;border:0;border-radius:14px;background:var(--blue);color:#fff;font-size:16px;font-weight:700;text-align:center;box-shadow:0 3px 7px #0003;cursor:default}
+    .terms{max-width:500px;margin:0;color:#4c4c4c;font-size:14px;line-height:1.45}
+    .features{margin:5px 0 0;font-size:13px;font-weight:700}
+    .referral{display:flex;flex-direction:column;align-items:center;gap:10px;width:min(100%,410px);margin:10px auto 0;text-align:center}
+    .referral img{display:block;width:100%;height:auto;box-shadow:0 4px 10px #0002}
+    .referral strong{font-size:21px;line-height:1.25}
+    .sample{padding:24px 26px;background:#fff;border:1px solid #dadada;border-radius:20px;box-shadow:0 5px 14px #00000013}
+    .sample .label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px;color:#ba5700;font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+    .sample h2{font-size:26px;line-height:1.13;letter-spacing:-.04em;margin:0 0 8px}
+    .sample .line{margin:0 0 15px;font-size:16px;font-weight:700}
+    .sample .why{margin:0 0 8px;font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase}
+    .sample ul{margin:0;padding-left:19px;color:#272727;font-size:15px;line-height:1.45}
+    .sample li+li{margin-top:6px}
+    .sample .result{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #dedede;margin:18px 0 0;padding-top:12px;font-size:13px;font-weight:700}
+    .sample .caveat{margin:8px 0 0;color:#666;font-size:11px}
+    .expand-proof{display:none;align-items:center;justify-content:center;min-height:44px;padding:8px 0;border:0;background:none;color:var(--blue);font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+    .below{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:28px}.below div{min-height:90px;padding:20px;border-radius:18px;background:#e7e7e7;color:#444}.below div:first-child{background:#111;color:#fff}.below strong{display:block;font-size:16px}.below span{font-size:13px}
+    .preview[data-variant="2"] .sample{background:#151515;color:#fff;border-color:#242424;box-shadow:9px 9px 0 var(--orange)}
+    .preview[data-variant="2"] .sample .label{color:#ffa04a}.preview[data-variant="2"] .sample ul{color:#efefef}.preview[data-variant="2"] .sample .result{border-color:#555}.preview[data-variant="2"] .sample .caveat{color:#aaa}
+    .preview[data-variant="3"] .offer-layout{grid-template-columns:minmax(0,.92fr) minmax(0,1fr)}.preview[data-variant="3"] .sample{order:-1;border-left:7px solid var(--orange)}
+    .preview[data-variant="4"] .offer-layout{grid-template-columns:1fr;gap:12px}.preview[data-variant="4"] .offer{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.75fr);column-gap:32px;text-align:left;justify-items:start}.preview[data-variant="4"] .member-card{grid-row:1/6;align-self:center}.preview[data-variant="4"] .offer .eyebrow{align-self:end}.preview[data-variant="4"] .sample{display:grid;grid-template-columns:210px minmax(0,1fr) 150px;align-items:center;gap:10px 20px}.preview[data-variant="4"] .sample .label{grid-column:1/-1;margin:0}.preview[data-variant="4"] .sample h2,.preview[data-variant="4"] .sample .line{grid-column:1}.preview[data-variant="4"] .sample .why{display:none}.preview[data-variant="4"] .sample ul{grid-column:2;grid-row:2/4}.preview[data-variant="4"] .sample .result{grid-column:3;grid-row:2/4;border:0;padding:0;margin:0;display:block}.preview[data-variant="4"] .sample .caveat{grid-column:1/-1}
+    .preview[data-variant="4"] .referral{grid-column:2;justify-self:start}
+    .preview[data-variant="5"] .sample{border:2px solid #111;border-radius:5px;box-shadow:8px 8px 0 #111}.preview[data-variant="5"] .sample .label{background:var(--orange);color:#111;padding:7px 9px;margin:-24px -26px 17px}.preview[data-variant="5"] .sample ul{list-style:none;padding:0;counter-reset:point}.preview[data-variant="5"] .sample li{display:grid;grid-template-columns:24px 1fr;gap:9px;counter-increment:point}.preview[data-variant="5"] .sample li:before{content:counter(point);display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#111;color:#fff;font-size:12px;font-weight:700}
+    .preview[data-variant="6"] .offer-layout{grid-template-columns:1fr}.preview[data-variant="6"] .sample{order:-1;display:grid;grid-template-columns:minmax(0,.55fr) minmax(0,1fr);gap:4px 28px;padding:20px 24px;border-top:6px solid var(--orange)}.preview[data-variant="6"] .sample .label{grid-column:1/-1}.preview[data-variant="6"] .sample .why{grid-column:2;grid-row:2}.preview[data-variant="6"] .sample ul{grid-column:2;grid-row:3/5}.preview[data-variant="6"] .sample .result{grid-column:1;grid-row:4;margin-top:0}.preview[data-variant="6"] .sample .caveat{grid-column:1/-1}.preview[data-variant="6"] .offer{gap:8px}.preview[data-variant="6"] .member-card{max-width:475px}
+    .preview[data-variant="7"] .offer-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}.preview[data-variant="7"] .sample{transform:translate(-26px,35px);z-index:1;position:relative;background:#f9f2e6;border:1px solid #dcba8e;box-shadow:0 14px 30px #0002}.preview[data-variant="7"] .offer{align-items:flex-start;text-align:left}.preview[data-variant="7"] .member-card{width:100%;max-width:680px}.preview[data-variant="7"] .terms{max-width:550px}
+    .preview[data-variant="8"] .sample{background:none;border:0;border-left:3px solid var(--orange);border-radius:0;box-shadow:none;padding:10px 24px}.preview[data-variant="8"] .sample ul{font-size:16px}.preview[data-variant="8"] .sample .result{border-color:#bbb}
+    @media(max-width:800px){.review-top{align-items:start}.offer-layout,.preview[data-variant] .offer-layout{display:flex;flex-direction:column;min-height:0;gap:10px}.offer,.preview[data-variant] .offer{display:contents}.member-card,.preview[data-variant] .member-card{order:0;align-self:center;width:min(100%,520px);max-width:520px}.sample,.preview[data-variant] .sample{display:block;order:1;transform:none;width:100%;padding:20px;border-radius:18px;margin:8px 0}.preview[data-variant="3"] .sample,.preview[data-variant="6"] .sample{order:-1}.offer .eyebrow{order:2;align-self:center;text-align:center;margin:0}.offer .cta{order:3;align-self:center}.offer .terms{order:4;align-self:center;text-align:center}.offer .features{order:5;align-self:center;text-align:center}.offer .referral{order:6;align-self:center;margin:18px auto 0}.sample .label{margin:0 0 12px!important;padding:0!important;background:none!important}.preview[data-variant="4"] .sample .result,.preview[data-variant="6"] .sample .result{display:flex;border-top:1px solid #dedede;margin:18px 0 0;padding-top:12px}.preview[data-variant="4"] .sample .why,.preview[data-variant="6"] .sample .why{display:block}.below{display:none}}
+    @media(max-width:800px){.sample:not([data-expanded="true"]) h2,.sample:not([data-expanded="true"]) .why,.sample:not([data-expanded="true"]) li:nth-child(n+3),.sample:not([data-expanded="true"]) .result,.sample:not([data-expanded="true"]) .caveat{display:none}.expand-proof{display:inline-flex}.sample:not([data-expanded="true"]) .line{margin-bottom:8px}.sample:not([data-expanded="true"]) ul{line-height:1.35}.sample:not([data-expanded="true"]) li+li{margin-top:3px}.offer .eyebrow,.offer .features{display:none}}
+    @media(max-width:600px){.review{padding:14px 12px}.review h1{font-size:16px}.review p,.review .notice{font-size:11px}.review .notice{max-width:125px}.stage-note{padding:0 16px}.site-header{min-height:86px;grid-template-rows:80px;display:block;padding:4px 16px 8px}.logo{position:absolute;left:16px;top:4px;width:105px;height:75px;margin:0}.header-actions{height:74px;justify-content:flex-end;gap:8px}.header-join{min-height:38px;padding:7px 10px;font-size:11px}.header-icons{gap:5px}.header-icons span{width:28px;height:28px}.header-icons span:nth-child(n+2){display:none}.ticker{height:24px;font-size:9px}main{padding:20px 16px 60px}.intro{margin-bottom:17px}.intro .sources{font-size:13px}.intro .vip{font-size:14px}.intro .promise{font-size:14px;margin-top:7px}.concept-title{margin-bottom:12px}.concept-title strong{font-size:10px}.member-card{filter:drop-shadow(0 4px 5px #0003)}.offer .eyebrow{font-size:14px}.cta{min-height:44px;font-size:15px}.terms{font-size:13px}.features{font-size:11px}.sample h2{font-size:22px}.sample .line{font-size:14px}.sample ul{font-size:14px}.sample .result{font-size:12px}.referral strong{font-size:20px}}
+    @media(max-width:360px){.logo{width:85px}.header-join{font-size:10px}.header-icons span{width:26px;height:26px}.tabs button{padding:8px 10px;font-size:12px}.sample{padding:16px!important}.sample h2{font-size:20px}.sample ul{font-size:13px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  </style>
+</head>
+<body>
+  <div class="review">
+    <div class="review-top">
+      <div><h1>Which homepage proof layout feels right?</h1><p>Eight local concepts using the current KBH card, price and trial offer.</p></div>
+      <div class="notice">Preview only · nothing is published</div>
+    </div>
+    <div class="tabs" role="group" aria-label="Choose a homepage concept">
+      <button type="button" data-choice="1" aria-pressed="true">1 · Side by side</button>
+      <button type="button" data-choice="2" aria-pressed="false">2 · Dark Discord</button>
+      <button type="button" data-choice="3" aria-pressed="false">3 · Proof first</button>
+      <button type="button" data-choice="4" aria-pressed="false">4 · Full-width strip</button>
+      <button type="button" data-choice="5" aria-pressed="false">5 · Numbered case</button>
+      <button type="button" data-choice="6" aria-pressed="false">6 · Proof banner</button>
+      <button type="button" data-choice="7" aria-pressed="false">7 · Layered card</button>
+      <button type="button" data-choice="8" aria-pressed="false">8 · Editorial</button>
+    </div>
+  </div>
+  <p class="stage-note" id="concept-note">1 / 8 — The original card and a readable real-writeup sample share the hero. This is my recommended direction.</p>
+  <div class="preview" data-variant="1" id="preview">
+    <header class="site-header">
+      <img class="logo" src="../../assets/kobes-betting-hub-logo-20261005-288.webp" alt="Kobe’s Betting Hub">
+      <div class="header-actions"><span class="header-join">Join the HUB</span><div class="header-icons" aria-hidden="true"><span>☰</span><span>●</span><span>◎</span><span>𝕏</span></div></div>
+    </header>
+    <div class="ticker">TOP PICKS. REAL BREAKDOWNS. ONE FOCUSED COMMUNITY. ✦ TOP PICKS. REAL BREAKDOWNS.</div>
+    <main>
+      <section class="intro">
+        <p class="sources"><strong>120+ expert sources</strong> <span>Browse the full lineup →</span></p>
+        <p class="vip">One VIP membership →</p>
+        <p class="promise">Eliminate the confusing parts of sports betting by bringing everything you need to make confident, informed decisions into one community.</p>
+      </section>
+      <div class="concept-title"><strong>Inside the Hub</strong><span></span></div>
+      <section class="offer-layout" aria-label="Membership offer and sample write-up">
+        <div class="offer">
+          <img class="member-card" src="../../assets/membership/kbh-vip-user-master-1120.webp" alt="KBH VIP member card">
+          <p class="eyebrow">Cancel Anytime, No Commitment.</p>
+          <span class="cta">Start 2 days free →</span>
+          <p class="terms"><strong>2 free days, then $32.99/month.</strong> Cancel before the trial ends to avoid the charge.</p>
+          <p class="features">Expert plays with odds · Detailed writeups · Arbitrage tools</p>
+          <div class="referral" aria-label="Existing referral offer"><img src="../../assets/referral/twenty-dollar-480.webp" alt="Twenty-dollar bill referral artwork"><strong>Earn $20 per eligible paid referral →</strong></div>
+        </div>
+        <article class="sample" aria-label="Example of a KBH write-up">
+          <p class="label"><span>REAL LOOK INSIDE #WRITEUPS</span><span>OCT 24, 2026</span></p>
+          <h2>What you get behind the pick.</h2>
+          <p class="line">Jarrett Allen over 12.5 points (-120)</p>
+          <p class="why">The reasoning</p>
+          <ul>
+            <li>Most of Allen’s shots come near the rim.</li>
+            <li>Brooklyn’s interior defense is the matchup to examine.</li>
+            <li>He scored 14 in his opener on 6-of-10 shooting.</li>
+            <li>The write-up weighs his role against this exact line.</li>
+          </ul>
+          <button class="expand-proof" type="button" aria-expanded="false">Read the full write-up ↓</button>
+          <p class="result"><span>Result</span><span>Pending verification</span></p>
+          <p class="caveat">Excerpt for layout review. Source figures and result need checking before publication. Past results never guarantee a future result.</p>
+        </article>
+      </section>
+      <section class="below" aria-label="Current supporting homepage sections"><div><strong>ARBITRAGE ALERTS</strong><span>Spot price gaps across sportsbooks.</span></div><div><strong>Today’s free pick</strong><span>No pick posted today.</span></div></section>
+    </main>
+  </div>
+  <script>
+    const names={1:'The original card and a readable write-up share the hero. Recommended.',2:'A darker proof panel echoes Discord beside the existing member card.',3:'The write-up leads the hero before the orange member card.',4:'The write-up runs as one wide strip directly under the offer.',5:'The reasoning is numbered like a compact research case.',6:'A wide proof banner appears before the card and trial action.',7:'The write-up overlaps the offer composition without covering the card art.',8:'A clean editorial excerpt keeps the original hero visually quiet.'};
+    const buttons=[...document.querySelectorAll('[data-choice]')];const preview=document.getElementById('preview');const note=document.getElementById('concept-note');
+    buttons.forEach(button=>button.addEventListener('click',()=>{const n=button.dataset.choice;preview.dataset.variant=n;buttons.forEach(b=>b.setAttribute('aria-pressed',String(b===button)));note.textContent=`${n} / 8 — ${names[n]}`;}));
+    const proof=document.querySelector('.sample');const expand=proof.querySelector('.expand-proof');expand.addEventListener('click',()=>{const open=proof.dataset.expanded==='true';proof.dataset.expanded=String(!open);expand.setAttribute('aria-expanded',String(!open));expand.textContent=open?'Read the full write-up ↓':'Show less ↑';});
+  </script>
+</body>
+</html>
