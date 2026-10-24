@@ -38,6 +38,7 @@
     "DISCORD_GUILD_ID": "1215407647155683358",
     "DISCORD_MEMBER_ROLE_ID": "1539063967878619218",
     "DISCORD_REDIRECT_URI": "https://kobes-betting-hub-checkout.kobedirwin.workers.dev/discord/callback",
+    "FREE_MEMBER_REFERRALS_ENABLED": "true",
     "STRIPE_FIRST_MONTH_COUPON": "O9RCPLIa",
     "STRIPE_GLOBAL_PAYOUTS_VERSION": "2026-08-26.preview",
     "STRIPE_MONTHLY_PRICE_ID": "price_1U7mwnE6p9BmPii3ge8dmJw2",

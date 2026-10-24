@@ -22,6 +22,14 @@ Let eligible free Discord members share a tracked $20 referral link without buyi
 
 ## Release sequence and limits
 
-Apply migration, deploy checkout Worker with the flag off, deploy the public page and private dashboard, verify VIP referrals and the free-member flow with a real eligible test Discord account and no purchase, then enable issuance. Deploy the updated bot card only after live verification. Never represent preparation as a running program.
+The planned order was migration, checkout Worker with issuance off, public page and private dashboard, live verification, then the issuance and bot switches. A real eligible free-member OAuth session was unavailable during this rollout; see the follow-up for the precise live checks and remaining limit. Never represent preparation as a running program.
 
 The controls reduce fraud risk; they cannot guarantee zero fraud or prevent a dispute after the seven-day hold. $20 is about 61% of the first $32.99 charge before fees and support. Monitor retained paid members and total reward cost before broad promotion.
+
+## Production rollout follow-up — October 24, 2026
+
+- PR #325 was merged into `main` at `9fdc624f2217c7b87ad844bad32f0856962908f3`. Render auto-deployed that commit successfully before the bot switch was enabled.
+- The checkout Worker was deployed with the switch off, then the public-site Worker published the changed referral and private dashboard assets. After the production migration and live page checks, Cloudflare production variable `FREE_MEMBER_REFERRALS_ENABLED` was set to `true` using the dashboard's deploy action. Its production settings visibly show `true`; the resulting checkout Worker health endpoint returned HTTP 200. `wrangler.jsonc` now declares the same production value so a future source-based deployment preserves the setting; staging retains its default-off state.
+- Render's existing `kobes-betting-hub` background worker was the only service in the connected workspace and was running the same merged commit. Its `FREE_MEMBER_REFERRALS_ENABLED` variable was merged without replacing other variables. Redeploy `dep-dbejn7vb9u1s739uvbj0` finished `live`; logs show `Logged in as Kobe Bot#1343` and `Referral information card receipt: {"status":"UPDATED","messageId":"1550997694372118529"}`.
+- In the live `#💸・refer-and-earn` channel, Kobe Bot's existing card now states that seven-day free-server members and VIPs can connect for one link, no VIP purchase is needed to share, and free-member rewards need manual approval after a full $32.99 month and seven-day hold. The public `/refer` page loads with the US/21+ attestation and current terms. The referral login starts Discord OAuth; the private community-review endpoint returns HTTP 401 without an admin session.
+- No real free-member OAuth callback, referred checkout, Stripe renewal, payout recipient setup or payout was performed during the smoke test. Those paths have focused automated tests but remain unverified end to end with a real eligible free-member account. The program is live for issuance, with financial release still held for authenticated manual review and guarded payout checks.
