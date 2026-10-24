@@ -32,6 +32,8 @@ const publicFiles = [
   'desktop-scale.css',
   'membership-scene.css',
   'membership-scene.js',
+  'home-writeup-proof.css',
+  'home-writeup-proof.js',
   'site.js',
   'extras.css',
   'gallery.css',

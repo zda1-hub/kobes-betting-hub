@@ -1,0 +1,17 @@
+/* A real write-up example beside the existing homepage membership card. */
+.membership-scene[data-open="false"]>.home-writeup-proof{position:relative;z-index:1;box-sizing:border-box;width:min(calc(100% - 32px),560px);margin:0 auto 20px;padding:18px 20px;border:1px solid #d8d8d8;border-radius:17px;background:#fff;color:#171717;box-shadow:0 5px 14px #0002}
+.home-writeup-proof .proof-meta{display:flex;justify-content:space-between;gap:12px;margin:0 0 8px;color:#ad5100;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+.home-writeup-proof .proof-meta span,.home-writeup-proof .proof-meta time{white-space:nowrap}
+.home-writeup-proof .proof-line{display:block;margin:0 0 8px;font-size:17px;line-height:1.3}
+.home-writeup-proof ul{margin:0;padding-left:20px;font-size:14px;line-height:1.4}
+.home-writeup-proof li+li{margin-top:4px}
+.home-writeup-proof .proof-result{display:flex;justify-content:space-between;gap:12px;margin:14px 0 0;padding-top:10px;border-top:1px solid #dedede;font-size:12px;font-weight:700}
+.home-writeup-proof .proof-result span:first-child{color:#147544}
+.home-writeup-proof .proof-note{margin:8px 0 0;color:#666;font-size:11px;line-height:1.4}
+.home-writeup-proof .proof-toggle{display:none;align-items:center;min-height:44px;margin:5px 0 -5px;padding:6px 0;border:0;background:none;color:#2459a8;font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.home-writeup-proof .proof-toggle:focus-visible{outline:3px solid #ff7900;outline-offset:3px}
+.membership-scene[data-open="true"]>.home-writeup-proof{display:none}
+@media(min-width:1280px){.home-page .membership-scene[data-open="false"]{display:grid;width:100%;max-width:1024px;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);align-items:stretch;gap:18px 28px}.membership-scene[data-open="false"]>.membership-card-promo{grid-column:1;grid-row:1;width:100%;max-width:600px;margin:0 auto}.membership-scene[data-open="false"]>.home-writeup-proof{grid-column:2;grid-row:1;width:100%;max-width:600px;margin:0;padding-block:15px}.membership-scene[data-open="false"]>.referral-promo-banner{grid-column:1/-1;grid-row:2;width:min(100%,760px);margin:0 auto 22px}}
+@media(max-width:1279px){.home-writeup-proof li:nth-child(n+2),.home-writeup-proof .proof-note{display:none}.home-writeup-proof[data-expanded="true"] li:nth-child(n+2){display:list-item}.home-writeup-proof[data-expanded="true"] .proof-note{display:block}.home-writeup-proof .proof-toggle{display:inline-flex}.membership-scene[data-open="false"]>.membership-card-promo{width:100%;max-width:600px;margin:0 auto}.membership-scene[data-open="false"]>.home-writeup-proof{margin:16px auto}}
+@media(max-width:360px){.home-writeup-proof .proof-meta{font-size:10px;gap:5px;letter-spacing:0}.home-writeup-proof .proof-line{font-size:15px}.home-writeup-proof ul{font-size:13px}.home-writeup-proof .proof-result{font-size:11px;gap:6px}.home-writeup-proof .proof-result span{white-space:nowrap}}
+@media(prefers-reduced-motion:reduce){.home-writeup-proof *{scroll-behavior:auto!important}}
