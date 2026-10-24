@@ -464,6 +464,22 @@ async function activeReferralAccessForDiscord(env, discordUserId) {
   } catch { return false; }
 }
 
+async function communityReferralAccessForDiscord(env, discordUserId, requireIssuanceFlag = true) {
+  if (requireIssuanceFlag && env.FREE_MEMBER_REFERRALS_ENABLED !== 'true') return null;
+  const customer = await membershipCustomerForDiscord(env, discordUserId);
+  if (customer?.current_subscription_id && await membershipEntitlementBlock(env, customer.current_subscription_id)) return null;
+  if (!env.DISCORD_BOT_TOKEN || !env.DISCORD_GUILD_ID) return null;
+  try {
+    const member = await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${discordUserId}`, {
+      headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
+    }, env, { memberId: discordUserId, triggerType: 'community_referral_access_check' });
+    const joinedAt = new Date(member?.joined_at || '').getTime();
+    if (!member?.user?.id || member.user.id !== discordUserId || member.pending === true
+        || !Number.isFinite(joinedAt) || joinedAt > Date.now() - 7 * 24 * 60 * 60 * 1000) return null;
+    return { joinedAt: member.joined_at };
+  } catch { return null; }
+}
+
 async function membershipEntitlementBlock(env, subscriptionId) {
   if (!subscriptionId) return null;
   const rows = await supabase(env, `membership_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(subscriptionId)}&select=entitlement_blocked,entitlement_block_reason,entitlement_blocked_at&limit=1`);
@@ -471,12 +487,12 @@ async function membershipEntitlementBlock(env, subscriptionId) {
 }
 
 async function referralProfileForDiscord(env, discordUserId) {
-  const rows = await supabase(env, `referral_profiles?discord_user_id=eq.${encodeURIComponent(discordUserId)}&select=discord_user_id,referral_code,stripe_recipient_account_id,payout_status&limit=1`);
+  const rows = await supabase(env, `referral_profiles?discord_user_id=eq.${encodeURIComponent(discordUserId)}&select=discord_user_id,referral_code,stripe_recipient_account_id,payout_status,contact_email,community_joined_at&limit=1`);
   return rows?.[0] || null;
 }
 
 async function referralProfileForCode(env, referralCode) {
-  const rows = await supabase(env, `referral_profiles?referral_code=eq.${encodeURIComponent(referralCode)}&select=discord_user_id,referral_code,stripe_recipient_account_id,payout_status&limit=1`);
+  const rows = await supabase(env, `referral_profiles?referral_code=eq.${encodeURIComponent(referralCode)}&select=discord_user_id,referral_code,stripe_recipient_account_id,payout_status,contact_email,community_joined_at&limit=1`);
   return rows?.[0] || null;
 }
 
@@ -497,8 +513,11 @@ async function referralOwnerForCode(env, referralCode) {
   }
   if (!/^KBH-[A-Z0-9]{10}$/.test(referralCode)) return null;
   const member = await referralProfileForCode(env, referralCode);
-  return member && await activeReferralAccessForDiscord(env, member.discord_user_id)
-    ? { kind: 'member', profile: member } : null;
+  if (!member) return null;
+  if (await activeReferralAccessForDiscord(env, member.discord_user_id)) return { kind: 'member', accessKind: 'VIP', profile: member };
+  if (member.contact_email && member.community_joined_at
+      && await communityReferralAccessForDiscord(env, member.discord_user_id, false)) return { kind: 'member', accessKind: 'COMMUNITY', profile: member };
+  return null;
 }
 
 async function ensureReferralProfile(env, discordUserId) {
@@ -556,6 +575,7 @@ async function createReferralAttribution(env, values) {
         referral_code: owner.profile.referral_code,
         referrer_discord_user_id: owner.kind === 'member' ? owner.profile.discord_user_id : null,
         creator_profile_id: owner.kind === 'creator' ? owner.profile.id : null,
+        referrer_access_kind: owner.accessKind === 'COMMUNITY' ? 'COMMUNITY' : 'VIP',
         referred_stripe_customer_id: values.customerId,
         referred_subscription_id: values.subscriptionId,
         reward_amount_cents: REFERRAL_REWARD_CENTS,
@@ -964,9 +984,9 @@ function discordNotReadyResponse(env) {
   return new Response('Discord connection is being configured. Please check back shortly.', { status: 503 });
 }
 
-async function createDiscordState({ sessionId = null, associationToken = null, referralCode = null, intent = 'connect' }, env) {
+async function createDiscordState({ sessionId = null, associationToken = null, referralCode = null, eligibility = null, intent = 'connect' }, env) {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
-  const body = toBase64Url(encode.encode(JSON.stringify({ sessionId, associationToken, referralCode, intent, expiresAt: Math.floor(Date.now() / 1000) + 600, nonce: toBase64Url(bytes) })));
+  const body = toBase64Url(encode.encode(JSON.stringify({ sessionId, associationToken, referralCode, eligibility, intent, expiresAt: Math.floor(Date.now() / 1000) + 600, nonce: toBase64Url(bytes) })));
   return `${body}.${await sign(body, env.DISCORD_OAUTH_STATE_SECRET)}`;
 }
 
@@ -1005,7 +1025,13 @@ async function readReferralAuthSession(env, token) {
   const rows = await supabase(env, `referral_auth_sessions?token_hash=eq.${encodeURIComponent(tokenHash)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=discord_user_id,contact_email,display_name&limit=1`);
   const session = rows?.[0];
   if (!session) throw new Error('That referral session expired. Reconnect Discord to continue.');
-  if (!await activeReferralAccessForDiscord(env, session.discord_user_id)) throw new Error('Current Betting Hub VIP access is required for referral payouts.');
+  if (!await activeReferralAccessForDiscord(env, session.discord_user_id)) {
+    const profile = await referralProfileForDiscord(env, session.discord_user_id);
+    if (!profile?.contact_email || profile.contact_email !== String(session.contact_email || '').trim().toLowerCase()
+        || !profile.community_joined_at || !await communityReferralAccessForDiscord(env, session.discord_user_id, false)) {
+      throw new Error('Current Betting Hub VIP access or eligible free-server access is required for referrals.');
+    }
+  }
   return session;
 }
 
@@ -1403,7 +1429,8 @@ function discordAuthorizationUrl(state, env, intent) {
 
 async function startReferralLogin(request, env) {
   if (!discordReady(env) || !supabaseReady(env)) return new Response('Member referrals are being configured. Please check back shortly.', { status: 503 });
-  const state = await createDiscordState({ intent: 'referral' }, env);
+  const eligibility = new URL(request.url).searchParams.get('eligibility') === 'us21' ? 'us21' : null;
+  const state = await createDiscordState({ intent: 'referral', eligibility }, env);
   return redirect(discordAuthorizationUrl(state, env, 'referral'));
 }
 
@@ -1753,8 +1780,22 @@ async function finishDiscordConnection(request, env) {
       return redirect(checkout.url);
     }
     if (state.intent === 'referral') {
-      if (!await activeReferralAccessForDiscord(env, user.id)) throw new Error('Connect the Discord account that currently has Kobe’s Betting Hub VIP access.');
-      const profile = await ensureReferralProfile(env, user.id);
+      const vipAccess = await activeReferralAccessForDiscord(env, user.id);
+      const existingProfile = vipAccess ? null : await referralProfileForDiscord(env, user.id);
+      const community = vipAccess ? null : await communityReferralAccessForDiscord(env, user.id,
+        !existingProfile?.contact_email || !existingProfile?.community_joined_at);
+      if (!vipAccess && !community) throw new Error('Connect an eligible Kobe’s Betting Hub Discord account. Free-server accounts must have been in the server for seven days.');
+      if (!vipAccess && (!user.email || user.verified !== true)) throw new Error('A verified Discord email is required for free-member referrals.');
+      if (community && state.eligibility !== 'us21') throw new Error('Confirm US residence and age 21+ on the referral page before getting a free-member link.');
+      let profile = await ensureReferralProfile(env, user.id);
+      if (community) {
+        const contactEmail = String(user.email).trim().toLowerCase();
+        const updated = await supabase(env, `referral_profiles?discord_user_id=eq.${encodeURIComponent(user.id)}`, {
+          method: 'PATCH', prefer: 'return=representation',
+          body: { contact_email: contactEmail, community_joined_at: community.joinedAt, updated_at: new Date().toISOString() },
+        });
+        profile = updated?.[0] || profile;
+      }
       const auth = await createReferralAuthSession(env, user);
       await recordReferralEvent(env, { eventType: 'REFERRAL_LINK_ACCESSED', actorType: 'discord_user', actorId: user.id, details: { referral_code: profile.referral_code } });
       return redirect(`${siteOrigin(env)}${SITE_PATH}/refer.html#code=${encodeURIComponent(profile.referral_code)}&auth=${encodeURIComponent(auth)}`);
@@ -2172,6 +2213,9 @@ async function qualifyingReferralCharge(env, reward) {
         || stripeId(subscription.items?.data?.[0]?.price) !== env.STRIPE_MONTHLY_PRICE_ID) {
       throw referralSafetyFailure('PAYMENT_NO_LONGER_QUALIFIES', 'VOID');
     }
+    if (reward.referrer_access_kind === 'COMMUNITY' && !['referral_trial', 'monthly'].includes(subscription.metadata?.offer)) {
+      throw referralSafetyFailure('COMMUNITY_REQUIRES_FULL_PRICE_FIRST_MONTH', 'VOID');
+    }
     if (subscription.metadata?.offer === 'first_month_back'
         && matchingOwner) minimumPaid = 1999;
   }
@@ -2247,6 +2291,28 @@ async function checkCreatorIdentity(env, reward, profile, fingerprintHash) {
   }
 }
 
+async function checkCommunityReferrerIdentity(env, reward, profile, fingerprintHash) {
+  if (!profile?.contact_email || !profile.community_joined_at
+      || !await communityReferralAccessForDiscord(env, reward.referrer_discord_user_id, false)) {
+    throw referralSafetyFailure('COMMUNITY_REFERRER_NOT_VERIFIED');
+  }
+  const referred = await stripeGet(env, `/customers/${encodeURIComponent(reward.referred_stripe_customer_id)}`);
+  if (!referred?.email) throw referralSafetyFailure('REFERRED_EMAIL_REQUIRES_REVIEW');
+  if (referred.email.trim().toLowerCase() === profile.contact_email) throw referralSafetyFailure('SELF_REFERRAL', 'VOID');
+  const matches = await stripeGet(env, `/customers?email=${encodeURIComponent(profile.contact_email)}&limit=100`);
+  if (matches.has_more) throw referralSafetyFailure('REFERRER_HISTORY_REQUIRES_REVIEW');
+  for (const match of matches.data || []) {
+    if (match.id === reward.referred_stripe_customer_id) throw referralSafetyFailure('SELF_REFERRAL', 'VOID');
+    const methods = await stripeGet(env, `/payment_methods?customer=${encodeURIComponent(match.id)}&type=card&limit=100`);
+    const charges = await stripeGet(env, `/charges?customer=${encodeURIComponent(match.id)}&limit=100`);
+    if (methods.has_more || charges.has_more) throw referralSafetyFailure('REFERRER_HISTORY_REQUIRES_REVIEW');
+    for (const fingerprint of [...(methods.data || []).map(item => item.card?.fingerprint),
+      ...(charges.data || []).map(item => item.payment_method_details?.card?.fingerprint)].filter(Boolean)) {
+      if (await sha256Text(fingerprint) === fingerprintHash) throw referralSafetyFailure('SHARED_CARD_REQUIRES_REVIEW');
+    }
+  }
+}
+
 function referralPayoutAmount(reward) {
   const amount = Number(reward?.reward_amount_cents);
   if (![1000, 2000].includes(amount)) throw new Error('Referral reward amount is invalid.');
@@ -2276,6 +2342,13 @@ async function processReferralPayouts(env) {
     let receiptSaved = false;
     try {
       const payoutAmount = referralPayoutAmount(reward);
+      // A free member's reward is never timer-released. Only an authenticated,
+      // audited admin review can make this record eligible for the payout loop.
+      if (reward.referrer_access_kind === 'COMMUNITY' && (!reward.community_reviewed_at || !reward.community_reviewed_by)) {
+        summary.review += 1;
+        await updateReferralReward(env, reward.id, { status: 'REVIEW_REQUIRED', status_reason: 'COMMUNITY_MANUAL_REVIEW' }, REFERRAL_PRE_PAYOUT_STATUSES);
+        continue;
+      }
       if (!reward.referred_discord_user_id) {
         summary.awaitingIdentity += 1;
         await updateReferralReward(env, reward.id, { status: 'AWAITING_MEMBER_IDENTITY', status_reason: 'REFERRED_DISCORD_NOT_CONNECTED' }, REFERRAL_PRE_PAYOUT_STATUSES);
@@ -2302,6 +2375,7 @@ async function processReferralPayouts(env) {
         ? await creatorProfileForId(env, reward.creator_profile_id)
         : await referralProfileForDiscord(env, reward.referrer_discord_user_id);
       if (reward.creator_profile_id) await checkCreatorIdentity(env, reward, profile, payment.fingerprintHash);
+      else if (reward.referrer_access_kind === 'COMMUNITY') await checkCommunityReferrerIdentity(env, reward, profile, payment.fingerprintHash);
       else await checkReferrerCardIdentity(env, reward, payment.fingerprintHash);
       if (!profile?.stripe_recipient_account_id) {
         summary.awaitingSetup += 1;
@@ -2956,6 +3030,61 @@ async function readAdminSession(request, env) {
     const allowed = new Set(String(env.ADMIN_DISCORD_USER_IDS || '').split(',').map(item => item.trim()).filter(Boolean));
     return value.purpose === 'admin' && value.expiresAt >= Math.floor(Date.now() / 1000) && allowed.has(value.discordUserId) ? value : null;
   } catch { return null; }
+}
+
+async function adminCommunityReferralReview(request, env, origin) {
+  const admin = await readAdminSession(request, env);
+  if (!admin) return json({ error: 'Admin sign-in required.' }, 401, origin);
+  if (request.method === 'GET') {
+    const rows = await supabase(env, `referral_rewards?referrer_access_kind=eq.COMMUNITY&status=eq.REVIEW_REQUIRED&status_reason=eq.COMMUNITY_MANUAL_REVIEW&eligible_at=lte.${encodeURIComponent(new Date().toISOString())}&select=id,referral_code,referrer_discord_user_id,referred_discord_user_id,referred_stripe_customer_id,referred_subscription_id,first_paid_at,eligible_at,reward_amount_cents,status_reason,created_at&order=eligible_at.asc&limit=100`);
+    const ids = [...new Set((rows || []).map(row => row.referrer_discord_user_id).filter(Boolean))];
+    const profiles = await Promise.all(ids.map(discordUserId => referralProfileForDiscord(env, discordUserId)));
+    const profileById = new Map(profiles.filter(Boolean).map(profile => [profile.discord_user_id, profile]));
+    return json({ rewards: (rows || []).map(row => {
+      const profile = profileById.get(row.referrer_discord_user_id);
+      return { ...row, referrer_contact_email: profile?.contact_email || null,
+        referrer_stripe_recipient_id: profile?.stripe_recipient_account_id || null,
+        referrer_community_joined_at: profile?.community_joined_at || null };
+    }) }, 200, origin);
+  }
+  let input;
+  try { input = JSON.parse(await readTextWithLimit(request, 4096)); }
+  catch { return json({ error: 'Invalid review request.' }, 400, origin); }
+  const rewardId = String(input?.reward_id || '');
+  const note = String(input?.review_note || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(rewardId) || input?.confirm_identity_us_21 !== true
+      || note.length < 15 || note.length > 500) return json({ error: 'Reward ID, identity/US 21+ confirmation, and a review note are required.' }, 400, origin);
+  const rows = await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(rewardId)}&referrer_access_kind=eq.COMMUNITY&status=eq.REVIEW_REQUIRED&status_reason=eq.COMMUNITY_MANUAL_REVIEW&select=*&limit=1`);
+  const reward = rows?.[0];
+  if (!reward || reward.community_reviewed_at || reward.stripe_outbound_payment_id || reward.payout_attempt_started_at
+      || !reward.first_paid_invoice_id || !reward.eligible_at || new Date(reward.eligible_at).getTime() > Date.now()) {
+    return json({ error: 'This reward is not ready for community review.' }, 409, origin);
+  }
+  try {
+    if (!reward.referred_discord_user_id || reward.referred_discord_user_id === reward.referrer_discord_user_id
+        || await membershipEntitlementBlock(env, reward.referred_subscription_id)) throw referralSafetyFailure('REFERRAL_IDENTITY_OR_ACCESS_REQUIRES_REVIEW');
+    const payment = await qualifyingReferralCharge(env, reward);
+    const profile = await referralProfileForDiscord(env, reward.referrer_discord_user_id);
+    await checkCommunityReferrerIdentity(env, reward, profile, payment.fingerprintHash);
+    if (!profile?.stripe_recipient_account_id) throw referralSafetyFailure('RECIPIENT_NOT_CONNECTED');
+    const recipient = await stripeV2(env, `/core/accounts/${encodeURIComponent(profile.stripe_recipient_account_id)}?${stripeV2IncludeQuery(['configuration.recipient'])}`);
+    const capability = recipient?.configuration?.recipient?.capabilities?.bank_accounts?.local;
+    const methods = await stripeV2(env, '/money_management/payout_methods', { stripeContext: profile.stripe_recipient_account_id });
+    if (!referralRecipientIsReady(capability, methods?.data?.[0]?.id)) throw referralSafetyFailure('RECIPIENT_VERIFICATION_PENDING');
+    await recordReferralEvent(env, { rewardId, eventType: 'COMMUNITY_REWARD_APPROVAL_AUTHORIZED', actorType: 'admin', actorId: admin.discordUserId,
+      details: { note, confirmed_identity_us_21: true, charge_id: payment.chargeId } });
+    const reviewedAt = new Date().toISOString();
+    const approved = await supabase(env, `referral_rewards?id=eq.${encodeURIComponent(rewardId)}&referrer_access_kind=eq.COMMUNITY&status=eq.REVIEW_REQUIRED&status_reason=eq.COMMUNITY_MANUAL_REVIEW&community_reviewed_at=is.null&payout_attempt_started_at=is.null&stripe_outbound_payment_id=is.null`, {
+      method: 'PATCH', prefer: 'return=representation', body: {
+        community_reviewed_at: reviewedAt, community_reviewed_by: admin.discordUserId,
+        community_review_note: note, status: 'HOLDING', status_reason: null, updated_at: reviewedAt,
+      },
+    });
+    if (approved?.length !== 1) return json({ error: 'Review state changed. Refresh before trying again.' }, 409, origin);
+    return json({ ok: true, reward_id: rewardId, status: 'HOLDING', payout: 'awaiting next guarded payout pass' }, 200, origin);
+  } catch (error) {
+    return json({ error: error.message || 'Referral review failed safely.' }, 409, origin);
+  }
 }
 
 async function readMemberSession(request, env) {
@@ -3860,6 +3989,7 @@ export default {
     if (request.method === 'POST' && url.pathname === '/ops/creators/activate') return activateCreator(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/admin/creators') return createCreatorInvitation(request, env, origin, readAdminSession);
     if (request.method === 'POST' && url.pathname === '/admin/creators/access') return updateCreatorAccess(request, env, origin);
+    if (['GET', 'POST'].includes(request.method) && url.pathname === '/admin/referrals/community-review') return adminCommunityReferralReview(request, env, origin);
     if (request.method === 'GET' && url.pathname === '/cancel/offer') return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
     if (request.method === 'GET' && url.pathname === '/admin/login') {
       if (!discordReady(env) || !env.ADMIN_DISCORD_USER_IDS) return new Response('Admin access is not configured.', { status: 503 });
@@ -3990,6 +4120,8 @@ export const __test = {
   verifyStripeSignature,
   memberHasConfiguredVipRole,
   activeReferralAccessForDiscord,
+  communityReferralAccessForDiscord,
+  adminCommunityReferralReview,
   readReferralAuthSession,
   referralOwnerForCode,
 };

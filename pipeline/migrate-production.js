@@ -61,6 +61,11 @@ const APPROVED_MIGRATIONS = [
     version: '018_standard_monthly_offer',
     sha256: 'c32d03cc8b8fbec54fd4a4642686f64c5171865ec0c9f3ab508e006692b20877',
   },
+  {
+    name: '020_community_referral_pilot.sql',
+    version: '020_community_referral_pilot',
+    sha256: 'f8c9a1fa08c434f4badb0a71d157784cda06e43f8d4fad810beaa3423f42cde0',
+  },
 ];
 const PROTECTED_TABLES = [
   'source_posts',
