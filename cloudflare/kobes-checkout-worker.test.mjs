@@ -1591,6 +1591,66 @@ test('free-server referrals require the feature switch, verified guild tenure an
   }finally{globalThis.fetch=originalFetch;}
 });
 
+test('eligible free member can receive a referral link through Discord without checkout or payout', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const calls = [];
+  let profile = null;
+  let joinedAt = '2026-09-01T00:00:00Z';
+  const env = {
+    DISCORD_CLIENT_ID: 'client_test', DISCORD_CLIENT_SECRET: 'secret_test',
+    DISCORD_BOT_TOKEN: 'bot_test', DISCORD_GUILD_ID: 'guild_test', DISCORD_MEMBER_ROLE_ID: 'vip_role',
+    DISCORD_OAUTH_STATE_SECRET: 'state_test', DISCORD_REDIRECT_URI: 'https://worker.test/discord/callback',
+    SUPABASE_URL: 'https://project.supabase.test', SUPABASE_SECRET_KEY: 'sb_secret_test',
+    FREE_MEMBER_REFERRALS_ENABLED: 'true',
+  };
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    const method = options.method || 'GET';
+    calls.push(`${method} ${url.pathname}`);
+    if (url.pathname === '/api/oauth2/token') return Response.json({ access_token: 'oauth_test' });
+    if (url.pathname === '/api/v10/users/@me') return Response.json({ id: 'free_member', email: 'free@example.com', verified: true, username: 'free_member' });
+    if (url.pathname === '/api/v10/guilds/guild_test/members/free_member') return Response.json({ user: { id: 'free_member' }, joined_at: joinedAt, pending: false, roles: [] });
+    if (url.pathname === '/api/oauth2/token/revoke' || url.pathname.endsWith('/api_call_events')) return new Response(null, { status: 204 });
+    if (url.pathname.endsWith('/membership_customers')) return Response.json([]);
+    if (url.pathname.endsWith('/referral_profiles')) {
+      if (method === 'GET') return Response.json(profile ? [profile] : []);
+      if (method === 'POST') {
+        profile = JSON.parse(options.body);
+        return Response.json([profile]);
+      }
+      if (method === 'PATCH') {
+        profile = { ...profile, ...JSON.parse(options.body) };
+        return Response.json([profile]);
+      }
+    }
+    if (url.pathname.endsWith('/referral_auth_sessions') || url.pathname.endsWith('/referral_events')) return new Response(null, { status: 204 });
+    throw new Error(`Unexpected external request: ${method} ${url.pathname}`);
+  };
+
+  const login = await worker.fetch(new Request('https://worker.test/referrals/login?eligibility=us21'), env);
+  assert.equal(login.status, 302);
+  const oauthUrl = new URL(login.headers.get('location'));
+  assert.equal(oauthUrl.origin, 'https://discord.com');
+  assert.equal(oauthUrl.searchParams.get('scope'), 'identify email');
+  const state = oauthUrl.searchParams.get('state');
+  const callback = () => worker.fetch(new Request(`https://worker.test/discord/callback?code=test&state=${encodeURIComponent(state)}`), env);
+  const response = await callback();
+  assert.equal(response.status, 302);
+  const issued = new URL(response.headers.get('location'));
+  assert.equal(issued.pathname, '/refer.html');
+  assert.equal(new URLSearchParams(issued.hash.slice(1)).get('code'), profile.referral_code);
+  assert.equal(profile.contact_email, 'free@example.com');
+  assert.equal(profile.community_joined_at, joinedAt);
+  assert.ok(new URLSearchParams(issued.hash.slice(1)).get('auth'));
+  assert.ok(!calls.some((call) => call.includes('stripe') || call.includes('/checkout')));
+
+  joinedAt = new Date().toISOString();
+  const denied = await callback();
+  assert.equal(denied.status, 400);
+  assert.match(await denied.text(), /seven days/);
+});
+
 
 test('Meta campaign source is normalized by the server and recovered from preserved old tags', () => {
   for (const tag of ['meta', 'meta_ads', 'Meta Ads', 'meta-paid']) {
