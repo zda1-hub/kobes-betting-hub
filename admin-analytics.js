@@ -251,6 +251,36 @@ function renderPaymentAndReferralDetails(d){
   document.querySelector('[data-alerts]').innerHTML=`<div class="row"><span>Total issues</span><strong>${d.alerts.total}</strong></div>`+failed.map(x=>{const invoice=x.invoiceId&&/^in_[A-Za-z0-9]+$/.test(x.invoiceId)?`https://dashboard.stripe.com/invoices/${x.invoiceId}`:'';const customer=x.customerId&&/^cus_[A-Za-z0-9]+$/.test(x.customerId)?`https://dashboard.stripe.com/customers/${x.customerId}`:'';return `<details class="row danger"><summary>${x.recovered?'Recovered':'Payment due'} · ${esc(x.name||x.email||x.customerId||'member')} · ${money(x.amountCents)} · ${x.attemptCount} attempt${x.attemptCount===1?'':'s'}</summary><div class="alert-detail">${esc(x.email||'Email unavailable')} · ${esc(x.membershipStatus||'unknown status')}<br>${esc(time(x.occurredAt))} · ${x.recovered?'Paid after failure':'Awaiting recovery'} · Decline reason: inspect Stripe${invoice?` · <a href="${invoice}" target="_blank" rel="noopener">Stripe invoice ↗</a>`:''}${customer?` · <a href="${customer}" target="_blank" rel="noopener">Customer ↗</a>`:''}<br><small>Stripe ID: ${esc(x.subscriptionId||x.customerId||'unavailable')}</small></div></details>`}).join('')+other.map(x=>`<div class="row danger"><span>${esc(x)}</span></div>`).join('');
   document.querySelector('[data-referral-links]').innerHTML=(d.referrals.links||[]).map(x=>`<tr><td><strong>${esc(x.name||'Unknown')}</strong><br><small>${esc(x.type)}${x.email?` · ${esc(x.email)}`:''}</small></td><td><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.code)}</a><br><small>${esc(x.url)}</small></td><td>${esc(x.status)}${x.type==='creator'?`<small class="member-attribution">Discord: ${x.discordConnected?'Connected':'Awaiting connection'}</small><small class="member-attribution">VIP access: ${x.accessMode==='PARTNERSHIP'?(x.accessEndsAt?`partnership ends ${esc(new Date(x.accessEndsAt).toLocaleString())}`:'active partnership'):(x.trialExpiresAt?`temporary until ${esc(new Date(x.trialExpiresAt).toLocaleString())}`:'not started')}</small><small class="member-attribution">Payout: ${esc(x.payoutStatus||'NOT_CONNECTED')}</small>`:''}</td><td>${esc(x.visits)}</td><td>${esc(x.successful)}</td><td>${esc(x.pending)}</td><td>${money(x.paidCents)}</td></tr>`).join('')||'<tr><td colspan="7">No referral links issued yet.</td></tr>';
 }
+async function loadCommunityReviews(){
+  const list=document.querySelector('[data-community-review-list]'),notice=document.querySelector('[data-community-review-status]');
+  if(!list||!token)return;
+  notice.textContent='Checking free-member rewards…';
+  try{
+    const response=await fetch(`${config.workerOrigin}/admin/referrals/community-review`,{headers:{Authorization:`Bearer ${token}`}});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error||'Review queue unavailable.');
+    const rewards=data.rewards||[];
+    list.innerHTML=rewards.length?rewards.map(x=>`<article class="community-review-row" data-community-reward="${esc(x.id)}"><p><strong>${esc(x.referral_code)}</strong> · $${(Number(x.reward_amount_cents||0)/100).toFixed(2)} · ${esc(x.status_reason)}</p><p class="muted">Referrer Discord: ${esc(x.referrer_discord_user_id)} · Buyer Discord: ${esc(x.referred_discord_user_id||'not connected')}</p><p class="muted">Referrer verified email: ${esc(x.referrer_contact_email||'unavailable')} · Stripe recipient: ${esc(x.referrer_stripe_recipient_id||'not connected')} · Server joined: ${esc(x.referrer_community_joined_at||'unknown')}</p><p class="muted">First paid: ${esc(x.first_paid_at||'unverified')} · Hold ends: ${esc(x.eligible_at||'unknown')}</p><p><a href="https://dashboard.stripe.com/customers/${encodeURIComponent(x.referred_stripe_customer_id)}" target="_blank" rel="noopener">Check Stripe customer ↗</a></p><label>Review note (identity, age, US eligibility, payment) <textarea data-review-note maxlength="500" rows="2"></textarea></label><label><input type="checkbox" data-review-confirm> I verified identity and US age 21+ eligibility.</label><button type="button" data-review-approve>Approve after checks</button></article>`).join(''):'<p class="muted">No free-member rewards await manual review.</p>';
+    notice.textContent=`${rewards.length} reward${rewards.length===1?'':'s'} in the review queue.`;
+  }catch(error){notice.textContent=error.message;list.innerHTML='';}
+}
+function setupCommunityReviews(){
+  document.querySelector('[data-community-review-refresh]')?.addEventListener('click',loadCommunityReviews);
+  document.querySelector('[data-community-review-list]')?.addEventListener('click',async event=>{
+    const button=event.target.closest?.('[data-review-approve]');if(!button)return;
+    const row=button.closest('[data-community-reward]'),note=row?.querySelector('[data-review-note]')?.value.trim()||'';
+    const confirmed=row?.querySelector('[data-review-confirm]')?.checked;
+    const notice=document.querySelector('[data-community-review-status]');
+    if(!confirmed||note.length<15){notice.textContent='Check the eligibility box and add a specific review note of at least 15 characters.';return}
+    button.disabled=true;notice.textContent='Rechecking Stripe, Discord and payout readiness…';
+    try{
+      const response=await fetch(`${config.workerOrigin}/admin/referrals/community-review`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({reward_id:row.dataset.communityReward,review_note:note,confirm_identity_us_21:true})});
+      const data=await response.json();if(!response.ok)throw new Error(data.error||'Review failed safely.');
+      notice.textContent=`Approved ${data.reward_id}. The next guarded payout pass will recheck payment and identity.`;
+      row.remove();
+    }catch(error){notice.textContent=error.message;button.disabled=false}
+  });
+}
 async function load(){
   const sequence=++loadSequence;
   if(!token)return;
@@ -266,7 +296,7 @@ async function load(){
     }
     const data=await response.json();
     if(sequence!==loadSequence)return;
-    render(data);renderExecutive(data);renderTarget(data);renderPaymentAndReferralDetails(data);renderOverview(data);labelMobileTables();
+    render(data);renderExecutive(data);renderTarget(data);renderPaymentAndReferralDetails(data);renderOverview(data);labelMobileTables();void loadCommunityReviews();
     if(!initialReportOpened){initialReportOpened=true;openDashboardTarget(location.hash.slice(1));}
     const notices=[...(data.dataCompletenessWarnings||[])];
     if(data.reportingExclusions?.customers)notices.push(`${data.reportingExclusions.customers} internal test customers excluded from membership and revenue reports.`);
@@ -281,4 +311,4 @@ document.querySelector('[data-member-search]').oninput=()=>{renderMembers();labe
 document.querySelector('[data-member-filter]').onchange=()=>{renderMembers();labelMobileTables()};
 document.querySelector('[data-member-scope]').onchange=()=>{renderMembers();labelMobileTables()};
 setupDashboardNavigation();
-setupCampaignLinks();setupCreatorInvite();load();
+setupCampaignLinks();setupCreatorInvite();setupCommunityReviews();load();

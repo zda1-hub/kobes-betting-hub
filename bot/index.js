@@ -459,7 +459,8 @@ async function ensureReferralInfoCard() {
   if (![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory].every((flag) => permissions?.has(flag))) {
     throw new Error('Kobe Bot needs View Channel, Send Messages, Embed Links and Read Message History in the referral channel.');
   }
-  const payload = referralCardPayload(referralWorkflow);
+  const payload = referralCardPayload({ ...referralWorkflow,
+    community_enabled: process.env.FREE_MEMBER_REFERRALS_ENABLED === 'true' });
   const messages = await channel.messages.fetch({ limit: 100 });
   const existing = [...messages.values()].find((message) => message.author?.id === client.user.id
     && message.embeds?.[0]?.footer?.text?.startsWith(REFERRAL_CARD_MARKER));

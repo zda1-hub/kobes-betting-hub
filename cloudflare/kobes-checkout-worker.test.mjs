@@ -1566,6 +1566,31 @@ test('legacy VIP referrals keep the same eligibility through login, session and 
   } finally {globalThis.fetch=originalFetch;}
 });
 
+test('free-server referrals require the feature switch, verified guild tenure and a signed US 21+ state', async () => {
+  const originalFetch=globalThis.fetch;
+  let joinedAt='2026-09-01T00:00:00Z',pending=false,blocked=false;
+  const env={SUPABASE_URL:'https://db.test',SUPABASE_SECRET_KEY:'test-key',DISCORD_BOT_TOKEN:'test-token',DISCORD_GUILD_ID:'guild',DISCORD_MEMBER_ROLE_ID:'vip',DISCORD_OAUTH_STATE_SECRET:'state-secret',FREE_MEMBER_REFERRALS_ENABLED:'true'};
+  globalThis.fetch=async (url)=>{
+    const target=new URL(url);
+    if(target.hostname==='discord.com')return Response.json({user:{id:'free_member'},joined_at:joinedAt,pending,roles:[]});
+    if(target.pathname.endsWith('/api_call_events'))return new Response(null,{status:204});
+    if(target.pathname.endsWith('/membership_customers'))return Response.json(blocked?[{current_subscription_id:'sub_blocked'}]:[]);
+    if(target.pathname.endsWith('/membership_subscriptions'))return Response.json(target.searchParams.get('entitlement_blocked')==='is.false'?[]:[{entitlement_blocked:true}]);
+    if(target.pathname.endsWith('/referral_profiles'))return Response.json([{discord_user_id:'free_member',referral_code:'KBH-ABCDEF1234',contact_email:'free@example.com',community_joined_at:'2026-09-01T00:00:00Z'}]);
+    throw new Error('Unexpected request '+target.pathname);
+  };
+  try{
+    assert.equal((await workerTest.referralOwnerForCode(env,'KBH-ABCDEF1234')).accessKind,'COMMUNITY');
+    assert.equal(await workerTest.communityReferralAccessForDiscord({...env,FREE_MEMBER_REFERRALS_ENABLED:'false'},'free_member'),null);
+    assert.equal((await workerTest.referralOwnerForCode({...env,FREE_MEMBER_REFERRALS_ENABLED:'false'},'KBH-ABCDEF1234')).accessKind,'COMMUNITY','issued links remain valid if new issuance is paused');
+    pending=true;assert.equal(await workerTest.referralOwnerForCode(env,'KBH-ABCDEF1234'),null);pending=false;
+    joinedAt=new Date().toISOString();assert.equal(await workerTest.referralOwnerForCode(env,'KBH-ABCDEF1234'),null);
+    joinedAt='2026-09-01T00:00:00Z';blocked=true;assert.equal(await workerTest.referralOwnerForCode(env,'KBH-ABCDEF1234'),null);
+    const signed=await workerTest.createDiscordState({intent:'referral',eligibility:'us21'},env);
+    assert.equal((await workerTest.readDiscordState(signed,env)).eligibility,'us21');
+  }finally{globalThis.fetch=originalFetch;}
+});
+
 
 test('Meta campaign source is normalized by the server and recovered from preserved old tags', () => {
   for (const tag of ['meta', 'meta_ads', 'Meta Ads', 'meta-paid']) {

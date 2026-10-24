@@ -42,3 +42,6 @@
  .referral-page .referral-rules[open]::details-content{block-size:auto}
 }
 @media(prefers-reduced-motion:reduce){.referral-page .referral-rules::details-content{transition:none!important}}
+.referral-eligibility{display:flex;align-items:center;justify-content:center;gap:10px;max-width:640px;margin:12px auto;color:inherit;font-size:14px;line-height:1.4;text-align:left}
+.referral-eligibility input{width:20px;height:20px;flex:none;accent-color:#ee7a22}
+.referral-login[aria-disabled="true"]{opacity:.6;cursor:not-allowed}

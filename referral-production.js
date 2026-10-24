@@ -2,16 +2,27 @@
 (() => {
   const localPreview = location.protocol === 'file:' || ['localhost', '127.0.0.1', '::1', '[::1]'].includes(location.hostname);
   const login = document.querySelector('[data-referral-login]');
+  const eligibility = document.querySelector('[data-referral-eligibility]');
   const preview = document.querySelector('[data-referral-preview]');
   if (localPreview) {
     if (preview) preview.hidden = false;
     if (login) { login.removeAttribute('href'); login.setAttribute('aria-disabled', 'true'); login.tabIndex = -1; }
     return;
   }
-  if (login) {
-    login.href = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev/referrals/login';
-    login.removeAttribute('aria-disabled');
-  }
+  const syncEligibility = () => {
+    if (!login) return;
+    if (eligibility?.checked) {
+      login.href = 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev/referrals/login?eligibility=us21';
+      login.removeAttribute('aria-disabled');
+      login.tabIndex = 0;
+    } else {
+      login.removeAttribute('href');
+      login.setAttribute('aria-disabled', 'true');
+      login.tabIndex = -1;
+    }
+  };
+  eligibility?.addEventListener('change', syncEligibility);
+  syncEligibility();
 const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
 const query = new URLSearchParams(window.location.search);
 const code = (hash.get('code') || query.get('code') || '').toUpperCase();

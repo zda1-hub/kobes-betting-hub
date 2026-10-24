@@ -20,8 +20,11 @@ function fixture(options = {}) {
     const status = filters.get('status');
     if (status?.startsWith('eq.') && reward.status !== status.slice(3)) return false;
     if (status?.startsWith('in.') && !status.slice(4, -1).split(',').includes(reward.status)) return false;
-    for (const name of ['stripe_outbound_payment_id', 'payout_attempt_started_at', 'first_paid_invoice_id']) {
+    for (const name of ['stripe_outbound_payment_id', 'payout_attempt_started_at', 'first_paid_invoice_id', 'community_reviewed_at']) {
       if (filters.get(name) === 'is.null' && reward[name] != null) return false;
+    }
+    for (const name of ['referrer_access_kind', 'status_reason']) {
+      if (filters.get(name)?.startsWith('eq.') && reward[name] !== filters.get(name).slice(3)) return false;
     }
     if (filters.get('payout_attempt_started_at')?.startsWith('lte.') && (!reward.payout_attempt_started_at || reward.payout_attempt_started_at > filters.get('payout_attempt_started_at').slice(4))) return false;
     return true;
@@ -43,10 +46,11 @@ function fixture(options = {}) {
       }
       if (table === 'membership_customers') return json([{ stripe_customer_id: 'cus_referrer', current_subscription_id: 'sub_referrer' }]);
       if (table === 'membership_subscriptions') return json(url.searchParams.get('select')?.includes('entitlement_blocked') ? [] : [{ stripe_customer_id: 'cus_referrer', stripe_subscription_id: 'sub_referrer', status: 'active' }]);
-      if (table === 'referral_profiles') return json([{ discord_user_id: 'referrer', stripe_recipient_account_id: 'acct_recipient', payout_status: 'READY' }]);
+      if (table === 'referral_profiles') return json([{ discord_user_id: 'referrer', stripe_recipient_account_id: 'acct_recipient', payout_status: 'READY', contact_email: 'referrer@example.com', community_joined_at: '2020-01-01T00:00:00Z' }]);
       if (table === 'referral_events' && options.auditFailure && reward.stripe_outbound_payment_id) return json({ message: 'audit unavailable' }, 503);
       return json([]);
     }
+    if (url.hostname === 'discord.com' && url.pathname.endsWith('/guilds/guild/members/referrer')) return json({ user: { id: 'referrer' }, pending: false, joined_at: '2020-01-01T00:00:00Z', roles: [] });
     if (url.pathname === '/v1/invoices/in_paid') {
       invoiceReads += 1;
       if (options.refundAfterClaim && invoiceReads === 2) charge.amount_refunded = 100;
@@ -59,6 +63,8 @@ function fixture(options = {}) {
     if (url.pathname === '/v1/refunds') return json({ data: options.refunds || [], has_more: false });
     if (url.pathname === '/v1/payment_methods') return json({ data: [{ card: { fingerprint: options.sharedCard ? 'new_card' : 'referrer_card' } }], has_more: false });
     if (url.pathname === '/v1/charges') return json({ data: [], has_more: Boolean(options.incompleteHistory) });
+    if (url.pathname === '/v1/customers/cus_new') return json({ id: 'cus_new', email: options.sameEmail ? 'referrer@example.com' : 'buyer@example.com' });
+    if (url.pathname === '/v1/customers') return json({ data: [], has_more: false });
     if (url.pathname === '/v2/money_management/financial_accounts') return json({ data: [{ id: 'fa_test' }] });
     if (url.pathname === '/v2/core/accounts/acct_recipient') return json({ configuration: { recipient: { capabilities: { bank_accounts: { local: { status: 'active' } } } } } });
     if (url.pathname === '/v2/money_management/payout_methods') return json({ data: [{ id: 'pm_test' }] });
@@ -89,6 +95,63 @@ test('a qualifying referral pays $10 only once and saves its charge/card identit
   assert.equal(state.reward.status, 'PAYOUT_SENT');
   assert.equal(state.reward.qualifying_charge_id, 'ch_new');
   assert.match(state.reward.payment_fingerprint_sha256, /^[a-f0-9]{64}$/);
+}));
+
+test('an unapproved free-member reward stops before every Stripe payout attempt', async () => withFixture({ reward: { referrer_access_kind: 'COMMUNITY' } }, async (state) => {
+  await api.processReferralPayouts({ ...env, DISCORD_BOT_TOKEN: 'bot', DISCORD_GUILD_ID: 'guild' });
+  assert.equal(state.sends(), 0);
+  assert.equal(state.reward.status, 'REVIEW_REQUIRED');
+  assert.equal(state.reward.status_reason, 'COMMUNITY_MANUAL_REVIEW');
+}));
+
+test('a manually approved free-member reward still reruns payment and identity checks', async () => withFixture({ reward: { referrer_access_kind: 'COMMUNITY', community_reviewed_at: '2020-01-10T00:00:00Z', community_reviewed_by: 'admin' }, sameEmail: true }, async (state) => {
+  await api.processReferralPayouts({ ...env, DISCORD_BOT_TOKEN: 'bot', DISCORD_GUILD_ID: 'guild' });
+  assert.equal(state.sends(), 0);
+  assert.equal(state.reward.status, 'VOID');
+  assert.equal(state.reward.status_reason, 'SELF_REFERRAL');
+}));
+
+test('an approved free-member reward pays at most once after independent rechecks', async () => withFixture({ reward: { referrer_access_kind: 'COMMUNITY', community_reviewed_at: '2020-01-10T00:00:00Z', community_reviewed_by: 'admin' } }, async (state) => {
+  const communityEnv = { ...env, DISCORD_BOT_TOKEN: 'bot', DISCORD_GUILD_ID: 'guild' };
+  await api.processReferralPayouts(communityEnv);
+  await api.processReferralPayouts(communityEnv);
+  assert.equal(state.sends(), 1);
+  assert.equal(state.reward.status, 'PAYOUT_SENT');
+}));
+
+async function adminToken(secret, discordUserId = '123456789012345678') {
+  const body = Buffer.from(JSON.stringify({ purpose: 'admin', discordUserId, expiresAt: Math.floor(Date.now() / 1000) + 300 })).toString('base64url');
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
+  return `${body}.${Buffer.from(signature).toString('hex')}`;
+}
+
+test('free-member approval requires admin auth and a finished hold, and only releases to guarded payout queue', async () => withFixture({ reward: {
+  id: '11111111-1111-4111-8111-111111111111', referrer_access_kind: 'COMMUNITY', status: 'REVIEW_REQUIRED',
+  status_reason: 'COMMUNITY_MANUAL_REVIEW', community_reviewed_at: null, first_paid_at: '2020-01-01T00:00:00Z',
+} }, async (state) => {
+  const reviewEnv = { ...env, DISCORD_BOT_TOKEN: 'bot', DISCORD_GUILD_ID: 'guild', DISCORD_OAUTH_STATE_SECRET: 'test-secret', ADMIN_DISCORD_USER_IDS: '123456789012345678' };
+  const input = { reward_id: state.reward.id, review_note: 'Checked Discord, Stripe identity and US age eligibility.', confirm_identity_us_21: true };
+  const request = (token) => new Request('https://worker.test/admin/referrals/community-review', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(input),
+  });
+  assert.equal((await api.adminCommunityReferralReview(request('bad'), reviewEnv, null)).status, 401);
+  assert.equal(state.sends(), 0);
+  const token = await adminToken(reviewEnv.DISCORD_OAUTH_STATE_SECRET);
+  const queue = await api.adminCommunityReferralReview(new Request('https://worker.test/admin/referrals/community-review', {
+    headers: { Authorization: `Bearer ${token}` },
+  }), reviewEnv, null);
+  assert.equal(queue.status, 200);
+  assert.equal((await queue.json()).rewards[0].referrer_contact_email, 'referrer@example.com');
+  state.reward.eligible_at = new Date(Date.now() + 86400000).toISOString();
+  assert.equal((await api.adminCommunityReferralReview(request(token), reviewEnv, null)).status, 409);
+  state.reward.eligible_at = '2020-01-08T00:00:00Z';
+  const response = await api.adminCommunityReferralReview(request(token), reviewEnv, null);
+  assert.equal(response.status, 200);
+  assert.equal(state.reward.status, 'HOLDING');
+  assert.equal(state.reward.community_reviewed_by, '123456789012345678');
+  assert.equal(state.sends(), 0);
+  assert.equal((await api.adminCommunityReferralReview(request(token), reviewEnv, null)).status, 409);
 }));
 
 test('overlapping processors have one atomic winner and one payout', async () => withFixture({}, async (state) => {
