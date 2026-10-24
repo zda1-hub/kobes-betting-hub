@@ -1,10 +1,12 @@
+const TERMINAL_ODDS = /\(\s*([+-]\d{3,4})(?:\s+([A-Za-z][A-Za-z0-9 .&'-]{1,30}))?\s*\)\s*:?\s*$/;
+
 function normalizeSelection(value) {
   return String(value || '')
     .replace(/:\s*$/, '')
     .replaceAll('−', '-')
     .replace(/\bO(?=\d)/i, 'OVER ')
     .replace(/\bU(?=\d)/i, 'UNDER ')
-    .replace(/\s*\(([+-]\d{3,4})\)\s*$/, '')
+    .replace(TERMINAL_ODDS, '')
     .trim();
 }
 
@@ -19,8 +21,10 @@ function manualFreePickRecord(message, { operatingDate, guildId, channelId, appr
   const header = lines[0];
   const evidence = lines.filter((line) => /^[-•*]\s*\S/.test(line)).map((line) => line.replace(/^[-•*]\s*/, '').trim());
   const marketPattern = /\b(?:over|under|receptions?|receiving\s+yards?|rushing\s+(?:yards?|attempts?)|attempts?|carries|touchdowns?|tds?|completions?|interceptions?|sacks?|targets?|longest\s+(?:reception|rush)|anytime\s+(?:touchdown|td)|to\s+score)\b|\b[ou]\s*\d/i;
-  const odds = header.replaceAll('−', '-').match(/\(([+-]\d{3,4})\)\s*:?[\s]*$/)?.[1] || '';
-  const selection = normalizeSelection(header);
+  const price = header.replaceAll('−', '-').match(TERMINAL_ODDS);
+  const odds = price?.[1] || '';
+  const sportsbook = price?.[2]?.trim() || '';
+  const selection = `${normalizeSelection(header)}${sportsbook ? ` at ${sportsbook}` : ''}`;
   const line = selection.match(/\b(?:OVER|UNDER)\s*(\d+(?:\.\d+)?)/i)?.[1] || '';
   if (!marketPattern.test(header) || !odds || evidence.length < 2 || selection.length > 256) return null;
 
@@ -42,7 +46,7 @@ function manualFreePickRecord(message, { operatingDate, guildId, channelId, appr
       pick_id: pickId,
       source: { publish_mode: 'independent_writeup', post_url: postReference },
       approval: { exact_evidence: evidence },
-      analysis: { extraction: { sport: 'football', league: 'NFL', event, selection, line, odds_american: odds, units: '', source_claims: evidence } },
+      analysis: { extraction: { sport: 'football', league: 'NFL', event, selection, line, odds_american: odds, sportsbook, units: '', source_claims: evidence } },
     },
   };
 }

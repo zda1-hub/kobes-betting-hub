@@ -21,6 +21,23 @@ test('turns an authorized manual Free Pick into one canonical delivery packet', 
   assert.equal(result.row.post_reference, 'https://discord.com/channels/guild/free/123');
 });
 
+test('keeps Kobe’s sportsbook when odds and book share the final parentheses', () => {
+  const message = {
+    id: 'today-pick', channelId: 'free', author: { id: 'kobe', bot: false },
+    createdAt: new Date('2026-10-24T23:04:00Z'),
+    content: `Christian McCaffrey Under 15.5 Rush Attempts (-110 Bet365)
+• Under in 5 of 6 games this season
+• Only went over once all season, with 16 carries`
+  };
+  const result = manualFreePickRecord(message, {
+    operatingDate: () => '2026-10-24', guildId: 'guild', channelId: 'free', approverIds: new Set(['kobe'])
+  });
+  assert.equal(result.row.selection, 'Christian McCaffrey Under 15.5 Rush Attempts at Bet365');
+  assert.equal(result.row.published_line, '15.5');
+  assert.equal(result.row.published_odds_american, '-110');
+  assert.equal(result.packet.analysis.extraction.sportsbook, 'Bet365');
+});
+
 test('rejects bots, unauthorized authors, wrong channels, thin posts and missing odds', () => {
   const options = { operatingDate: () => '2026-09-20', guildId: 'guild', channelId: 'free', approverIds: new Set(['kobe']) };
   const base = { id: '123', channelId: 'free', content, createdAt: new Date(), author: { id: 'kobe', bot: false } };
