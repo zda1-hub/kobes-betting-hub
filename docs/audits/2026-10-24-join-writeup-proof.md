@@ -1,0 +1,25 @@
+# October 24, 2026 — membership writeup proof
+
+## Request and baseline
+
+The owner wants more verified VIP trials and paid memberships, with a target of 50 active paid or verified trial members by October 31. At the last live check, the dashboard showed 8 paid active memberships and 1 verified active trial. The prior seven-day dashboard showed 56 join views, 15 offer selections, 2 checkout starts and 1 verified trial. These are independently timed stages, not a single visitor cohort. The active X test had 1,544 impressions, 7 link clicks and $3.37 spend; only one consented, tagged site visit was visible. None of those ad counts proves a paid member.
+
+Before this change, `/join` showed the member card, two-day trial, renewal price and benefits, but no concrete Kobe writeup beside the offer. A visitor had to leave the purchase path to judge the analysis. This change adds a dated excerpt from Kobe's October 20 Trae Young writeup and links to the [public X example](https://x.com/kobesbettinghub/status/2114046390095507960). The historical example is explicitly labeled as not a current pick. Its outcome is not used as a sales claim.
+
+## Four-angle release review and five useful changes
+
+| Placement | Change | Reason | Evidence needed / disposition |
+| --- | --- | --- | --- |
+| `/join`, immediately after the primary trial offer | Show a real dated Kobe writeup excerpt | A qualified buyer can see what a writeup contains before leaving checkout | Original Discord excerpt and public X post checked; applied |
+| Same proof block, mobile | Transcribe one short reasoning point in readable type | The original wide screenshot is too small to read at 320–390px | Rendered mobile screenshots; applied |
+| Same proof block, source link | Link the public example and label it historical | A skeptic can verify the source and avoid mistaking an old line for today's pick | Public post and date checked; applied |
+| Primary CTA and terms | Preserve the existing blue trial action and exact $32.99 renewal language | A visitor needs an unambiguous next step | Current offer and preview checkout behavior checked; preserved |
+| Acquisition and measurement | Keep ad cap and tagged destination; judge verified trials and paid renewals separately from clicks | A competing community can copy generic features, while unsupported claims and click-only success would mislead | Existing experiment has too little conversion evidence to justify a spend or targeting change; deferred |
+
+## Files and verification
+
+Changed `membership-scene.js`, `membership-scene.css`, the cache versions in `index.html`, `join.html` and `membership.html`, and added `assets/membership/kobe-writeup-example-20261020.png`. The site public-build whitelist copies the assets directory, so the image is included. No checkout, Stripe, Discord access, offer, attribution, or ad-budget code changed. The approved orange member card and page styling remain intact.
+
+Local preview visual checks at 320px and 390px showed no horizontal overflow or clipped header, primary CTA, or proof. The [390px screenshot](2026-10-24-join-proof-390.png) shows the CTA, terms, proof excerpt and source link. The [desktop screenshot](2026-10-24-join-proof-desktop.png) shows the original card and CTA composition. Clicking the trial action in the local preview displayed the preview-only message; it did not open Stripe or start a trial. Focused membership tests passed, JavaScript syntax checked, and the public-site build completed. This remains a conversion hypothesis until tagged visits, checkout starts, verified trials and paid renewals are observed in production.
+
+Release status: local review complete; publication and production verification recorded separately below when done.
