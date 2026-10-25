@@ -15,3 +15,9 @@ Brave Search visibly returned the homepage for `site:kobesbettinghub.com` on Oct
 ## Verification and limits
 
 Run `node scripts/prepare-public-site.mjs`, `node scripts/check-public-seo.mjs`, and `node --test scripts/search-indexing.test.mjs`; record the results before release. The sitemap has no visual or checkout changes. This audit is local until the branch is merged and the deployed sitemap is checked. Search traffic and membership impact remain unknown. Do not refresh every `<lastmod>` or resubmit unchanged URLs merely to simulate freshness.
+
+## Publication follow-up
+
+PR [#329](https://github.com/zda1-hub/kobes-betting-hub/pull/329) merged as `ad61a29`. The GitHub Pages job for that commit passed, and the public-only Cloudflare Worker was deployed from the same merged source with `wrangler.site.jsonc --keep-vars`, version `2b168253-f021-4699-99a0-3e33c4690cb1`. The deploy uploaded only `/sitemap.xml`; checkout, billing, access and page presentation were unchanged. Live reads of both `https://kobesbettinghub.com/sitemap.xml` and the Worker URL showed October 24 modification dates for the homepage and `/refer`.
+
+The SEO build check passed for 20 sitemap pages, and both focused search-indexing tests passed. There is still no evidence of a new Brave index entry, Claude citation, Google recrawl, search traffic change or membership caused by this release.
