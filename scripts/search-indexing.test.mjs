@@ -23,7 +23,10 @@ const pages = new Map([
   ['/guides/how-to-read-betting-odds-and-line-movement', 'guides/how-to-read-betting-odds-and-line-movement.html'],
   ['/guides/bankroll-management-for-sports-betting', 'guides/bankroll-management-for-sports-betting.html'],
   ['/guides/what-a-sports-betting-writeup-should-include', 'guides/what-a-sports-betting-writeup-should-include.html'],
-  ['/support', 'support.html']
+  ['/support', 'support.html'],
+  ['/responsible-gambling', 'responsible-gambling.html'],
+  ['/education/mean-versus-median', 'education/mean-versus-median.html'],
+  ['/education/per-game-versus-per-minute', 'education/per-game-versus-per-minute.html']
 ]);
 
 test('sitemap contains only final public URLs with matching canonicals', async () => {
