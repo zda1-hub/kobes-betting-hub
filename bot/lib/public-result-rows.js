@@ -74,7 +74,13 @@ async function publicResultRows({ rows, root, directory, readFile = fs.readFile 
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);
   }
-  return [...groups.values()].flatMap(group => distinctCapperWagers(group).map(entry => entry.row));
+  return [...groups.values()].flatMap(group => distinctCapperWagers(group).map(entry => ({
+    ...entry.row,
+    // Preserve channel provenance when the same call was also posted among
+    // expert picks; deduplication must not erase its writeup publication.
+    publication_channel_ids: [...new Set(entry.sources.map(row => String(row.post_reference || '')
+      .match(/^https:\/\/discord\.com\/channels\/\d+\/(\d+)\/\d+$/)?.[1]).filter(Boolean))],
+  })));
 }
 
 module.exports = { publicResultRows };

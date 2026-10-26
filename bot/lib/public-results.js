@@ -3,6 +3,7 @@ const { resultFor } = require('./pick-log');
 const { publicMetadata } = require('../../result-metadata');
 const { verified } = require('./free-pick-results');
 const { previousDayRecords, previousMstDate } = require('./vip-expert-list');
+const { buildWriteupRecord } = require('./writeup-record');
 
 function counts(rows) {
   const record = { wins: 0, losses: 0, pushes: 0, voids: 0 };
@@ -29,7 +30,7 @@ function publicResult(row) {
   });
 }
 
-function buildPublicResults(rows, today, now = new Date(), { expertChannelIds = [] } = {}) {
+function buildPublicResults(rows, today, now = new Date(), { expertChannelIds = [], writeupChannelIds = [] } = {}) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today || '')) throw new Error('Expected an operating date.');
   const published = rows.filter((row) => isPublishedRow(row) && /^\d{4}-\d{2}-\d{2}$/.test(row.operating_date || ''));
   const settled = published.filter(verified);
@@ -47,6 +48,7 @@ function buildPublicResults(rows, today, now = new Date(), { expertChannelIds = 
     source: sourceNames.get(key), wins: value.W, losses: value.L, pushes: value.P, voids: value.V, pending: value.PENDING
   })).sort((a, b) => a.source.localeCompare(b.source, 'en', { sensitivity: 'base' })) };
   return {
+    writeupRecord: buildWriteupRecord(published, today, writeupChannelIds.filter(id => !expertChannelIds.includes(id))),
     expertRecords,
     generatedAt: now.toISOString(),
     operatingDate: today,

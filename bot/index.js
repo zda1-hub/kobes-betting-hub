@@ -27,6 +27,7 @@ const { buildFreePickRecapEmbed, freePickRecapRows } = require('./lib/free-recap
 const { buildFreePickResults, freeRows, verified } = require('./lib/free-pick-results');
 const { syncFreePickResultReplies, resultReplyConfig } = require('./lib/free-pick-result-replies');
 const { buildPublicResults } = require('./lib/public-results');
+const { writeupChannelIds } = require('./lib/writeup-record');
 const { publicResultRows } = require('./lib/public-result-rows');
 const { recordEligibility } = require('./lib/record-eligibility');
 const { approvalUserIds } = require('./lib/approval-access');
@@ -805,6 +806,7 @@ function startPublicResultsSync() {
   const origin = (process.env.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
   let lastContent = '';
   let lastEligibility = '';
+  let lastPublicResultsSyncHour = '';
   let running = false;
   const run = async () => {
     if (running) return;
@@ -817,9 +819,14 @@ function startPublicResultsSync() {
         lastEligibility = eligibilitySummary;
       }
       const rows = await publicResultRows({ rows: eligibility.eligible, root: reviewQueueRoot, directory: path.dirname(pickLogPath()) });
-      const snapshot = buildPublicResults(rows, dailyPickOperatingDate(new Date()), new Date(), { expertChannelIds: [expertPicksChannelId] });
+      const snapshot = buildPublicResults(rows, dailyPickOperatingDate(new Date()), new Date(), {
+        expertChannelIds: [expertPicksChannelId], writeupChannelIds: writeupChannelIds(process.env)
+      });
       const content = JSON.stringify({ ...snapshot, generatedAt: null });
-      if (content === lastContent) return;
+      const syncHour = snapshot.generatedAt.slice(0, 13);
+      // Refresh the read-only snapshot heartbeat hourly even when no game has
+      // settled. This reads saved evidence; it never grades or invokes an AI.
+      if (content === lastContent && syncHour === lastPublicResultsSyncHour) return;
       const response = await fetch(`${origin}/api/results`, {
         method: 'PUT',
         headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
@@ -828,6 +835,7 @@ function startPublicResultsSync() {
       });
       if (!response.ok) throw new Error(`website returned ${response.status}`);
       lastContent = content;
+      lastPublicResultsSyncHour = syncHour;
       console.log('Verified complete results updated on the website.');
     } catch (error) {
       console.error('Verified complete results sync needs attention:', error.message);

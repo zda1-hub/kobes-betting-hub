@@ -631,6 +631,15 @@ test('public results normalization preserves count-only expert records and rejec
   assert.equal(workerTest.normalizedPublicResults({...input,expertRecords:{...input.expertRecords,experts:[{source:'Alpha',...record,pending:-1}]}}),null);
 });
 
+test('public results preserve only validated scoped writeup counts', () => {
+ const record={wins:2,losses:3,pushes:1,voids:0};
+ const input={generatedAt:'2026-10-25T20:00:00Z',operatingDate:'2026-10-25',overall:record,today:record,pending:2,settled:6,recent:[],writeupRecord:{scope:'writeup_channels',...record,pending:2,trackingSince:'2026-10-01',through:'2026-10-25',channelIds:['private'],percentage:100}};
+ const value=workerTest.normalizedPublicResults(input).writeupRecord;
+ assert.deepEqual(value,{scope:'writeup_channels',...record,pending:2,trackingSince:'2026-10-01',through:'2026-10-25'});
+ for(const change of [{wins:-1},{scope:'all_picks'},{through:'2027-01-01'},{trackingSince:null}])assert.equal(workerTest.normalizedPublicResults({...input,writeupRecord:{...input.writeupRecord,...change}}),null);
+ assert.equal(workerTest.normalizedPublicResults({...input,writeupRecord:undefined}).writeupRecord,null);
+});
+
  test('automated free-pick payload removes retired like gate and keeps results standalone', () => {
  const body = 'TODAY’S FREE PICK\n\nPlayer over 2.5 (-115)\n\n❤️ 10 likes and we’ll post another free pick.\nFull writeup → example.com';
  assert.deepEqual(workerTest.xPostPayload({id:'free-x-12345678',body}),{text:'TODAY’S FREE PICK\n\nPlayer over 2.5 (-115)\n\nFull writeup → example.com'});
