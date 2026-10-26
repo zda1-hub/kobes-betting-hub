@@ -91,6 +91,8 @@ const publicFiles = [
   'kobe-message.css',
   'kobe-message.js',
   'home-results.js',
+  'writeup-record.js',
+  'writeup-record.css',
   'email-signup.css',
   'email-signup.js',
   'membership.css',

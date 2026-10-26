@@ -67,7 +67,7 @@ if (verifiedResultsTrack) {
     rail.scrollLeft += event.shiftKey ? event.deltaY : event.deltaX;
   }, { passive: false });
   }
-  fetch((['localhost','127.0.0.1','::1'].includes(location.hostname) ? '/preview-api/results' : 'https://bettinghub-publisher.kobedirwin.workers.dev/api/results'), { cache: 'no-store' })
+  (globalThis.KBHVerifiedResults ? globalThis.KBHVerifiedResults.then(snapshot => ({ok:true,json:async()=>snapshot})) : fetch((['localhost','127.0.0.1','::1'].includes(location.hostname) ? '/preview-api/results' : 'https://bettinghub-publisher.kobedirwin.workers.dev/api/results'), { cache: 'no-store' }))
     .then((response) => {
       if (!response.ok) throw new Error('Verified results unavailable');
       return response.json();

@@ -1098,7 +1098,18 @@ function normalizedPublicResults(input) {
     if (experts.some(entry => !entry)) return null;
     expertRecords = { date: value.date, experts };
   }
-  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, settled, recent, ...(wins && { wins }), ...(expertRecords && { expertRecords }), trackingSince: input.trackingSince || null };
+  let writeupRecord = null;
+  if (input.writeupRecord != null) {
+    const value = input.writeupRecord, totals = record(value), unresolved = count(value.pending);
+    if (!totals || unresolved === null || value.scope !== 'writeup_channels'
+      || unresolved > pending || Object.keys(totals).some(key => totals[key] > overall[key])
+      || !validDate(value.through) || value.through > input.operatingDate
+      || (value.trackingSince !== null && (!validDate(value.trackingSince) || value.trackingSince > value.through))
+      || (value.trackingSince === null && Object.values(totals).reduce((a,b) => a+b, unresolved) !== 0)) return null;
+    writeupRecord = { scope: 'writeup_channels', ...totals, pending: unresolved,
+      trackingSince: value.trackingSince, through: value.through };
+  }
+  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, settled, recent, ...(wins && { wins }), ...(expertRecords && { expertRecords }), writeupRecord, trackingSince: input.trackingSince || null };
 }
 
 async function putPublicResults(request, env) {

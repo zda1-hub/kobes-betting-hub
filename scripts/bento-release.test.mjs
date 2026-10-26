@@ -77,9 +77,10 @@ test('production email form supplies age, consent and honeypot to the existing h
   assert.match(source, /legalAge/); assert.match(source, /consent/);
 });
 
-test('landing wins retain their qualified historical estimate and proof retains the original review gallery', async () => {
+test('landing wins use the scoped tracked record and proof retains the original review gallery', async () => {
   const home = await read('index.html');
-  assert.match(home, /KOBE’S HISTORICAL 65% WIN RATE/); assert.match(home, /data-wins-track/);
+  assert.match(home, /data-writeup-record/); assert.match(home, /data-wins-track/);
+  assert.doesNotMatch(home, /65%|Kobe-reported historical estimate/);
   assert.match(home, /href="\/?results(?:\.html)?"[^>]*>See winning plays/);
   const proof = await read('proof.html');
   assert.doesNotMatch(proof, /data-verified-results-track/);
@@ -140,8 +141,8 @@ test('homepage highlights only wins, uses the overall live count and the supplie
   assert.equal(summary.textContent,'323 tracked wins and counting');
   assert.match(since.textContent,/Since September 10, 2026/);
   const home = await read('index.html');
-  assert.match(home, /KOBE’S HISTORICAL 65% WIN RATE/);
-  assert.match(home, /class="historical-qualifier">Kobe-reported historical estimate<\/small>/);
+  assert.match(home, /data-writeup-record/);
+  assert.match(home, /Expert-only picks excluded/);
   assert.doesNotMatch(home, /complete (?:historical )?(?:supporting )?records are unavailable/);
   assert.match(home, /See winning plays/);
   assert.doesNotMatch(home, /data-wins-motion/);

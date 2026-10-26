@@ -13,7 +13,7 @@ function winningRow(item) {
 async function loadResults() {
   const loading = document.querySelector('[data-loading]'), shell = document.querySelector('[data-results]');
   try {
-    const response = await fetch(RESULTS_URL, {cache:'no-store'});
+    const response = globalThis.KBHVerifiedResults ? {ok:true,json:()=>globalThis.KBHVerifiedResults} : await fetch(RESULTS_URL, {cache:'no-store'});
     if (!response.ok) throw new Error(`Results service returned ${response.status}`);
     const data = await response.json();
     const wins = (Array.isArray(data.wins) ? data.wins : data.recent || []).filter(item => item.result === 'W').map(KBHResultMetadata.publicMetadata);
