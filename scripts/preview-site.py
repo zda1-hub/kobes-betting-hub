@@ -10,14 +10,9 @@ os.chdir(Path(__file__).resolve().parent.parent)
 class Preview(SimpleHTTPRequestHandler):
     def do_GET(self):
         path=urlsplit(self.path).path
-        feeds={'/preview-api/free-pick/gate':'/api/free-pick/gate','/preview-api/free-pick/current':'/api/free-pick/current','/preview-api/free-pick/results':'/api/free-pick/results','/preview-api/results':'/api/results'}
+        feeds={'/preview-api/free-pick/gate':'/api/free-pick/gate','/preview-api/free-pick/current':'/api/free-pick/current','/preview-api/results':'/api/results'}
         if path in feeds:
             try:
-                fixture=os.environ.get('KBH_PREVIEW_RESULTS_JSON') if path == '/preview-api/free-pick/results' else None
-                if fixture:
-                    payload=Path(fixture).read_bytes()
-                    self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(payload)
-                    return
                 result=subprocess.run(['curl','-sS','--max-time','15','-w','\n%{http_code}','https://bettinghub-publisher.kobedirwin.workers.dev'+feeds[path]],capture_output=True,check=True)
                 payload,status=result.stdout.rsplit(b'\n',1)
                 self.send_response(int(status));self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(payload)
