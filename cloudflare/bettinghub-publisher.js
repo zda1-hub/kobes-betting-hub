@@ -1022,20 +1022,39 @@ function normalizedFreePickResults(input) {
       postUrl: value.postUrl,
     };
   };
+  const graded = (value) => {
+    if (!validDateValue(value?.date) || !Number.isFinite(Date.parse(value?.gradedAt || ''))
+      || typeof value.selection !== 'string' || !value.selection.trim()
+      || !['W', 'L', 'P', 'V'].includes(value.result)
+      || typeof value.postUrl !== 'string'
+      || !/^https:\/\/discord\.com\/channels\/\d+\/\d+\/\d+$/.test(value.postUrl)) return null;
+    return {
+      date: value.date,
+      gradedAt: new Date(value.gradedAt).toISOString(),
+      selection: value.selection.slice(0, 180),
+      line: String(value.line || '').slice(0, 80),
+      odds: String(value.odds || '').slice(0, 24),
+      final: String(value.final || '').slice(0, 120),
+      result: value.result,
+      postUrl: value.postUrl,
+    };
+  };
   if (!input || !validDateValue(input.operatingDate) || !Number.isFinite(Date.parse(input.generatedAt || ''))) return null;
   const overall = record(input.overall), today = record(input.today), pending = count(input.pending);
   if (!overall || !today || pending === null || !Array.isArray(input.recentWins) || !Array.isArray(input.bestWins)
+    || (input.recent !== undefined && (!Array.isArray(input.recent) || input.recent.length > 30))
     || input.recentWins.length > 5 || input.bestWins.length > 3) return null;
   const recentWins = input.recentWins.map(win), bestWins = input.bestWins.map(win);
-  if ([...recentWins, ...bestWins].some((item) => !item)) return null;
-  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, recentWins, bestWins };
+  const recent = (input.recent || []).map(graded);
+  if ([...recentWins, ...bestWins, ...recent].some((item) => !item)) return null;
+  return { generatedAt: new Date(input.generatedAt).toISOString(), operatingDate: input.operatingDate, overall, today, pending, recent, recentWins, bestWins };
 }
 
 async function putFreePickResults(request, env) {
   if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({ error: 'Unauthorized' }, 401);
   if (!hasFreePickStore(env)) return json({ error: 'Free Pick storage is unavailable' }, 503);
   const raw = await request.text();
-  if (raw.length > 20000) return json({ error: 'Results snapshot is too large' }, 413);
+  if (raw.length > 40000) return json({ error: 'Results snapshot is too large' }, 413);
   let input;
   try { input = JSON.parse(raw); } catch { return json({ error: 'Invalid JSON' }, 400); }
   const snapshot = normalizedFreePickResults(input);

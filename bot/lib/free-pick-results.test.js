@@ -35,4 +35,16 @@ test('free pick results count only published channel posts with recorded verific
   assert.equal(result.pending, 2);
   assert.deepEqual(result.bestWins.map((win) => win.selection), ['Pick 107', 'Pick 101']);
   assert.equal(result.recentWins[0].selection, 'Pick 101');
+  assert.deepEqual(result.recent.map((item) => [item.selection, item.result]), [
+    ['Pick 101', 'W'], ['Pick 102', 'L'], ['Pick 107', 'W']
+  ]);
+});
+
+test('a verified older loss rises to the top when graded later', () => {
+  const snapshot = buildFreePickResults([
+    row('201', 'W', { operating_date: '2026-09-21', result_verified_at: '2026-09-21T22:00:00Z' }),
+    row('202', 'L', { operating_date: '2026-09-20', result_verified_at: '2026-09-22T10:00:00Z' }),
+  ], '2026-09-22', channelId);
+  assert.deepEqual(snapshot.recent.map((item) => item.result), ['L', 'W']);
+  assert.deepEqual(snapshot.overall, { wins: 1, losses: 1, pushes: 0, voids: 0 });
 });
