@@ -38,6 +38,17 @@ test('keeps Kobe’s sportsbook when odds and book share the final parentheses',
   assert.equal(result.packet.analysis.extraction.sportsbook, 'Bet365');
 });
 
+test('indexes a manual basketball points pick without NFL metadata', () => {
+  const result = manualFreePickRecord({
+    id: '456', channelId: 'free', author: { id: 'kobe', bot: false },
+    createdAt: new Date('2026-10-25T20:56:00Z'),
+    content: `Walker Kessler Over 15.5 Points (-108)\n• Scored 22 and 26 points in his first 2 games\n• Drew 9 free-throw attempts through 2 games`
+  }, { operatingDate: () => '2026-10-25', guildId: 'guild', channelId: 'free', approverIds: new Set(['kobe']) });
+  assert.equal(result.row.sport, 'basketball');
+  assert.equal(result.row.league, '');
+  assert.equal(result.row.selection, 'Walker Kessler Over 15.5 Points');
+});
+
 test('rejects bots, unauthorized authors, wrong channels, thin posts and missing odds', () => {
   const options = { operatingDate: () => '2026-09-20', guildId: 'guild', channelId: 'free', approverIds: new Set(['kobe']) };
   const base = { id: '123', channelId: 'free', content, createdAt: new Date(), author: { id: 'kobe', bot: false } };

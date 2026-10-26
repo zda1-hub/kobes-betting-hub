@@ -68,6 +68,53 @@ test('grades a standard final MLB player prop from the ESPN box score', async ()
   });
 });
 
+test('grades a published night-before free pick only from its exact next-day matchup', async () => {
+  const game = {
+    id: 'next-day-49ers-falcons', date: '2026-10-25T17:00:00Z',
+    status: { type: { completed: true } },
+    competitions: [{ competitors: [
+      { team: { displayName: 'San Francisco 49ers', shortDisplayName: '49ers', abbreviation: 'SF' } },
+      { team: { displayName: 'Atlanta Falcons', shortDisplayName: 'Falcons', abbreviation: 'ATL' } }
+    ] }]
+  };
+  const box = {
+    header: { competitions: [{ id: game.id, status: { type: { completed: true } } }] },
+    boxscore: { players: [{ statistics: [{ type: 'rushing', keys: ['rushingAttempts'],
+      athletes: [{ athlete: { displayName: 'Christian McCaffrey' }, stats: ['7'] }]
+    }] }] }
+  };
+  const fetchImpl = async url => new Response(JSON.stringify(url.includes('/summary?') ? box
+    : { events: url.includes('dates=20261025') ? [game] : [] }));
+  const row = { operating_date: '2026-10-24', published_at: '2026-10-24T20:00:00Z',
+    league: 'NFL', event: 'San Francisco 49ers at Atlanta Falcons',
+    selection: 'Christian McCaffrey Under 15.5 Rush Attempts', result: 'PENDING' };
+  const grade = await gradePickFromEspn(row, { fetchImpl });
+  assert.equal(grade.status, 'GRADED', grade.reason);
+  assert.equal(grade.result, 'W');
+  assert.match(grade.outcome, /7 rushing attempts/);
+  assert.equal((await gradePickFromEspn({ ...row, published_at: '2026-10-25T18:00:00Z' }, { fetchImpl })).status, 'PENDING');
+  assert.equal((await gradePickFromEspn({ ...row, event: '49ers at Los Angeles Rams' }, { fetchImpl })).status, 'PENDING');
+});
+
+test('repairs old manual basketball metadata and grades a unique same-day player', async () => {
+  const game = { id: 'nba-kessler', date: '2026-10-25T21:00:00Z', status: { type: { completed: true } } };
+  const box = {
+    header: { competitions: [{ id: game.id, status: { type: { completed: true } } }] },
+    boxscore: { players: [{ statistics: [{ type: 'statistics', keys: ['points'],
+      athletes: [{ athlete: { displayName: 'Walker Kessler' }, stats: ['2'] }]
+    }] }] }
+  };
+  const fetchImpl = async url => new Response(JSON.stringify(url.includes('/summary?') ? box
+    : { events: url.includes('/basketball/nba/') ? [game] : [] }));
+  const row = { pick_id: 'discord-manual-free-1564019898517291130', operating_date: '2026-10-25',
+    published_at: '2026-10-25T20:56:00Z', league: 'NFL', sport: 'football', event: '',
+    selection: 'Walker Kessler Over 15.5 Points', result: 'PENDING' };
+  const grade = await gradePickFromEspn(row, { fetchImpl });
+  assert.equal(grade.status, 'GRADED', grade.reason);
+  assert.equal(grade.result, 'L');
+  assert.match(grade.outcome, /2 points/);
+});
+
 test('grades published Rush Yards wording against an official name with a suffix', async () => {
   const nflEvent = {
     id: '401873005', status: { type: { completed: true } },

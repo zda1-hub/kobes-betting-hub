@@ -27,6 +27,10 @@ function compact(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function words(value) {
+  return ` ${String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
+}
+
 function leagueFor(row) {
   if (row.league_from_group) return null;
   const value = `${row.league || ''} ${row.sport || ''}`.toLowerCase();
@@ -45,15 +49,20 @@ function eventDate(date) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? date.replaceAll('-', '') : '';
 }
 
+function followingDate(date) {
+  if (!eventDate(date)) return '';
+  return new Date(Date.parse(`${date}T12:00:00Z`) + 86400000).toISOString().slice(0, 10).replaceAll('-', '');
+}
+
 function matchingEvent(row, events) {
-  const sourceEvent = compact(row.event);
-  if (!sourceEvent) return null;
+  const sourceEvent = words(row.event);
+  if (!sourceEvent.trim()) return null;
   const matches = (events || []).filter((event) => {
     const competitors = event.competitions?.[0]?.competitors || [];
     // Multiple aliases of one team do not identify both sides of a matchup.
     return competitors.length === 2 && competitors.every((competitor) => [
       competitor.team?.displayName, competitor.team?.shortDisplayName, competitor.team?.abbreviation, competitor.team?.name
-    ].map(compact).filter((name) => name.length >= 3).some((name) => sourceEvent.includes(name)));
+    ].map(words).filter((name) => name.trim().length >= 2).some((name) => sourceEvent.includes(name)));
   });
   // Doubleheaders or duplicate event matches need an explicit event identity.
   return matches.length === 1 ? matches[0] : null;
@@ -129,7 +138,7 @@ function statSpec(row, entries) {
   if (/interceptions? thrown/.test(text)) return pick('passing', ['interceptions', 'interceptionsThrown'], 'interceptions thrown');
   if (/longest pass|long pass/.test(text)) return pick('passing', ['longPassing', 'longestPass', 'long'], 'longest pass');
   if (/rushing touchdowns?|rush tds?/.test(text)) return pick('rushing', ['rushingTouchdowns', 'rushingTDs'], 'rushing touchdowns');
-  if (/rushing attempts?|carries/.test(text)) return pick('rushing', ['rushingAttempts', 'attempts', 'carries'], 'rushing attempts');
+  if (/\b(?:rush(?:ing)? attempts?|carries)\b/.test(text)) return pick('rushing', ['rushingAttempts', 'attempts', 'carries'], 'rushing attempts');
   if (/longest rush|long rush/.test(text)) return pick('rushing', ['longRushing', 'longestRush', 'long'], 'longest rush');
   if (/\brush(?:ing)? yards?\b/.test(text)) return pick('rushing', 'rushingYards', 'rushing yards');
   if (/longest reception|long reception|longest catch|long catch/.test(text)) {
@@ -275,24 +284,37 @@ async function resolvePlayerWager(row, fetchImpl) {
   const player = selectedPlayerName(row);
   if (player.length < 5 && !/^[A-Z]{3,4}$/.test(selectedPlayerPrefix(row))) return null;
   const known = leagueFor(row);
-  const football = /passing|rushing|receiving|receptions?|carries|touchdown|\bTD\b|field goals|\bpass\b/i.test(row.selection);
+  const football = /passing|rush(?:ing)?(?: attempts?| yards?)?|receiving|receptions?|carries|touchdown|\bTD\b|field goals|\bpass\b/i.test(row.selection);
   const baseball = /strikeout|\bKs\b|hits|total bases|RBIs|earned runs|outs/i.test(row.selection);
   const basketball = /points|rebounds|assists/i.test(row.selection);
   const leagues = known ? [known] : football ? [LEAGUES.nfl, LEAGUES.ncaaf] : baseball ? [LEAGUES.mlb] : basketball ? [LEAGUES.nba, LEAGUES.wnba, LEAGUES.ncaab] : [];
-  const candidates = [];
-  for (const league of leagues) {
-    const scoreboard = await getJson(`${ESPN_BASE_URL}/${league.path}/scoreboard?dates=${eventDate(row.operating_date)}&limit=100`, fetchImpl);
-    const events = scoreboard.events || [];
-    // No partial scan: if a slate exceeds the safe limit, exact event identity is required.
-    if (events.length > 40) return null;
-    for (const event of events) {
-      if (!event.id) continue;
-      const summary = await getJson(`${ESPN_BASE_URL}/${league.path}/summary?event=${event.id}`, fetchImpl);
-      const matches = [...new Set(athleteEntries(summary).filter(entry => playerNameMatches(selectedPlayerPrefix(row), entry.name)).map(entry => entry.name))];
-      if (matches.length === 1) candidates.push({ league, event, summary, market: row.market, selection: row.selection.replace(selectedPlayerPrefix(row), matches[0]) });
+  const scan = async date => {
+    const candidates = [];
+    let scheduled = 0;
+    for (const league of leagues) {
+      const scoreboard = await getJson(`${ESPN_BASE_URL}/${league.path}/scoreboard?dates=${date}&limit=100`, fetchImpl);
+      const events = scoreboard.events || [];
+      scheduled += events.length;
+      // No partial scan: if a slate exceeds the safe limit, exact event identity is required.
+      if (events.length > 40) return null;
+      for (const event of events) {
+        if (!event.id) continue;
+        const summary = await getJson(`${ESPN_BASE_URL}/${league.path}/summary?event=${event.id}`, fetchImpl);
+        const matches = [...new Set(athleteEntries(summary).filter(entry => playerNameMatches(selectedPlayerPrefix(row), entry.name)).map(entry => entry.name))];
+        if (matches.length === 1) candidates.push({ league, event, summary, market: row.market, selection: row.selection.replace(selectedPlayerPrefix(row), matches[0]) });
+      }
     }
-  }
-  return candidates.length === 1 ? candidates[0] : null;
+    return { candidates, scheduled };
+  };
+  const sameDay = await scan(eventDate(row.operating_date));
+  if (!sameDay) return null;
+  if (sameDay.candidates.length === 1) return sameDay.candidates[0];
+  if (sameDay.candidates.length || sameDay.scheduled || !row.published_at || !followingDate(row.operating_date)) return null;
+  // Night-before picks are common. Only search tomorrow when the known sport
+  // has no games at all today, so a DNP today cannot inherit tomorrow's stats.
+  const nextDay = await scan(followingDate(row.operating_date));
+  const candidate = nextDay?.candidates.length === 1 ? nextDay.candidates[0] : null;
+  return candidate?.event?.date && Date.parse(candidate.event.date) > Date.parse(row.published_at) ? candidate : null;
 }
 
 function createGradingFetch(fetchImpl = fetch) {
@@ -311,6 +333,14 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
   const reviewed = reviewedAdjudication(row);
   if (reviewed) return reviewed;
   if (String(row.result || 'PENDING').toUpperCase() !== 'PENDING') return { status: 'SKIPPED', reason: 'Pick is already graded.' };
+  // Older manually published basketball Free Picks were indexed with the
+  // football default. Their exact points/rebounds/assists terms take priority
+  // over that erroneous metadata, while the player and date still must match
+  // one official game uniquely.
+  if (/^discord-manual-free-\d+$/.test(row.pick_id || '') && /^.+\b(?:over|under)\s*\d+(?:\.\d+)?\s+(?:points|rebounds|assists)\b/i.test(row.selection || '')
+    && /^(?:NFL|football)$/i.test(String(row.league || row.sport || '')) && !row.event) {
+    row = { ...row, league: '', sport: '' };
+  }
   const leading = leadingWagerTerms(row.selection);
   if (leading.conflictingLeagues) return { status: 'PENDING', reason: 'Conflicting explicit league labels in the published selection.' };
   const labelledLeague = leading.league && leagueFor({ league: leading.league });
@@ -382,7 +412,18 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
   } catch (error) {
     return { status: 'PENDING', reason: error.message };
   }
-  const event = resolved?.event || matchingEvent(row, scoreboard.events);
+  let event = resolved?.event || matchingEvent(row, scoreboard.events);
+  // A pick can be published the evening before its game. Use the next day's
+  // slate only for an explicit two-team matchup absent on the operating date;
+  // do not infer a player-only pick from a different day's box score.
+  if (!event?.id && row.event && row.published_at && followingDate(row.operating_date)) {
+    try {
+      const nextBoard = await getJson(`${ESPN_BASE_URL}/${league.path}/scoreboard?dates=${followingDate(row.operating_date)}&limit=100`, fetchImpl);
+      const candidate = matchingEvent(row, nextBoard.events);
+      if (candidate?.id && Number.isFinite(Date.parse(candidate.date || ''))
+        && Date.parse(candidate.date) > Date.parse(row.published_at)) event = candidate;
+    } catch { /* The next-day feed is optional; never guess a result. */ }
+  }
   if (!event?.id) return { status: 'PENDING', reason: 'No matching ESPN event was found.' };
   let summary;
   try {

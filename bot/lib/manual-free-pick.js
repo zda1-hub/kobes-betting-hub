@@ -29,6 +29,10 @@ function manualFreePickRecord(message, { operatingDate, guildId, channelId, appr
   if (!marketPattern.test(header) || !odds || evidence.length < 2 || selection.length > 256) return null;
 
   const event = lines.slice(1).find((line) => !/^[-•*]\s*/.test(line))?.replace(/:\s*$/, '').trim() || '';
+  const basketballProp = /\b(?:OVER|UNDER)\s*\d+(?:\.\d+)?\s+(?:points|rebounds|assists)\b/i.test(selection)
+    && !/\b(?:rushing|rush attempts?|receiving|passing|touchdown|field goals)\b/i.test(selection);
+  const sport = basketballProp ? 'basketball' : 'football';
+  const league = basketballProp ? '' : 'NFL';
   const createdAt = message.createdAt instanceof Date ? message.createdAt : new Date(message.createdTimestamp || Date.now());
   const date = operatingDate(createdAt);
   const pickId = `discord-manual-free-${message.id}`;
@@ -37,7 +41,7 @@ function manualFreePickRecord(message, { operatingDate, guildId, channelId, appr
   const authorId = String(message.author.id);
   return {
     row: {
-      pick_id: pickId, operating_date: date, event, sport: 'football', league: 'NFL', market: 'player_prop',
+      pick_id: pickId, operating_date: date, event, sport, league, market: 'player_prop',
       selection, published_line: line, published_odds_american: odds, units_risked: '', source_name: 'Kobe',
       credit_text: 'Kobe manual Free Pick', approver: authorId, approved_at: publishedAt, published_by: authorId,
       published_at: publishedAt, destination: '#free-picks', post_reference: postReference, status: 'PUBLISHED',
@@ -46,7 +50,7 @@ function manualFreePickRecord(message, { operatingDate, guildId, channelId, appr
       pick_id: pickId,
       source: { publish_mode: 'independent_writeup', post_url: postReference },
       approval: { exact_evidence: evidence },
-      analysis: { extraction: { sport: 'football', league: 'NFL', event, selection, line, odds_american: odds, sportsbook, units: '', source_claims: evidence } },
+      analysis: { extraction: { sport, league, event, selection, line, odds_american: odds, sportsbook, units: '', source_claims: evidence } },
     },
   };
 }
