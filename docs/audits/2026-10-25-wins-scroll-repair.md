@@ -28,3 +28,11 @@ A real-browser reverse-arrow test exposed a further defect: offsets were calcula
 Local real-feed browser checks: Next/Previous changed visible selections in the expected directions (Caleb Wilson to Donovan Mitchell on reverse); a pointer drag moved scrollLeft 250px; a native horizontal wheel gesture moved it 250px; vertical wheel over the carousel moved the document from 1384 to 1595 without capture. After pointer-focused arrow use, automatic movement resumed while focus-visible was false. Checked 320px/390px containment with no horizontal page overflow and header top 0; no layout or control additions. Coarse-pointer hover and reduced-motion behavior are exercised in deterministic tests, not claimed as a physical-phone test.
 
 Skills applied: interface-fit-review and web-verify. Existing rates, checkout, referral and result-grading data are unchanged.
+
+## Published verification
+
+PR #333 merged as e58a940. Cloudflare public-site version 906e819b-dceb-4e77-aa9f-500cf15bbf4b uploaded exactly index.html and home-results.js. No backend, CSS, billing, grading or referral deployment was needed. 22 targeted checks passed; the public SEO check passed for all 20 sitemap routes.
+
+Live browser check confirms the new cache-version URL and source. At the live mobile carousel, Next advanced scrollLeft 8124→8574.667 and Previous returned to 8124. At an actual 320 CSS-pixel width, Next/Previous also moved 4273.333→4022.667 in reverse; no horizontal document overflow and header top 0. After pointer-focused interaction, later observation showed automatic advancement to 5777.333 while focus-visible remained false. The live writeup rate still displayed 56.0%. Existing arrows remain in their original controls.
+
+Local real-input tests also verified drag, horizontal wheel and vertical page scroll. Physical-device touch testing was not performed. Browser screenshot tooling produced inconsistent crops while the page was zoomed; numeric DOM measurements and real control transitions are recorded separately rather than treating those crops as layout proof.
