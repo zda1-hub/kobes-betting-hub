@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildResultReply, resultReplyId, syncFreePickResultReplies } = require('./free-pick-result-replies');
+const { buildResultReply, resultReplyId, independentResultPostId, syncFreePickResultReplies } = require('./free-pick-result-replies');
 
 const row = {
   pick_id: '20260930-free-1', operating_date: '2026-09-30', status: 'PUBLISHED',
@@ -51,4 +51,27 @@ test('sync submits one reply request tied to the confirmed parent', async () => 
   assert.match(submitted.id, /^result-x-123456789-[a-f0-9]{20}$/);
   assert.match(submitted.body, /FREE PICK RESULT: WIN/);
   assert.match(submitted.body, /Original pick: https:\/\/x\.com\/kobesbettinghub\/status\/123456789/);
+});
+
+test('new verified wins and losses publish without an original X receipt and keep one ID if that receipt arrives later', async () => {
+  const published = [];
+  let parentId = null;
+  const fetchImpl = async (url, init) => {
+    if (String(url).includes('/parent?')) return parentId
+      ? new Response(JSON.stringify({ xPostId: parentId }))
+      : new Response('{}', { status: 404 });
+    published.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ status: 'published' }), { status: 201 });
+  };
+  const newer = { ...row, pick_id: 'manual-free-20261027', result_verified_at: '2026-10-27T02:00:00Z' };
+  for (const result of ['W', 'L']) {
+    const receipts = await syncFreePickResultReplies([{ ...newer, result }], '456', { environment, fetchImpl });
+    assert.equal(receipts[0].status, 'published');
+    assert.equal(published.at(-1).id, independentResultPostId(newer.pick_id));
+    assert.match(published.at(-1).body, new RegExp(`FREE PICK RESULT: ${result === 'W' ? 'WIN' : 'LOSS'}`));
+  }
+  parentId = '123456789';
+  await syncFreePickResultReplies([newer], '456', { environment, fetchImpl });
+  assert.equal(published.at(-1).id, independentResultPostId(newer.pick_id));
+  assert.match(published.at(-1).body, /Original pick: https:\/\/x\.com\/kobesbettinghub\/status\/123456789/);
 });
