@@ -357,6 +357,10 @@ test('verified Free Pick results require authorization and expose only the appro
     generatedAt: '2026-09-21T23:00:00.000Z', operatingDate: '2026-09-21',
     overall: { wins: 2, losses: 1, pushes: 1, voids: 0 },
     today: { wins: 1, losses: 1, pushes: 0, voids: 0 }, pending: 2,
+    recent: [
+      { date: '2026-09-21', gradedAt: '2026-09-21T22:30:00Z', selection: 'Test loss', line: '8.5', odds: '-110', result: 'L', postUrl: 'https://discord.com/channels/1/2/4' },
+      { date: '2026-09-21', gradedAt: '2026-09-21T22:00:00Z', selection: 'Test win', line: '+3.5', odds: '-110', result: 'W', postUrl: 'https://discord.com/channels/1/2/3' },
+    ],
     recentWins: [{ date: '2026-09-21', selection: 'Test free pick', line: '+3.5', odds: '-110', netUnits: 0.91, postUrl: 'https://discord.com/channels/1/2/3', secret: 'do not expose' }],
     bestWins: [], secret: 'do not expose',
   };
@@ -371,8 +375,10 @@ test('verified Free Pick results require authorization and expose only the appro
   const body = await response.text();
   assert.doesNotMatch(body, /do not expose/);
   assert.equal(JSON.parse(body).overall.losses, 1);
+  assert.deepEqual(JSON.parse(body).recent.map((item) => item.result), ['L', 'W']);
   assert.equal((await submit({ ...snapshot, generatedAt: '2026-09-20T23:00:00.000Z' })).status, 409);
   assert.equal((await submit({ ...snapshot, recentWins: [{ ...snapshot.recentWins[0], postUrl: 'https://example.com/private' }] })).status, 400);
+  assert.equal((await submit({ ...snapshot, recent: [{ ...snapshot.recent[0], result: 'PENDING' }] })).status, 400);
 });
 
 test('stores and serves a dated Instagram Story without publishing it to X', async () => {

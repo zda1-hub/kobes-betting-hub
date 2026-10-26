@@ -42,11 +42,31 @@ function publicWin(row) {
   };
 }
 
+function publicResult(row) {
+  return {
+    date: row.operating_date,
+    gradedAt: new Date(row.result_verified_at).toISOString(),
+    selection: String(row.selection || '').slice(0, 180),
+    line: String(row.published_line || '').slice(0, 80),
+    odds: String(row.published_odds_american || '').slice(0, 24),
+    final: String(row.score_or_outcome || '').slice(0, 120),
+    result: resultFor(row),
+    postUrl: row.post_reference,
+  };
+}
+
 function buildFreePickResults(rows, today, channelId, now = new Date()) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today || '')) throw new Error('Expected an operating date.');
   const published = freeRows(rows, channelId);
   const settled = published.filter(verified);
   const wins = settled.filter((row) => resultFor(row) === 'W');
+  // Order by verification time so a newly settled older pick appears in the
+  // public feed immediately, whether it won or lost.
+  const recent = [...settled].sort((a, b) =>
+    Date.parse(b.result_verified_at) - Date.parse(a.result_verified_at)
+    || String(b.operating_date).localeCompare(String(a.operating_date))
+    || String(b.published_at).localeCompare(String(a.published_at))
+  ).slice(0, 30).map(publicResult);
   const recentWins = [...wins].sort((a, b) =>
     String(b.operating_date).localeCompare(String(a.operating_date))
     || String(b.published_at).localeCompare(String(a.published_at))
@@ -58,7 +78,7 @@ function buildFreePickResults(rows, today, channelId, now = new Date()) {
     overall: counts(settled),
     today: counts(settled.filter((row) => row.operating_date === today)),
     pending: published.filter((row) => !verified(row)).length,
-    recentWins, bestWins,
+    recent, recentWins, bestWins,
   };
 }
 

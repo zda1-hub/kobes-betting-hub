@@ -152,3 +152,95 @@
   });
   initialize();
 })();
+
+(() => {
+  const section = document.querySelector('[data-free-results]');
+  if (!section) return;
+  const preview = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(location.hostname);
+  const publisher = preview ? '/preview-api' : 'https://bettinghub-publisher.kobedirwin.workers.dev/api';
+  const status = section.querySelector('[data-free-results-status]');
+  const body = section.querySelector('[data-free-results-body]');
+  const list = section.querySelector('[data-free-results-list]');
+  const labels = { W: 'WIN', L: 'LOSS', P: 'PUSH', V: 'VOID' };
+  const dateLabel = value => new Intl.DateTimeFormat('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Phoenix'
+  }).format(new Date(`${value}T12:00:00-07:00`));
+  let loading = false;
+  let lastGeneratedAt = '';
+  let lastHealthyStatus = '';
+
+  async function loadResults() {
+    if (loading) return;
+    loading = true;
+    try {
+      const response = await fetch(`${publisher}/free-pick/results`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Results request failed: ${response.status}`);
+      const data = await response.json();
+      const { overall, pending, recent, generatedAt } = data;
+      if (!overall || !['wins', 'losses', 'pushes', 'voids'].every(key => Number.isSafeInteger(overall[key]))
+        || !Number.isSafeInteger(pending) || !Array.isArray(recent) || !Number.isFinite(Date.parse(generatedAt))) {
+        throw new Error('Results feed is incomplete.');
+      }
+      if (generatedAt === lastGeneratedAt) {
+        if (status.textContent !== lastHealthyStatus) status.textContent = lastHealthyStatus;
+        return;
+      }
+      section.querySelector('[data-free-results-wins]').textContent = overall.wins.toLocaleString();
+      section.querySelector('[data-free-results-losses]').textContent = overall.losses.toLocaleString();
+      section.querySelector('[data-free-results-pending]').textContent = pending.toLocaleString();
+      section.querySelector('[data-free-results-updated]').textContent = `Verified feed updated ${new Intl.DateTimeFormat('en-US', {
+        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Phoenix'
+      }).format(new Date(generatedAt))} MST`;
+      const entries = document.createDocumentFragment();
+      for (const pick of recent) {
+        if (!labels[pick?.result] || !/^https:\/\/discord\.com\/channels\/\d+\/\d+\/\d+$/.test(pick.postUrl || '')) continue;
+        const item = document.createElement('li');
+        const link = document.createElement('a');
+        link.className = 'free-results-entry';
+        link.href = pick.postUrl;
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        const head = document.createElement('span');
+        head.className = 'free-results-entry-head';
+        const date = document.createElement('span');
+        date.textContent = dateLabel(pick.date);
+        const badge = document.createElement('span');
+        badge.className = `free-results-badge is-${pick.result.toLowerCase()}`;
+        badge.textContent = labels[pick.result];
+        head.append(date, badge);
+        const selection = document.createElement('strong');
+        selection.textContent = pick.selection;
+        const details = document.createElement('span');
+        details.textContent = [
+          pick.line && !pick.selection.includes(pick.line) ? pick.line : '',
+          pick.odds && !pick.selection.includes(pick.odds) ? `(${pick.odds})` : '',
+          pick.final ? `Final: ${pick.final}` : '',
+          'Original Discord post ↗'
+        ].filter(Boolean).join(' · ');
+        link.append(head, selection, details);
+        item.append(link);
+        entries.append(item);
+      }
+      list.replaceChildren(entries);
+      section.querySelector('[data-free-results-list-title]').textContent = `Latest verified picks (${list.children.length})`;
+      status.textContent = overall.pushes || overall.voids
+        ? `Also recorded: ${overall.pushes} pushes and ${overall.voids} voids.`
+        : `${overall.wins + overall.losses} verified decisions. Results update automatically after grading.`;
+      if (!list.children.length && overall.wins + overall.losses) {
+        status.textContent = 'The record is available; individual results are still syncing.';
+      }
+      lastHealthyStatus = status.textContent;
+      lastGeneratedAt = generatedAt;
+      body.hidden = false;
+    } catch (error) {
+      status.textContent = body.hidden
+        ? 'Verified results are temporarily unavailable. Please check back shortly.'
+        : 'The latest update is delayed. Showing the last verified results loaded here.';
+      console.warn('Unable to load verified free-pick results.', error);
+    } finally { loading = false; }
+  }
+
+  void loadResults();
+  setInterval(() => { if (document.visibilityState === 'visible') void loadResults(); }, 60_000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void loadResults(); });
+})();
