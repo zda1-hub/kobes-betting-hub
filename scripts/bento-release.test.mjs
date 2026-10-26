@@ -165,17 +165,17 @@ test('legal and portal artifacts retain current approved operator and secure acc
 
 test('wins motion respects reduced motion, focus, hover, manual browsing and four-second idle', async () => {
   const source = await read('home-results.js');
-  for (const reduce of [false,true]) {
+  for (const reduce of [false,true]) for (const hoverCapable of [true,false]) {
     const frames=[], listeners={}, controlsListeners={}, buttons={};
     const timers=new Map(); let timerId=0, now=0;
     for(const name of ['previous','next']) buttons[name]={addEventListener(type,fn){this[type]=fn;}};
-    let focused=false,scroll=0;
+    let focused=false,focusVisible=true,scroll=0;
     const controls={contains(){return focused;},addEventListener(type,fn){controlsListeners[type]=fn;},querySelector(selector){return buttons[selector.match(/wins-(\w+)/)[1]];}};
-    const rail={get scrollLeft(){return scroll;},set scrollLeft(value){scroll=Math.floor(value);},closest(){return controls;},addEventListener(type,fn){listeners[type]=fn;},getBoundingClientRect(){return {top:20,bottom:200};}};
-    const track={parentElement:rail,children:[],hasAttribute(name){return name==='data-wins-only';},replaceChildren(...cards){this.children=cards;this.layout();},prepend(...cards){this.children.unshift(...cards);this.layout();},append(...cards){this.children.push(...cards);this.layout();},layout(){this.children.forEach((card,i)=>card.offsetLeft=i*262);}};
+    const rail={get scrollLeft(){return scroll;},set scrollLeft(value){scroll=Math.round((value-12)/262)*262+12;},closest(){return controls;},addEventListener(type,fn){listeners[type]=fn;},getBoundingClientRect(){return {top:20,bottom:200};}};
+    const track={parentElement:rail,offsetLeft:0,children:[],hasAttribute(name){return name==='data-wins-only';},replaceChildren(...cards){this.children=cards;this.layout();},prepend(...cards){this.children.unshift(...cards);this.layout();},append(...cards){this.children.push(...cards);this.layout();},layout(){this.children.forEach((card,i)=>card.offsetLeft=12+i*262);}};
     const create=()=>({children:[],append(...nodes){this.children.push(...nodes);},setAttribute(){},cloneNode(){return create();},getBoundingClientRect(){return {width:250};}});
-    const document={hidden:false,activeElement:{},querySelector(selector){return selector==='[data-verified-results-track]'?track:null;},querySelectorAll(){return [];},createElement:create};
-    vm.runInNewContext(source,{KBHResultMetadata:{publicMetadata:item=>item},document,location:{hostname:'kobesbettinghub.com'},fetch:async()=>({ok:true,json:async()=>({recent:[{result:'W',selection:'A'},{result:'W',selection:'B'}]})}),performance:{now:()=>now},matchMedia:query=>({matches:query.includes('prefers-reduced-motion') && reduce,addEventListener(){}}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>frames.push(fn),setTimeout(fn,delay){assert.equal(delay,4000);const id=++timerId;timers.set(id,{fn,at:now+delay});return id;},clearTimeout:id=>timers.delete(id),innerHeight:844});
+    const document={hidden:false,activeElement:{matches(){return focusVisible;}},querySelector(selector){return selector==='[data-verified-results-track]'?track:null;},querySelectorAll(){return [];},createElement:create};
+    vm.runInNewContext(source,{KBHResultMetadata:{publicMetadata:item=>item},document,location:{hostname:'kobesbettinghub.com'},fetch:async()=>({ok:true,json:async()=>({recent:[{result:'W',selection:'A'},{result:'W',selection:'B'}]})}),performance:{now:()=>now},matchMedia:query=>({matches:query.includes('prefers-reduced-motion') ? reduce : query.includes('hover:') ? hoverCapable : false,addEventListener(){}}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>frames.push(fn),setTimeout(fn,delay){assert.equal(delay,4000);const id=++timerId;timers.set(id,{fn,at:now+delay});return id;},clearTimeout:id=>timers.delete(id),innerHeight:844});
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(frames.length,1,'carousel must initialize without a swallowed browser API error');
     const advance=duration=>{const end=now+duration;while(now<end){now=Math.min(now+16,end);for(const [id,timer] of [...timers]){if(timer.at<=now){timers.delete(id);timer.fn();}}const frame=frames.shift();assert.equal(typeof frame,'function');frame(now);}};
@@ -188,8 +188,11 @@ test('wins motion respects reduced motion, focus, hover, manual browsing and fou
     advance(200);assert.equal(scroll,reduce?manuallyPaused:initial,'normal motion resumes and wraps after idle');
     focused=true;controlsListeners.focusin();const focusPosition=scroll;advance(12000);assert.equal(scroll,focusPosition,'focus must hold the pause even after the idle timer');
     focused=false;controlsListeners.focusout();advance(10100);const resumed=scroll;assert.equal(resumed,reduce?focusPosition:focusPosition===initial?initial+262:initial);
-    listeners.mouseenter();advance(12000);assert.equal(scroll,resumed,'hover must pause automatic movement');
-    listeners.mouseleave();advance(3990);assert.equal(scroll,resumed);
-    buttons.next.click();assert.notEqual(scroll,resumed,'manual next remains usable with reduced motion');
+    listeners.mouseenter();advance(6100);assert.equal(scroll,reduce||hoverCapable?resumed:resumed===initial?initial+262:initial,'only real hover may pause automatic movement');
+    const afterHover=scroll;listeners.mouseleave();advance(3990);assert.equal(scroll,afterHover);
+    buttons.next.click();assert.notEqual(scroll,afterHover,'manual next remains usable with reduced motion');
+    buttons.previous.click();assert.equal(scroll,afterHover,'previous must return to the preceding card including the native 12px snap inset');
+    focused=true;focusVisible=false;controlsListeners.focusin();buttons.next.click();const pointerFocused=scroll;advance(10100);assert.equal(scroll,reduce?pointerFocused:pointerFocused===initial?initial+262:initial,'pointer focus must not permanently block automatic resume');
+    let horizontalPrevented=false;listeners.wheel({deltaX:8,deltaY:0,preventDefault(){horizontalPrevented=true;}});assert.equal(horizontalPrevented,false,'small trackpad deltas must use native wheel accumulation, not snap-back assignments');
   }
 });

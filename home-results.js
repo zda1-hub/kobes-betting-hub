@@ -8,22 +8,28 @@ const setupWins = track => {
     if (side === 'before') track.prepend(...copies); else track.append(...copies);
   }
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const fineHover = matchMedia('(hover: hover) and (pointer: fine)');
   const mobile = matchMedia('(max-width:700px)');
   let lastStep = performance.now();
   let manual = reduced.matches, hovered = false, last = 0, loop = 0, position = 0, pointer, startX, startScroll;
   let resumeTimer;
-  const pause = () => { manual = true; clearTimeout(resumeTimer); resumeTimer = setTimeout(() => { if(pointer!==undefined || controls.contains(document.activeElement)){pause();return;} manual = reduced.matches; position=rail.scrollLeft;last=0;lastStep=performance.now(); },4000); };
-  const measure = () => { loop = track.children[originals.length * 2].offsetLeft - track.children[originals.length].offsetLeft; position = loop; rail.scrollLeft = position; };
+  const keyboardFocused = () => controls.contains(document.activeElement)
+    && (document.activeElement?.matches?.(':focus-visible') ?? true);
+  const pause = () => { manual = true; clearTimeout(resumeTimer); resumeTimer = setTimeout(() => { if(pointer!==undefined || keyboardFocused()){pause();return;} manual = reduced.matches; position=rail.scrollLeft;last=0;lastStep=performance.now(); },4000); };
+  const measure = () => { loop = track.children[originals.length * 2].offsetLeft - track.children[originals.length].offsetLeft; position = loop + track.children[0].offsetLeft - track.offsetLeft; rail.scrollLeft = position; };
   const normalize = (value = rail.scrollLeft) => { if (!loop) return; if(value < loop) value += loop; if(value >= loop*2) value -= loop; rail.scrollLeft = value; position = value; };
-  const browse = (direction, user = true) => { if(user) pause(); const origin = track.children[0].offsetLeft; const offsets = [...track.children].map(card => card.offsetLeft - origin); const current = rail.scrollLeft; const target = direction > 0 ? offsets.find(offset => offset > current + 2) : offsets.filter(offset => offset < current - 2).at(-1); rail.scrollLeft = target ?? current + direction * (originals[0].getBoundingClientRect().width + 12); normalize(); };
+  const browse = (direction, user = true) => { if(user) pause(); const offsets = [...track.children].map(card => card.offsetLeft - track.offsetLeft); const current = rail.scrollLeft; const target = direction > 0 ? offsets.find(offset => offset > current + 2) : offsets.filter(offset => offset < current - 2).at(-1); rail.scrollLeft = target ?? current + direction * (originals[0].getBoundingClientRect().width + 12); normalize(); };
   controls.querySelector('[data-wins-previous]').addEventListener('click', () => browse(-1));
   controls.querySelector('[data-wins-next]').addEventListener('click', () => browse(1));
-  rail.addEventListener('mouseenter', () => hovered = true);
+  rail.addEventListener('mouseenter', () => hovered = fineHover.matches);
   rail.addEventListener('mouseleave', () => { hovered = false; pause(); });
   controls.addEventListener('focusin', pause);
   controls.addEventListener('focusout', pause);
   for (const type of ['touchstart','touchmove','touchend']) rail.addEventListener(type, pause, {passive:true});
-  rail.addEventListener('wheel', event => { pause(); if(!event.shiftKey && Math.abs(event.deltaY)>=Math.abs(event.deltaX))return; event.preventDefault(); rail.scrollLeft += event.shiftKey?event.deltaY:event.deltaX; normalize(); }, {passive:false});
+  // Native wheel handling accumulates trackpad deltas before scroll snapping.
+  // Assigning scrollLeft on every small delta can snap straight back to the
+  // same card. Leave both horizontal browsing and vertical page scroll native.
+  rail.addEventListener('wheel', pause, {passive:true});
   rail.addEventListener('keydown', event => { if(['ArrowLeft','ArrowRight'].includes(event.key)){event.preventDefault();browse(event.key==='ArrowRight'?1:-1);} });
   rail.addEventListener('pointerdown', event => { pause(); if(event.pointerType==='touch'||event.button!==0) return;pointer=event.pointerId; startX=event.clientX;startScroll=rail.scrollLeft;rail.setPointerCapture(pointer);rail.classList.add('is-dragging'); });
   rail.addEventListener('pointermove', event => { if(pointer!==event.pointerId) return;event.preventDefault();rail.scrollLeft=startScroll-(event.clientX-startX); });
