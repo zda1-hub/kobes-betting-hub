@@ -30,7 +30,7 @@ const { buildPublicResults } = require('./lib/public-results');
 const { writeupChannelIds } = require('./lib/writeup-record');
 const { publicResultRows } = require('./lib/public-result-rows');
 const { recordEligibility } = require('./lib/record-eligibility');
-const { approvalUserIds } = require('./lib/approval-access');
+const { approvalUserIds, arbitrageApprovalUserIds } = require('./lib/approval-access');
 const { MARKER: COLLECTOR_HEALTH_MARKER, collectorHealthPayload } = require('./lib/collector-health');
 const { recoverResultsBacklog, readResultsBacklogCursor } = require('./lib/results-backlog');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
@@ -443,8 +443,9 @@ async function startArbitragePaperTest() {
     windows: String(process.env.ARBITRAGE_WINDOWS_ARIZONA || '07:00-18:00').split(',').map(value => value.trim()).filter(Boolean),
     intervalMinutes: Number(process.env.ARBITRAGE_SCAN_INTERVAL_MINUTES || 5),
     memberPostingEnabled: process.env.ARBITRAGE_MEMBER_POSTING_ENABLED === 'true',
-    isApprover: ({ userId, ownerId }) => userId === ownerId || pickApproverUserIds.has(userId)
+    isApprover: ({ userId, ownerId }) => userId === ownerId || arbitrageApprovalUserIds(process.env.PICK_APPROVER_USER_IDS).has(userId)
   });
+  console.log('Arbitrage approval access ready:', JSON.stringify({ reviewerIds: [...arbitrageApprovalUserIds(process.env.PICK_APPROVER_USER_IDS)] }));
   const receipt = await arbitragePaperMonitor.start();
   console.log('Arbitrage monitor receipt:', JSON.stringify({ ...receipt, approvalChannelId: reviewChannel.id,
     destinationChannelId: destinationChannel.id, memberPostingEnabled: process.env.ARBITRAGE_MEMBER_POSTING_ENABLED === 'true' }));
