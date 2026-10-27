@@ -1651,3 +1651,146 @@ test('recovered historical source keeps its evidenced campaign rather than lifet
   assert.equal(summary.ctas[0].source,'instagram');
   assert.equal(summary.ctas[0].campaign,'new_launch');
 });
+
+const readyCancellationPortal = id => ({ id, active: true, features: { subscription_cancel: { enabled: true, mode: 'at_period_end' } } });
+
+test('portal readiness rejects payment-only, inactive and immediate-cancel configurations', () => {
+  for (const config of [null, { id: 'bpc_payment', active: true, features: {} }, { ...readyCancellationPortal('bpc_off'), active: false }, { id: 'bpc_now', active: true, features: { subscription_cancel: { enabled: true, mode: 'immediately' } } }]) {
+    assert.equal(workerTest.cancellationPortalReady(config), false);
+  }
+  assert.equal(workerTest.cancellationPortalReady(readyCancellationPortal('bpc_ok')), true);
+});
+
+test('portal uses an enabled explicit configuration without changing Stripe settings', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), method: options.method || 'GET' });
+    return Response.json(readyCancellationPortal('bpc_explicit'));
+  };
+  assert.equal(await workerTest.cancellationPortalConfiguration({ STRIPE_SECRET_KEY: 'sk_test_only', STRIPE_PORTAL_CONFIGURATION_ID: 'bpc_explicit' }), 'bpc_explicit');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, 'GET');
+  assert.match(calls[0].url, /billing_portal\/configurations\/bpc_explicit$/);
+});
+
+test('payment-only default gets dedicated end-of-period cancellation without touching cards or subscriptions', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const path = new URL(url).pathname;
+    const body = new URLSearchParams(options.body);
+    calls.push({ path, method: options.method || 'GET', body, headers: new Headers(options.headers) });
+    if (options.method === 'POST') return Response.json(readyCancellationPortal('bpc_managed'));
+    if (String(url).includes('is_default=true')) return Response.json({ data: [{ id: 'bpc_payment_only', active: true, features: { subscription_cancel: { enabled: false } } }] });
+    return Response.json({ data: [] });
+  };
+  const env = { STRIPE_SECRET_KEY: 'sk_test_only' };
+  assert.equal(await workerTest.cancellationPortalConfiguration(env), 'bpc_managed');
+  const writes = calls.filter(call => call.method === 'POST');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].path, '/v1/billing_portal/configurations');
+  assert.equal(writes[0].body.get('features[subscription_cancel][enabled]'), 'true');
+  assert.equal(writes[0].body.get('features[subscription_cancel][mode]'), 'at_period_end');
+  assert.equal(writes[0].body.get('features[subscription_cancel][proration_behavior]'), 'none');
+  assert.equal(writes[0].body.get('features[payment_method_update][enabled]'), 'true');
+  assert.equal(writes[0].body.get('features[invoice_history][enabled]'), 'true');
+  assert.equal(writes[0].headers.get('Idempotency-Key'), 'kbh-self-service-cancel-v1');
+  assert.equal(writes[0].body.get('default_return_url'), 'https://kobesbettinghub.com/managemembership');
+});
+
+test('managed cancellation configuration is reused and unrelated configurations are ignored', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let calls = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    assert.notEqual(options.method, 'POST'); calls++;
+    if (String(url).includes('is_default=true')) return Response.json({ data: [] });
+    return Response.json({ data: [readyCancellationPortal('bpc_unrelated'), { ...readyCancellationPortal('bpc_kbh'), metadata: { kbh_purpose: 'kbh-self-service-cancel-v1' } }] });
+  };
+  assert.equal(await workerTest.cancellationPortalConfiguration({ STRIPE_SECRET_KEY: 'sk_test_only' }), 'bpc_kbh');
+  assert.equal(calls, 2);
+});
+
+test('cancellation configuration provider failure fails closed instead of opening payment-only portal', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => Response.json({ error: { message: 'Stripe unavailable' } }, { status: 503 });
+  await assert.rejects(workerTest.cancellationPortalConfiguration({ STRIPE_SECRET_KEY: 'sk_test_only' }), /Stripe unavailable/);
+});
+
+test('authenticated portal callback pins cancellation-enabled config even when stored subscription pointer is absent', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const env = {
+    DISCORD_CLIENT_ID: 'client_test', DISCORD_CLIENT_SECRET: 'secret_test',
+    DISCORD_BOT_TOKEN: 'bot_test', DISCORD_GUILD_ID: 'guild_test',
+    DISCORD_MEMBER_ROLE_ID: 'role_test', DISCORD_OAUTH_STATE_SECRET: 'state_test',
+    DISCORD_REDIRECT_URI: 'https://worker.test/discord/callback',
+    SUPABASE_URL: 'https://database.test', SUPABASE_SECRET_KEY: 'db_test',
+    STRIPE_SECRET_KEY: 'sk_test_local_only',
+  };
+  const writes = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const target = String(url);
+    if (target.endsWith('/oauth2/token')) return Response.json({ access_token: 'oauth_test' });
+    if (target.endsWith('/users/@me')) return Response.json({ id: 'discord_test' });
+    if (target.includes('/membership_customers?')) return Response.json([{ stripe_customer_id: 'cus_member', current_subscription_id: null }]);
+    if (target.includes('/v1/customers/cus_member')) return Response.json({ id: 'cus_member', metadata: {} });
+    if (target.includes('/billing_portal/configurations?is_default=true')) return Response.json({ data: [{ id: 'bpc_payment_only', active: true, features: {} }] });
+    if (target.includes('/billing_portal/configurations?active=true')) return Response.json({ data: [{ ...readyCancellationPortal('bpc_managed'), metadata: { kbh_purpose: 'kbh-self-service-cancel-v1' } }] });
+    if (target.endsWith('/billing_portal/sessions')) {
+      writes.push(new URLSearchParams(options.body));
+      return Response.json({ url: 'https://billing.stripe.com/p/session/test_only' });
+    }
+    if (target.endsWith('/api_call_events') || target.endsWith('/membership_events') || target.endsWith('/oauth2/token/revoke')) return new Response(null, { status: 204 });
+    throw new Error(`Unexpected external operation: ${new URL(target).pathname}`);
+  };
+  const state = await workerTest.createDiscordState({ intent: 'portal' }, env);
+  const response = await worker.fetch(new Request(`https://worker.test/discord/callback?code=test&state=${encodeURIComponent(state)}`), env);
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get('location'), 'https://billing.stripe.com/p/session/test_only');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].get('customer'), 'cus_member');
+  assert.equal(writes[0].get('configuration'), 'bpc_managed');
+});
+
+test('coupon provisioning failure cannot block an authenticated cancellation flow', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const env = {
+    DISCORD_CLIENT_ID: 'client_test', DISCORD_CLIENT_SECRET: 'secret_test',
+    DISCORD_BOT_TOKEN: 'bot_test', DISCORD_GUILD_ID: 'guild_test',
+    DISCORD_MEMBER_ROLE_ID: 'role_test', DISCORD_OAUTH_STATE_SECRET: 'state_test',
+    DISCORD_REDIRECT_URI: 'https://worker.test/discord/callback',
+    SUPABASE_URL: 'https://database.test', SUPABASE_SECRET_KEY: 'db_test',
+    STRIPE_SECRET_KEY: 'sk_test_local_only', STRIPE_MONTHLY_PRICE_ID: 'price_monthly', STRIPE_RETENTION_COUPON_ID: 'coupon_template',
+  };
+  let sessionValues;
+  globalThis.fetch = async (url, options = {}) => {
+    const target = String(url);
+    if (target.endsWith('/oauth2/token')) return Response.json({ access_token: 'oauth_test' });
+    if (target.endsWith('/users/@me')) return Response.json({ id: 'discord_test' });
+    if (target.includes('/membership_customers?')) return Response.json([{ stripe_customer_id: 'cus_member', current_subscription_id: 'sub_member' }]);
+    if (target.includes('/v1/customers/cus_member')) return Response.json({ id: 'cus_member', metadata: {} });
+    if (target.includes('/v1/subscriptions/sub_member')) return Response.json({ id: 'sub_member', customer: 'cus_member', status: 'active', items: { data: [{ price: { id: 'price_monthly' } }] }, metadata: {}, discounts: [] });
+    if (target.endsWith('/v1/coupons')) return Response.json({ error: { message: 'Coupon provisioning failed' } }, { status: 503 });
+    if (target.includes('/billing_portal/configurations?is_default=true')) return Response.json({ data: [readyCancellationPortal('bpc_enabled')] });
+    if (target.endsWith('/billing_portal/sessions')) {
+      sessionValues = new URLSearchParams(options.body);
+      return Response.json({ url: 'https://billing.stripe.com/p/session/test_only' });
+    }
+    if (target.endsWith('/api_call_events') || target.endsWith('/membership_events') || target.endsWith('/oauth2/token/revoke')) return new Response(null, { status: 204 });
+    throw new Error(`Unexpected external operation: ${new URL(target).pathname}`);
+  };
+  const state = await workerTest.createDiscordState({ intent: 'portal' }, env);
+  const response = await worker.fetch(new Request(`https://worker.test/discord/callback?code=test&state=${encodeURIComponent(state)}`), env);
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get('location'), 'https://billing.stripe.com/p/session/test_only');
+  assert.equal(sessionValues.get('configuration'), 'bpc_enabled');
+  assert.equal(sessionValues.get('flow_data[type]'), 'subscription_cancel');
+  assert.equal(sessionValues.get('flow_data[subscription_cancel][subscription]'), 'sub_member');
+  assert.equal(sessionValues.get('flow_data[subscription_cancel][retention][coupon_offer][coupon]'), null);
+});
