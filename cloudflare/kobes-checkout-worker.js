@@ -1113,6 +1113,46 @@ function portalSessionValues(membership, customer, subscription, env, memberCoup
   return values;
 }
 
+// Do not depend on a dashboard default that can silently become payment-only.
+// This configuration changes available self-service actions, never a subscription.
+const CANCELLATION_PORTAL_VERSION = 'kbh-self-service-cancel-v1';
+function cancellationPortalReady(config) {
+  return Boolean(config?.id && config.active && config.features?.subscription_cancel?.enabled
+    && config.features.subscription_cancel.mode === 'at_period_end');
+}
+
+async function cancellationPortalConfiguration(env) {
+  const configured = env.STRIPE_PORTAL_CONFIGURATION_ID
+    ? await stripeGet(env, `/billing_portal/configurations/${encodeURIComponent(env.STRIPE_PORTAL_CONFIGURATION_ID)}`)
+    : (await stripeGet(env, '/billing_portal/configurations?is_default=true&limit=1')).data?.[0];
+  if (cancellationPortalReady(configured)) return configured.id;
+
+  const existing = await stripeGet(env, '/billing_portal/configurations?active=true&limit=100');
+  const managed = existing.data?.find(config => config.metadata?.kbh_purpose === CANCELLATION_PORTAL_VERSION && cancellationPortalReady(config));
+  if (managed) return managed.id;
+
+  // A dedicated configuration avoids changing other uses of the account default.
+  const created = await stripe(env, '/billing_portal/configurations', {
+    name: 'KBH membership management',
+    'metadata[kbh_purpose]': CANCELLATION_PORTAL_VERSION,
+    'features[subscription_cancel][enabled]': 'true',
+    'features[subscription_cancel][mode]': 'at_period_end',
+    'features[subscription_cancel][proration_behavior]': 'none',
+    'features[payment_method_update][enabled]': 'true',
+    'features[invoice_history][enabled]': 'true',
+    'features[customer_update][enabled]': 'true',
+    'features[customer_update][allowed_updates][0]': 'email',
+    'features[customer_update][allowed_updates][1]': 'name',
+    'features[subscription_update][enabled]': 'false',
+    'business_profile[headline]': 'Manage your Kobe’s Betting Hub membership',
+    'business_profile[terms_of_service_url]': `${siteOrigin(env)}/terms`,
+    'business_profile[privacy_policy_url]': `${siteOrigin(env)}/privacy`,
+    default_return_url: `${siteOrigin(env)}/managemembership`,
+  }, { idempotencyKey: CANCELLATION_PORTAL_VERSION });
+  if (!cancellationPortalReady(created)) throw new Error('Subscription cancellation is temporarily unavailable. Contact support to stop renewal.');
+  return created.id;
+}
+
 async function ensurePerMemberRetentionCoupon(env, customer, percent = 50) {
   if (!env.STRIPE_RETENTION_COUPON_ID || !customer?.id || customer.metadata?.[RETENTION_USED_METADATA_KEY] === 'true') return '';
   if (![50, 75].includes(percent)) throw new Error('Invalid retention discount.');
@@ -1811,11 +1851,18 @@ async function finishDiscordConnection(request, env) {
       const subscription = membership.current_subscription_id
         ? await stripeGet(env, `/subscriptions/${encodeURIComponent(membership.current_subscription_id)}?expand[]=discounts`)
         : null;
-      const redemptionRecorded = subscription ? await recordRetentionRedemption(env, subscription, null, customer) : false;
-      const memberCouponId = !monthlyRetentionEligible(subscription, env) || redemptionRecorded || retentionOfferUsed(customer, subscription, env.STRIPE_RETENTION_COUPON_ID)
-        ? ''
-        : await ensurePerMemberRetentionCoupon(env, customer);
-      const portalValues = portalSessionValues(membership, customer, subscription, env, memberCouponId);
+      let memberCouponId = '';
+      try {
+        const redemptionRecorded = subscription ? await recordRetentionRedemption(env, subscription, null, customer) : false;
+        if (monthlyRetentionEligible(subscription, env) && !redemptionRecorded && !retentionOfferUsed(customer, subscription, env.STRIPE_RETENTION_COUPON_ID)) {
+          memberCouponId = await ensurePerMemberRetentionCoupon(env, customer);
+        }
+      } catch {
+        // An optional discount must never prevent a member from canceling.
+        console.error('Optional portal retention offer unavailable; continuing to cancellation.');
+      }
+      const portalConfigurationId = await cancellationPortalConfiguration(env);
+      const portalValues = portalSessionValues(membership, customer, subscription, { ...env, STRIPE_PORTAL_CONFIGURATION_ID: portalConfigurationId }, memberCouponId);
       const offersRetention = Boolean(portalValues['flow_data[subscription_cancel][retention][coupon_offer][coupon]']);
       const portal = await stripe(env, '/billing_portal/sessions', portalValues, {
         idempotencyKey: crypto.randomUUID(),
@@ -4107,6 +4154,8 @@ export const __test = {
   qualifyingReferralCharge,
   voidReferralForInvoice,
   portalSessionValues,
+  cancellationPortalReady,
+  cancellationPortalConfiguration,
   monthlyRetentionEligible,
   referralPayoutAmount,
   referralRecipientIsReady,
