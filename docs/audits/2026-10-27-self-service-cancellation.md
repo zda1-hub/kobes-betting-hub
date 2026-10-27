@@ -15,3 +15,7 @@ Verification: 138 tests passed across checkout Worker, monthly trial, member wel
 Limitations: no real subscription canceled, trial started, card removed or charge created. Live authenticated end-to-end Stripe cancellation not verified. Dedicated configuration is selected/provisioned on the next authenticated management visit; deployment health alone does not prove portal creation or customer cancellation. Owner login requested for independent KBH Stripe settings verification.
 
 Rollback: redeploy previous checkout version. Dedicated portal configuration, if provisioned, does not change default or current subscriptions; do not delete while sessions may use it.
+
+## Production release follow-up
+
+PR #341 merged as 6912e8f (implementation c8fac2a). Checkout Worker deployed as 3cece6e9-f3bb-46af-821b-935ba1003171. Live /health returns that version. All five production smoke probes passed: checkout health, publisher health, current Free Pick API, public Free Pick page and Free Pick client asset. No static site deployment performed. Render/Discord Changes notified with scope, version, validation and limitations. Live authenticated portal provisioning and customer cancellation remain unverified, not implied by health/smoke.
