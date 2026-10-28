@@ -150,6 +150,37 @@ async function recordSourcePost(input) {
   return result?.rows?.[0]?.id || null;
 }
 
+// Reconsider same-day X posts that were incorrectly finalized when the
+// extraction quota was exhausted before the retry guard was deployed. The
+// latest candidate state controls replay, so a completed retry drops out of
+// this list; a model-budget deferral remains eligible for the next scan.
+async function quotaFailedSourcePosts(date, firstSeenBefore) {
+  const result = await query(`
+    SELECT s.external_post_id, s.source_handle, s.posted_at, s.raw_text, s.media_urls
+    FROM source_posts s
+    JOIN LATERAL (
+      SELECT c.status, c.rejection_codes
+      FROM pick_candidates c
+      WHERE c.source_post_id=s.id
+      ORDER BY c.updated_at DESC, c.created_at DESC
+      LIMIT 1
+    ) latest ON true
+    WHERE s.platform='Twitter/X'
+      AND s.first_seen_at < $2::timestamptz
+      AND (s.posted_at AT TIME ZONE 'America/Phoenix')::date=$1::date
+      AND (
+        (latest.status='REJECTED' AND 'EXTRACTION_FAILED'=ANY(latest.rejection_codes))
+        OR (latest.status='DEFERRED' AND latest.rejection_codes &&
+          ARRAY['MODEL_CALL_LIMIT_REACHED','BUDGET_EXCEEDED','EXTRACTION_FAILED']::text[])
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM pick_candidates queued
+        JOIN approval_cards card ON card.candidate_id=queued.id
+        WHERE queued.source_post_id=s.id
+      )`, [date, firstSeenBefore]);
+  return result?.rows || [];
+}
+
 function usageFromResponse(response) {
   const usage = response?.usage || {};
   const inputDetails = usage.input_tokens_details || {};
@@ -561,6 +592,7 @@ module.exports = {
   recordPublicationResult,
   recordRecapRun,
   recordSourcePost,
+  quotaFailedSourcePosts,
   recordWorkflowEvent,
   readAuditTimeline,
   sha256,

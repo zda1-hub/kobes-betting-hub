@@ -11,6 +11,7 @@ const {
   recordApprovalCard,
   approvalSendWasOnlyRateLimited,
   recordSourcePost,
+  quotaFailedSourcePosts,
   recordWorkflowEvent,
   upsertPickCandidate
 } = require('./audit-store');
@@ -805,6 +806,24 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
   }
 
   const date = pacificDate();
+  // On the day the extraction-quota retry fix went live, older failed posts
+  // had already been marked handled. Recover only those audited failures,
+  // from stored source text/media, without spending more X fetch credits or
+  // replaying an approval card that was already sent.
+  let quotaRecoveryRows = [];
+  if (date === '2026-10-28') {
+    try {
+      quotaRecoveryRows = await quotaFailedSourcePosts(date, '2026-10-28T20:36:25Z');
+    } catch (error) {
+      console.warn(`Quota-failure recovery lookup unavailable: ${error.message}`);
+    }
+  }
+  const quotaRecoveryByHandle = new Map();
+  for (const row of quotaRecoveryRows) {
+    if (!quotaRecoveryByHandle.has(row.source_handle)) quotaRecoveryByHandle.set(row.source_handle, []);
+    quotaRecoveryByHandle.get(row.source_handle).push(row);
+  }
+  if (quotaRecoveryRows.length) console.log(`Rechecking ${quotaRecoveryRows.length} audited same-day X extraction failure(s).`);
   // Check the priority sports first, but do not use their slate as a global
   // gate: baseball, basketball, hockey, soccer, and other configured sports
   // must still be collected when football is off.
@@ -865,11 +884,35 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
     });
     const responses = buffered.pages;
     const response = { meta: { newest_id: buffered.newest_id } };
-    const media = Object.assign({}, ...responses.map(mediaUrls));
+    const recoveryRows = quotaRecoveryByHandle.get(source.handle) || [];
+    const recoveryPostIds = new Set(recoveryRows.map(row => String(row.external_post_id)));
+    const recoveryMedia = {};
+    const recoveryPosts = recoveryRows.map(row => {
+      const urls = Array.isArray(row.media_urls) ? row.media_urls : [];
+      const mediaKeys = urls.map((url, index) => {
+        const key = `quota-recovery-${row.external_post_id}-${index}`;
+        recoveryMedia[key] = url;
+        return key;
+      });
+      return {
+        id: String(row.external_post_id),
+        created_at: row.posted_at,
+        text: row.raw_text,
+        attachments: { media_keys: mediaKeys }
+      };
+    });
+    const media = Object.assign({}, ...responses.map(mediaUrls), recoveryMedia);
     // Strong text-identified picks get first look, followed by caption-signaled
     // media and finally dedicated photo-review posts. Keep the original ID as
     // the tie-breaker so a source remains deterministic.
-    const posts = responses.flatMap((page) => page.data || []).map(completeXPost)
+    const seenPostIds = new Set();
+    const posts = [...responses.flatMap((page) => page.data || []), ...recoveryPosts]
+      .map(completeXPost)
+      .filter(post => {
+        if (seenPostIds.has(String(post.id))) return false;
+        seenPostIds.add(String(post.id));
+        return true;
+      })
       .sort((a, b) => intakePriority(source, a, { prioritizeBasketball: nbaGamesToday === true })
         - intakePriority(source, b, { prioritizeBasketball: nbaGamesToday === true }) || b.id.localeCompare(a.id));
     console.log(`X fetch buffer @${source.handle}: ${buffered.fetched} freshly returned post(s), ${buffered.pending} retained for processing.`);
@@ -902,7 +945,8 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
       // the old caption filter, but never creates a duplicate for a post that
       // already has a current-day approval packet.
       const revisitHeldPost = !queuedSourcePostIds.has(String(post.id))
-        && ((rescanImages && postMediaUrls.length > 0) || rescanUpcomingSlate);
+        && ((rescanImages && postMediaUrls.length > 0) || rescanUpcomingSlate
+          || recoveryPostIds.has(String(post.id)));
       if (handledPostIds.has(post.id) && !revisitHeldPost) {
         await recordGateDecision(packet, { code: 'ALREADY_HANDLED', reason: 'This source post was already evaluated in an earlier collection pass.', status: 'DEDUPLICATED' });
         lastProcessedId = post.id;
