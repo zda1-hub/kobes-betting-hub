@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildResultReply, resultReplyId, independentResultPostId, syncFreePickResultReplies } = require('./free-pick-result-replies');
+const { buildResultReply, resultReplyId, syncFreePickResultReplies } = require('./free-pick-result-replies');
 
 const row = {
   pick_id: '20260930-free-1', operating_date: '2026-09-30', status: 'PUBLISHED',
@@ -21,9 +21,8 @@ test('result copy reports each verified outcome plainly', () => {
   }
   assert.throws(() => buildResultReply({ ...row, result_verified_source: '' }), /not verified/);
   assert.equal(resultReplyId(row.pick_id, '123456789'), resultReplyId(row.pick_id, '123456789'));
-  assert.match(buildResultReply(row, '123456789'), /Original pick: https:\/\/x\.com\/kobesbettinghub\/status\/123456789$/);
-  assert.throws(() => buildResultReply(row, 'not-an-id'), /confirmed X post ID/);
-  assert.doesNotMatch(buildResultReply({ ...row, selection: 'A'.repeat(170) }, '123456789'), /Original pick:/);
+  assert.throws(() => resultReplyId(row.pick_id, 'not-an-id'), /confirmed X post ID/);
+  assert.equal(buildResultReply({ ...row, selection: 'A'.repeat(170) }).length <= 280, true);
 });
 
 test('sync waits for an original X receipt and skips unverified results', async () => {
@@ -50,10 +49,10 @@ test('sync submits one reply request tied to the confirmed parent', async () => 
   const submitted = JSON.parse(calls[1].init.body);
   assert.match(submitted.id, /^result-x-123456789-[a-f0-9]{20}$/);
   assert.match(submitted.body, /FREE PICK RESULT: WIN/);
-  assert.match(submitted.body, /Original pick: https:\/\/x\.com\/kobesbettinghub\/status\/123456789/);
+  assert.doesNotMatch(submitted.body, /Original pick:/);
 });
 
-test('new verified wins and losses publish without an original X receipt and keep one ID if that receipt arrives later', async () => {
+test('new verified wins and losses wait for an original post, then request one stable reply', async () => {
   const published = [];
   let parentId = null;
   const fetchImpl = async (url, init) => {
@@ -64,14 +63,18 @@ test('new verified wins and losses publish without an original X receipt and kee
     return new Response(JSON.stringify({ status: 'published' }), { status: 201 });
   };
   const newer = { ...row, pick_id: 'manual-free-20261027', result_verified_at: '2026-10-27T02:00:00Z' };
+  const waiting = await syncFreePickResultReplies([newer], '456', { environment, fetchImpl });
+  assert.equal(waiting[0].status, 'awaiting_original_post');
+  assert.equal(published.length, 0);
+  parentId = '123456789';
   for (const result of ['W', 'L']) {
-    const receipts = await syncFreePickResultReplies([{ ...newer, result }], '456', { environment, fetchImpl });
+    const graded = { ...newer, pick_id: `${newer.pick_id}-${result}`, result };
+    const receipts = await syncFreePickResultReplies([graded], '456', { environment, fetchImpl });
     assert.equal(receipts[0].status, 'published');
-    assert.equal(published.at(-1).id, independentResultPostId(newer.pick_id));
+    assert.equal(published.at(-1).id, resultReplyId(graded.pick_id, parentId));
     assert.match(published.at(-1).body, new RegExp(`FREE PICK RESULT: ${result === 'W' ? 'WIN' : 'LOSS'}`));
   }
-  parentId = '123456789';
-  await syncFreePickResultReplies([newer], '456', { environment, fetchImpl });
-  assert.equal(published.at(-1).id, independentResultPostId(newer.pick_id));
-  assert.match(published.at(-1).body, /Original pick: https:\/\/x\.com\/kobesbettinghub\/status\/123456789/);
+  const again = await syncFreePickResultReplies([newer], '456', { environment, fetchImpl });
+  assert.equal(again[0].status, 'published');
+  assert.equal(published.at(-1).id, resultReplyId(newer.pick_id, parentId));
 });

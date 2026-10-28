@@ -300,11 +300,29 @@ test('result reply parent lookup requires a confirmed original X receipt', async
   assert.deepEqual(await result.json(), { xPostId: '123456789' });
 });
 
-test('verified result and ordinary posts are standalone on X', () => {
+test('verified results reply to the original X pick while ordinary posts stay standalone', () => {
   assert.deepEqual(workerTest.xPostPayload({ id: 'result-x-123456789-aaaaaaaaaaaaaaaaaaaa', body: 'LOSS' }), {
-    text: 'LOSS',
+    text: 'LOSS', reply: { in_reply_to_tweet_id: '123456789' },
   });
   assert.deepEqual(workerTest.xPostPayload({ id: 'free-x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', body: 'PICK' }), { text: 'PICK' });
+  assert.throws(() => workerTest.xPostPayload({ id: 'result-x-0-aaaaaaaaaaaaaaaaaaaa', body: 'LOSS' }), /Standalone free-pick result posts are disabled/);
+});
+
+test('result cutover blocks new standalone results and duplicate legacy grades', async () => {
+  const DB = memoryD1();
+  await DB.prepare('CREATE TABLE approved_posts (id TEXT PRIMARY KEY, status TEXT, x_post_id TEXT, last_error TEXT)').run();
+  await DB.prepare('INSERT INTO approved_posts (id, status, x_post_id) VALUES (?, ?, ?)')
+    .bind('result-x-0-aaaaaaaaaaaaaaaaaaaa', 'published', '987654321').run();
+  const env = { DB, FREE_PICK_X_QUEUE_SECRET: 'test-key' };
+  const submit = (id) => worker.fetch(new Request('https://publisher.test/api/queue/x', {
+    method: 'POST', headers: { authorization: 'Bearer test-key', 'content-type': 'application/json' },
+    body: JSON.stringify({ id, body: 'FREE PICK RESULT: LOSS', scheduledAt: '2026-10-28T12:00:00Z' }),
+  }), env);
+  assert.equal((await submit('result-x-0-bbbbbbbbbbbbbbbbbbbb')).status, 422);
+  const duplicate = await submit('result-x-123456789-aaaaaaaaaaaaaaaaaaaa');
+  assert.equal(duplicate.status, 409);
+  assert.deepEqual((await duplicate.json()).xPostId, '987654321');
+  DB.close();
 });
 
 test('Free Pick reports the active kobebettinghub Story connection and delivery receipt', async () => {
@@ -640,10 +658,10 @@ test('public results preserve only validated scoped writeup counts', () => {
  assert.equal(workerTest.normalizedPublicResults({...input,writeupRecord:undefined}).writeupRecord,null);
 });
 
- test('automated free-pick payload removes retired like gate and keeps results standalone', () => {
+ test('automated free-pick payload removes retired like gate and keeps result replies linked', () => {
  const body = 'TODAY’S FREE PICK\n\nPlayer over 2.5 (-115)\n\n❤️ 10 likes and we’ll post another free pick.\nFull writeup → example.com';
  assert.deepEqual(workerTest.xPostPayload({id:'free-x-12345678',body}),{text:'TODAY’S FREE PICK\n\nPlayer over 2.5 (-115)\n\nFull writeup → example.com'});
- assert.deepEqual(workerTest.xPostPayload({id:'result-x-123-01234567890123456789',body:'RESULT: LOSS'}),{text:'RESULT: LOSS'});
+ assert.deepEqual(workerTest.xPostPayload({id:'result-x-123-01234567890123456789',body:'RESULT: LOSS'}),{text:'RESULT: LOSS',reply:{in_reply_to_tweet_id:'123'}});
  assert.deepEqual(workerTest.xPostPayload({id:'manual-post',body}),{text:body});
  });
 
