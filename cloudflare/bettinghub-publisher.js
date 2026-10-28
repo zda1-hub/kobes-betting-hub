@@ -801,6 +801,15 @@ async function enqueueXPost(request, env) {
 
   const id = typeof input.id === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(input.id) ? input.id : crypto.randomUUID();
   if (id.startsWith('result-x-') && !/^result-x-\d{1,25}-[a-f0-9]{20}$/.test(id)) return json({ error: 'Invalid result post id' }, 400);
+  const replyMatch = /^result-x-(\d{1,25})-([a-f0-9]{20})$/.exec(id);
+  if (replyMatch?.[1] === '0') return json({ error: 'A free-pick result requires the original X post ID for a reply' }, 422);
+  if (replyMatch) {
+    // The previous publisher used result-x-0 IDs for standalone results. Never
+    // create a second post for one of those picks during the reply cutover.
+    const legacy = await env.DB.prepare('SELECT status, x_post_id AS xPostId, last_error AS lastError FROM approved_posts WHERE id = ?')
+      .bind(`result-x-0-${replyMatch[2]}`).first();
+    if (legacy) return json({ error: 'A result for this pick already exists', status: legacy.status, xPostId: legacy.xPostId, lastError: legacy.lastError }, 409);
+  }
   const result = await env.DB.prepare(
     `INSERT INTO approved_posts (id, channel, body, scheduled_at, status, created_at)
      VALUES (?, 'x', ?, ?, 'approved', ?)
@@ -1349,7 +1358,11 @@ function xPostPayload(post) {
   const text = post.id.startsWith('free-x-')
     ? post.body.split('\n').filter(line => !/^❤️?\s*10 likes and we[’']ll post another free pick\.$/u.test(line.trim())).join('\n').replace(/\n{3,}/g, '\n\n').trim()
     : post.body;
-  return { text };
+  const resultMatch = /^result-x-(\d{1,25})-[a-f0-9]{20}$/.exec(post.id);
+  if (resultMatch?.[1] === '0') throw new Error('Standalone free-pick result posts are disabled');
+  return resultMatch
+    ? { text, reply: { in_reply_to_tweet_id: resultMatch[1] } }
+    : { text };
 }
 
 async function recordDeliveryFailure(postId, httpStatus, detail, retryable, env) {
