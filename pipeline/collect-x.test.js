@@ -6,6 +6,7 @@ const {
   candidateEventTiming,
   createModelCallBudget,
   createSourceModelCallReservation,
+  extractionRequiresRetry,
   configuredMediaOnlyLimit,
   configuredPerSourceModelCallLimit,
   footballGamesScheduledToday,
@@ -454,6 +455,41 @@ test('model-call deferrals are audited and logged without advancing the source c
   assert.equal(nextState.catchup_date, undefined);
   assert.equal(nextState.image_rescan_version, 'source-routing-image-rescan-v4');
   assert.equal(nextState.upcoming_slate_rescan_version, 'upcoming-slate-rescan-v1');
+});
+
+test('provider budget failures defer X candidates without consuming their source cursor', async () => {
+  for (const status of ['MODEL_CALL_LIMIT_REACHED', 'BUDGET_EXCEEDED', 'WAITING_FOR_OPENAI_API_KEY',
+    'ENRICHMENT_OFF', 'EXTRACTION_FAILED']) assert.equal(extractionRequiresRetry(status), true, status);
+  for (const status of ['SOURCE_EXTRACTED', 'MODEL_NOT_PICK_CANDIDATE']) {
+    assert.equal(extractionRequiresRetry(status), false, status);
+  }
+  const decisions = [];
+  const logs = [];
+  const counts = await recordModelCallDeferral({ pick_id: 'BUDGET-1' }, {
+    sourceHandle: 'prioritysource',
+    postId: '250',
+    status: 'BUDGET_EXCEEDED',
+    detail: 'OpenAI monthly request limit reached (5002 / 5000). No OpenAI request was sent.',
+    recordDecision: async (_packet, decision) => decisions.push(decision),
+    logger: message => logs.push(message)
+  });
+  const nextState = sourceStateAfterPass({
+    sourceState: { since_id: '100', handled_post_ids: ['150'] },
+    userId: 'source-user', date: '2026-10-28', lastProcessedId: '300',
+    handledPostIds: new Set(['150', '200']), completedSourcePass: false,
+    rescanImages: false, rescanUpcomingSlate: false
+  });
+
+  assert.deepEqual(counts, { skipped: 1, deferred: 1 });
+  assert.deepEqual(decisions, [{
+    code: 'BUDGET_EXCEEDED',
+    reason: 'OpenAI monthly request limit reached (5002 / 5000). No OpenAI request was sent.',
+    status: 'DEFERRED'
+  }]);
+  assert.match(logs[0], /Deferred @prioritysource post 250/);
+  assert.equal(nextState.since_id, '100');
+  assert.equal(nextState.handled_post_ids.includes('250'), false);
+  assert.equal(nextState.catchup_date, undefined);
 });
 
 test('exclusive recovery rescan remains eligible after a budget-limited partial pass', () => {
