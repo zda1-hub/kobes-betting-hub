@@ -693,21 +693,30 @@ async function recordGateDecision(packet, { code, reason, status = 'REJECTED' })
   });
 }
 
-async function recordModelCallDeferral(packet, { sourceHandle, postId, recordDecision = recordGateDecision, logger = console.log } = {}) {
+async function recordModelCallDeferral(packet, { sourceHandle, postId, status = 'MODEL_CALL_LIMIT_REACHED', detail,
+  recordDecision = recordGateDecision, logger = console.log } = {}) {
+  const reason = status === 'MODEL_CALL_LIMIT_REACHED'
+    ? 'The per-run OpenAI extraction-call limit was reached before this candidate.'
+    : detail || 'Source extraction is unavailable; this candidate must be retried.';
   await recordDecision(packet, {
-    code: 'MODEL_CALL_LIMIT_REACHED',
-    reason: 'The per-run OpenAI extraction-call limit was reached before this candidate.',
+    code: status,
+    reason,
     status: 'DEFERRED'
   });
-  logger(`Deferred @${sourceHandle} post ${postId}; per-run OpenAI extraction-call limit reached.`);
+  logger(`Deferred @${sourceHandle} post ${postId}; ${reason}`);
   return { skipped: 1, deferred: 1 };
+}
+
+function extractionRequiresRetry(status) {
+  return ['MODEL_CALL_LIMIT_REACHED', 'BUDGET_EXCEEDED', 'WAITING_FOR_OPENAI_API_KEY',
+    'ENRICHMENT_OFF', 'EXTRACTION_FAILED'].includes(status);
 }
 
 function sourceStateAfterPass({ sourceState, userId, date, lastProcessedId, handledPostIds, completedSourcePass, rescanImages, rescanUpcomingSlate, upcomingSlateRescanVersion = UPCOMING_SLATE_RESCAN_VERSION }) {
   const nextSourceState = {
     user_id: userId,
     // An incomplete pass must retain the previous cursor. Already handled
-    // posts remain in the bounded ID list, while model-cap deferrals are not
+    // posts remain in the bounded ID list, while extraction deferrals are not
     // added and therefore remain eligible on the next collection interval.
     since_id: completedSourcePass ? (lastProcessedId || '') : (sourceState.since_id || ''),
     handled_post_ids: [...handledPostIds].slice(-250),
@@ -942,11 +951,13 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
         beforeOpenAIRequest: () => sourceModelReservation.tryStart()
       });
 
-      if (packet.analysis.status === 'MODEL_CALL_LIMIT_REACHED') {
+      if (extractionRequiresRetry(packet.analysis.status)) {
         claimedSourcePostIds.delete(String(post.id));
         const counts = await recordModelCallDeferral(packet, {
           sourceHandle: source.handle,
-          postId: post.id
+          postId: post.id,
+          status: packet.analysis.status,
+          detail: packet.analysis.detail
         });
         skipped += counts.skipped;
         deferred += counts.deferred;
@@ -1108,7 +1119,7 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
       handledPostIds.add(post.id);
     }
 
-    // Advance only through posts we actually completed. A model-call deferral
+    // Advance only through posts we actually completed. An extraction deferral
     // keeps the old cursor so it cannot be hidden behind a newer since_id.
     const nextSourceState = sourceStateAfterPass({
       sourceState,
@@ -1428,6 +1439,7 @@ module.exports = {
   heldMonitoredXCandidate,
   heldExpertTermsCandidate,
   recordModelCallDeferral,
+  extractionRequiresRetry,
   recoverAuditedExclusive,
   recoverHeldMonitoredXApprovals,
   rotateSources,
