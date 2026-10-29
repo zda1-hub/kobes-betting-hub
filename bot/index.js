@@ -66,9 +66,6 @@ const { createFreeWriteupBoard } = require('./lib/free-writeup-board');
 const { archivedWriteupSource } = require('./lib/writeup-archive-source');
 const { createVipExpertList, previousMstDate } = require('./lib/vip-expert-list');
 const { createExpertPulse } = require('./lib/expert-pulse');
-const { createExpertTrendReminder } = require('./lib/expert-trend-reminder');
-const { createMorningDeliveryAlert } = require('./lib/morning-delivery-alert');
-const { recapDeliveryIssues } = require('./lib/recap-delivery-status');
 const { telegramConfig } = require('./lib/telegram-session');
 const { reviewQueuePath } = require('./lib/review-queue-path');
 const { consolidatePendingMonitoredApprovals: reconcileMonitoredApprovals } = require('./lib/monitored-approval-reconcile');
@@ -241,38 +238,6 @@ const expertPulse = vipExpertPulseChannelId && vipExpertPulseApprovalChannelId ?
   legacyStateFile: useExpertCheatChannels ? path.join(path.dirname(pickLogPath()), 'expert-pulse.json') : null
 }) : null;
 const refreshExpertPulse = expertPulse ? () => expertPulse.refresh() : null;
-const remindExpertTrendReview = expertPulse ? createExpertTrendReminder({
-  channelFor: () => approvedTextChannel(vipExpertPulseApprovalChannelId)
-}) : null;
-const checkMorningDelivery = vipExpertPulseApprovalChannelId ? createMorningDeliveryAlert({
-  channelFor: () => approvedTextChannel(vipExpertPulseApprovalChannelId),
-  statusFor: async () => {
-    const issues = [];
-    if (!refreshExpertPulse) issues.push('Expert trend sheet is not configured.');
-    else {
-      try {
-        const receipt = await refreshExpertPulse();
-        if (!receipt?.messageId || receipt.status === 'VIP_HELD')
-          issues.push(`Expert trend review card is unavailable${receipt?.reason ? `: ${receipt.reason}` : '.'}`);
-      } catch (error) { issues.push(`Expert trend refresh failed: ${error.message}`); }
-    }
-    const recapDate = previousPacificOperatingDate();
-    try {
-      const rows = await readPickLog();
-      const published = rows.filter((row) => row.operating_date === recapDate && isPublishedRow(row));
-      if (published.length) {
-        const state = await readFreeRecapState();
-        const recap = state.dates?.[recapDate] || {};
-        if (freePickRecapRows(rows, recapDate, freePickChannelId).length && !recap.public_results_message_id)
-          issues.push(`Public results for ${recapDate} have not reached Discord.`);
-        if (recap.public_results_pending > 0)
-          issues.push(`${recap.public_results_pending} result(s) from ${recapDate} still await verification; no win/loss was assumed.`);
-        if (recapEmailConfigured()) issues.push(...recapDeliveryIssues(recap, recapDate));
-      }
-    } catch (error) { issues.push(`Recap delivery could not be verified: ${error.message}`); }
-    return issues;
-  }
-}) : null;
 if ((vipExpertPulseChannelId || vipExpertPulseApprovalChannelId) && !expertPulse) {
   console.error('VIP expert pulse is held: both private review and private destination channel IDs are required.');
 }
@@ -2951,28 +2916,17 @@ client.once(Events.ClientReady, async (readyClient) => {
   }
   if (refreshExpertPulse) {
     void refreshExpertPulse()
-      .then(async (receipt) => {
+      .then((receipt) => {
         if (receipt.status === 'VIP_HELD') console.error('VIP expert pulse needs attention:', receipt.reason);
         else console.log('VIP expert pulse receipt:', JSON.stringify(receipt));
-        const reminder = await remindExpertTrendReview(receipt);
-        if (reminder.status === 'NOTIFIED') console.log('Expert trend morning reminder:', JSON.stringify(reminder));
       })
       .catch((error) => console.error('VIP expert pulse needs attention:', error.message));
     setInterval(() => void refreshExpertPulse()
-      .then(async (receipt) => {
+      .then((receipt) => {
         if (receipt.status === 'VIP_HELD') console.error('VIP expert pulse needs attention:', receipt.reason);
         else if (receipt.status !== 'UNCHANGED') console.log('VIP expert pulse receipt:', JSON.stringify(receipt));
-        const reminder = await remindExpertTrendReview(receipt);
-        if (reminder.status === 'NOTIFIED') console.log('Expert trend morning reminder:', JSON.stringify(reminder));
       })
       .catch((error) => console.error('VIP expert pulse needs attention:', error.message)), 300000);
-  }
-  if (checkMorningDelivery) {
-    const run = () => void checkMorningDelivery()
-      .then((receipt) => { if (receipt.status === 'ALERTED') console.error('Morning delivery alert:', JSON.stringify(receipt)); })
-      .catch((error) => console.error('Morning delivery check failed:', error.message));
-    run();
-    setInterval(run, 300000);
   }
   try {
     await consolidatePendingMonitoredApprovals();
