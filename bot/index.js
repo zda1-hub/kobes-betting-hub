@@ -65,6 +65,7 @@ const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/dai
 const { createFreeWriteupBoard } = require('./lib/free-writeup-board');
 const { archivedWriteupSource } = require('./lib/writeup-archive-source');
 const { revisePublishedWriteup } = require('./lib/published-writeup-edit');
+const { claimMirror, countMirrorClaims, mirrorMarker, readMirror, saveMirror } = require('./lib/writeup-free-mirror');
 const { createVipExpertList, previousMstDate } = require('./lib/vip-expert-list');
 const { createExpertPulse } = require('./lib/expert-pulse');
 const { telegramConfig } = require('./lib/telegram-session');
@@ -256,6 +257,7 @@ const trendsChannelMap = new Map(
 // including picks, trends, expert sheets, and arbitrage, without Render setup.
 const pickApproverUserIds = approvalUserIds(process.env.PICK_APPROVER_USER_IDS);
 const reviewQueueRoot = reviewQueuePath();
+const writeupFreeMirrorRoot = path.join(path.dirname(pickLogPath()), 'writeup-free-mirrors');
 const trendsInboxQueueUrl = (process.env.TRENDS_INBOX_QUEUE_URL || '').replace(/\/$/, '');
 const trendsInboxQueueSecret = process.env.TRENDS_INBOX_QUEUE_SECRET || '';
 const recapNotificationQueueUrl = (process.env.RECAP_NOTIFICATION_QUEUE_URL || '').replace(/\/$/, '');
@@ -1536,11 +1538,12 @@ function dailyFreePickLimit() {
 async function publishedFreePickCount() {
   if (!freePickChannelId) return 0;
   const rows = await readPickLog();
-  return rows.filter((row) => (
+  const direct = rows.filter((row) => (
     row.operating_date === pacificOperatingDate()
-    && row.status === 'PUBLISHED'
-    && row.destination === '#daily-free-play'
+    && isPublishedRow(row)
+    && String(row.post_reference || '').match(/^https:\/\/discord\.com\/channels\/\d+\/(\d+)\/\d+$/)?.[1] === freePickChannelId
   )).length;
+  return direct + await countMirrorClaims(writeupFreeMirrorRoot, pacificOperatingDate());
 }
 
 async function enforceDailyFreePickLimit() {
@@ -2245,12 +2248,31 @@ async function handlePublishedWriteupEditSubmit(interaction) {
     return;
   }
   const originalEmbed = message.embeds[0].toJSON();
+  const mirror = await readMirror(writeupFreeMirrorRoot, row.pick_id);
+  if (mirror?.status === 'CLAIMED') throw new Error('A free-play share is still being reconciled. Edit after that receipt is resolved.');
+  let freeMessage = null;
+  let originalFreeEmbed = null;
+  if (mirror?.status === 'PUBLISHED') {
+    const match = String(mirror.freeReference || '').match(/^https:\/\/discord\.com\/channels\/\d+\/(\d+)\/(\d+)$/);
+    if (!match || match[1] !== freePickChannelId) throw new Error('The free-play mirror receipt is invalid. No changes were made.');
+    const freeChannel = await approvedTextChannel(match[1]);
+    freeMessage = await freeChannel.messages.fetch(match[2]);
+    if (freeMessage.author?.id !== client.user?.id || freeMessage.embeds?.[0]?.footer?.text !== mirrorMarker(row.pick_id)
+      || freeMessage.embeds[0].description !== originalDescription)
+      throw new Error('The free-play copy no longer matches this writeup. No changes were made.');
+    originalFreeEmbed = freeMessage.embeds[0].toJSON();
+  }
   await message.edit({ embeds: [{ ...originalEmbed, description: edit.copy }], allowedMentions: { parse: [] } });
   try {
+    if (freeMessage) await freeMessage.edit({ embeds: [{ ...originalFreeEmbed, description: edit.copy }], allowedMentions: { parse: [] } });
     await fs.writeFile(packetPath, `${JSON.stringify(edit.packet, null, 2)}\n`);
   } catch (error) {
     try { await message.edit({ embeds: [originalEmbed], allowedMentions: { parse: [] } }); }
     catch (rollbackError) { console.error('Published writeup rollback needs attention:', row.pick_id, rollbackError); }
+    if (freeMessage) {
+      try { await freeMessage.edit({ embeds: [originalFreeEmbed], allowedMentions: { parse: [] } }); }
+      catch (rollbackError) { console.error('Free-play writeup rollback needs attention:', row.pick_id, rollbackError); }
+    }
     throw error;
   }
   try {
@@ -2260,6 +2282,69 @@ async function handlePublishedWriteupEditSubmit(interaction) {
         new_sha256: edit.packet.approval.exact_final_copy_sha256 } });
   } catch (error) { console.error('Published writeup edit audit needs attention:', row.pick_id, error); }
   await interaction.editReply(`Writeup updated in place: ${reference}. Pick, line, odds, and result were not changed.`);
+}
+
+async function handleShareWriteupToFree(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  if (!isPickApprover(interaction) || interaction.guildId !== process.env.DISCORD_GUILD_ID)
+    throw new Error('Only Kobe can share an approved writeup to free plays.');
+  if (!allowedChannelIds.has(interaction.channelId) || !/writeups?/i.test(interaction.channel?.name || ''))
+    throw new Error('Choose a published post in an approved writeups channel.');
+  const source = interaction.targetMessage;
+  if (source?.author?.id !== client.user?.id || source.embeds?.length !== 1 || !source.embeds[0].description)
+    throw new Error('Choose a Kobe Bot writeup. Kobe-authored messages can be copied using Discord.');
+  const sourceChannel = await approvedTextChannel(interaction.channelId);
+  const sourceReference = discordPostReference(sourceChannel, source);
+  const row = (await readPickLog()).find((entry) => entry.post_reference === sourceReference);
+  if (!row || !isPublishedRow(row) || !/writeups?/i.test(row.destination || ''))
+    throw new Error('This post is not an approved, logged writeup. Nothing was shared.');
+  const packetPath = sourcePacketPath(reviewQueueRoot, row.pick_id);
+  if (!packetPath) throw new Error('The approved writeup record is unavailable. Nothing was shared.');
+  const packet = JSON.parse(await fs.readFile(packetPath, 'utf8'));
+  if (packet.pick_id !== row.pick_id || packet.approval?.decision !== 'PAID_PUBLISHED'
+    || packet.approval.exact_final_copy !== source.embeds[0].description)
+    throw new Error('The saved writeup and Discord post do not match. Nothing was shared.');
+  assertFreePickEligible(packet);
+  assertCompleteWriteup(packet);
+  const timing = await upcomingEventStatus(packet);
+  if (timing.status !== 'UPCOMING') throw new Error('This game is no longer verified as upcoming. Nothing was shared.');
+  const freeChannel = await approvedTextChannel(freePickChannelId);
+  if (freeChannel.id === sourceChannel.id) throw new Error('The free-play destination is the same as the source channel.');
+  const existing = await readMirror(writeupFreeMirrorRoot, row.pick_id);
+  if (existing?.status === 'PUBLISHED') {
+    await interaction.editReply(`Already shared to free plays: ${existing.freeReference}`);
+    return;
+  }
+  if (existing?.status === 'CLAIMED') {
+    const recent = await freeChannel.messages.fetch({ limit: 100 });
+    const recovered = recent.find((message) => message.author.id === client.user.id
+      && message.embeds?.[0]?.footer?.text === mirrorMarker(row.pick_id));
+    if (!recovered) throw new Error('A free-play share was started but its receipt is uncertain. Check the channel before retrying; the bot will not risk a duplicate.');
+    existing.status = 'PUBLISHED';
+    existing.freeReference = discordPostReference(freeChannel, recovered);
+    existing.publishedAt = recovered.createdAt.toISOString();
+    await saveMirror(writeupFreeMirrorRoot, existing);
+    await interaction.editReply(`Already shared to free plays: ${existing.freeReference}`);
+    return;
+  }
+  await enforceDailyFreePickLimit();
+  const state = { pickId: row.pick_id, date: pacificOperatingDate(), status: 'CLAIMED',
+    sourceReference, claimedAt: new Date().toISOString() };
+  if (!await claimMirror(writeupFreeMirrorRoot, state))
+    throw new Error('This share is already being processed. Check the free-play channel before retrying.');
+  const embed = { ...source.embeds[0].toJSON(), color: 0x2B90D9,
+    footer: { text: mirrorMarker(row.pick_id) } };
+  const freeMessage = await freeChannel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+  state.status = 'PUBLISHED';
+  state.freeReference = discordPostReference(freeChannel, freeMessage);
+  state.publishedAt = new Date().toISOString();
+  await saveMirror(writeupFreeMirrorRoot, state);
+  try {
+    await recordWorkflowEvent(packet, { eventType: 'WRITEUP_SHARED_TO_FREE', actorType: 'discord_user',
+      actorId: interaction.user.id, beforeState: 'PUBLISHED', afterState: 'PUBLISHED',
+      details: { pick_id: row.pick_id, source_reference: sourceReference, free_reference: state.freeReference } });
+  } catch (error) { console.error('Free writeup share audit needs attention:', row.pick_id, error); }
+  await interaction.editReply(`Same approved play shared to free plays: ${state.freeReference}. One Pick ID and one grading record; no X post was requested.`);
 }
 
 async function handleSourceReviewButton(interaction) {
@@ -3338,6 +3423,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'Edit writeup') {
     try { await handlePublishedWriteupEditButton(interaction); }
     catch (error) { await respondToInteractionFailure(interaction, error.message || 'Could not open this writeup for editing.', 'Published writeup edit'); }
+    return;
+  }
+  if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'Share to free plays') {
+    try { await handleShareWriteupToFree(interaction); }
+    catch (error) { await respondToInteractionFailure(interaction, error.message || 'Could not share this writeup.', 'Free writeup share'); }
     return;
   }
 
