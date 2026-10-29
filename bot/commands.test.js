@@ -14,3 +14,9 @@ test('registers a message action for editing published writeups', () => {
   assert.ok(command);
   assert.equal(command.type, 3);
 });
+
+test('registers a message action for sharing a writeup to free plays', () => {
+  const command = commands.find((item) => item.name === 'Share to free plays');
+  assert.ok(command);
+  assert.equal(command.type, 3);
+});

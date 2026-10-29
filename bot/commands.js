@@ -154,6 +154,9 @@ module.exports = [
   new ContextMenuCommandBuilder()
     .setName('Edit writeup')
     .setType(ApplicationCommandType.Message),
+  new ContextMenuCommandBuilder()
+    .setName('Share to free plays')
+    .setType(ApplicationCommandType.Message),
   pickOptions(
     new SlashCommandBuilder()
       .setName('preview-pick')
