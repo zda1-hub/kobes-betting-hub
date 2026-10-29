@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, ChannelType, PermissionFlagsBits } = require('discord.js');
 
 const sports = [
   ['football', 'Football (NFL / college)'],
@@ -151,6 +151,9 @@ const trendOptions = (command) => command
     .setMaxLength(10));
 
 module.exports = [
+  new ContextMenuCommandBuilder()
+    .setName('Edit writeup')
+    .setType(ApplicationCommandType.Message),
   pickOptions(
     new SlashCommandBuilder()
       .setName('preview-pick')
