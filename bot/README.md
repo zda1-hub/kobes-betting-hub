@@ -64,6 +64,8 @@ to be checked before publishing.
 3. Under **OAuth2 → URL Generator**, select scopes `bot` and `applications.commands`; grant the bot `View Channels`, `Send Messages`, and `Embed Links` in only the destination channels.
 4. Enable Developer Mode in Discord, then copy the application, server, channel, and authorized publisher-role IDs.
 5. Copy `../.env.example` to `../.env` and set the values. During setup set `DISCORD_GUILD_ID` so command updates are immediate. Add every production destination to `ALLOWED_CHANNEL_IDS`; map sport defaults with `SPORT_CHANNEL_MAP`, such as `baseball:123,basketball:456`. `BASKETBALL_WRITEUPS_CHANNEL_ID` explicitly routes approved NBA writeups and adds that channel to the bot allowlist; give the Kobe Bot role View Channel, Send Messages, Embed Links, and Read Message History on the channel. A publisher can select a different allowlisted channel at the final step.
+
+To correct an already published Kobe Bot writeup, Kobe can long-press or right-click the message in a writeups channel and choose **Apps → Edit writeup**. The form edits 4–8 supporting facts on that same post. The bot keeps the original pick, line, odds, image, and grading record unchanged, and saves the revision in the durable approval packet. Kobe-authored messages use Discord's normal **Edit Message** action instead.
 6. From the project root, run `npm install` (or `pnpm install`), then `npm run register:commands`, then `npm run bot`.
 
 ## Welcome existing members

@@ -64,6 +64,7 @@ const { createTelegramReader } = require('./lib/telegram-reader');
 const { createDailyWriteupBoard, manualFootballWriteupRow } = require('./lib/daily-writeup-board');
 const { createFreeWriteupBoard } = require('./lib/free-writeup-board');
 const { archivedWriteupSource } = require('./lib/writeup-archive-source');
+const { revisePublishedWriteup } = require('./lib/published-writeup-edit');
 const { createVipExpertList, previousMstDate } = require('./lib/vip-expert-list');
 const { createExpertPulse } = require('./lib/expert-pulse');
 const { telegramConfig } = require('./lib/telegram-session');
@@ -2194,6 +2195,73 @@ async function handleSourceEditSubmit(interaction) {
   await interaction.editReply('Details updated on the private card. Player, prop, line, and odds stayed locked. Review the revised card before posting.');
 }
 
+async function handlePublishedWriteupEditButton(interaction) {
+  if (!isPickApprover(interaction)) throw new Error('Only Kobe can edit a published writeup.');
+  if (interaction.guildId !== process.env.DISCORD_GUILD_ID || !allowedChannelIds.has(interaction.channelId)
+    || !/writeups?/i.test(interaction.channel?.name || '')) throw new Error('Use this on a published writeup in an approved writeups channel.');
+  const message = interaction.targetMessage;
+  if (message?.author?.id !== client.user?.id || message.embeds?.length !== 1 || !message.embeds[0].description)
+    throw new Error('This is not a Kobe Bot writeup. The author can edit their own Discord message normally.');
+  const description = message.embeds[0].description;
+  const facts = description.split(/\r?\n/).filter((line) => /^- /.test(line)).join('\n');
+  if (!facts) throw new Error('This post has no editable writeup facts.');
+  const digest = approvalCopySha256(description).slice(0, 20);
+  await interaction.showModal({
+    custom_id: `writeup-edit:${interaction.channelId}:${message.id}:${digest}`,
+    title: 'Edit published writeup facts',
+    components: [{ type: 1, components: [{ type: 4, custom_id: 'facts',
+      label: '4–8 verified facts, one per line', style: 2, required: true,
+      min_length: 20, max_length: 3000, value: facts.slice(0, 3000) }] }]
+  });
+}
+
+async function handlePublishedWriteupEditSubmit(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  if (!isPickApprover(interaction) || interaction.guildId !== process.env.DISCORD_GUILD_ID)
+    throw new Error('Only Kobe can edit a published writeup.');
+  const match = interaction.customId.match(/^writeup-edit:(\d+):(\d+):([a-f0-9]{20})$/);
+  if (!match) throw new Error('Invalid writeup edit form.');
+  const channel = await approvedTextChannel(match[1]);
+  if (!/writeups?/i.test(channel.name || '')) throw new Error('This is not a writeups channel.');
+  const message = await channel.messages.fetch(match[2]);
+  if (message.author?.id !== client.user?.id || message.embeds?.length !== 1)
+    throw new Error('The original bot writeup is no longer available.');
+  const originalDescription = message.embeds[0].description || '';
+  if (approvalCopySha256(originalDescription).slice(0, 20) !== match[3])
+    throw new Error('This edit is stale. Reopen Edit writeup on the latest post.');
+  const reference = discordPostReference(channel, message);
+  const row = (await readPickLog()).find((entry) => entry.post_reference === reference);
+  if (!row || !/writeups?/i.test(row.destination || '') || !['PUBLISHED', 'GRADED'].includes(row.status))
+    throw new Error('This post is not a logged published writeup. No changes were made.');
+  const packetPath = sourcePacketPath(reviewQueueRoot, row.pick_id);
+  if (!packetPath) throw new Error('This writeup has no editable source packet.');
+  const packet = JSON.parse(await fs.readFile(packetPath, 'utf8'));
+  if (packet.pick_id !== row.pick_id || !['PAID_PUBLISHED', 'FREE_PUBLISHED'].includes(packet.approval?.decision)
+    || isTermsOnlyMode(packet))
+    throw new Error('The saved writeup and Discord post do not match. No changes were made.');
+  const edit = revisePublishedWriteup(packet, originalDescription, interaction.fields.getTextInputValue('facts'), interaction.user.id);
+  if (!edit.changed) {
+    await interaction.editReply('No changes to save.');
+    return;
+  }
+  const originalEmbed = message.embeds[0].toJSON();
+  await message.edit({ embeds: [{ ...originalEmbed, description: edit.copy }], allowedMentions: { parse: [] } });
+  try {
+    await fs.writeFile(packetPath, `${JSON.stringify(edit.packet, null, 2)}\n`);
+  } catch (error) {
+    try { await message.edit({ embeds: [originalEmbed], allowedMentions: { parse: [] } }); }
+    catch (rollbackError) { console.error('Published writeup rollback needs attention:', row.pick_id, rollbackError); }
+    throw error;
+  }
+  try {
+    await recordWorkflowEvent(edit.packet, { eventType: 'PUBLISHED_WRITEUP_EDITED', actorType: 'discord_user',
+      actorId: interaction.user.id, beforeState: 'PUBLISHED', afterState: 'PUBLISHED',
+      details: { pick_id: row.pick_id, post_reference: reference, old_sha256: edit.oldDigest,
+        new_sha256: edit.packet.approval.exact_final_copy_sha256 } });
+  } catch (error) { console.error('Published writeup edit audit needs attention:', row.pick_id, error); }
+  await interaction.editReply(`Writeup updated in place: ${reference}. Pick, line, odds, and result were not changed.`);
+}
+
 async function handleSourceReviewButton(interaction) {
   const [, pickId, action] = interaction.customId.split(':');
   const startedAt = Date.now();
@@ -3169,6 +3237,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     catch (error) { await respondToInteractionFailure(interaction, error.message || 'Could not edit this pick.', 'Pick edit interaction'); }
     return;
   }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('writeup-edit:')) {
+    try { await handlePublishedWriteupEditSubmit(interaction); }
+    catch (error) { await respondToInteractionFailure(interaction, error.message || 'Could not edit this writeup.', 'Published writeup edit'); }
+    return;
+  }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('recap-edit:')) {
     try {
       await interaction.deferReply({ ephemeral: true });
@@ -3259,6 +3332,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
       console.error(error);
       await respondToInteractionFailure(interaction, 'I could not send the welcome right now. Please try the button again in a moment.', 'Welcome interaction');
     }
+    return;
+  }
+
+  if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'Edit writeup') {
+    try { await handlePublishedWriteupEditButton(interaction); }
+    catch (error) { await respondToInteractionFailure(interaction, error.message || 'Could not open this writeup for editing.', 'Published writeup edit'); }
     return;
   }
 
