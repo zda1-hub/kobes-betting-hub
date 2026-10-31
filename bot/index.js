@@ -14,6 +14,7 @@ const recapWorkflow = require('../data/recap-workflow.json');
 const referralWorkflow = require('../data/referral-workflow.json');
 const { REFERRAL_CARD_MARKER, referralCardPayload } = require('./lib/referral-card');
 const { COMMUNITY_REFERRAL_ANNOUNCEMENT_MARKER, communityReferralAnnouncementPayload } = require('./lib/referral-announcement');
+const { VIP_TRIAL_NOTICE_MARKER, vipTrialNoticePayload } = require('./lib/vip-trial-announcement');
 const exclusiveRecapWorkflow = { ...recapWorkflow, writeup: undefined };
 const writeupRecapWorkflow = {
   enabled: recapWorkflow.writeup?.enabled === true,
@@ -461,6 +462,26 @@ async function ensureCommunityReferralAnnouncement() {
   if (existing) return { status: 'EXISTS', messageId: existing.id };
   const payload = communityReferralAnnouncementPayload(referralWorkflow.dashboard_url);
   const sent = await channel.send(payload);
+  return { status: 'POSTED', messageId: sent.id };
+}
+
+async function ensureVipTrialNotice() {
+  // One weekend notice in the existing join channel; do not turn restarts into broadcasts.
+  if (Date.now() > Date.parse('2026-11-03T07:00:00Z')) return { status: 'EXPIRED' };
+  const channel = await client.channels.fetch('1539062219894030396', { force: true });
+  if (!channel?.isTextBased() || channel.guildId !== process.env.DISCORD_GUILD_ID || !/join-vip/i.test(channel.name || '')) {
+    throw new Error('Unexpected VIP join channel.');
+  }
+  const permissions = channel.permissionsFor(client.user);
+  if (![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks,
+    PermissionFlagsBits.ReadMessageHistory].every(flag => permissions?.has(flag))) {
+    throw new Error('Kobe Bot cannot post and verify the VIP trial notice.');
+  }
+  const messages = await channel.messages.fetch({ limit: 100 });
+  const existing = [...messages.values()].find(message => message.author?.id === client.user.id
+    && message.embeds?.[0]?.footer?.text === VIP_TRIAL_NOTICE_MARKER);
+  if (existing) return { status: 'EXISTS', messageId: existing.id };
+  const sent = await channel.send(vipTrialNoticePayload());
   return { status: 'POSTED', messageId: sent.id };
 }
 
@@ -3022,6 +3043,12 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.log('Community referral announcement receipt:', JSON.stringify(announcementReceipt));
   } catch (error) {
     console.error('Community referral announcement needs attention:', error.message);
+  }
+  try {
+    const trialNoticeReceipt = await ensureVipTrialNotice();
+    console.log('VIP trial notice receipt:', JSON.stringify(trialNoticeReceipt));
+  } catch (error) {
+    console.error('VIP trial notice needs attention:', error.message);
   }
   if (dailyWriteupBoard) {
     void dailyWriteupBoard.refresh()
