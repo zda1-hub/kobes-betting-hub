@@ -16,3 +16,7 @@ The owner supplied a KBH X screenshot and asked that future Free Pick posts use 
 `node --test bot/lib/free-pick-x.test.js bot/lib/free-pick-delivery.test.js bot/lib/free-pick-site.test.js` passed 26/26. `node --check bot/lib/free-pick-x.js` and `git diff --check` passed. The publisher `/health` reported `ready`, `xConnected`, and `freePickReady` before release. Render's October 30 Free Pick receipt had `x: disabled`, so that pick is intentionally not backfilled. No new pick was posted during the test; the next newly approved pick is the first live end-to-end check.
 
 Release status: local until merged and the Render environment switch is verified. Append the production receipt after release.
+
+## Production release
+
+PR #351 merged as `31b009f` on October 30 MST. Render deployed that commit as `dep-dbinpqu417fc73a55us0` (live), then the `FREE_PICK_X_SYNC_ENABLED=true` environment change deployed as `dep-dbinqdvlk1mc73f8buf0` (live). The separate result-reply switch was not changed and remains false in the Blueprint. The October 30 pick `20261030-026-X` received `site: published`, `x: disabled`, `email: sent`, `complete: true` after the code deploy; it was not replayed to X when the switch changed. A new approved Free Pick after this release is required to verify an actual X post URL and final provider receipt.
