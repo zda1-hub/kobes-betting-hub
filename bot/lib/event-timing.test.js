@@ -17,6 +17,16 @@ const scoreboard = {
   }]
 };
 
+test('matches both teams when a source uses distinctive NBA team hashtags', () => {
+  const game = { competitions: [{ competitors: [
+    { team: { displayName: 'Memphis Grizzlies', abbreviation: 'MEM' } },
+    { team: { displayName: 'Sacramento Kings', abbreviation: 'SAC' } }
+  ] }] };
+  assert.equal(matchesExtractedEvent({ analysis: { extraction: { event: '#GrindCity vs #LightTheBeam' } } }, game), true);
+  assert.equal(matchesExtractedEvent({ analysis: { extraction: { event: '#GrindCity' } } }, game), false);
+  assert.equal(matchesExtractedEvent({ analysis: { extraction: { event: '#GrindCity vs #DubNation' } } }, game), false);
+});
+
 test('classifies image-extracted sport-specific markets when the league label is missing', () => {
   assert.equal(espnLeague({ analysis: { extraction: { selection: 'Corbin Carroll to hit a home run +470' } } }), 'baseball/mlb');
   assert.equal(espnLeague({ analysis: { extraction: { selection: 'DeMario Douglas over 3.5 receptions' } } }), 'football/nfl');

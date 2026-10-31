@@ -871,7 +871,10 @@ async function runCollector({ maxCandidates, maxModelCalls, sourceHandles } = {}
     // event has not started. Later passes return to normal since_id polling.
     const rescanImages = sourceState.image_rescan_version !== IMAGE_RESCAN_VERSION;
     const upcomingSlateRescanVersion = source.publish_mode === 'terms_only'
-      ? `${UPCOMING_SLATE_RESCAN_VERSION}-exclusive-terms-v3` : UPCOMING_SLATE_RESCAN_VERSION;
+      ? `${UPCOMING_SLATE_RESCAN_VERSION}-exclusive-terms-v3`
+      : source.handle.toLowerCase() === 'austinsprops'
+        ? `${UPCOMING_SLATE_RESCAN_VERSION}-austin-team-hashtags-v1`
+        : UPCOMING_SLATE_RESCAN_VERSION;
     const rescanUpcomingSlate = sourceState.upcoming_slate_rescan_version !== upcomingSlateRescanVersion;
     const dailyCatchup = sourceState.catchup_date !== date || rescanImages || rescanUpcomingSlate;
     const bufferFile = path.join(X_MONITORING_ROOT, 'fetch-buffer', `${source.handle}.json`);

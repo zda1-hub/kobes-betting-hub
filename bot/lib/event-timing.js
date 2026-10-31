@@ -68,6 +68,14 @@ function compact(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+// Some source posts name NBA teams with their distinctive X hashtags. Keep
+// these aliases tied to the official ESPN competitor, so both teams still
+// have to match the same scheduled game before a pick can reach approval.
+const teamEventAliases = {
+  MEM: ['GrindCity'],
+  SAC: ['LightTheBeam']
+};
+
 function matchesExtractedEvent(packet, event) {
   const sourceEvent = compact(packet.analysis?.extraction?.event);
   if (!sourceEvent) return false;
@@ -77,7 +85,8 @@ function matchesExtractedEvent(packet, event) {
   return competitors.filter(competitor => [
     competitor.team?.displayName,
     competitor.team?.shortDisplayName,
-    competitor.team?.abbreviation
+    competitor.team?.abbreviation,
+    ...(teamEventAliases[competitor.team?.abbreviation] || [])
   ].map(compact).filter(name => name.length >= 3)
     .some(name => sourceEvent.includes(name))).length >= 2;
 }
