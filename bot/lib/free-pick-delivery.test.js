@@ -62,6 +62,14 @@ test('receipt already queued is left to Publisher cron without a new POST', asyn
   const { delivery, calls } = await setup(t, { readX: async () => ({ status: 'approved' }) });
   await delivery.run(); assert.equal(calls.filter(c => c[0] === 'x').length, 0);
 });
+test('a pick delivered while X was off is complete and is not replayed when X resumes', async (t) => {
+  const { delivery, options, calls } = await setup(t, { readX: async () => ({ status: 'disabled' }) });
+  const first = await delivery.run();
+  assert.equal(first[0].complete, true);
+  const resumed = createFreePickDelivery({ ...options, readX: async () => ({ status: 'not_requested' }) });
+  assert.deepEqual(await resumed.run(), []);
+  assert.equal(calls.filter((call) => call[0] === 'x').length, 0);
+});
 test('emails the approved packet without requiring a Story asset and checkpoints once',async t=>{
  let emails=0;const {delivery,options}=await setup(t,{notify:async(r,site,p)=>{assert.equal(p.pick_id,row.pick_id);emails++;return {status:'sent',messageId:'email-receipt'};}});
  await delivery.run();await createFreePickDelivery(options).run();assert.equal(emails,1);
