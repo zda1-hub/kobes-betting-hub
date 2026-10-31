@@ -13,7 +13,7 @@ const packet = {
 };
 
 test('formats the approved free pick as a compact X post', () => {
-  assert.equal(buildFreePickXPost(packet), 'TODAY’S FREE PICK\n\nArizona Diamondbacks ML (-115)\n\nFull writeup → kobesbettinghub.com/free-pick?utm_source=kobe_x\nLegal age where you live. Bet responsibly.');
+  assert.equal(buildFreePickXPost(packet), 'Arizona Diamondbacks ML (-115)\n\nkobesbettinghub.com/free-pick?utm_source=kobe_x\n21+ where permitted. Bet responsibly.');
   assert.match(freePickXPostId(packet.pick_id), /^free-x-[a-f0-9]{40}$/);
 });
 
@@ -26,9 +26,8 @@ test('adds complete verified evidence bullets when they fit', () => {
   ];
 
   const body = buildFreePickXPost(evidencePacket);
-  assert.match(body, /• Arizona has won 7 of its last 10 games/);
-  assert.match(body, /QUICK BREAKDOWN/);
-  assert.doesNotMatch(body, /• The starter allowed two or fewer earned runs in four straight starts/);
+  assert.match(body, /^Arizona Diamondbacks ML \(-115\)\n\n- Arizona has won 7 of its last 10 games/m);
+  assert.match(body, /- The starter allowed two or fewer earned runs in four straight starts/);
   assert.doesNotMatch(body, /deliberately long/);
   assert.ok(body.length <= 280);
 });
@@ -41,7 +40,7 @@ test('never truncates evidence or removes approved wager terms to fit X', () => 
   const body = buildFreePickXPost(longEvidencePacket);
   assert.match(body, /Arizona Diamondbacks ML \(-115\)/);
   assert.doesNotMatch(body, /matchup advantage/);
-  assert.match(body, /Legal age where you live\. Bet responsibly\./);
+  assert.match(body, /21\+ where permitted\. Bet responsibly\./);
   assert.ok(body.length <= 280);
 });
 

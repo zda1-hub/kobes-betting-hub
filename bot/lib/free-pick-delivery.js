@@ -97,7 +97,7 @@ function createFreePickDelivery({ root, readRows, loadPacket, verifyPost, paused
           await saveDelivery(root, state);
         }
         state.complete = ['published', 'already_published', 'superseded'].includes(state.site?.status)
-          && state.x?.status === 'published' && state.notified === true;
+          && ['published', 'disabled'].includes(state.x?.status) && state.notified === true;
         state.lastError = null;
       } catch (error) {
         // Error text may contain provider response details; retain only a safe
