@@ -466,11 +466,11 @@ async function ensureCommunityReferralAnnouncement() {
 }
 
 async function ensureVipTrialNotice() {
-  // One weekend notice in the existing join channel; do not turn restarts into broadcasts.
+  // One weekend notice in announcements; do not turn restarts into broadcasts.
   if (Date.now() > Date.parse('2026-11-03T07:00:00Z')) return { status: 'EXPIRED' };
-  const channel = await client.channels.fetch('1539062219894030396', { force: true });
-  if (!channel?.isTextBased() || channel.guildId !== process.env.DISCORD_GUILD_ID || !/join-vip/i.test(channel.name || '')) {
-    throw new Error('Unexpected VIP join channel.');
+  const channel = await client.channels.fetch(referralWorkflow.announcement_channel_id, { force: true });
+  if (!channel?.isTextBased() || channel.guildId !== process.env.DISCORD_GUILD_ID || !/announcement/i.test(channel.name || '')) {
+    throw new Error('Unexpected announcement channel.');
   }
   const permissions = channel.permissionsFor(client.user);
   if (![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks,
