@@ -1621,21 +1621,15 @@ async function beginDailyXMonitor() {
     console.log(`X monitoring is scheduled to begin at ${new Date(startAt).toISOString()} (${dailyAt} Arizona time).`);
     return;
   }
-  const limit = dailyFreePickLimit();
   const dailyStopAt = xMonitorDailyStopAt();
   if (dailyStopAt && currentTime >= dailyStopAt) {
     stopXMonitor(`today's daily cutoff of ${dailyStopAt} Arizona time has passed`);
     return;
   }
-  if (limit !== null && await publishedFreePickCount() >= limit) {
-    stopXMonitor(`today's ${limit}-pick limit is already reached`);
-    return;
-  }
   const interval = xMonitorIntervalMs();
-  const stoppingRule = limit === null
-    ? 'until the daily cutoff'
-    : `until the ${limit}-pick daily free-pick limit is reached`;
-  console.log(`X monitoring enabled at ${currentTime} Arizona time: checking every ${Math.round(interval / 60000)} minute(s) ${stoppingRule}.`);
+  // The free-pick publication cap does not govern private candidate intake.
+  // Keep finding writeups for Kobe until the configured monitoring cutoff.
+  console.log(`X monitoring enabled at ${currentTime} Arizona time: checking every ${Math.round(interval / 60000)} minute(s) until the daily cutoff.`);
   void collectXSafely();
   xMonitorIntervalTimer = setInterval(() => void collectXSafely(), interval);
   if (dailyStopAt) {
@@ -1669,15 +1663,6 @@ async function collectXSafely() {
 
   xCollectionInProgress = true;
   try {
-    const approvedFreePickLimit = dailyFreePickLimit();
-    if (approvedFreePickLimit !== null) {
-      const published = await publishedFreePickCount();
-      if (published >= approvedFreePickLimit) {
-        stopXMonitor(`published ${published} approved free pick(s); limit was ${approvedFreePickLimit}`);
-        return;
-      }
-    }
-
     // Collection is independent of review. New qualifying posts keep flowing
     // for the configured time window; Kobe's buttons control publication only.
     const modelCallLimit = xMonitorModelCallLimit();
@@ -1720,12 +1705,9 @@ function startXMonitor() {
       return;
     }
     const interval = xMonitorIntervalMs();
-    const approvedFreePickLimit = dailyFreePickLimit();
     const modelCallLimit = xMonitorModelCallLimit();
-    const stoppingRule = [
-      approvedFreePickLimit !== null ? ` until ${approvedFreePickLimit} Kobe-approved free pick(s) are published` : '',
-      modelCallLimit === null ? '' : ` (safety cap: ${modelCallLimit} OpenAI extraction calls per collection run)`
-    ].join('');
+    const stoppingRule = modelCallLimit === null ? ''
+      : ` (safety cap: ${modelCallLimit} OpenAI extraction calls per collection run)`;
     console.log(`X monitoring enabled: checking approved sources every ${Math.round(interval / 60000)} minute(s)${stoppingRule}.`);
     void collectXSafely();
     xMonitorIntervalTimer = setInterval(() => void collectXSafely(), interval);
