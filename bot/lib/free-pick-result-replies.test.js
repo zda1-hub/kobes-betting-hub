@@ -37,6 +37,15 @@ test('sync waits for an original X receipt and skips unverified results', async 
   assert.deepEqual(receipts.map((item) => item.status), ['awaiting_original_post']);
 });
 
+test('sync skips a pick whose result was already replied to manually', async () => {
+  const fetchImpl = async () => { throw new Error('A duplicate result must not be queued'); };
+  const receipts = await syncFreePickResultReplies([row], '456', {
+    environment: { ...environment, FREE_PICK_X_RESULT_REPLY_SKIP_PICK_IDS: ` another-pick, ${row.pick_id} ` },
+    fetchImpl,
+  });
+  assert.deepEqual(receipts, []);
+});
+
 test('sync submits one reply request tied to the confirmed parent', async () => {
   const calls = [];
   const fetchImpl = async (url, init) => {
