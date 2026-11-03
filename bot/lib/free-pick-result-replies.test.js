@@ -7,6 +7,7 @@ const row = {
   published_at: '2026-09-30T18:00:00Z',
   post_reference: 'https://discord.com/channels/123/456/789',
   selection: 'Team A', published_line: '+2.5', published_odds_american: '-110',
+  source_name: 'Austin Props', source_handle: 'austinsprops',
   score_or_outcome: 'Team A 24, Team B 20', result: 'W',
   result_verified_source: 'Verified final result: ESPN', result_verified_at: '2026-09-30T23:00:00Z',
 };
@@ -59,6 +60,7 @@ test('sync submits one reply request tied to the confirmed parent', async () => 
   assert.match(submitted.id, /^result-x-123456789-[a-f0-9]{20}$/);
   assert.match(submitted.body, /FREE PICK RESULT: WIN/);
   assert.doesNotMatch(submitted.body, /Original pick:/);
+  assert.doesNotMatch(submitted.body, /Austin Props|austinsprops/i);
 });
 
 test('new verified wins and losses wait for an original post, then request one stable reply', async () => {

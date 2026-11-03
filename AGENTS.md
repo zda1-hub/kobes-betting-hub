@@ -55,3 +55,7 @@ The latest request reverses the original card shrink: homepage KBH artwork match
 Latest mobile follow-up: the tall two-row header was rejected for pushing controls/content down and feeling restrictive. Use one compact mobile row (logo, Join/Back, menu, Discord); Instagram/X remain reachable in the responsive menu. Preserve the opaque topmost header and desktop composition. Verify the 320px Back label, all menu links, and primary-action position.
 
 Latest mobile refinements: keep homepage intro type smaller than desktop; use bounded fluid type on public interior pages. Floating menus/dialogs may use subtle translucent glass and system blur with solid fallback/reduced-transparency support; header stays opaque. Expanded mobile KBH artwork is wider than the secondary term poster. The winning-play tracker shows verified wins and last verified sync without sport/date/search controls.
+
+## X Free Pick results — November 3, 2026
+
+When replying to an original KBH Free Pick on X with a verified result, state the exact wager, win/loss/push/void, and final outcome plainly. Do not add an “Original pick: @handle” line or name the monitored source in the public result reply. Keep the source and grading evidence in the internal record. This applies to both manual and automated result replies.
