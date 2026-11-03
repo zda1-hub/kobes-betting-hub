@@ -10,7 +10,9 @@ function resultReplyConfig(environment = process.env) {
   const secret = environment.FREE_PICK_X_QUEUE_SECRET;
   const startAt = Date.parse(environment.FREE_PICK_X_RESULT_REPLY_START_AT || '');
   if (!publisherUrl || !secret || !Number.isFinite(startAt)) throw new Error('Result replies require publisher URL, queue secret, and a valid activation timestamp.');
-  return { publisherUrl, secret, startAt };
+  const skipPickIds = new Set((environment.FREE_PICK_X_RESULT_REPLY_SKIP_PICK_IDS || '')
+    .split(',').map((id) => id.trim()).filter(Boolean));
+  return { publisherUrl, secret, startAt, skipPickIds };
 }
 
 function resultReplyId(pickId, xPostId) {
@@ -34,7 +36,11 @@ async function syncFreePickResultReplies(rows, channelId, { environment = proces
   const config = resultReplyConfig(environment);
   if (!config) return [];
   const receipts = [];
-  const eligible = freeRows(rows, channelId).filter((row) => verified(row) && Date.parse(row.result_verified_at) >= config.startAt);
+  const eligible = freeRows(rows, channelId).filter((row) => (
+    verified(row)
+    && Date.parse(row.result_verified_at) >= config.startAt
+    && !config.skipPickIds.has(row.pick_id)
+  ));
   for (const row of eligible) {
     try {
       const queueId = freePickXPostId(row.pick_id);
