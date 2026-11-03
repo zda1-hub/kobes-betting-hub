@@ -115,6 +115,40 @@ test('repairs old manual basketball metadata and grades a unique same-day player
   assert.match(grade.outcome, /2 points/);
 });
 
+test('grades NBA three-pointers made from the exact final ESPN made-attempted stat', async () => {
+  const game = {
+    id: '401909913', date: '2026-11-03T01:00:00Z', status: { type: { completed: true } },
+    competitions: [{ competitors: [
+      { team: { displayName: 'Dallas Mavericks' } },
+      { team: { displayName: 'Sacramento Kings' } },
+    ] }],
+  };
+  const box = {
+    header: { competitions: [{ id: game.id, status: { type: { completed: true } } }] },
+    boxscore: { players: [{ statistics: [{
+      keys: ['threePointFieldGoalsMade-threePointFieldGoalsAttempted'],
+      athletes: [{ athlete: { displayName: 'Cooper Flagg' }, stats: ['0-4'] }],
+    }] }] },
+  };
+  const fetchImpl = async (url) => new Response(JSON.stringify(url.includes('/summary?') ? box : { events: [game] }));
+  const row = {
+    pick_id: '20261102-117-X', operating_date: '2026-11-02', published_at: '2026-11-02T21:15:40Z',
+    league: 'NBA', event: 'Dallas Mavericks vs Sacramento Kings',
+    selection: 'Cooper Flagg over 1.5 three-pointers made', published_line: '1.5 3PM', result: 'PENDING',
+  };
+  const loss = await gradePickFromEspn(row, { fetchImpl });
+  assert.equal(loss.status, 'GRADED', loss.reason);
+  assert.equal(loss.result, 'L');
+  assert.equal(loss.outcome, 'Cooper Flagg: 0 three-pointers made');
+  assert.match(loss.source, /gameId\/401909913/);
+  box.boxscore.players[0].statistics[0].athletes[0].stats = ['2-4'];
+  assert.equal((await gradePickFromEspn(row, { fetchImpl })).result, 'W');
+  box.boxscore.players[0].statistics[0].athletes[0].stats = ['--'];
+  assert.equal((await gradePickFromEspn(row, { fetchImpl })).status, 'PENDING');
+  box.boxscore.players[0].statistics[0].athletes[0].stats = ['0-4'];
+  assert.equal((await gradePickFromEspn({ ...row, selection: 'Cooper Flagg over 1.5 three-point attempts', published_line: '' }, { fetchImpl })).status, 'PENDING');
+});
+
 test('grades published Rush Yards wording against an official name with a suffix', async () => {
   const nflEvent = {
     id: '401873005', status: { type: { completed: true } },
