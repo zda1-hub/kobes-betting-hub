@@ -149,6 +149,9 @@ function statSpec(row, entries) {
   if (/receiving targets?|\btargets?\b/.test(text)) return pick('receiving', ['receivingTargets', 'targets'], 'receiving targets');
   if (/receptions?/.test(text)) return pick('receiving', 'receptions', 'receptions');
   if (/field goals? made/.test(text)) return pick('kicking', 'fieldGoalsMade/fieldGoalAttempts', 'field goals made', value => Number(String(value).split('/')[0]));
+  if (/\b(?:threes|three[- ]pointers?|3[- ]pointers?|3pm)\b/.test(text) && !/\b(?:attempts?|3pa)\b/.test(text)) {
+    return pick('basketball', ['threePointFieldGoalsMade', 'threePointFieldGoalsMade-threePointFieldGoalsAttempted'], 'three-pointers made');
+  }
   if (/\bpoints\b/.test(text)) return pick('basketball', 'points', 'points');
   if (/\brebounds\b/.test(text)) return pick('basketball', 'rebounds', 'rebounds');
   if (/\bassists\b/.test(text)) return pick('basketball', 'assists', 'assists');
@@ -160,6 +163,11 @@ function statValue(entry, key) {
   for (const candidate of keys) {
     const raw = entry?.values?.[candidate];
     if (raw == null || String(raw).trim() === '' || raw === '--') continue;
+    if (candidate === 'threePointFieldGoalsMade-threePointFieldGoalsAttempted') {
+      const split = /^(\d+)-(\d+)$/.exec(String(raw));
+      if (split && Number(split[1]) <= Number(split[2])) return Number(split[1]);
+      continue;
+    }
     if (candidate.includes('/') && /^\d+\/\d+$/.test(String(raw))) return String(raw);
     const value = Number(raw);
     if (Number.isFinite(value)) return value;
