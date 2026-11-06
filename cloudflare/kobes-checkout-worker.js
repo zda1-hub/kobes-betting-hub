@@ -730,18 +730,21 @@ function cleanAttribution(value = {}) {
 
 function attributionSourceForSession(session) {
   if (!session) return 'unattributed';
+  // Legacy owned-X links used kobe_x. Keep the stored tag intact, but report
+  // it with other X traffic so source totals do not split by link version.
+  const reportSource = source => source === 'kobe_x' ? 'x' : source;
   const touch = session.first_touch || {};
   const acquisition = cleanAttribution({ session_source: touch.session_source }).session_source;
-  if (acquisition) return acquisition;
+  if (acquisition) return reportSource(acquisition);
   const original = cleanAttribution({ first_source: touch.first_source || touch.utm_source || session.first_referrer_host || 'direct' }).first_source;
   // Older rows can retain a lifetime direct/other source despite explicit session
   // landing tags. Recover only recognized tags captured in that row's first touch;
   // never infer from last touch or retroactively manufacture missing visits.
   if (['other', 'direct'].includes(original) && touch.utm_source) {
     const tagged = cleanAttribution({ first_source: touch.utm_source }).first_source;
-    if (!['other', 'direct'].includes(tagged)) return tagged;
+    if (!['other', 'direct'].includes(tagged)) return reportSource(tagged);
   }
-  return original;
+  return reportSource(original);
 }
 
 
@@ -752,7 +755,7 @@ function attributionCampaignForSession(session) {
     return String(touch.session_campaign || 'uncategorized').slice(0, 120).toLowerCase();
   }
   const original = cleanAttribution({ first_source: touch.first_source || touch.utm_source || session.first_referrer_host || 'direct' }).first_source;
-  const recovered = attributionSourceForSession(session) !== original;
+  const recovered = attributionSourceForSession(session) !== (original === 'kobe_x' ? 'x' : original);
   return String(recovered ? touch.utm_campaign || 'uncategorized' : touch.first_campaign || touch.utm_campaign || 'uncategorized').slice(0, 120).toLowerCase();
 }
 

@@ -12,8 +12,10 @@ const packet = {
   }
 };
 
-test('formats the approved free pick as a compact X post', () => {
-  assert.equal(buildFreePickXPost(packet), 'Arizona Diamondbacks ML (-115)\n\nkobesbettinghub.com/free-pick?utm_source=kobe_x\n21+ where permitted. Bet responsibly.');
+test('formats the approved free pick with one stable X campaign link', () => {
+  const body = buildFreePickXPost(packet);
+  assert.match(body, /^Arizona Diamondbacks ML \(-115\)\n\nkobesbettinghub\.com\/free-pick\?utm_source=x&utm_campaign=free_pick_[a-f0-9]{10}\n21\+ where permitted\. Bet responsibly\.$/);
+  assert.equal(buildFreePickXPost(packet), body);
   assert.match(freePickXPostId(packet.pick_id), /^free-x-[a-f0-9]{40}$/);
 });
 
@@ -30,6 +32,13 @@ test('adds complete verified evidence bullets when they fit', () => {
   assert.match(body, /- The starter allowed two or fewer earned runs in four straight starts/);
   assert.doesNotMatch(body, /deliberately long/);
   assert.ok(body.length <= 280);
+});
+
+test('different approved picks get different click tags without changing the source bucket', () => {
+  const first = buildFreePickXPost(packet);
+  const second = buildFreePickXPost({ ...packet, pick_id: '20260829-MLB-002' });
+  assert.notEqual(first.match(/utm_campaign=(free_pick_[a-f0-9]+)/)[1], second.match(/utm_campaign=(free_pick_[a-f0-9]+)/)[1]);
+  assert.match(second, /utm_source=x&utm_campaign=free_pick_/);
 });
 
 test('never truncates evidence or removes approved wager terms to fit X', () => {
