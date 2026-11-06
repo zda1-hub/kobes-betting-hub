@@ -6,6 +6,7 @@
   const offers = new Set(['starter', 'trial_2_day', 'referral_trial', 'first_month_back', 'monthly', 'six_month', 'annual']);
   const sent = new Set();
   let initialized = false;
+  let sdkReady = Promise.resolve();
 
   function initialize() {
     if (initialized || !window.KBHConsent?.allowed() || !allowedHosts.has(location.hostname)
@@ -19,11 +20,23 @@
       const script = document.createElement('script');
       script.async = true;
       script.src = 'https://static.ads-twitter.com/uwt.js';
+      // A checkout redirect can otherwise unload the page before the queued
+      // event reaches X. Bound the wait so tracking never traps a customer.
+      sdkReady = new Promise(resolve => {
+        const timeout = setTimeout(resolve, 600);
+        const finish = () => { clearTimeout(timeout); resolve(); };
+        script.addEventListener('load', finish, { once: true });
+        script.addEventListener('error', finish, { once: true });
+      });
       const firstScript = document.getElementsByTagName('script')[0];
       firstScript.parentNode.insertBefore(script, firstScript);
     }
     twq('config', pixelId);
     window.KBHX = Object.freeze({
+      async waitForDispatch() {
+        await sdkReady;
+        await new Promise(resolve => setTimeout(resolve, 150));
+      },
       trackCheckout(offer, requestId) {
         if (!window.KBHConsent?.allowed() || !offers.has(offer) || !/^[0-9a-f-]{36}$/i.test(requestId || '')) return false;
         const key = `checkout:${requestId}`;

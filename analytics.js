@@ -35,7 +35,9 @@
     || referrerHost.endsWith('.kobedirwin.workers.dev') || referrerHost === 'checkout.stripe.com';
   const taggedSource = normalizeSource(query.get('utm_source'));
   const referrerSource = isInternalReferrer ? '' : normalizeSource(referrerHost);
-  const clickIdSource = query.get('fbclid') ? 'meta' : '';
+  // A click ID identifies the platform, but does not by itself prove a paid
+  // campaign or a completed visit. X's pixel reads twclid separately.
+  const clickIdSource = query.get('fbclid') ? 'meta' : query.get('twclid') ? 'x' : '';
   const incomingSource = referralIdentifier ? 'referral' : taggedSource || referrerSource || clickIdSource;
   const inferredMedium = !taggedSource && !referrerSource && clickIdSource && !referralIdentifier ? 'unknown_social' : !incomingSource ? '' : ['x', 'kobe_x', 'instagram', 'tiktok', 'youtube', 'facebook'].includes(incomingSource) ? 'organic_social' : incomingSource === 'discord' ? 'community' : incomingSource;
   let sessionId;

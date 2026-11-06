@@ -14,8 +14,8 @@ function browser({ hostname = 'kobesbettinghub.com', search = '', environment = 
     localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) }
   };
   const scripts = [];
-  const document = { createElement: () => ({}), getElementsByTagName: () => [{ parentNode: { insertBefore(node) { scripts.push(node); } } }] };
-  vm.runInNewContext(source, { window, location, document, URLSearchParams, Number, Set });
+  const document = { createElement: () => ({ listeners: {}, addEventListener(name, listener) { this.listeners[name] = listener; } }), getElementsByTagName: () => [{ parentNode: { insertBefore(node) { scripts.push(node); } } }] };
+  vm.runInNewContext(source, { window, location, document, URLSearchParams, Number, Set, Promise, setTimeout, clearTimeout });
   return { window, location, listeners, storage, scripts, events: () => window.twq?.queue.filter(args => args[0] === 'event') || [] };
 }
 
@@ -26,6 +26,17 @@ test('X pixel initializes once on consented public pages with the account pixel 
   assert.equal(page.window.twq.queue.filter(args => args[0] === 'config' && args[1] === 'rht3t').length, 1);
   page.listeners.get('kbh:tracking-url-ready')();
   assert.equal(page.scripts.length, 1);
+});
+
+test('checkout waits for SDK load and a short dispatch window', async () => {
+  const page = browser();
+  let finished = false;
+  const waiting = page.window.KBHX.waitForDispatch().then(() => { finished = true; });
+  await Promise.resolve();
+  assert.equal(finished, false);
+  page.scripts[0].listeners.load();
+  await waiting;
+  assert.equal(finished, true);
 });
 
 test('declined consent, previews, staging and private URLs never load the X SDK', () => {
