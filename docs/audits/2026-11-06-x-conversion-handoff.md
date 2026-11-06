@@ -1,0 +1,13 @@
+# X conversion handoff and click attribution — November 6, 2026
+
+Request: check the current KBH X pixel after an outreach email questioned its setup, and make checkout/trial/payment tracking verifiable without inventing a conversion.
+
+Affected files: `x-pixel.js`, `membership.js`, `analytics.js`, the three public membership page references, `scripts/prepare-public-site.mjs`, and focused tests. No checkout price, Stripe route, consent rule, or advertising budget changed.
+
+Before: X Events Manager showed account pixel `rht3t` recording site visits, most recently November 6 at 3:58 PM MST. Its checkout, verified trial, and paid membership events had no recorded activity. The browser queued a checkout-intent event and immediately navigated to Discord or Stripe, which could unload the page before X's script dispatched it. An untagged landing URL with only `twclid` appeared as direct in first-party reports. The private dashboard showed one verified trial start on November 5, still within its two-day window; it did not establish that X observed that trial or drove it.
+
+After: when a consented checkout event is queued, the checkout handoff waits for the X SDK load or a 600 ms bound, then gives the event a 150 ms dispatch window before navigating. Tracking failure never prevents the checkout redirect. A `twclid` landing URL is labeled X with an unknown social medium unless an explicit UTM or external referrer identifies another source. The raw click ID is not added to the first-party attribution payload; X's SDK handles it separately. Browser asset versions changed so the public build requests the new scripts. Trial and paid events still require the existing verified onboarding receipts; no synthetic event is sent.
+
+Verification: 47 focused tests passed, covering the handoff order, SDK wait, click-ID precedence, consent and private URL guards, event separation, and the public asset manifest. The production build generated 113 whitelisted entries. The full repository run reported 934 passes and seven failures in unrelated existing tests (ESPN evidence, Discord recovery, an expired offer assertion, backdrop, and guide fixtures); these do not exercise this change. Deployed behavior is recorded in the release follow-up below. X event activity can become Active only after a real consented customer completes the corresponding path; a local test or site visit is not proof of a purchase. Stripe-completed payments and VIP activation remain distinct first-party stages.
+
+Release follow-up: pending.

@@ -231,7 +231,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
     const withGoogle = withConsent.includes('src="/analytics-integrations.js') ? withConsent : withConsent.replace('</head>', `  <script>window.__KBH_TRACKING_CONFIG__=${JSON.stringify(trackingConfig)}</script>\n  <script src="/analytics-integrations.js?v=20261009-consent-bootstrap"></script>\n</head>`);
     const withAnalytics = withGoogle.includes('src="analytics.js')
       ? withGoogle
-      : withGoogle.replace('</body>', '  <script src="/analytics.js?v=20261015-session-source"></script>\n  </body>');
+      : withGoogle.replace('</body>', '  <script src="/analytics.js?v=20261106-x-click-id"></script>\n  </body>');
     await writeFile(outputPath, useCanonicalPageLinks(withAnalytics, file));
   }));
 
@@ -254,7 +254,7 @@ export async function preparePublicSite({ env = process.env } = {}) {
       source = source.replace('</head>', '  <script src="/meta-pixel.js?v=20261015-kobe-pixel" defer></script>\n</head>');
     }
     if (!source.includes('src="/x-pixel.js')) {
-      source = source.replace('</head>', '  <script src="/x-pixel.js?v=20261022-consent" defer></script>\n</head>');
+      source = source.replace('</head>', '  <script src="/x-pixel.js?v=20261106-handoff" defer></script>\n</head>');
     }
     // A noscript pixel would bypass the visitor's tracking choice.
     await writeFile(outputPath, source);

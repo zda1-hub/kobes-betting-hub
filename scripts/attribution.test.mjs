@@ -175,6 +175,15 @@ test('fbclid only identifies Meta platform with unknown social medium', () => {
   assert.equal(visit({url:'https://kobesbettinghub.com/?fbclid=example',referrer:'https://www.facebook.com/'}).attribution.session_source,'facebook');
 });
 
+test('twclid identifies X without falsely claiming a paid campaign', () => {
+  const result = visit({ url: 'https://kobesbettinghub.com/join?twclid=example' });
+  assert.equal(result.attribution.session_source, 'x');
+  assert.equal(result.attribution.session_medium, 'unknown_social');
+  assert.equal(result.attribution.session_campaign, '');
+  assert.equal(result.attribution.twclid, undefined);
+  assert.equal(visit({ url: 'https://kobesbettinghub.com/join?twclid=example&utm_source=ig' }).attribution.session_source, 'instagram');
+});
+
 
 test('a later direct session does not inherit lifetime campaign acquisition', () => {
   const first=visit({url:'https://kobesbettinghub.com/?utm_source=x&utm_campaign=old',now:100000000});

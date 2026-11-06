@@ -10,7 +10,7 @@ const productionConfig = {
   workerOrigin: 'https://kobes-betting-hub-checkout.kobedirwin.workers.dev',
 };
 
-function checkoutPage(fetchImpl, { config = productionConfig, search = '', historyState = null } = {}) {
+function checkoutPage(fetchImpl, { config = productionConfig, search = '', historyState = null, xPixel = null } = {}) {
   const storage = new Map();
   const assignedUrls = [];
   const tracking = [];
@@ -59,6 +59,7 @@ function checkoutPage(fetchImpl, { config = productionConfig, search = '', histo
     crypto: globalThis.crypto,
     history: { state: historyState, replaceState(state) { this.state = state; } },
     KBHMeta: { trackCheckout: (...args) => tracking.push(args) },
+    KBHX: xPixel,
     location: { href: `https://kobesbettinghub.com/join${search}`, search, assign: (url) => assignedUrls.push(url) },
     sessionStorage: {
       getItem: (key) => storage.get(key) || null,
@@ -148,6 +149,22 @@ test('checkout retries reuse an in-flight request ID and clear it after Stripe r
 
   await page.buttons[0].click();
   assert.notEqual(requestIds[2], requestIds[1]);
+});
+
+test('a consented X checkout event gets a bounded dispatch opportunity before redirect', async () => {
+  let release;
+  let eventCount = 0;
+  const ready = new Promise(resolve => { release = resolve; });
+  const page = checkoutPage(async () => Response.json({ url: 'https://checkout.stripe.com/verified-session' }), {
+    xPixel: { trackCheckout: () => { eventCount++; return true; }, waitForDispatch: () => ready },
+  });
+  const click = page.buttons[0].click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(eventCount, 1);
+  assert.deepEqual(page.assignedUrls, []);
+  release();
+  await click;
+  assert.deepEqual(page.assignedUrls, ['https://checkout.stripe.com/verified-session']);
 });
 
 test('staging checkout only calls the configured staging Worker', async () => {
