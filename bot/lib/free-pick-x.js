@@ -4,7 +4,15 @@ const { auditedFetch } = require('../../pipeline/api-client');
 
 const MAX_X_POST_LENGTH = 280;
 const MAX_X_EVIDENCE_POINTS = 3;
-const X_FOOTER = 'kobesbettinghub.com/free-pick?utm_source=kobe_x\n21+ where permitted. Bet responsibly.';
+const X_FOOTER_LEGAL = '21+ where permitted. Bet responsibly.';
+
+function freePickXFooter(packet, terms) {
+  // One stable, short tag per approved pick lets consented site sessions be
+  // matched to the X post without putting a raw pick ID in the public link.
+  const content = createHash('sha256').update(packet.pick_id || terms.join('\n')).digest('hex').slice(0, 10);
+  // Campaign is unique because the existing dashboard groups by campaign.
+  return `kobesbettinghub.com/free-pick?utm_source=x&utm_campaign=free_pick_${content}\n${X_FOOTER_LEGAL}`;
+}
 
 function freePickXPostId(pickId) {
   if (typeof pickId !== 'string' || !pickId.trim()) {
@@ -25,7 +33,8 @@ function buildFreePickXPost(packet) {
   // Exact approved wager terms are mandatory. Verified evidence is optional
   // and is added only as complete bullets; a claim is never shortened into a
   // potentially misleading fragment just to fit X's character limit.
-  const fixedSections = [terms.join('\n'), X_FOOTER];
+  const footer = freePickXFooter(packet, terms);
+  const fixedSections = [terms.join('\n'), footer];
   let body = fixedSections.join('\n\n');
   if (body.length > MAX_X_POST_LENGTH) {
     throw new Error(`The approved free-pick post is ${body.length} characters before evidence; X allows ${MAX_X_POST_LENGTH}.`);
@@ -37,12 +46,12 @@ function buildFreePickXPost(packet) {
   const acceptedEvidence = [];
   for (const claim of evidence) {
     const candidateEvidence = [...acceptedEvidence, `- ${claim}`];
-    const candidate = [terms.join('\n'), candidateEvidence.join('\n'), X_FOOTER].join('\n\n');
+    const candidate = [terms.join('\n'), candidateEvidence.join('\n'), footer].join('\n\n');
     if (candidate.length <= MAX_X_POST_LENGTH) acceptedEvidence.push(`- ${claim}`);
   }
 
   return acceptedEvidence.length
-    ? [terms.join('\n'), acceptedEvidence.join('\n'), X_FOOTER].join('\n\n')
+    ? [terms.join('\n'), acceptedEvidence.join('\n'), footer].join('\n\n')
     : body;
 }
 

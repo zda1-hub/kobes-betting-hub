@@ -1604,6 +1604,23 @@ test('Meta campaign source is normalized by the server and recovered from preser
   assert.equal(workerTest.attributionSourceForSession(null),'unattributed');
 });
 
+test('historic owned-X tags share the X source total without losing their campaign', () => {
+  const legacy = { first_touch: { first_source: 'kobe_x', first_campaign: 'old_free_pick', utm_source: 'kobe_x' } };
+  assert.equal(workerTest.attributionSourceForSession(legacy), 'x');
+  assert.equal(workerTest.attributionCampaignForSession(legacy), 'old_free_pick');
+  assert.equal(workerTest.attributionSourceForSession({ first_touch: { session_source: 'kobe_x', session_campaign: 'legacy_post' } }), 'x');
+  assert.equal(workerTest.attributionSourceForSession({ first_touch: { first_source: 'direct', utm_source: 'kobe_x' } }), 'x');
+  const summary = workerTest.websitePageViewSummary([
+    { event_name: 'page_view', session_id: 'old' },
+    { event_name: 'page_view', session_id: 'new' },
+  ], [
+    { id: 'old', first_touch: { session_source: 'kobe_x' } },
+    { id: 'new', first_touch: { session_source: 'x' } },
+  ]);
+  assert.equal(summary.sources.x, 2);
+  assert.equal(summary.sources.kobe_x, undefined);
+});
+
 
 test('CTA reporting uses the same recoverable Meta source as the session report', () => {
   const result=workerTest.interactionSummary([{event_name:'page_view',session_id:'s1',path:'/join',properties:{kind:'interaction',action:'cta_click',target_id:'join_monthly',location:'membership'}}],[{id:'s1',first_touch:{first_source:'other',utm_source:'Meta Ads',first_campaign:'oct_8_2026'}}]);
