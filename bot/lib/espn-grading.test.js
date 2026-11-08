@@ -68,6 +68,30 @@ test('grades a standard final MLB player prop from the ESPN box score', async ()
   });
 });
 
+test('grades a generic basketball Free Pick only after matching its exact matchup across leagues', async () => {
+  const game = { id: 'nba-hawks-nets', status: { type: { completed: true } }, competitions: [{ competitors: [
+    { team: { displayName: 'Brooklyn Nets', shortDisplayName: 'Nets', abbreviation: 'BKN' } },
+    { team: { displayName: 'Atlanta Hawks', shortDisplayName: 'Hawks', abbreviation: 'ATL' } }
+  ] }] };
+  const box = { header: { competitions: [{ id: game.id, status: { type: { completed: true } } }] },
+    boxscore: { players: [{ statistics: [{ keys: ['points'], athletes: [
+      { athlete: { displayName: 'Nickeil Alexander-Walker' }, stats: ['20'] }
+    ] }] }] } };
+  let duplicate = false;
+  const fetchImpl = async url => new Response(JSON.stringify(url.includes('/summary?') ? box : {
+    events: url.includes('/basketball/nba/') || duplicate && url.includes('/basketball/wnba/') ? [game] : []
+  }));
+  const row = { pick_id: '20261107-008-X', operating_date: '2026-11-07', sport: 'Basketball', league: '',
+    event: 'Brooklyn Nets at Atlanta Hawks', selection: 'Nickeil Alexander-Walker over 20.5 points',
+    published_line: '20.5 points', result: 'PENDING' };
+  const grade = await gradePickFromEspn(row, { fetchImpl });
+  assert.equal(grade.status, 'GRADED', grade.reason);
+  assert.equal(grade.result, 'L');
+  assert.match(grade.outcome, /20 points/);
+  duplicate = true;
+  assert.equal((await gradePickFromEspn(row, { fetchImpl })).status, 'PENDING');
+});
+
 test('grades a published night-before free pick only from its exact next-day matchup', async () => {
   const game = {
     id: 'next-day-49ers-falcons', date: '2026-10-25T17:00:00Z',

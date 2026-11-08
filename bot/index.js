@@ -733,6 +733,7 @@ function startFreePickResultReplies() {
   if (!freePickChannelId || freePickResultReplyTimer) return;
   try { if (!resultReplyConfig()) return; } catch (error) { console.error('Free Pick result replies are not configured:', error.message); return; }
   let running = false;
+  let weeklyRecordLogged = false;
   const run = async () => {
     if (running) return;
     running = true;
@@ -741,14 +742,23 @@ function startFreePickResultReplies() {
       for (let daysAgo = 0; daysAgo <= 2; daysAgo += 1) {
         await autoGradePendingOfficialPicks(dailyPickOperatingDate(new Date(now.getTime() - daysAgo * 86400000)), fetch, true);
       }
-      const receipts = await syncFreePickResultReplies(await readPickLog(), freePickChannelId);
+      const rows = await readPickLog();
+      if (!weeklyRecordLogged) {
+        const start = dailyPickOperatingDate(new Date(now.getTime() - 6 * 86400000));
+        const end = dailyPickOperatingDate(now);
+        const snapshot = buildFreePickResults(rows.filter((row) => row.operating_date >= start && row.operating_date <= end), end, freePickChannelId);
+        console.log('Verified Free Pick seven-day record:', JSON.stringify({ start, end, ...snapshot.overall, pending: snapshot.pending }));
+        weeklyRecordLogged = true;
+      }
+      const receipts = await syncFreePickResultReplies(rows, freePickChannelId);
       for (const receipt of receipts.filter((item) => item.status !== 'already_requested')) console.log('Free Pick result reply:', JSON.stringify(receipt));
     } catch (error) { console.error('Free Pick result reply scan needs attention:', error.message); }
     finally { running = false; }
   };
   void run();
-  freePickResultReplyTimer = setInterval(run, 30 * 60 * 1000);
+  freePickResultReplyTimer = setInterval(run, 5 * 60 * 1000);
   freePickResultReplyTimer.unref();
+  console.log('Verified Free Pick X result replies active: 5-minute scan after an official final.');
 }
 
 function startFreePickResultsSync() {

@@ -325,6 +325,23 @@ async function resolvePlayerWager(row, fetchImpl) {
   return candidate?.event?.date && Date.parse(candidate.event.date) > Date.parse(row.published_at) ? candidate : null;
 }
 
+async function resolveLeagueFromMatchup(row, fetchImpl) {
+  if (!row.event || leagueFor(row)) return null;
+  const sport = `${row.sport || ''} ${row.league || ''}`.toLowerCase();
+  const leagues = /basketball/.test(sport) ? [LEAGUES.nba, LEAGUES.wnba, LEAGUES.ncaab]
+    : /football/.test(sport) ? [LEAGUES.nfl, LEAGUES.ncaaf]
+      : /hockey/.test(sport) ? [LEAGUES.nhl]
+        : /baseball/.test(sport) ? [LEAGUES.mlb] : [];
+  if (!leagues.length) return null;
+  const candidates = [];
+  for (const league of leagues) {
+    const scoreboard = await getJson(`${ESPN_BASE_URL}/${league.path}/scoreboard?dates=${eventDate(row.operating_date)}&limit=100`, fetchImpl);
+    const event = matchingEvent(row, scoreboard.events);
+    if (event) candidates.push({ league, event, market: row.market, selection: row.selection });
+  }
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
 function createGradingFetch(fetchImpl = fetch) {
   const responses = new Map();
   return async (url, options) => {
@@ -397,7 +414,7 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
     } catch (error) { return { status: 'PENDING', reason: error.message }; }
   }
   let resolved;
-  try { resolved = await resolveStraightWager(row, fetchImpl) || await resolvePlayerWager(row, fetchImpl); }
+  try { resolved = await resolveStraightWager(row, fetchImpl) || await resolvePlayerWager(row, fetchImpl) || await resolveLeagueFromMatchup(row, fetchImpl); }
   catch (error) { return { status: 'PENDING', reason: error.message }; }
   if (resolved) {
     league = resolved.league;

@@ -1,0 +1,9 @@
+# Free Pick X result recovery and direct Discord link — November 8, 2026
+
+Request: post source-verified Free Pick results as replies under their original X picks after games finish, and link future original X Free Picks directly to the free Discord. Report the seven-day verified record before drafting any weekly recap.
+
+Before: the November 7 Nickeil Alexander-Walker over 20.5 points pick was still pending even after ESPN marked Brooklyn at Atlanta final. Its published sport was generic `Basketball`, and the grader would not choose NBA by assumption. The X post linked to the website Free Pick page. The result-reply scan interval was 30 minutes; the Blueprint default still said disabled even though a November 4 live result reply had been logged.
+
+After: for a generic sport with an explicit two-team matchup, the grader checks the compatible ESPN leagues and accepts exactly one matching event on the operating date. Ambiguous or missing matches remain pending. The result scan runs every five minutes after an official final and keeps the existing deterministic X reply ID and duplicate guard. New X Free Pick copy uses the confirmed free-server invite `https://discord.gg/sB9vzGz2xj`; the Discord invite API returned Kobe's Betting Hub with no expiration. The Blueprint records result replies enabled. The bot logs the verified seven-day win/loss/push/void and pending counts once at startup; no weekly recap is posted automatically.
+
+Verification: ESPN's November 7 NBA scoreboard marks Brooklyn at Atlanta final; its exact game summary lists Nickeil Alexander-Walker with 20 points. Focused grader, X copy, and result-reply tests passed (41/41); `git diff --check` passed. Live deployment and X reply receipt are to be appended after release. Direct Discord links no longer carry the website campaign tag, so website session analytics will not attribute those clicks; Discord invite/join attribution should be measured separately.
