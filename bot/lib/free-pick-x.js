@@ -6,12 +6,8 @@ const MAX_X_POST_LENGTH = 280;
 const MAX_X_EVIDENCE_POINTS = 3;
 const X_FOOTER_LEGAL = '21+ where permitted. Bet responsibly.';
 
-function freePickXFooter(packet, terms) {
-  // One stable, short tag per approved pick lets consented site sessions be
-  // matched to the X post without putting a raw pick ID in the public link.
-  const content = createHash('sha256').update(packet.pick_id || terms.join('\n')).digest('hex').slice(0, 10);
-  // Campaign is unique because the existing dashboard groups by campaign.
-  return `kobesbettinghub.com/free-pick?utm_source=x&utm_campaign=free_pick_${content}\n${X_FOOTER_LEGAL}`;
+function freePickXFooter() {
+  return `Free Discord: https://discord.gg/sB9vzGz2xj\n${X_FOOTER_LEGAL}`;
 }
 
 function freePickXPostId(pickId) {
@@ -33,7 +29,7 @@ function buildFreePickXPost(packet) {
   // Exact approved wager terms are mandatory. Verified evidence is optional
   // and is added only as complete bullets; a claim is never shortened into a
   // potentially misleading fragment just to fit X's character limit.
-  const footer = freePickXFooter(packet, terms);
+  const footer = freePickXFooter();
   const fixedSections = [terms.join('\n'), footer];
   let body = fixedSections.join('\n\n');
   if (body.length > MAX_X_POST_LENGTH) {

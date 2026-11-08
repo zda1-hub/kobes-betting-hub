@@ -12,9 +12,9 @@ const packet = {
   }
 };
 
-test('formats the approved free pick with one stable X campaign link', () => {
+test('formats the approved free pick with the direct free Discord invite', () => {
   const body = buildFreePickXPost(packet);
-  assert.match(body, /^Arizona Diamondbacks ML \(-115\)\n\nkobesbettinghub\.com\/free-pick\?utm_source=x&utm_campaign=free_pick_[a-f0-9]{10}\n21\+ where permitted\. Bet responsibly\.$/);
+  assert.match(body, /^Arizona Diamondbacks ML \(-115\)\n\nFree Discord: https:\/\/discord\.gg\/sB9vzGz2xj\n21\+ where permitted\. Bet responsibly\.$/);
   assert.equal(buildFreePickXPost(packet), body);
   assert.match(freePickXPostId(packet.pick_id), /^free-x-[a-f0-9]{40}$/);
 });
@@ -34,11 +34,12 @@ test('adds complete verified evidence bullets when they fit', () => {
   assert.ok(body.length <= 280);
 });
 
-test('different approved picks get different click tags without changing the source bucket', () => {
+test('different approved picks use the same current direct invite', () => {
   const first = buildFreePickXPost(packet);
   const second = buildFreePickXPost({ ...packet, pick_id: '20260829-MLB-002' });
-  assert.notEqual(first.match(/utm_campaign=(free_pick_[a-f0-9]+)/)[1], second.match(/utm_campaign=(free_pick_[a-f0-9]+)/)[1]);
-  assert.match(second, /utm_source=x&utm_campaign=free_pick_/);
+  assert.match(first, /Free Discord: https:\/\/discord\.gg\/sB9vzGz2xj/);
+  assert.match(second, /Free Discord: https:\/\/discord\.gg\/sB9vzGz2xj/);
+  assert.doesNotMatch(second, /kobesbettinghub\.com\/free-pick/);
 });
 
 test('never truncates evidence or removes approved wager terms to fit X', () => {
