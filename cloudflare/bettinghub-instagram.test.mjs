@@ -216,7 +216,7 @@ test('scheduled Story reads the current Free Pick through the publisher service 
   assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_story_deliveries').get().n, 0);
 });
 
-test('approved current Free Pick publishes one Reel with the Discord caption and a separate receipt', async () => {
+test('approved current Free Pick publishes one Reel with a short rotating caption and a separate receipt', async () => {
   const env = environment();
   env.INSTAGRAM_REELS_ENABLED = 'true';
   env.INSTAGRAM_REEL_NOT_BEFORE_DATE = __test.pacificDate();
@@ -234,7 +234,7 @@ test('approved current Free Pick publishes one Reel with the Discord caption and
     if (String(url).endsWith('/media')) {
       assert.equal(init.body.get('media_type'), 'REELS');
       assert.equal(init.body.get('video_url'), pick.reelUrl);
-      assert.equal(init.body.get('caption'), caption);
+      assert.equal(init.body.get('caption'), __test.freePickReelCaption(0));
       assert.equal(init.body.get('share_to_feed'), 'true');
       return Response.json({ id: '123456789' });
     }
@@ -251,6 +251,17 @@ test('approved current Free Pick publishes one Reel with the Discord caption and
   assert.equal(calls.filter(call => call.url.endsWith('/media_publish')).length, 1);
   assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_story_deliveries').get().n, 0);
   assert.equal(env.DB.sql.prepare('SELECT state FROM instagram_reel_deliveries').get().state, 'published');
+});
+
+test('Reel captions rotate approved openers without claiming an ungraded win', () => {
+  const first = __test.freePickReelCaption(0);
+  const second = __test.freePickReelCaption(1);
+  assert.match(first, /^She's gettin what she needs 😂/);
+  assert.match(second, /^Happy wife, happy life 🤝/);
+  assert.notEqual(first, second);
+  assert.ok(first.includes('https://discord.gg/sB9vzGz2xj'));
+  assert.ok(!first.includes('green slip'));
+  assert.equal(__test.freePickReelCaption(9), first);
 });
 
 test('wrong username, Creator account, missing grant and invalid expiration cannot install credentials', async () => {
