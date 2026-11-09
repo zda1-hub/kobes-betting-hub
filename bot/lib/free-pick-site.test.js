@@ -32,6 +32,7 @@ const packet = {
 test('image-backed Free Pick copies exact approved image bytes into one multipart publish', async () => {
   const expectedBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
   const storyBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 9, 8, 7, 6]);
+  const reelBytes = Uint8Array.from([0, 0, 0, 24, 102, 116, 121, 112]);
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url: String(url), init });
@@ -41,6 +42,7 @@ test('image-backed Free Pick copies exact approved image bytes into one multipar
     return new Response(JSON.stringify({
       imageUrl: 'https://publisher.test/media/free-pick/current',
       storyUrl: 'https://publisher.test/media/free-pick/story/2026-09-14',
+      reelUrl: 'https://publisher.test/media/free-pick/reel/2026-09-14',
       xPosted: true,
     }), {
       status: 201,
@@ -55,11 +57,13 @@ test('image-backed Free Pick copies exact approved image bytes into one multipar
       FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret'
     },
     storyRenderer: async () => storyBytes,
+    reelRenderer: async () => reelBytes,
   });
 
   assert.deepEqual(result, {
     status: 'published', image: true,
     storyUrl: 'https://publisher.test/media/free-pick/story/2026-09-14', xPosted: true,
+    reelUrl: 'https://publisher.test/media/free-pick/reel/2026-09-14',
   });
   assert.equal(calls.length, 2);
   assert.equal(calls[0].url, packet.approval.image_url);
@@ -74,6 +78,9 @@ test('image-backed Free Pick copies exact approved image bytes into one multipar
   const story = calls[1].init.body.get('story');
   assert.equal(story.type, 'image/jpeg');
   assert.deepEqual(new Uint8Array(await story.arrayBuffer()), storyBytes);
+  const reel = calls[1].init.body.get('reel');
+  assert.equal(reel.type, 'video/mp4');
+  assert.deepEqual(new Uint8Array(await reel.arrayBuffer()), reelBytes);
   assert.match(calls[1].init.body.get('caption'), /^Bijan Robinson over 29\.5 receiving yards/);
   assert.match(calls[1].init.body.get('caption'), /\n- Bijan averaged 48\.2 receiving yards per game last season/);
   assert.match(calls[1].init.body.get('caption'), /21\+ where permitted\. Bet responsibly\.$/);
@@ -103,10 +110,12 @@ test('image retrieval failure falls back to one text-only publish', async () => 
         FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret'
       },
       storyRenderer: async () => storyBytes,
+      reelRenderer: async () => Uint8Array.from([0, 0, 0, 1]),
     });
     assert.deepEqual(result, {
       status: 'published', image: false,
       storyUrl: 'https://publisher.test/media/free-pick/story/2026-09-14', xPosted: false,
+      reelUrl: null,
     });
   } finally {
     console.error = originalError;
@@ -139,8 +148,9 @@ test('falls back to JSON when both source media and Story rendering fail', async
         FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret',
       },
       storyRenderer: async () => { throw new Error('fixture story unavailable'); },
+      reelRenderer: async () => null,
     });
-    assert.deepEqual(result, { status: 'published', image: false, storyUrl: null, xPosted: false });
+    assert.deepEqual(result, { status: 'published', image: false, storyUrl: null, reelUrl: null, xPosted: false });
   } finally {
     console.error = originalError;
   }
@@ -155,10 +165,11 @@ test('website selection includes the approved separate player name before any pu
   const prop = { pick_id: 'named-free-pick', analysis: { extraction: { player_name: 'DeVaughn Vele', selection: 'Over 3.5 receptions', line: '3.5', odds_american: '-125', event: 'New Orleans Saints @ Minnesota Vikings' } } };
   const calls = [];
   await publishApprovedFreePickToSite(prop, { environment: { FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret' }, storyRenderer: async () => null,
+    reelRenderer: async () => null,
     fetchImpl: async (url, init) => { calls.push(JSON.parse(init.body)); return new Response(JSON.stringify({xPosted: false}), {status: 201}); } });
   assert.equal(calls[0].details.selection, 'DeVaughn Vele Over 3.5 receptions');
   assert.match(calls[0].caption, /DeVaughn Vele/);
   delete prop.analysis.extraction.player_name;
-  await assert.rejects(publishApprovedFreePickToSite(prop, {environment: {FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret'}, fetchImpl: async () => {throw new Error('must not publish');}}), /player’s full name/);
+  await assert.rejects(publishApprovedFreePickToSite(prop, {environment: {FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret'}, reelRenderer: async () => null, fetchImpl: async () => {throw new Error('must not publish');}}), /player’s full name/);
   assert.equal(calls.length, 1);
 });

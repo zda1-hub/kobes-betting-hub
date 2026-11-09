@@ -15,6 +15,7 @@ const FREE_PICK_GATE_KEY = "free-picks/email-gate-enabled";
 const FREE_PICK_DAY_STATE_KEY = "free-picks/day-state.json";
 const PUBLIC_RESULTS_KEY = "results/verified-results.json";
 const FREE_PICK_MAX_BYTES = 5 * 1024 * 1024;
+const FREE_PICK_REEL_MAX_BYTES = 20 * 1024 * 1024;
 const TREND_EMAIL_MAX_BYTES = 12 * 1024;
 const TREND_EMAIL_LEAGUES = new Set(["mlb", "nfl"]);
 const RECAP_NOTIFICATION_MAX_BYTES = 12 * 1024;
@@ -183,6 +184,7 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname === "/api/vip-preview/current" && request.method === "PUT") return putVipPreview(request, env);
   if (url.pathname === "/media/free-pick/current" && request.method === "GET") return getCurrentFreePickImage(request, env);
   if (url.pathname.startsWith("/media/free-pick/story/") && request.method === "GET") return getFreePickStory(request, env);
+  if (url.pathname.startsWith("/media/free-pick/reel/") && request.method === "GET") return getFreePickReel(request, env);
   if (url.pathname === "/api/free-pick/social-email" && request.method === "POST") return enqueueSocialEmail(request, env, socialEmailHelpers());
   if (url.pathname === "/api/free-pick/publish" && request.method === "POST") return publishFreePick(request, env, ctx);
   return new Response("Not found", { status: 404 });
@@ -873,6 +875,7 @@ async function publishFreePick(request, env, ctx) {
   let input = {};
   let image = null;
   let story = null;
+  let reel = null;
   let contentType = "";
   if (contentTypeHeader.includes("multipart/form-data")) {
     let form;
@@ -880,6 +883,7 @@ async function publishFreePick(request, env, ctx) {
     input = Object.fromEntries([...form.entries()].filter(([key, value]) => typeof value === "string").map(([key, value]) => [key, value]));
     image = form.get("image");
     story = form.get("story");
+    reel = form.get("reel");
     contentType = image instanceof File ? image.type : "";
   } else if (contentTypeHeader.includes("application/json")) {
     try { input = await request.json(); } catch { return json({ error: "Expected valid JSON" }, 400); }
@@ -892,6 +896,7 @@ async function publishFreePick(request, env, ctx) {
   if (image && (image.size < 1 || image.size > FREE_PICK_MAX_BYTES)) return json({ error: "image must be no larger than 5 MB" }, 400);
   if (story && (!(story instanceof File) || story.type !== "image/jpeg")) return json({ error: "story must be a JPEG file" }, 400);
   if (story && (story.size < 1 || story.size > FREE_PICK_MAX_BYTES)) return json({ error: "story must be no larger than 5 MB" }, 400);
+  if (reel && (!(reel instanceof File) || reel.type !== "video/mp4" || reel.size < 1 || reel.size > FREE_PICK_REEL_MAX_BYTES)) return json({ error: "reel must be an MP4 file no larger than 20 MB" }, 400);
 
   const publishedDate = validDate(String(input.date || input.publishedDate || "")) || phoenixDate();
   const details = normalizeFreePickDetails(input.details || input);
@@ -912,6 +917,7 @@ async function publishFreePick(request, env, ctx) {
 
   let objectKey = null;
   let storyObjectKey = null;
+  let reelObjectKey = null;
   if (image) {
     objectKey = `free-picks/${publishedDate}/${crypto.randomUUID()}.${extension}`;
     await putFreePickObject(env, objectKey, image, contentType, "public, max-age=31536000, immutable");
@@ -920,11 +926,15 @@ async function publishFreePick(request, env, ctx) {
     storyObjectKey = `free-picks/${publishedDate}/story-${crypto.randomUUID()}.jpg`;
     await putFreePickObject(env, storyObjectKey, story, "image/jpeg", "public, max-age=31536000, immutable");
   }
+  if (reel) {
+    reelObjectKey = `free-picks/${publishedDate}/reel-${crypto.randomUUID()}.mp4`;
+    await putFreePickObject(env, reelObjectKey, reel, "video/mp4", "public, max-age=31536000, immutable");
+  }
 
   const xEnabled = Boolean(env.X_CLIENT_ID);
   const pickId = typeof input.pickId === "string" && /^[A-Za-z0-9_-]{4,160}$/.test(input.pickId) ? input.pickId : null;
   const xQueueId = typeof input.xQueueId === "string" && /^free-x-[a-f0-9]{40}$/.test(input.xQueueId) ? input.xQueueId : null;
-  const pick = { publishedDate, caption, details, pickId, xQueueId, objectKey, storyObjectKey, updatedAt: new Date().toISOString(), xStatus: image && xEnabled ? "pending" : "not_requested" };
+  const pick = { publishedDate, caption, details, pickId, xQueueId, objectKey, storyObjectKey, reelObjectKey, updatedAt: new Date().toISOString(), xStatus: image && xEnabled ? "pending" : "not_requested" };
   await writeFreePick(pick, env);
   await putFreePickObject(env, `${FREE_PICK_BY_DATE_PREFIX}${publishedDate}.json`, JSON.stringify(pick), "application/json; charset=UTF-8", "no-store");
   if (publishedDate === phoenixDate()) {
@@ -986,6 +996,8 @@ async function getCurrentFreePick(request, env) {
   let instagramConnectionStatus = 'unavailable';
   let instagramStory = null;
   let instagramStoryStatus = 'unavailable';
+  let instagramReel = null;
+  let instagramReelStatus = 'unavailable';
   if (env.DB && pick.xQueueId) {
     xReceipt = await env.DB.prepare(`SELECT status, published_at AS xPublishedAt, x_post_id AS xPostId, last_error AS xError FROM approved_posts WHERE id = ?`).bind(pick.xQueueId).first();
   } else if (env.DB && pick.updatedAt) {
@@ -1002,12 +1014,18 @@ async function getCurrentFreePick(request, env) {
       instagramStory = await env.DB.prepare(`SELECT state, published_at AS publishedAt, last_error AS lastError FROM instagram_story_deliveries WHERE pick_id = ?`).bind(pick.pickId).first();
       instagramStoryStatus = instagramStory?.state || (!pick.storyObjectKey ? 'not_ready' : instagramConnectionStatus === 'connected' ? 'pending' : instagramConnectionStatus);
     } catch { /* A missing receipt table must never break the Free Pick page. */ }
+    try {
+      instagramReel = await env.DB.prepare(`SELECT state, published_at AS publishedAt, last_error AS lastError FROM instagram_reel_deliveries WHERE pick_id = ?`).bind(pick.pickId).first();
+      instagramReelStatus = instagramReel?.state || (!pick.reelObjectKey ? 'not_ready' : instagramConnectionStatus === 'connected' ? 'pending' : instagramConnectionStatus);
+    } catch { /* A missing receipt table must never break the Free Pick page. */ }
   }
   const resolved = xReceipt ? { ...pick, xStatus: xReceipt.status, xPublishedAt: xReceipt.xPublishedAt || null, xPostId: xReceipt.xPostId || null, xError: xReceipt.xError || null } : pick;
   return json({ ...publicFreePick(resolved, new URL(request.url).origin), instagramStatus: instagramStoryStatus, instagramConnectionStatus,
     instagramAccountId: instagramConnectionStatus === 'connected' ? instagram.accountId : null,
     instagramStoryStatus, instagramStoryPublishedAt: instagramStory?.publishedAt ? new Date(instagramStory.publishedAt).toISOString() : null,
-    instagramStoryError: instagramStory?.lastError || null }, 200, corsHeaders(request));
+    instagramStoryError: instagramStory?.lastError || null,
+    instagramReelStatus, instagramReelPublishedAt: instagramReel?.publishedAt ? new Date(instagramReel.publishedAt).toISOString() : null,
+    instagramReelError: instagramReel?.lastError || null }, 200, corsHeaders(request));
 }
 
 function normalizedFreePickResults(input) {
@@ -1181,6 +1199,34 @@ async function getFreePickStory(request, env) {
   return new Response(object.body, { headers });
 }
 
+async function getFreePickReel(request, env) {
+  if (!hasFreePickStore(env)) return new Response('Free Pick media storage is not configured', { status: 503 });
+  const segment = new URL(request.url).pathname.split('/').pop();
+  const publishedDate = validDate(segment) ? segment : null;
+  if (!publishedDate) return new Response('A valid reel date is required', { status: 400 });
+  const stored = await getFreePickText(env, `${FREE_PICK_BY_DATE_PREFIX}${publishedDate}.json`);
+  let pick;
+  try { pick = stored ? JSON.parse(stored) : null; } catch { pick = null; }
+  if (!pick?.reelObjectKey) return new Response('Free Pick Reel was not found', { status: 404 });
+  const object = await getFreePickObject(env, pick.reelObjectKey);
+  if (!object) return new Response('Free Pick Reel was not found', { status: 404 });
+  const body = object.body instanceof ArrayBuffer ? object.body : await new Response(object.body).arrayBuffer();
+  const headers = new Headers(corsHeaders(request));
+  headers.set('content-type', 'video/mp4');
+  headers.set('cache-control', 'public, max-age=31536000, immutable');
+  headers.set('accept-ranges', 'bytes');
+  headers.set('content-disposition', `inline; filename="kobes-betting-hub-${publishedDate}-reel.mp4"`);
+  const range = request.headers.get('range')?.match(/^bytes=(\d*)-(\d*)$/);
+  if (range) {
+    const start = range[1] ? Number(range[1]) : Math.max(0, body.byteLength - Number(range[2]));
+    const end = range[1] && range[2] ? Number(range[2]) : body.byteLength - 1;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || end >= body.byteLength) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${body.byteLength}` } });
+    headers.set('content-range', `bytes ${start}-${end}/${body.byteLength}`);
+    return new Response(body.slice(start, end + 1), { status: 206, headers });
+  }
+  return new Response(body, { headers });
+}
+
 async function readFreePick(env) {
   const stored = await getFreePickText(env, FREE_PICK_STATE_KEY);
   if (!stored) return null;
@@ -1188,7 +1234,8 @@ async function readFreePick(env) {
     const pick = JSON.parse(stored);
     const validObjectKey = pick?.objectKey === null || typeof pick?.objectKey === "string";
     const validStoryKey = pick?.storyObjectKey == null || typeof pick?.storyObjectKey === "string";
-    return validDate(pick?.publishedDate) && validObjectKey && validStoryKey && typeof pick?.caption === "string" ? pick : null;
+    const validReelKey = pick?.reelObjectKey == null || typeof pick?.reelObjectKey === "string";
+    return validDate(pick?.publishedDate) && validObjectKey && validStoryKey && validReelKey && typeof pick?.caption === "string" ? pick : null;
   } catch {
     return null;
   }
@@ -1240,6 +1287,7 @@ function publicFreePick(pick, origin) {
     details: pick.details || {},
     imageUrl: pick.objectKey ? `${origin}/media/free-pick/current?v=${encodeURIComponent(pick.updatedAt || pick.publishedDate)}` : null,
     storyUrl: pick.storyObjectKey ? `${origin}/media/free-pick/story/${encodeURIComponent(pick.publishedDate)}` : null,
+    reelUrl: pick.reelObjectKey ? `${origin}/media/free-pick/reel/${encodeURIComponent(pick.publishedDate)}` : null,
     websiteStatus: "published",
     websitePublishedAt: pick.updatedAt || null,
     xStatus: pick.xStatus || "not_requested",
@@ -1247,6 +1295,7 @@ function publicFreePick(pick, origin) {
     xPostId: pick.xPostId || null,
     instagramStatus: pick.storyObjectKey ? "story_ready" : "not_ready",
     instagramStoryPreparedAt: pick.storyObjectKey ? (pick.updatedAt || null) : null,
+    instagramReelPreparedAt: pick.reelObjectKey ? (pick.updatedAt || null) : null,
   };
 }
 

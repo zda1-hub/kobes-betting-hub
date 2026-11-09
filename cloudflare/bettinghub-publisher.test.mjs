@@ -418,6 +418,32 @@ test('stores and serves a dated Instagram Story without publishing it to X', asy
   assert.deepEqual(new Uint8Array(await storyResponse.arrayBuffer()), new Uint8Array(storyBytes));
 });
 
+test('stores a bounded Reel video and serves it to Instagram with byte ranges', async () => {
+  const store = memoryKv();
+  const reelBytes = Uint8Array.from([0, 0, 0, 24, 102, 116, 121, 112, 1, 2, 3, 4]);
+  const form = new FormData();
+  form.set('date', '2026-11-09');
+  form.set('pickId', 'approved-reel-pick');
+  form.set('caption', 'Approved free pick https://discord.gg/sB9vzGz2xj');
+  form.set('selection', 'Fixture selection');
+  form.set('reel', new File([reelBytes], 'reel.mp4', { type: 'video/mp4' }));
+  const env = { FREE_PICK_KV: store, FREE_PICK_SITE_PUBLISH_SECRET: 'test-publisher-secret' };
+  const published = await worker.fetch(new Request('https://publisher.test/api/free-pick/publish', {
+    method: 'POST', headers: { authorization: 'Bearer test-publisher-secret' }, body: form,
+  }), env);
+  assert.equal(published.status, 201);
+  const reelUrl = (await published.json()).reelUrl;
+  assert.equal(reelUrl, 'https://publisher.test/media/free-pick/reel/2026-11-09');
+  const full = await worker.fetch(new Request(reelUrl), env);
+  assert.equal(full.status, 200);
+  assert.equal(full.headers.get('content-type'), 'video/mp4');
+  assert.deepEqual(new Uint8Array(await full.arrayBuffer()), reelBytes);
+  const partial = await worker.fetch(new Request(reelUrl, { headers: { range: 'bytes=4-7' } }), env);
+  assert.equal(partial.status, 206);
+  assert.equal(partial.headers.get('content-range'), 'bytes 4-7/12');
+  assert.deepEqual(new Uint8Array(await partial.arrayBuffer()), reelBytes.slice(4, 8));
+});
+
 test('multipart Free Pick keeps a 280-character approved caption after line-ending normalization', async () => {
   const caption = `${'A'.repeat(270)}\n${'B'.repeat(9)}`;
   assert.equal(caption.length, 280);
