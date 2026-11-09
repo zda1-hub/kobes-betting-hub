@@ -509,10 +509,10 @@ async function readJsonForm(request) {
 /** @type {ExportedHandler<Cloudflare.Env>} */
 const worker = {
   fetch: (request, env) => handle(request, env),
-  scheduled: (_controller, env, ctx) => ctx.waitUntil(Promise.all([
-    deliverCurrentStory(env).catch(error => console.error(JSON.stringify({ service: 'instagram-story', error: error instanceof SafeError ? error.message : 'STORY_DELIVERY_FAILED' }))),
-    deliverCurrentReel(env).catch(error => console.error(JSON.stringify({ service: 'instagram-reel', error: error instanceof SafeError ? error.message : 'REEL_DELIVERY_FAILED' }))),
-  ])),
+  scheduled: (_controller, env, ctx) => ctx.waitUntil((async () => {
+    await deliverCurrentStory(env).catch(error => console.error(JSON.stringify({ service: 'instagram-story', error: error instanceof SafeError ? error.message : 'STORY_DELIVERY_FAILED' })));
+    await deliverCurrentReel(env).catch(error => console.error(JSON.stringify({ service: 'instagram-reel', error: error instanceof SafeError ? error.message : 'REEL_DELIVERY_FAILED' })));
+  })()),
 };
 export default worker;
 export const __test = { configured, encrypt, decrypt, identity, hash, readJson, pacificDate, publishingEnabled, reelsEnabled, publicationDateAllowed, deliverCurrentStory, deliverCurrentReel, SCOPES };
