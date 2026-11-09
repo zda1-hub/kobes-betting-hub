@@ -6,6 +6,25 @@ const CALLBACK = '/auth/instagram/callback';
 const COOKIE = '__Host-kbh-ig-state';
 const MAX_JSON_BYTES = 65536;
 const encoder = new TextEncoder();
+const FREE_DISCORD_INVITE = 'https://discord.gg/sB9vzGz2xj';
+const REEL_OPENERS = Object.freeze([
+  "She's gettin what she needs 😂",
+  'Happy wife, happy life 🤝',
+  'Just doing my part 🫡',
+  'Whatever makes her happy ❤️',
+  'She knows I got her 😂',
+  'Gotta keep her happy somehow',
+  'She asked, I delivered.',
+  'Taking care of business, babe 😂',
+  'Anything for her ❤',
+]);
+
+function freePickReelCaption(index) {
+  // This Reel is published before the game is final. The suggested "green
+  // slip" line would imply a verified win, so it is ineligible here.
+  const opener = REEL_OPENERS[index % REEL_OPENERS.length];
+  return `${opener}\nFollow for free picks.\nFree Discord: ${FREE_DISCORD_INVITE}`;
+}
 
 class SafeError extends Error {
   constructor(code, status = 400) { super(code); this.status = status; }
@@ -262,7 +281,7 @@ async function currentFreePick(env, fetchImpl = fetch, kind = 'story') {
   const mediaUrl = String(kind === 'story' ? data?.storyUrl || '' : data?.reelUrl || '');
   const caption = String(data?.caption || '');
   if (!/^[A-Za-z0-9_-]{4,160}$/.test(pickId) || !/^\d{4}-\d{2}-\d{2}$/.test(operatingDate) || mediaUrl !== `${origin}/media/free-pick/${kind}/${operatingDate}`) throw new SafeError(`FREE_PICK_${kind.toUpperCase()}_INVALID`, 409);
-  if (kind === 'reel' && (!caption.includes('https://discord.gg/sB9vzGz2xj') || caption.length > 2200)) throw new SafeError('FREE_PICK_REEL_CAPTION_INVALID', 409);
+  if (kind === 'reel' && (!caption.includes(FREE_DISCORD_INVITE) || caption.length > 2200)) throw new SafeError('FREE_PICK_REEL_CAPTION_INVALID', 409);
   if (operatingDate !== pacificDate()) throw new SafeError('FREE_PICK_NOT_TODAY', 409);
   return { pickId, operatingDate, mediaUrl, caption };
 }
@@ -289,6 +308,10 @@ async function deliverCurrentMedia(env, fetchImpl = fetch, kind = 'story') {
   try { token = await decrypt(connection.encrypted_token, env); }
   catch { throw new SafeError('INSTAGRAM_TOKEN_DECRYPT_FAILED', 503); }
   if (!row) {
+    if (kind === 'reel') {
+      const sequence = await env.DB.prepare("SELECT COUNT(*) AS count FROM instagram_reel_deliveries WHERE state = 'published'").first();
+      pick.caption = freePickReelCaption(Number(sequence?.count || 0));
+    }
     let reserved;
     try { reserved = await env.DB.prepare(`INSERT INTO ${table} (pick_id, operating_date, ${urlColumn}, state, attempted_at, updated_at) VALUES (?, ?, ?, 'creating_container', ?, ?) ON CONFLICT DO NOTHING`).bind(pick.pickId, pick.operatingDate, pick.mediaUrl, Date.now(), Date.now()).run(); }
     catch { throw new SafeError(`INSTAGRAM_${kind.toUpperCase()}_RESERVATION_FAILED`, 503); }
@@ -515,4 +538,4 @@ const worker = {
   })()),
 };
 export default worker;
-export const __test = { configured, encrypt, decrypt, identity, hash, readJson, pacificDate, publishingEnabled, reelsEnabled, publicationDateAllowed, deliverCurrentStory, deliverCurrentReel, SCOPES };
+export const __test = { configured, encrypt, decrypt, identity, hash, readJson, pacificDate, publishingEnabled, reelsEnabled, publicationDateAllowed, deliverCurrentStory, deliverCurrentReel, freePickReelCaption, SCOPES };
