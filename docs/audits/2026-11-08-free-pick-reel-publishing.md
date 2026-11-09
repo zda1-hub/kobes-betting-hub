@@ -18,4 +18,12 @@ Publish the approved Free Pick text graphic as a vertical Instagram Reel each ti
 
 Local tests cover MP4 generation, upload and range serving, separate Reel receipt, one provider create/publish, no duplicate on repeat, and existing Story behavior. The local mock proves the request shape but cannot prove Meta accepted a real Reel. A live Reel receipt and profile check are required after the next approved Free Pick. The existing canonical Free Pick workflow selects one current site pick per operating day; earlier same-day picks remain superseded by that workflow.
 
-Status: local implementation pending merge and production deploy at the time of this audit. Append release receipts below.
+## Release receipts
+
+- PR #368 merged to main at `f23a701495e2cd9aa4c9cbb71a39b28a3f8d0ccd`.
+- Cloudflare Publisher deployed as version `2dcdcb87-e844-446b-b350-a66897772a2e`.
+- Cloudflare Instagram worker deployed as version `0ab49eab-21a4-4ee8-a567-cb2c7cf9957e`. Live `/health` reported `configured=true`, Story and Reel publishing enabled.
+- Render bot deployed commit `f23a701495e2cd9aa4c9cbb71a39b28a3f8d0ccd` as `dep-dboln50473hc73aopahg`, status live.
+- The current public Free Pick remained November 7 pick `20261107-008-X` with a published Story and no Reel asset; no old Reel was released.
+
+The first real Reel receipt remains unverified until the next approved canonical Free Pick is delivered and Meta accepts it.
