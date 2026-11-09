@@ -94,6 +94,7 @@ async function schema(env) {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_connections_v2 (target TEXT PRIMARY KEY CHECK (target = '${TARGET}'), account_id TEXT NOT NULL, encrypted_token TEXT NOT NULL, granted_scopes TEXT NOT NULL, issued_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, checked_at INTEGER NOT NULL)`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_story_deliveries (pick_id TEXT PRIMARY KEY, operating_date TEXT NOT NULL, story_url TEXT NOT NULL, state TEXT NOT NULL, container_id TEXT, media_id TEXT, attempted_at INTEGER, published_at INTEGER, last_error TEXT, updated_at INTEGER NOT NULL)`),
     env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS instagram_story_date ON instagram_story_deliveries(operating_date)`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_reel_deliveries (pick_id TEXT PRIMARY KEY, operating_date TEXT NOT NULL, reel_url TEXT NOT NULL, state TEXT NOT NULL, container_id TEXT, media_id TEXT, attempted_at INTEGER, published_at INTEGER, last_error TEXT, updated_at INTEGER NOT NULL)`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_connection_audit (id TEXT PRIMARY KEY, operation_id TEXT NOT NULL, occurred_at INTEGER NOT NULL, event TEXT NOT NULL, endpoint_class TEXT, method TEXT, outcome TEXT NOT NULL, http_status INTEGER, latency_ms INTEGER, provider_request_id TEXT, response_shape_sha256 TEXT, worker_version TEXT)`),
     env.DB.prepare(`CREATE INDEX IF NOT EXISTS instagram_audit_operation ON instagram_connection_audit(operation_id, occurred_at)`),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS instagram_audit_no_update BEFORE UPDATE ON instagram_connection_audit BEGIN SELECT RAISE(ABORT, 'instagram audit is append-only'); END`),
@@ -201,6 +202,10 @@ function publishingEnabled(env) {
   return String(env.INSTAGRAM_PUBLISHING_ENABLED || '').toLowerCase() === 'true';
 }
 
+function reelsEnabled(env) {
+  return String(env.INSTAGRAM_REELS_ENABLED || '').toLowerCase() === 'true';
+}
+
 function publicationDateAllowed(env, operatingDate) {
   const notBefore = String(env.INSTAGRAM_NOT_BEFORE_DATE || '9999-12-31');
   return /^\d{4}-\d{2}-\d{2}$/.test(notBefore) && operatingDate >= notBefore;
@@ -212,12 +217,14 @@ async function providerPost(env, operation, endpoint, fields, fetchImpl = fetch)
   let result;
   let recorded = false;
   try {
-    const url = endpoint === 'story_create'
+    const url = endpoint.endsWith('_create')
       ? `https://graph.instagram.com/${env.INSTAGRAM_API_VERSION}/${fields.accountId}/media`
       : `https://graph.instagram.com/${env.INSTAGRAM_API_VERSION}/${fields.accountId}/media_publish`;
     const body = new URLSearchParams(endpoint === 'story_create'
-      ? { image_url: fields.storyUrl, media_type: 'STORIES', access_token: fields.token }
-      : { creation_id: fields.containerId, access_token: fields.token });
+      ? { image_url: fields.mediaUrl, media_type: 'STORIES', access_token: fields.token }
+      : endpoint === 'reel_create'
+        ? { video_url: fields.mediaUrl, media_type: 'REELS', caption: fields.caption, share_to_feed: 'true', access_token: fields.token }
+        : { creation_id: fields.containerId, access_token: fields.token });
     result = await fetchImpl(url, { method: 'POST', body, redirect: 'manual', signal: AbortSignal.timeout(15000) });
     await rejectProviderRedirect(result);
     const data = await readJson(result.body);
@@ -235,7 +242,7 @@ async function providerPost(env, operation, endpoint, fields, fetchImpl = fetch)
   }
 }
 
-async function currentFreePick(env, fetchImpl = fetch) {
+async function currentFreePick(env, fetchImpl = fetch, kind = 'story') {
   const origin = String(env.FREE_PICK_API_ORIGIN || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
   const currentUrl = `${origin}/api/free-pick/current`;
   let response;
@@ -252,25 +259,29 @@ async function currentFreePick(env, fetchImpl = fetch) {
   catch { throw new SafeError('FREE_PICK_RESPONSE_INVALID', 502); }
   const pickId = String(data?.pickId || '');
   const operatingDate = String(data?.publishedDate || '');
-  const storyUrl = String(data?.storyUrl || '');
-  if (!/^[A-Za-z0-9_-]{4,160}$/.test(pickId) || !/^\d{4}-\d{2}-\d{2}$/.test(operatingDate) || !storyUrl.startsWith(`${origin}/media/free-pick/story/`)) throw new SafeError('FREE_PICK_STORY_INVALID', 409);
+  const mediaUrl = String(kind === 'story' ? data?.storyUrl || '' : data?.reelUrl || '');
+  const caption = String(data?.caption || '');
+  if (!/^[A-Za-z0-9_-]{4,160}$/.test(pickId) || !/^\d{4}-\d{2}-\d{2}$/.test(operatingDate) || mediaUrl !== `${origin}/media/free-pick/${kind}/${operatingDate}`) throw new SafeError(`FREE_PICK_${kind.toUpperCase()}_INVALID`, 409);
+  if (kind === 'reel' && (!caption.includes('https://discord.gg/sB9vzGz2xj') || caption.length > 2200)) throw new SafeError('FREE_PICK_REEL_CAPTION_INVALID', 409);
   if (operatingDate !== pacificDate()) throw new SafeError('FREE_PICK_NOT_TODAY', 409);
-  return { pickId, operatingDate, storyUrl };
+  return { pickId, operatingDate, mediaUrl, caption };
 }
 
-async function deliverCurrentStory(env, fetchImpl = fetch) {
-  if (!configured(env) || !publishingEnabled(env)) return { status: 'disabled' };
+async function deliverCurrentMedia(env, fetchImpl = fetch, kind = 'story') {
+  if (!configured(env) || !(kind === 'story' ? publishingEnabled(env) : reelsEnabled(env))) return { status: 'disabled' };
+  const table = kind === 'story' ? 'instagram_story_deliveries' : 'instagram_reel_deliveries';
+  const urlColumn = kind === 'story' ? 'story_url' : 'reel_url';
   try { await schema(env); }
   catch { throw new SafeError('INSTAGRAM_SCHEMA_FAILED', 503); }
   let connection;
   try { connection = await env.DB.prepare('SELECT * FROM instagram_connections_v2 WHERE target = ?').bind(TARGET).first(); }
   catch { throw new SafeError('INSTAGRAM_CONNECTION_READ_FAILED', 503); }
   if (!connection || connection.expires_at <= Date.now()) return { status: 'not_connected' };
-  const pick = await currentFreePick(env, fetchImpl);
-  if (!publicationDateAllowed(env, pick.operatingDate)) return { status: 'before_activation_date' };
+  const pick = await currentFreePick(env, fetchImpl, kind);
+  if (!publicationDateAllowed(env, pick.operatingDate) || (kind === 'reel' && pick.operatingDate < String(env.INSTAGRAM_REEL_NOT_BEFORE_DATE || '9999-12-31'))) return { status: 'before_activation_date' };
   let row;
-  try { row = await env.DB.prepare('SELECT * FROM instagram_story_deliveries WHERE pick_id = ?').bind(pick.pickId).first(); }
-  catch { throw new SafeError('INSTAGRAM_STORY_READ_FAILED', 503); }
+  try { row = await env.DB.prepare(`SELECT * FROM ${table} WHERE pick_id = ?`).bind(pick.pickId).first(); }
+  catch { throw new SafeError(`INSTAGRAM_${kind.toUpperCase()}_READ_FAILED`, 503); }
   if (row?.state === 'published') return { status: 'published', mediaId: row.media_id };
   if (row && !['container_created'].includes(row.state)) return { status: row.state };
   const operation = crypto.randomUUID();
@@ -279,32 +290,35 @@ async function deliverCurrentStory(env, fetchImpl = fetch) {
   catch { throw new SafeError('INSTAGRAM_TOKEN_DECRYPT_FAILED', 503); }
   if (!row) {
     let reserved;
-    try { reserved = await env.DB.prepare(`INSERT INTO instagram_story_deliveries (pick_id, operating_date, story_url, state, attempted_at, updated_at) VALUES (?, ?, ?, 'creating_container', ?, ?) ON CONFLICT DO NOTHING`).bind(pick.pickId, pick.operatingDate, pick.storyUrl, Date.now(), Date.now()).run(); }
-    catch { throw new SafeError('INSTAGRAM_STORY_RESERVATION_FAILED', 503); }
+    try { reserved = await env.DB.prepare(`INSERT INTO ${table} (pick_id, operating_date, ${urlColumn}, state, attempted_at, updated_at) VALUES (?, ?, ?, 'creating_container', ?, ?) ON CONFLICT DO NOTHING`).bind(pick.pickId, pick.operatingDate, pick.mediaUrl, Date.now(), Date.now()).run(); }
+    catch { throw new SafeError(`INSTAGRAM_${kind.toUpperCase()}_RESERVATION_FAILED`, 503); }
     if (reserved.meta.changes !== 1) return { status: 'already_reserved' };
     try {
-      const containerId = await providerPost(env, operation, 'story_create', { accountId: connection.account_id, storyUrl: pick.storyUrl, token }, fetchImpl);
-      await env.DB.prepare(`UPDATE instagram_story_deliveries SET state='container_created', container_id=?, updated_at=? WHERE pick_id=? AND state='creating_container'`).bind(containerId, Date.now(), pick.pickId).run();
+      const containerId = await providerPost(env, operation, `${kind}_create`, { accountId: connection.account_id, mediaUrl: pick.mediaUrl, caption: pick.caption, token }, fetchImpl);
+      await env.DB.prepare(`UPDATE ${table} SET state='container_created', container_id=?, updated_at=? WHERE pick_id=? AND state='creating_container'`).bind(containerId, Date.now(), pick.pickId).run();
       row = { ...pick, state: 'container_created', container_id: containerId };
     } catch (error) {
-      await env.DB.prepare(`UPDATE instagram_story_deliveries SET state='held', last_error='CONTAINER_CREATE_UNCERTAIN', updated_at=? WHERE pick_id=?`).bind(Date.now(), pick.pickId).run();
+      await env.DB.prepare(`UPDATE ${table} SET state='held', last_error='CONTAINER_CREATE_UNCERTAIN', updated_at=? WHERE pick_id=?`).bind(Date.now(), pick.pickId).run();
       throw error;
     }
   }
   const container = await provider(env, operation, `container_status:${row.container_id}`, { token }, fetchImpl);
   if (String(container.status_code || '').toUpperCase() !== 'FINISHED') return { status: 'processing' };
-  await env.DB.prepare(`UPDATE instagram_story_deliveries SET state='publishing', updated_at=? WHERE pick_id=? AND state='container_created'`).bind(Date.now(), pick.pickId).run();
+  const claimed = await env.DB.prepare(`UPDATE ${table} SET state='publishing', updated_at=? WHERE pick_id=? AND state='container_created'`).bind(Date.now(), pick.pickId).run();
+  if (claimed.meta.changes !== 1) return { status: 'already_claimed' };
   try {
-    const mediaId = await providerPost(env, operation, 'story_publish', { accountId: connection.account_id, containerId: row.container_id, token }, fetchImpl);
+    const mediaId = await providerPost(env, operation, `${kind}_publish`, { accountId: connection.account_id, containerId: row.container_id, token }, fetchImpl);
     const now = Date.now();
-    await env.DB.prepare(`UPDATE instagram_story_deliveries SET state='published', media_id=?, published_at=?, updated_at=?, last_error=NULL WHERE pick_id=?`).bind(mediaId, now, now, pick.pickId).run();
-    await audit(env, operation, 'STORY_PUBLISHED', 'SUCCEEDED');
+    await env.DB.prepare(`UPDATE ${table} SET state='published', media_id=?, published_at=?, updated_at=?, last_error=NULL WHERE pick_id=?`).bind(mediaId, now, now, pick.pickId).run();
+    await audit(env, operation, `${kind.toUpperCase()}_PUBLISHED`, 'SUCCEEDED');
     return { status: 'published', mediaId };
   } catch (error) {
-    await env.DB.prepare(`UPDATE instagram_story_deliveries SET state='held', last_error='PUBLISH_UNCERTAIN', updated_at=? WHERE pick_id=?`).bind(Date.now(), pick.pickId).run();
+    await env.DB.prepare(`UPDATE ${table} SET state='held', last_error='PUBLISH_UNCERTAIN', updated_at=? WHERE pick_id=?`).bind(Date.now(), pick.pickId).run();
     throw error;
   }
 }
+const deliverCurrentStory = (env, fetchImpl = fetch) => deliverCurrentMedia(env, fetchImpl, 'story');
+const deliverCurrentReel = (env, fetchImpl = fetch) => deliverCurrentMedia(env, fetchImpl, 'reel');
 function single(data) {
   if (Array.isArray(data?.data)) {
     if (data.data.length !== 1) throw new SafeError('INSTAGRAM_AMBIGUOUS_ACCOUNT', 403);
@@ -376,20 +390,25 @@ export async function handle(request, env, fetchImpl = fetch) {
   const url = new URL(request.url);
   const isCallback = url.pathname === CALLBACK;
   try {
-    if (url.pathname === '/health' && request.method === 'GET') return json({ service: 'bettinghub-instagram', configured: configured(env), publishingEnabled: publishingEnabled(env), mode: publishingEnabled(env) ? 'story-publisher' : 'connection-only', workerVersion: env.CF_VERSION_METADATA?.id || null });
+    if (url.pathname === '/health' && request.method === 'GET') return json({ service: 'bettinghub-instagram', configured: configured(env), publishingEnabled: publishingEnabled(env), reelsEnabled: reelsEnabled(env), mode: publishingEnabled(env) ? reelsEnabled(env) ? 'story-and-reel-publisher' : 'story-publisher' : 'connection-only', workerVersion: env.CF_VERSION_METADATA?.id || null });
     if (url.origin !== origin(env)) return json({ error: 'NOT_FOUND' }, 404);
     const isOperator = url.pathname.startsWith('/operator/');
     if (isOperator && !await operator(request, env)) return json({ error: 'UNAUTHORIZED' }, 401);
-    const known = ['/operator/instagram/invite', '/operator/instagram/status', '/operator/instagram/check', '/operator/instagram/refresh', '/operator/instagram/disconnect', '/operator/instagram/story-status', '/operator/instagram/publish-current-story', '/connect/instagram', '/auth/instagram/start', CALLBACK].includes(url.pathname);
+    const known = ['/operator/instagram/invite', '/operator/instagram/status', '/operator/instagram/check', '/operator/instagram/refresh', '/operator/instagram/disconnect', '/operator/instagram/story-status', '/operator/instagram/publish-current-story', '/operator/instagram/reel-status', '/operator/instagram/publish-current-reel', '/connect/instagram', '/auth/instagram/start', CALLBACK].includes(url.pathname);
     if (!known) return json({ error: 'NOT_FOUND' }, 404);
     const allowed = ['/operator/instagram/status', '/connect/instagram', CALLBACK].includes(url.pathname) ? 'GET' : 'POST';
     if (request.method !== allowed) return json({ error: 'METHOD_NOT_ALLOWED' }, 405);
     if (!configured(env)) return json({ error: 'INSTAGRAM_SETUP_REQUIRED' }, 503);
     await schema(env);
     if (url.pathname === '/operator/instagram/publish-current-story') return json(await deliverCurrentStory(env, fetchImpl));
+    if (url.pathname === '/operator/instagram/publish-current-reel') return json(await deliverCurrentReel(env, fetchImpl));
     if (url.pathname === '/operator/instagram/story-status') {
       const delivery = await env.DB.prepare('SELECT pick_id AS pickId, operating_date AS operatingDate, state, media_id AS mediaId, published_at AS publishedAt, last_error AS lastError FROM instagram_story_deliveries ORDER BY updated_at DESC LIMIT 1').first();
       return json({ delivery: delivery || null, publishingEnabled: publishingEnabled(env) });
+    }
+    if (url.pathname === '/operator/instagram/reel-status') {
+      const delivery = await env.DB.prepare('SELECT pick_id AS pickId, operating_date AS operatingDate, state, media_id AS mediaId, published_at AS publishedAt, last_error AS lastError FROM instagram_reel_deliveries ORDER BY updated_at DESC LIMIT 1').first();
+      return json({ delivery: delivery || null, reelsEnabled: reelsEnabled(env) });
     }
     if (url.pathname === '/operator/instagram/invite') {
       const invite = randomToken();
@@ -490,7 +509,10 @@ async function readJsonForm(request) {
 /** @type {ExportedHandler<Cloudflare.Env>} */
 const worker = {
   fetch: (request, env) => handle(request, env),
-  scheduled: (_controller, env, ctx) => ctx.waitUntil(deliverCurrentStory(env).catch(error => console.error(JSON.stringify({ service: 'instagram-story', error: error instanceof SafeError ? error.message : 'STORY_DELIVERY_FAILED' })))),
+  scheduled: (_controller, env, ctx) => ctx.waitUntil(Promise.all([
+    deliverCurrentStory(env).catch(error => console.error(JSON.stringify({ service: 'instagram-story', error: error instanceof SafeError ? error.message : 'STORY_DELIVERY_FAILED' }))),
+    deliverCurrentReel(env).catch(error => console.error(JSON.stringify({ service: 'instagram-reel', error: error instanceof SafeError ? error.message : 'REEL_DELIVERY_FAILED' }))),
+  ])),
 };
 export default worker;
-export const __test = { configured, encrypt, decrypt, identity, hash, readJson, pacificDate, publishingEnabled, publicationDateAllowed, deliverCurrentStory, SCOPES };
+export const __test = { configured, encrypt, decrypt, identity, hash, readJson, pacificDate, publishingEnabled, reelsEnabled, publicationDateAllowed, deliverCurrentStory, deliverCurrentReel, SCOPES };

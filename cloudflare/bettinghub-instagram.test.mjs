@@ -92,7 +92,7 @@ async function connected(env, mock = providerMock()) {
 test('unconfigured service fails closed and never touches a provider', async () => {
   const env = environment(); delete env.INSTAGRAM_APP_SECRET;
   const never = () => { throw new Error('unexpected external call'); };
-  assert.deepEqual(await (await handle(request('/health'), env, never)).json(), { service: 'bettinghub-instagram', configured: false, publishingEnabled: false, mode: 'connection-only', workerVersion: 'local-fixture-version' });
+  assert.deepEqual(await (await handle(request('/health'), env, never)).json(), { service: 'bettinghub-instagram', configured: false, publishingEnabled: false, reelsEnabled: false, mode: 'connection-only', workerVersion: 'local-fixture-version' });
   assert.equal((await handle(operatorRequest('invite'), env, never)).status, 503);
   assert.equal(env.DB.sql.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name LIKE 'instagram_%'").get().n, 0);
 });
@@ -214,6 +214,43 @@ test('scheduled Story reads the current Free Pick through the publisher service 
   await assert.rejects(__test.deliverCurrentStory(env, async () => { throw new Error('public fetch must not run'); }), /FREE_PICK_NOT_READY/);
   assert.equal(boundReads, 1);
   assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_story_deliveries').get().n, 0);
+});
+
+test('approved current Free Pick publishes one Reel with the Discord caption and a separate receipt', async () => {
+  const env = environment();
+  env.INSTAGRAM_REELS_ENABLED = 'true';
+  env.INSTAGRAM_REEL_NOT_BEFORE_DATE = __test.pacificDate();
+  env.INSTAGRAM_NOT_BEFORE_DATE = '2026-09-21';
+  assert.equal((await connected(env)).result.status, 200);
+  const date = __test.pacificDate();
+  const origin = 'https://bettinghub-publisher.kobedirwin.workers.dev';
+  const caption = 'Approved free pick. Join the free Discord: https://discord.gg/sB9vzGz2xj';
+  const pick = { pickId: 'reel-fixture-pick', publishedDate: date, reelUrl: `${origin}/media/free-pick/reel/${date}`, caption };
+  let stage = 'IN_PROGRESS';
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), body: init.body });
+    if (String(url).endsWith('/api/free-pick/current')) return Response.json(pick);
+    if (String(url).endsWith('/media')) {
+      assert.equal(init.body.get('media_type'), 'REELS');
+      assert.equal(init.body.get('video_url'), pick.reelUrl);
+      assert.equal(init.body.get('caption'), caption);
+      assert.equal(init.body.get('share_to_feed'), 'true');
+      return Response.json({ id: '123456789' });
+    }
+    if (String(url).includes('fields=status_code')) return Response.json({ status_code: stage });
+    if (String(url).endsWith('/media_publish')) return Response.json({ id: '987654321' });
+    throw new Error('unexpected endpoint');
+  };
+  assert.deepEqual(await __test.deliverCurrentReel(env, fetchImpl), { status: 'processing' });
+  assert.equal(env.DB.sql.prepare('SELECT state FROM instagram_reel_deliveries').get().state, 'container_created');
+  stage = 'FINISHED';
+  assert.deepEqual(await __test.deliverCurrentReel(env, fetchImpl), { status: 'published', mediaId: '987654321' });
+  assert.deepEqual(await __test.deliverCurrentReel(env, fetchImpl), { status: 'published', mediaId: '987654321' });
+  assert.equal(calls.filter(call => call.url.endsWith('/media')).length, 1);
+  assert.equal(calls.filter(call => call.url.endsWith('/media_publish')).length, 1);
+  assert.equal(env.DB.sql.prepare('SELECT count(*) AS n FROM instagram_story_deliveries').get().n, 0);
+  assert.equal(env.DB.sql.prepare('SELECT state FROM instagram_reel_deliveries').get().state, 'published');
 });
 
 test('wrong username, Creator account, missing grant and invalid expiration cannot install credentials', async () => {

@@ -3,6 +3,7 @@ const { sourceEvidence, visiblePlays } = require('./source-review');
 const { auditedFetch } = require('../../pipeline/api-client');
 const { buildFreePickXPost, freePickXPostId } = require('./free-pick-x');
 const { instagramStoryFilename, renderInstagramStory } = require('./instagram-story');
+const { renderFreePickReel } = require('./free-pick-reel');
 
 function phoenixOperatingDate() {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
@@ -17,7 +18,7 @@ function siteConfig(environment = process.env) {
   return { url, secret };
 }
 
-async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, environment = process.env, storyRenderer = renderInstagramStory, copyImage = true, date = phoenixOperatingDate() } = {}) {
+async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, environment = process.env, storyRenderer = renderInstagramStory, reelRenderer = renderFreePickReel, copyImage = true, date = phoenixOperatingDate() } = {}) {
   const config = siteConfig(environment);
   if (!config) return { status: 'disabled' };
 
@@ -46,6 +47,7 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
   let imagePayload = null;
   let imageType = '';
   let storyPayload = null;
+  let reelPayload = null;
 
   if (imageUrl) {
     try {
@@ -71,12 +73,16 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
   } catch (error) {
     console.error('Instagram Story generation failed; continuing without the social asset.', error);
   }
+  // A Reel is prepared only from the approved canonical Free Pick. Failure
+  // prevents a false success receipt so the existing delivery retry can run.
+  reelPayload = await reelRenderer(packet);
 
   let response;
-  if (imagePayload || storyPayload) {
+  if (imagePayload || storyPayload || reelPayload) {
     const form = new FormData();
     if (imagePayload) form.append('image', new Blob([imagePayload], { type: imageType }), 'free-pick.png');
     if (storyPayload) form.append('story', new Blob([storyPayload], { type: 'image/jpeg' }), instagramStoryFilename(packet.pick_id));
+    if (reelPayload) form.append('reel', new Blob([reelPayload], { type: 'video/mp4' }), `kobes-betting-hub-${packet.pick_id}-reel.mp4`);
     Object.entries({ date, caption, pickId: packet.pick_id, xQueueId: freePickXPostId(packet.pick_id), ...details }).forEach(([key, value]) => form.append(key, String(value || '')));
     response = await auditedFetch(`${config.url}/api/free-pick/publish`, { method: 'POST', headers: { authorization: `Bearer ${config.secret}` }, body: form }, {
       service: 'cloudflare-worker',
@@ -106,6 +112,7 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
       status: response.status === 409 ? 'already_published' : 'published',
       image: Boolean(payload.imageUrl),
       storyUrl: payload.storyUrl || null,
+      reelUrl: payload.reelUrl || null,
       xPosted: payload.xPosted === true,
     };
   }
@@ -113,6 +120,7 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
     'Could not read the upload': 'UPLOAD_PARSE_FAILED',
     'story must be a JPEG file': 'STORY_TYPE_INVALID',
     'story must be no larger than 5 MB': 'STORY_TOO_LARGE',
+    'reel must be an MP4 file no larger than 20 MB': 'REEL_INVALID',
     'selection or pick is required when no image is supplied': 'SELECTION_MISSING',
     'caption must contain 1–280 characters': 'CAPTION_INVALID',
     'Unauthorized': 'UNAUTHORIZED',
