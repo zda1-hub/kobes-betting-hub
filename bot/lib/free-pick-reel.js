@@ -19,11 +19,17 @@ async function renderFreePickReel(packet, { cardRenderer = renderFreePickChatCar
     try { card = await cardRenderer(packet); }
     catch { card = await fallbackRenderer(packet); }
     await fs.writeFile(image, card);
+    // Render's bot instance has a 512 MiB limit. A still card does not need a
+    // full-resolution, multi-threaded encoder: those defaults exhausted the
+    // instance before the website, X, or Instagram could receive the pick.
     await run(ffmpegPath, [
-      '-hide_banner', '-loglevel', 'error', '-y', '-loop', '1', '-framerate', '24', '-i', image,
-      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000',
-      '-t', '8', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '25', '-pix_fmt', 'yuv420p',
-      '-r', '24', '-c:a', 'aac', '-b:a', '64k', '-ar', '48000', '-shortest',
+      '-hide_banner', '-loglevel', 'error', '-y', '-filter_threads', '1',
+      '-loop', '1', '-framerate', '24', '-i', image,
+      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=48000',
+      '-t', '6', '-vf', 'scale=540:960:flags=fast_bilinear',
+      '-c:v', 'libx264', '-threads', '1', '-preset', 'ultrafast', '-crf', '24',
+      '-pix_fmt', 'yuv420p', '-r', '24',
+      '-c:a', 'aac', '-b:a', '32k', '-ar', '48000', '-shortest',
       '-movflags', '+faststart', output,
     ], { timeout: 120000, maxBuffer: 1024 * 1024 });
     const video = await fs.readFile(output);

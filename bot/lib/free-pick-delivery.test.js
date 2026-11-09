@@ -28,7 +28,8 @@ test('single writer and restart checkpoint prevent duplicate website/X writes', 
   await Promise.all([delivery.run(), delivery.run()]);
   await createFreePickDelivery(options).run();
   assert.equal(calls.length, 2);
-  assert.deepEqual(calls[0], ['site', { copyImage: false, date }]);
+  assert.deepEqual(calls[0], ['x']);
+  assert.deepEqual(calls[1], ['site', { copyImage: false, date }]);
 });
 test('website failure is retried without changing pick date or posting a duplicate X request', async (t) => {
   let attempts = 0;
