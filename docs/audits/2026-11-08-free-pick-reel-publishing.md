@@ -27,3 +27,5 @@ Local tests cover MP4 generation, upload and range serving, separate Reel receip
 - The current public Free Pick remained November 7 pick `20261107-008-X` with a published Story and no Reel asset; no old Reel was released.
 
 The first real Reel receipt remains unverified until the next approved canonical Free Pick is delivered and Meta accepts it.
+
+Follow-up: the five-minute worker now runs Story then Reel in sequence because both paths initialize the same D1 schema. A Story error is logged and the Reel path still runs. The separate delivery receipts remain unchanged.
