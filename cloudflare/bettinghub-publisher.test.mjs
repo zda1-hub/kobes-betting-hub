@@ -594,6 +594,7 @@ test('free-pick email numbers approved points and avoids repeating the line', ()
   assert.ok(lines.includes('1. Utah is 4-0'));
   assert.ok(lines.includes('3. Backing Utah ✅'));
   assert.ok(lines.some(line => line.includes('/join')));
+  assert.ok(lines.includes('Join the free KBH Discord: https://discord.gg/sB9vzGz2xj'));
   assert.ok(lines.some(line => line.includes('Wager responsibly')));
   assert.equal(lines.at(-1), 'Unsubscribe: https://example.com/unsubscribe');
   assert.ok(workerTest.freePickEmailLines({details:{selection:'Utah',line:'-15.5',reason:'1. First point\n2. Second point'}}, 'link').includes('2. Second point'));
