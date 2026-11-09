@@ -3,7 +3,7 @@ const {chatCardCopy,chatCardSvg,renderFreePickChatCard,dailyOpener,DAILY_OPENERS
 const packet={pick_id:'20261015-017-X',analysis:{extraction:{selection:'Over 3.5 receptions',player_name:'DeVaughn Vele',line:'3.5',odds_american:'-125',source_claims:['He has gone over this line in 3/4 games','He has had 6+ targets in all four games']}}};
 test('uses approved named terms and complete claims, with the requested shopping opener',()=>{
  const copy=chatCardCopy(packet);assert.match(copy.term,/DeVaughn Vele/);assert.match(copy.term,/-125/);assert.deepEqual(copy.evidence,packet.analysis.extraction.source_claims);
- assert.equal(copy.hook,"Babe, can I get money to go shopping?"); assert.match(chatCardSvg(packet),/Babe, can I get money/);assert.doesNotMatch(chatCardSvg(packet),/Babby|guaranteed|today.s free pick/);
+ assert.equal(copy.hook,"Babe, can I get money to go shopping?"); assert.match(chatCardSvg(packet),/Babe, can I get money/);assert.match(chatCardSvg(packet),/discord\.gg\/sB9vzGz2xj/);assert.doesNotMatch(chatCardSvg(packet),/Babby|guaranteed|today.s free pick/);
 });
 test('renders the real 1080 by 1920 Reel JPEG',async()=>{const data=await renderFreePickChatCard(packet);const meta=await sharp(data).metadata();assert.equal(meta.width,1080);assert.equal(meta.height,1920);assert.equal(meta.format,'jpeg');});
 test('requires a name and a breakdown; never drops additional parlay legs',()=>{

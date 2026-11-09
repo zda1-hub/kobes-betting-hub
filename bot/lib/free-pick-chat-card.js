@@ -75,8 +75,12 @@ function chatCardSvg(packet) {
   <path d="M1005 ${y-6} Q1005 ${y+46} 1050 ${y+64} Q1000 ${y+51} 980 ${y+25}" fill="#087ff2"/>
   <g font-family="Arial, Helvetica, sans-serif" fill="white">${text}</g>
   <text x="540" y="1272" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="23" fill="#555">KOBE'S BETTING HUB · FREE PICK</text>
-  <text x="540" y="1310" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="21" fill="#777">21+ where permitted. Wager responsibly.</text>
-  </g></svg>`;
+  </g>
+  <rect x="80" y="1685" width="920" height="145" rx="32" fill="#ff7900"/>
+  <text x="540" y="1743" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="27" fill="#090909">JOIN THE FREE DISCORD</text>
+  <text x="540" y="1802" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="900" font-size="43" fill="#090909">discord.gg/sB9vzGz2xj</text>
+  <text x="540" y="1885" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="21" fill="#777">21+ where permitted. Wager responsibly.</text>
+  </svg>`;
 }
 async function renderFreePickChatCard(packet) { return sharp(Buffer.from(chatCardSvg(packet))).jpeg({quality:94,chromaSubsampling:'4:4:4'}).toBuffer(); }
 module.exports = { WIDTH, HEIGHT, chatCardCopy, chatCardSvg, renderFreePickChatCard, dailyOpener, DAILY_OPENERS };

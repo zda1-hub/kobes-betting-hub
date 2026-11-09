@@ -303,8 +303,8 @@ async function sendLeadWelcome(env, row) {
     reply_to: "support@kobesbettinghub.com",
     subject: freePickSignup ? "You're on the free-pick list" : "You're on the Kobe's Betting Hub list",
     text: freePickSignup
-      ? `You're on the Kobe's Betting Hub free-pick list. No free pick is posted today; we'll email the next one when it's published.\n\n${vipTrialEmailLines('free_pick_welcome').join('\n')}\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
-      : `Thanks for joining the Kobe's Betting Hub email list. See free picks at https://kobesbettinghub.com/free-pick.\n\n${vipTrialEmailLines('email_welcome').join('\n')}\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
+      ? `You're on the Kobe's Betting Hub free-pick list. No free pick is posted today; we'll email the next one when it's published.\n\nJoin the free KBH Discord: https://discord.gg/sB9vzGz2xj\n\n${vipTrialEmailLines('free_pick_welcome').join('\n')}\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
+      : `Thanks for joining the Kobe's Betting Hub email list. Join the free Discord for approved free picks: https://discord.gg/sB9vzGz2xj\n\n${vipTrialEmailLines('email_welcome').join('\n')}\n\nPicks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.\n\nUnsubscribe: ${unsubscribeUrl}`
   };
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -451,6 +451,7 @@ function freePickEmailLines(pick, unsubscribeUrl) {
     ...(extra ? [extra] : []), '',
     ...reasons.map((point, index) => `${index + 1}. ${point}`), '',
     ...(pick.imageUrl ? [`View the approved pick card: ${pick.imageUrl}`, ''] : []),
+    'Join the free KBH Discord: https://discord.gg/sB9vzGz2xj', '',
     ...vipTrialEmailLines('daily_free_pick'), '',
     'Picks vary and no outcome is guaranteed. 21+ where permitted. Wager responsibly.', '',
     `Unsubscribe: ${unsubscribeUrl}`,
@@ -897,7 +898,7 @@ async function publishFreePick(request, env, ctx) {
   if (!details.selection && !details.pick) return json({ error: "selection or pick is required when no image is supplied" }, 400);
   // Multipart text fields normalize LF to CRLF. Restore the approved X copy
   // before measuring its length or persisting it for the website.
-  const caption = String(input.caption || `Today’s free pick is live. https://kobesbettinghub.com/free-pick`).replace(/\r\n?/g, '\n').trim();
+  const caption = String(input.caption || `Today’s free pick is live. Join the free Discord: https://discord.gg/sB9vzGz2xj`).replace(/\r\n?/g, '\n').trim();
   if (!caption || caption.length > MAX_POST_LENGTH) return json({ error: `caption must contain 1–${MAX_POST_LENGTH} characters` }, 400);
   const replace = String(input.replace || "").toLowerCase() === "true";
   const existing = await readFreePick(env);

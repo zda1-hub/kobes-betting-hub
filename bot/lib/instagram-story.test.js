@@ -26,6 +26,8 @@ test('story copy comes only from approved terms and escapes markup', () => {
   assert.match(svg, /Bijan Robinson/);
   assert.match(svg, /OVER 29\.5/);
   assert.match(svg, /receiving yards \(-140\)/);
+  assert.match(svg, /discord\.gg\/sB9vzGz2xj/);
+  assert.doesNotMatch(svg, /KOBESBETTINGHUB\.COM/);
   assert.doesNotMatch(svg, /source_claims|confidence|Twitter/);
   assert.equal(escapeXml('<pick & “line”>'), '&lt;pick &amp; “line”&gt;');
 });

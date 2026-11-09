@@ -65,8 +65,8 @@ function storySvg(packet) {
       ${details}
       ${evidence.length ? `<rect x="90" y="1040" width="900" height="395" rx="24" fill="#1c1c1c" stroke="#ff6a00" stroke-width="3"/><text x="118" y="1110" class="breakdownTitle">THE QUICK BREAKDOWN</text>${breakdown}` : ''}
       <rect x="90" y="1510" width="900" height="190" rx="24" fill="#f4f0e8"/>
-      <text x="540" y="1585" text-anchor="middle" class="ctaTop">FULL WRITEUP + MEMBER CARD</text>
-      <text x="540" y="1665" text-anchor="middle" class="cta">KOBESBETTINGHUB.COM</text>
+      <text x="540" y="1585" text-anchor="middle" class="ctaTop">JOIN THE FREE DISCORD</text>
+      <text x="540" y="1665" text-anchor="middle" class="cta">discord.gg/sB9vzGz2xj</text>
       <text x="90" y="1810" class="legal">LEGAL AGE WHERE YOU LIVE • WAGER RESPONSIBLY</text>
       <style>
         .brand { fill:#f4f0e8; font-family:Arial,Helvetica,sans-serif; font-size:72px; font-weight:900; letter-spacing:4px; }
@@ -77,7 +77,7 @@ function storySvg(packet) {
         .breakdownTitle { fill:#ff6a00; font-family:Arial,Helvetica,sans-serif; font-size:31px; font-weight:800; letter-spacing:3px; }
         .reason { fill:#f4f0e8; font-family:Arial,Helvetica,sans-serif; font-size:31px; font-weight:600; }
         .ctaTop { fill:#5b5852; font-family:Arial,Helvetica,sans-serif; font-size:25px; font-weight:800; letter-spacing:3px; }
-        .cta { fill:#090909; font-family:Arial,Helvetica,sans-serif; font-size:48px; font-weight:900; letter-spacing:1px; }
+        .cta { fill:#090909; font-family:Arial,Helvetica,sans-serif; font-size:46px; font-weight:900; letter-spacing:0; }
         .legal { fill:#a8a39b; font-family:Arial,Helvetica,sans-serif; font-size:24px; font-weight:700; letter-spacing:2px; }
       </style>
     </svg>`;
