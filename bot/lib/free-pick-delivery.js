@@ -75,10 +75,8 @@ function createFreePickDelivery({ root, readRows, loadPacket, verifyPost, paused
           state.email = { status: email?.status || 'pending', messageId: email?.messageId || null };
           await saveDelivery(root, state);
         }
-        if (!state.site || state.site.status === 'disabled') {
-          state.site = await publishSite(packet, { copyImage: false, date });
-          await saveDelivery(root, state);
-        }
+        // Queue the approved X copy before image/video work. Media rendering is
+        // heavier than X and must not keep the original pick off X if it fails.
         if (!state.x || !['published', 'disabled'].includes(state.x.status)) {
           const receipt = await readX(packet);
           if (['failed', 'publishing', 'cancelled', 'draft'].includes(receipt.status)) {
@@ -94,6 +92,10 @@ function createFreePickDelivery({ root, readRows, loadPacket, verifyPost, paused
           } else {
             throw new Error('Unrecognized X receipt; refusing a blind retry.');
           }
+          await saveDelivery(root, state);
+        }
+        if (!state.site || state.site.status === 'disabled') {
+          state.site = await publishSite(packet, { copyImage: false, date });
           await saveDelivery(root, state);
         }
         state.complete = ['published', 'already_published', 'superseded'].includes(state.site?.status)
