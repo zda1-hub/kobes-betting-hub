@@ -17,6 +17,7 @@
     "enabled": true,
     "workflow_id": "writeup",
     "review_channel_id": "1569551927115780187",
+    "replaced_review_channel_id": "1550992474367983677",
     "destination_channel_id": "1539062059306848368",
     "source_channel_ids": [
       "1539055413633228881",
