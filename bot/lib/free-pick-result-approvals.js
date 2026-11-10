@@ -96,6 +96,7 @@ function createFreePickResultApprovals({ root, config, channelFor, rowsFor, free
       throw new Error('Only Kobe or the KBH owner can approve results in the private result review channel.');
   }
   return {
+    async verifyChannel() { await reviewChannel(); return true; },
     scan(rows) { return serialize(async () => {
       const receipts = [];
       for (const row of freeRows(rows, freePickChannelId).filter(item => verified(item)
