@@ -61,6 +61,8 @@ test('verified result is private until Kobe separately approves; one stable X re
   const engine = createFreePickResultApprovals({ root, config: { reviewChannelId: '555', startAt: 0 },
     channelFor: async () => channel, rowsFor: async () => rows, freePickChannelId: '456',
     reviewerIds: new Set(['kobe', 'owner']), guildId: '123', environment, fetchImpl });
+  assert.equal(await engine.verifyChannel(), true);
+  assert.equal(calls.length, 0);
   const first = await engine.scan(rows);
   assert.equal(first[0].status, 'AWAITING_APPROVAL');
   assert.equal(saved.size, 1);

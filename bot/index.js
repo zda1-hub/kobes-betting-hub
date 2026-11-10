@@ -768,6 +768,7 @@ function startFreePickResultReplies() {
   } catch (error) { console.error('Free Pick result replies are not configured:', error.message); return; }
   let running = false;
   let weeklyRecordLogged = false;
+  let reviewChannelVerified = false;
   const run = async () => {
     if (running) return;
     running = true;
@@ -777,6 +778,11 @@ function startFreePickResultReplies() {
         await autoGradePendingOfficialPicks(dailyPickOperatingDate(new Date(now.getTime() - daysAgo * 86400000)), fetch, true);
       }
       const rows = await readPickLog();
+      if (approvalMode && !reviewChannelVerified) {
+        await freePickResultApprovals.verifyChannel();
+        reviewChannelVerified = true;
+        console.log('Free Pick result review channel verified for Kobe and KBH owner.');
+      }
       if (!weeklyRecordLogged) {
         const start = dailyPickOperatingDate(new Date(now.getTime() - 6 * 86400000));
         const end = dailyPickOperatingDate(now);
