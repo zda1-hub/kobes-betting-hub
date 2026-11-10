@@ -181,6 +181,9 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname === "/api/free-pick/current" && request.method === "GET") return getCurrentFreePick(request, env);
   if (url.pathname === "/api/free-pick/results" && request.method === "GET") return getFreePickResults(request, env);
   if (url.pathname === "/api/free-pick/results" && request.method === "PUT") return putFreePickResults(request, env);
+  if (url.pathname === "/api/free-pick/result-story" && request.method === "POST") return enqueueResultStory(request, env);
+  if (url.pathname === "/api/free-pick/result-story" && request.method === "GET") return resultStoryStatus(request, env);
+  if (/^\/media\/free-pick\/result-story\/[A-Za-z0-9_-]{4,160}\/[a-f0-9]{64}\.jpg$/.test(url.pathname) && request.method === "GET") return getResultStoryImage(request, env);
   if (url.pathname === "/api/results" && request.method === "GET") return getPublicResults(request, env);
   if (url.pathname === "/api/results" && request.method === "PUT") return putPublicResults(request, env);
   if (url.pathname === "/api/vip-preview/current" && request.method === "GET") return getVipPreview(request, env);
@@ -1315,6 +1318,75 @@ async function getCalendarImage(request, env) {
   const row = await env.DB.prepare('SELECT media_key AS mediaKey FROM calendar_posts WHERE id = ?').bind(id).first();
   if (row?.mediaKey !== `calendar/${id}-${digest}.jpg`) return new Response(null, { status: 404 });
   const asset = await getFreePickObject(env, row.mediaKey);
+  if (!asset) return new Response(null, { status: 404 });
+  return new Response(asset.body, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' } });
+}
+
+async function ensureResultStoryTable(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_result_stories (
+    pick_id TEXT PRIMARY KEY, result_digest TEXT NOT NULL, image_key TEXT NOT NULL,
+    approved_by TEXT NOT NULL, verified_at TEXT NOT NULL, source TEXT NOT NULL,
+    approved_copy TEXT NOT NULL, created_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'approved', container_id TEXT, media_id TEXT,
+    attempted_at TEXT, published_at TEXT, last_error TEXT
+  )`).run();
+}
+
+async function enqueueResultStory(request, env) {
+  if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({ error: 'Unauthorized' }, 401);
+  if (!env.DB || !hasFreePickStore(env)) return json({ error: 'Result Story storage is not configured' }, 503);
+  if (Number(request.headers.get('content-length') || 0) > FREE_PICK_MAX_BYTES + 64 * 1024) return json({ error: 'Upload exceeds 5 MB' }, 413);
+  let form;
+  try { form = await request.formData(); } catch { return json({ error: 'Expected result Story form' }, 400); }
+  const pickId = String(form.get('pickId') || '');
+  const resultDigest = String(form.get('resultDigest') || '');
+  const approvedBy = String(form.get('approvedBy') || '');
+  const verifiedAt = String(form.get('verifiedAt') || '');
+  const source = String(form.get('source') || '');
+  const copy = String(form.get('copy') || '').trim();
+  const image = form.get('image');
+  if (!/^[A-Za-z0-9_-]{4,160}$/.test(pickId) || !/^[a-f0-9]{20}$/.test(resultDigest)
+    || !/^\d{15,25}$/.test(approvedBy) || !source.trim() || source.length > 1000
+    || !Number.isFinite(Date.parse(verifiedAt)) || Date.parse(verifiedAt) > Date.now() + 60_000
+    || Date.parse(verifiedAt) < Date.now() - 7 * 86400_000
+    || !/FREE PICK RESULT: (WIN|LOSS|PUSH|VOID)/.test(copy) || !copy.includes('Final: ') || copy.length > 280)
+    return json({ error: 'Verified, newly approved result facts are required' }, 422);
+  if (!(image instanceof File) || image.type !== 'image/jpeg' || image.size < 100 || image.size > FREE_PICK_MAX_BYTES)
+    return json({ error: 'A result Story JPEG is required' }, 422);
+  const bytes = await image.arrayBuffer();
+  const magic = new Uint8Array(bytes);
+  if (magic[0] !== 0xff || magic[1] !== 0xd8 || magic[magic.length - 2] !== 0xff || magic[magic.length - 1] !== 0xd9)
+    return json({ error: 'Image is not a complete JPEG' }, 422);
+  await ensureResultStoryTable(env);
+  const prior = await env.DB.prepare('SELECT result_digest AS digest, state, media_id AS mediaId FROM instagram_result_stories WHERE pick_id=?').bind(pickId).first();
+  if (prior) return json({ pickId, status: prior.digest === resultDigest ? 'already_queued' : 'conflicting_result', state: prior.state, mediaId: prior.mediaId }, prior.digest === resultDigest ? 200 : 409);
+  const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(n => n.toString(16).padStart(2, '0')).join('');
+  const imageKey = `free-picks/result-story/${pickId}-${hash}.jpg`;
+  await putFreePickObject(env, imageKey, bytes, 'image/jpeg', 'public, max-age=31536000, immutable');
+  const inserted = await env.DB.prepare(`INSERT INTO instagram_result_stories
+    (pick_id,result_digest,image_key,approved_by,verified_at,source,approved_copy,created_at)
+    VALUES (?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`).bind(pickId, resultDigest, imageKey, approvedBy,
+      new Date(Date.parse(verifiedAt)).toISOString(), source, copy, new Date().toISOString()).run();
+  if (inserted.meta.changes !== 1) return json({ pickId, status: 'already_queued' }, 200);
+  return json({ pickId, status: 'approved', imageUrl: `${new URL(request.url).origin}/media/free-pick/result-story/${pickId}/${hash}.jpg` }, 201);
+}
+
+async function resultStoryStatus(request, env) {
+  if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({ error: 'Unauthorized' }, 401);
+  await ensureResultStoryTable(env);
+  const pickId = new URL(request.url).searchParams.get('pickId');
+  if (!/^[A-Za-z0-9_-]{4,160}$/.test(pickId || '')) return json({ error: 'pickId is required' }, 400);
+  const row = await env.DB.prepare('SELECT pick_id AS pickId,state,media_id AS mediaId,published_at AS publishedAt,last_error AS lastError FROM instagram_result_stories WHERE pick_id=?').bind(pickId).first();
+  return row ? json(row) : json({ error: 'Not found' }, 404);
+}
+
+async function getResultStoryImage(request, env) {
+  const parts = new URL(request.url).pathname.split('/');
+  const pickId = parts[4], hash = parts[5]?.replace(/\.jpg$/, '');
+  await ensureResultStoryTable(env);
+  const row = await env.DB.prepare('SELECT image_key AS imageKey FROM instagram_result_stories WHERE pick_id=?').bind(pickId).first();
+  if (row?.imageKey !== `free-picks/result-story/${pickId}-${hash}.jpg`) return new Response(null, { status: 404 });
+  const asset = await getFreePickObject(env, row.imageKey);
   if (!asset) return new Response(null, { status: 404 });
   return new Response(asset.body, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' } });
 }

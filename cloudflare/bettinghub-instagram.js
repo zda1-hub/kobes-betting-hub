@@ -406,6 +406,61 @@ async function deliverCalendarStories(env, fetchImpl = fetch) {
   }
   return { status: 'checked', count: rows.results.length };
 }
+
+async function deliverApprovedResultStories(env, fetchImpl = fetch) {
+  if (!configured(env) || !publishingEnabled(env)) return { status: 'disabled' };
+  await schema(env);
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS instagram_result_stories (
+    pick_id TEXT PRIMARY KEY, result_digest TEXT NOT NULL, image_key TEXT NOT NULL,
+    approved_by TEXT NOT NULL, verified_at TEXT NOT NULL, source TEXT NOT NULL,
+    approved_copy TEXT NOT NULL, created_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'approved', container_id TEXT, media_id TEXT,
+    attempted_at TEXT, published_at TEXT, last_error TEXT
+  )`).run();
+  const { results } = await env.DB.prepare(`SELECT pick_id AS pickId, image_key AS imageKey,
+    state, container_id AS containerId FROM instagram_result_stories
+    WHERE state IN ('approved','container_created') ORDER BY created_at LIMIT 5`).all();
+  if (!results.length) return { status: 'empty' };
+  const connection = await env.DB.prepare('SELECT * FROM instagram_connections_v2 WHERE target=?').bind(TARGET).first();
+  if (!connection || connection.expires_at <= Date.now()) return { status: 'not_connected', pending: results.length };
+  const token = await decrypt(connection.encrypted_token, env);
+  const origin = String(env.FREE_PICK_API_ORIGIN || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
+  if (!/^https:\/\/[^/]+$/.test(origin)) throw new SafeError('RESULT_STORY_MEDIA_ORIGIN_INVALID', 503);
+  for (const row of results) {
+    const operation = crypto.randomUUID();
+    if (!/^free-picks\/result-story\/[A-Za-z0-9_-]{4,160}-[a-f0-9]{64}\.jpg$/.test(row.imageKey)) {
+      await env.DB.prepare("UPDATE instagram_result_stories SET state='held',last_error='INVALID_MEDIA_KEY' WHERE pick_id=? AND state='approved'").bind(row.pickId).run();
+      continue;
+    }
+    try {
+      let containerId = row.containerId;
+      if (row.state === 'approved') {
+        const claim = await env.DB.prepare("UPDATE instagram_result_stories SET state='creating_container',attempted_at=? WHERE pick_id=? AND state='approved'")
+          .bind(new Date().toISOString(), row.pickId).run();
+        if (claim.meta.changes !== 1) continue;
+        const hash = row.imageKey.match(/-([a-f0-9]{64})\.jpg$/)[1];
+        const mediaUrl = `${origin}/media/free-pick/result-story/${row.pickId}/${hash}.jpg`;
+        containerId = await providerPost(env, operation, 'story_create', { accountId: connection.account_id, mediaUrl, token }, fetchImpl);
+        await env.DB.prepare("UPDATE instagram_result_stories SET state='container_created',container_id=?,last_error=NULL WHERE pick_id=? AND state='creating_container'")
+          .bind(containerId, row.pickId).run();
+      }
+      const container = await provider(env, operation, `container_status:${containerId}`, { token }, fetchImpl);
+      if (String(container.status_code || '').toUpperCase() !== 'FINISHED') continue;
+      const claim = await env.DB.prepare("UPDATE instagram_result_stories SET state='publishing' WHERE pick_id=? AND state='container_created'").bind(row.pickId).run();
+      if (claim.meta.changes !== 1) continue;
+      const mediaId = await providerPost(env, operation, 'story_publish', { accountId: connection.account_id, containerId, token }, fetchImpl);
+      await env.DB.prepare("UPDATE instagram_result_stories SET state='published',media_id=?,published_at=?,last_error=NULL WHERE pick_id=? AND state='publishing'")
+        .bind(mediaId, new Date().toISOString(), row.pickId).run();
+      await audit(env, operation, 'APPROVED_RESULT_STORY_PUBLISHED', 'SUCCEEDED');
+    } catch (error) {
+      await env.DB.prepare("UPDATE instagram_result_stories SET state='held',last_error=? WHERE pick_id=? AND state IN ('creating_container','container_created','publishing')")
+        .bind(error instanceof SafeError ? error.message : 'RESULT_STORY_PROVIDER_UNCERTAIN', row.pickId).run();
+      console.error(JSON.stringify({ service: 'result-story', pickId: row.pickId,
+        error: error instanceof SafeError ? error.message : 'RESULT_STORY_PROVIDER_UNCERTAIN' }));
+    }
+  }
+  return { status: 'checked', count: results.length };
+}
 function single(data) {
   if (Array.isArray(data?.data)) {
     if (data.data.length !== 1) throw new SafeError('INSTAGRAM_AMBIGUOUS_ACCOUNT', 403);
@@ -600,7 +655,8 @@ const worker = {
     await deliverCurrentStory(env).catch(error => console.error(JSON.stringify({ service: 'instagram-story', error: error instanceof SafeError ? error.message : 'STORY_DELIVERY_FAILED' })));
     await deliverCurrentReel(env).catch(error => console.error(JSON.stringify({ service: 'instagram-reel', error: error instanceof SafeError ? error.message : 'REEL_DELIVERY_FAILED' })));
     await deliverCalendarStories(env).catch(error => console.error(JSON.stringify({ service: 'calendar-story', error: error instanceof SafeError ? error.message : 'CALENDAR_DELIVERY_FAILED' })));
+    await deliverApprovedResultStories(env).catch(error => console.error(JSON.stringify({ service: 'result-story', error: error instanceof SafeError ? error.message : 'RESULT_STORY_DELIVERY_FAILED' })));
   })()),
 };
 export default worker;
-export const __test = { configured, encrypt, decrypt, identity, hash, readJson, pacificDate, publishingEnabled, reelsEnabled, publicationDateAllowed, deliverCurrentStory, deliverCurrentReel, deliverCalendarStories, freePickReelCaption, SCOPES };
+export const __test = { configured, encrypt, decrypt, identity, hash, readJson, pacificDate, publishingEnabled, reelsEnabled, publicationDateAllowed, deliverCurrentStory, deliverCurrentReel, deliverCalendarStories, deliverApprovedResultStories, freePickReelCaption, SCOPES };

@@ -1,13 +1,21 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { createHash } = require('node:crypto');
+const { createHash, randomInt } = require('node:crypto');
 const { freeRows, verified } = require('./free-pick-results');
 const { resultFor } = require('./pick-log');
 const { buildResultReply, syncFreePickResultReplies } = require('./free-pick-result-replies');
+const { queueApprovedResultStory } = require('./free-pick-result-story');
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 20);
 const noMentions = { parse: [] };
 const finalStatuses = new Set(['REJECTED', 'X_REQUESTED', 'NEEDS_ATTENTION']);
+// Kobe's source list also includes certainty and profit claims such as "FREE
+// MONEY FR" and "WE DON'T MISS". Only the reactions below can be used without
+// changing the verified result or implying a guaranteed return.
+const resultOpeners = Object.freeze({
+  W: ['CASHHH', 'ANOTHER ONE', "THAT'S A WINNER", 'CASH THE TICKET', 'ANOTHER FREE ONE', 'WE LOVE WINNERS'],
+  L: ['ONTO THE NEXT', "CAN'T WIN EM ALL", 'THAT ONE HURT', 'SHAKE IT OFF', "THAT'S THE GAME", 'RESET AND RELOAD'],
+});
 
 function approvalConfig(environment = process.env) {
   if (environment.FREE_PICK_RESULT_APPROVALS_ENABLED !== 'true') return null;
@@ -37,7 +45,7 @@ function card(state) {
   const disabled = finalStatuses.has(state.status) || state.status === 'APPROVED_AWAITING_PARENT';
   return { allowedMentions: noMentions, embeds: [{ color: state.status === 'REJECTED' ? 0x777777 : 0xff7900,
     title: `Free Pick result approval · ${state.operatingDate}`,
-    description: `${state.copy}\n\nX: ${state.status === 'X_REQUESTED' ? 'reply requested' : state.status === 'REJECTED' ? 'rejected' : 'requires separate approval'}\nInstagram: ${state.status === 'X_REQUESTED' ? 'approved copy; manual publication remains' : 'not published'}`,
+    description: `${state.copy}\n\nX: ${state.status === 'X_REQUESTED' ? 'reply requested' : state.status === 'REJECTED' ? 'rejected' : state.status === 'NEEDS_ATTENTION' ? 'reply needs attention' : state.status === 'APPROVED_AWAITING_PARENT' ? 'waiting for original post' : 'requires separate approval'}\nInstagram: ${state.instagramStatus === 'QUEUED' ? 'approved Story queued; check delivery receipt' : state.instagramStatus === 'NEEDS_ATTENTION' ? 'queue needs attention' : 'not published'}`,
     footer: { text: `KBH free-result-review ${state.key} ${state.digest} · ${state.status}` } }],
     components: [{ type: 1, components: [
       { type: 2, style: 3, label: 'Approve result', custom_id: `free-result:approve:${state.key}:${state.digest}`, disabled },
@@ -47,7 +55,8 @@ function card(state) {
 }
 
 function createFreePickResultApprovals({ root, config, channelFor, rowsFor, freePickChannelId,
-  reviewerIds, guildId, environment = process.env, fetchImpl = fetch }) {
+  reviewerIds, guildId, environment = process.env, fetchImpl = fetch,
+  queueInstagram = queueApprovedResultStory, randomIndex = randomInt }) {
   let tail = Promise.resolve();
   const serialize = fn => {
     const result = tail.then(fn);
@@ -55,6 +64,21 @@ function createFreePickResultApprovals({ root, config, channelFor, rowsFor, free
     return result;
   };
   const file = key => path.join(root, `${key}.json`);
+  const rotationFile = path.join(root, 'opener-rotation.json');
+  async function nextOpener(row) {
+    const grade = resultFor(row);
+    const options = resultOpeners[grade];
+    if (!options) return '';
+    let previous = {};
+    try { previous = JSON.parse(await fs.readFile(rotationFile, 'utf8')); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    const eligible = options.filter(value => value !== previous[grade]);
+    const opener = eligible[randomIndex(eligible.length)];
+    await fs.mkdir(root, { recursive: true, mode: 0o700 });
+    await fs.writeFile(`${rotationFile}.tmp`, JSON.stringify({ ...previous, [grade]: opener }), { mode: 0o600 });
+    await fs.rename(`${rotationFile}.tmp`, rotationFile);
+    return opener;
+  }
   async function read(key) {
     if (!/^[a-f0-9]{20}$/.test(key)) throw new Error('Invalid result approval key.');
     try { return JSON.parse(await fs.readFile(file(key), 'utf8')); }
@@ -117,8 +141,9 @@ function createFreePickResultApprovals({ root, config, channelFor, rowsFor, free
         }
         if (state?.digest === rowDigest && state.messageId) continue;
         if (state && finalStatuses.has(state.status)) continue;
+        const opener = await nextOpener(row);
         state = { key, digest: rowDigest, pickId: row.pick_id, operatingDate: row.operating_date,
-          copy: publicCopy(row), opener: '', status: 'AWAITING_APPROVAL', messageId: null };
+          copy: publicCopy(row, opener), opener, status: 'AWAITING_APPROVAL', messageId: null };
         await save(state);
         const channel = await reviewChannel();
         const marker = `KBH free-result-review ${key} ${rowDigest}`;
@@ -175,8 +200,24 @@ function createFreePickResultApprovals({ root, config, channelFor, rowsFor, free
       }
       state.status = 'APPROVED_AWAITING_PARENT';
       await save(state); // Approval is durable before any external X request.
-      const receipt = await requestX(state, row);
-      return { status: state.status, receipt, copy: state.copy };
+      let receipt;
+      try { receipt = await requestX(state, row); }
+      catch (error) {
+        state.status = 'NEEDS_ATTENTION';
+        state.error = String(error?.message || error).slice(0, 200);
+        await save(state);
+      }
+      try {
+        state.instagramReceipt = await queueInstagram({ row, copy: state.copy, approvedBy: userId,
+          resultDigest: state.digest, environment, fetchImpl });
+        state.instagramStatus = 'QUEUED';
+      } catch (error) {
+        state.instagramStatus = 'NEEDS_ATTENTION';
+        state.instagramError = String(error?.message || error).slice(0, 200);
+      }
+      await save(state);
+      await updateCard(state);
+      return { status: state.status, receipt, instagram: state.instagramStatus, copy: state.copy };
     }); },
   };
 }
