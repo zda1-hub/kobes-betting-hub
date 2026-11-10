@@ -97,7 +97,7 @@ services:
       - key: FREE_PICK_X_SYNC_ENABLED
         value: "true"
       - key: FREE_PICK_X_RESULT_REPLIES_ENABLED
-        value: "true"
+        value: "false"
       - key: FREE_PICK_X_RESULT_REPLY_START_AT
         sync: false
       - key: FREE_PICK_X_PUBLISH_URL

@@ -10,10 +10,18 @@ function approvalUserIds(configuredIds) {
 // bbbelt1600: owner-authorized arbitrage reviewer, October 27, 2026.
 // Keep this grant out of general pick approval permissions.
 const ARBITRAGE_REVIEWER_ID = '832944927884312606';
+// The KBH owner authorized this same account to review Free Pick results on November 9.
+// This does not grant original-pick or other content approval access.
+const FREE_PICK_RESULT_OWNER_ID = '832944927884312606';
 function arbitrageApprovalUserIds(configuredIds) {
   const ids = approvalUserIds(configuredIds);
   ids.add(ARBITRAGE_REVIEWER_ID);
   return ids;
 }
 
-module.exports = { approvalUserIds, arbitrageApprovalUserIds, ARBITRAGE_REVIEWER_ID };
+function freePickResultApprovalUserIds() {
+  return new Set([KOBE_APPROVER_ID, FREE_PICK_RESULT_OWNER_ID]);
+}
+
+module.exports = { approvalUserIds, arbitrageApprovalUserIds, freePickResultApprovalUserIds,
+  ARBITRAGE_REVIEWER_ID, FREE_PICK_RESULT_OWNER_ID };

@@ -23,3 +23,11 @@ test('bbbelt1600 can approve arbitrage without gaining general pick approval', (
   assert.equal(arbitrageApprovalUserIds('').has('stranger'), false);
   assert.ok(arbitrageApprovalUserIds('existing-reviewer').has('existing-reviewer'));
 });
+
+const { freePickResultApprovalUserIds, FREE_PICK_RESULT_OWNER_ID } = require('./approval-access');
+test('only Kobe and the KBH owner can approve Free Pick results', () => {
+  const ids = freePickResultApprovalUserIds();
+  assert.deepEqual(ids, new Set([KOBE_APPROVER_ID, FREE_PICK_RESULT_OWNER_ID]));
+  assert.equal(ids.has('existing-reviewer'), false);
+  assert.equal(approvalUserIds('').has(FREE_PICK_RESULT_OWNER_ID), false);
+});

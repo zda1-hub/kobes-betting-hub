@@ -32,7 +32,7 @@ function buildResultReply(row) {
   return body;
 }
 
-async function syncFreePickResultReplies(rows, channelId, { environment = process.env, fetchImpl = fetch } = {}) {
+async function syncFreePickResultReplies(rows, channelId, { environment = process.env, fetchImpl = fetch, bodyFor = buildResultReply } = {}) {
   const config = resultReplyConfig(environment);
   if (!config) return [];
   const receipts = [];
@@ -53,7 +53,8 @@ async function syncFreePickResultReplies(rows, channelId, { environment = proces
       }
       const xPostId = (await parent.json()).xPostId;
       const id = resultReplyId(row.pick_id, xPostId);
-      const body = buildResultReply(row);
+      const body = bodyFor(row);
+      if (typeof body !== 'string' || !body.trim() || body.length > 280) throw new Error('The approved X result body must be 1–280 characters.');
       const response = await auditedFetch(`${config.publisherUrl}/api/queue/x`, {
         method: 'POST', headers: { authorization: `Bearer ${config.secret}`, 'content-type': 'application/json' },
         body: JSON.stringify({ id, body, scheduledAt: new Date().toISOString(), publishNow: true }),
