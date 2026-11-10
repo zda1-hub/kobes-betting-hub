@@ -177,6 +177,21 @@ test('calendar caption edit preserves the slot and refuses partial delivery or s
   await env.DB.prepare("UPDATE calendar_posts SET ig_state='approved', x_state='publishing' WHERE id=?").bind(id).run();
   assert.equal((await edit(updated, original)).status, 409);
   assert.equal((await worker.fetch(new Request('https://publisher.test/api/calendar/caption', { method: 'PATCH' }), env)).status, 401);
+  const mediaKey = `calendar/${id}-${'a'.repeat(64)}.jpg`;
+  await env.FREE_PICK_KV.put(mediaKey, Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]));
+  await env.DB.prepare('CREATE TABLE instagram_reel_deliveries (pick_id TEXT, operating_date TEXT, state TEXT)').run();
+  await env.DB.prepare('CREATE TABLE approved_posts (id TEXT, status TEXT, scheduled_at TEXT)').run();
+  await env.DB.prepare("UPDATE calendar_posts SET x_state='approved', ig_state='approved', pacific_date=?, scheduled_at=?, media_key=? WHERE id=?")
+    .bind('2026-11-18', new Date(Date.now() - 60_000).toISOString(), mediaKey, id).run();
+  const sent = [];
+  await workerTest.dispatchCalendarX(Date.now(), env, async (_image, _type, caption) => {
+    sent.push(caption);
+    return '123456789';
+  });
+  assert.deepEqual(sent, [updated]);
+  const delivered = await env.DB.prepare('SELECT x_state AS state, x_post_id AS postId FROM calendar_posts WHERE id=?').bind(id).first();
+  assert.equal(delivered.state, 'published');
+  assert.equal(delivered.postId, '123456789');
   env.DB.close();
 });
 
