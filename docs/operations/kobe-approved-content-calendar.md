@@ -18,4 +18,6 @@ The active schedule uses `America/Los_Angeles`, including daylight saving. The 2
 
 The weekly pattern has no more than four proposed content slots per day, counting the existing Free Pick slot and native polls. The scheduler does not release unapproved content to fill a slot. It does not generate or publish member reviews, odds, profit claims, or VIP screenshots on its own. An approved calendar Story displays the provided artwork; it cannot attach a native poll or clickable link sticker through the current Graph integration.
 
+The next three education slots have exact X copy and original 1080 × 1920 Story JPEGs prepared in `drafts/calendar/README-2026-11-10.md`. They are ready for item approval; their presence in the repository is not a queued or published receipt.
+
 At dispatch, both calendar publishers count confirmed Free Pick Reel or X receipts and already published calendar slots for the Pacific date. A calendar slot is held once four such slots have been used. This is a best-effort cap on the connected publishers; manually posted content or a Free Pick approved later in the day can change the total. Inspect the day before approving more content.

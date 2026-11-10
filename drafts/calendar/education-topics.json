@@ -1,0 +1,113 @@
+[
+  {
+    "id": "unit-size",
+    "title": ["SET A UNIT", "BEFORE THE SLATE"],
+    "figure": "1% = $10",
+    "figureNote": "on a $1,000 bankroll",
+    "body": ["Keep the stake the same after a loss.", "Chasing changes the risk, not the result."],
+    "action": ["Write down the unit before game one.", "Track the stake on every ticket."],
+    "xText": "Pick a unit before the slate. A $1,000 bankroll at 1% means $10 per bet. A loss stays $10; don't raise the next stake just to get even. Track every wager. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-11-11 wed0900"
+  },
+  {
+    "id": "line-shopping",
+    "title": ["SAME PICK.", "DIFFERENT PRICE."],
+    "figure": "−110 vs −120",
+    "figureNote": "for the same $100 profit",
+    "body": ["At −110, risk $110 to win $100.", "At −120, risk $120 to win $100."],
+    "action": ["Compare available legal books.", "Get the price before placing the bet."],
+    "xText": "Same pick, different price: at -110, $110 risked wins $100; at -120, $120 risked wins $100. Check more than one legal book before placing a bet. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-11-11 wed1430"
+  },
+  {
+    "id": "closing-line-value",
+    "title": ["DID YOU BEAT", "THE CLOSE?"],
+    "figure": "BET vs CLOSE",
+    "figureNote": "a process check, not a win",
+    "body": ["Compare your price with the final", "pregame number on the same market."],
+    "action": ["Record the price you took.", "Check the closing price later."],
+    "xText": "Closing line value compares the price you took with the final pregame price on the same market. It can help review your process; a ticket with a good number can still lose. Log both prices. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-11-13 fri0900"
+  },
+  {
+    "id": "break-even-rate",
+    "title": ["KNOW THE", "BREAK-EVEN RATE"],
+    "figure": "−110 → 52.4%",
+    "figureNote": "before other costs or promos",
+    "body": ["At −110 odds, winning half your bets", "still loses money over time."],
+    "action": ["Check the price and the record.", "Don't judge by wins alone."],
+    "xText": "At -110 odds, a bettor needs about 52.4% wins to break even before other costs. A 5-5 record can still lose money. Track price, stake, wins and losses together. Free Discord: https://discord.gg/sB9vzGz2xj"
+  },
+  {
+    "id": "parlay-probability",
+    "title": ["MORE LEGS.", "MORE WAYS TO MISS."],
+    "figure": "2 / 3 / 4 LEGS",
+    "figureNote": "every leg must hit",
+    "body": ["A bigger payout also means the whole", "ticket is harder to land."],
+    "action": ["Price each leg on its own.", "Read the payout before you bet."],
+    "xText": "A parlay needs every leg to hit. More legs can raise the payout, but they also give the ticket more ways to lose. Check each price and the combined payout before betting. Free Discord: https://discord.gg/sB9vzGz2xj"
+  },
+  {
+    "id": "stop-rule",
+    "title": ["SET THE STOP", "BEFORE THE START"],
+    "figure": "3 LOSSES? STOP.",
+    "figureNote": "choose your own limit first",
+    "body": ["A stop rule can cap one bad night.", "It does not make the next pick win."],
+    "action": ["Write the rule before the first bet.", "Close the apps when it is reached."],
+    "xText": "Set a stop rule before the first bet, such as three losses or a dollar amount you can afford. When it hits, close the apps. The rule limits a bad night; it doesn't predict the next game. Free Discord: https://discord.gg/sB9vzGz2xj"
+  },
+  {
+    "id": "bet-log",
+    "title": ["KEEP A REAL", "BET LOG"],
+    "figure": "DATE / ODDS / $",
+    "figureNote": "then record the result",
+    "body": ["A record without stake and odds", "doesn't show how the money moved."],
+    "action": ["Log each ticket when you place it.", "Grade wins and losses alike."],
+    "xText": "A bet log should include date, wager, odds, stake and final result. Wins alone won't show whether the account is up. Record losses the same way you record wins. Free Discord: https://discord.gg/sB9vzGz2xj"
+  },
+  {
+    "id": "line-movement",
+    "title": ["A LINE MOVED.", "NOW WHAT?"],
+    "figure": "OPEN → NOW",
+    "figureNote": "compare the same market",
+    "body": ["A move can reflect news, action or", "a price adjustment. Check why."],
+    "action": ["Write down the number you saw.", "Decide at the current number."],
+    "xText": "When a line moves, compare the opener and current price on the same market. Check for news, then decide if the current number still works for you. A move alone is not a pick. Free Discord: https://discord.gg/sB9vzGz2xj"
+  },
+  {
+    "id": "injury-check",
+    "title": ["CHECK STATUS", "BEFORE TIPOFF"],
+    "figure": "NEWS → LINE",
+    "figureNote": "status can change late",
+    "body": ["An injury update can change minutes,", "usage and the price you get."],
+    "action": ["Recheck the official status.", "Look at the current line again."],
+    "xText": "Before a player prop, recheck the player's status and the teammates who affect minutes or usage. Then recheck the line. Early research can be right while the price becomes stale. Free Discord: https://discord.gg/sB9vzGz2xj"
+  },
+  {
+    "id": "market-match",
+    "title": ["COMPARE THE", "SAME MARKET"],
+    "figure": "LINE + ODDS",
+    "figureNote": "both numbers matter",
+    "body": ["Over 20.5 and over 21.5 are", "different bets, even at the same odds."],
+    "action": ["Match the player, market and line.", "Then compare the price."],
+    "xText": "When shopping a prop, match the player, market and line first. Over 20.5 and over 21.5 are different bets even if the odds look similar. Compare both the number and the price. Free Discord: https://discord.gg/sB9vzGz2xj"
+  },
+  {
+    "id": "pushes-voids",
+    "title": ["A PUSH ISN'T", "A WIN"],
+    "figure": "W / L / P / V",
+    "figureNote": "grade each outcome plainly",
+    "body": ["A push returns the stake under", "standard grading; voids vary by rule."],
+    "action": ["Read the market's house rules.", "Keep pushes and voids in the log."],
+    "xText": "Keep wins, losses, pushes and voids separate in your bet log. A push usually returns the stake under standard grading; void rules depend on the market and book. Check the house rules. Free Discord: https://discord.gg/sB9vzGz2xj"
+  },
+  {
+    "id": "profit-vs-record",
+    "title": ["RECORD ISN'T", "PROFIT"],
+    "figure": "WINS ≠ ROI",
+    "figureNote": "odds and stakes matter",
+    "body": ["A winning record can still lose", "if the prices or stakes are poor."],
+    "action": ["Report the full W/L/P/V record.", "Calculate return from every stake."],
+    "xText": "A winning record doesn't automatically mean profit. Odds and stake size matter. For an honest recap, include every win, loss, push and void, then calculate return from the actual tickets. Free Discord: https://discord.gg/sB9vzGz2xj"
+  }
+]
