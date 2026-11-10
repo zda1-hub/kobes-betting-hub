@@ -8,6 +8,11 @@ const sitemap = await readFile(new URL('../sitemap.xml', import.meta.url), 'utf8
 
 const pages = new Map([
   ['/', 'index.html'],
+  ['/about', 'about.html'],
+  ['/pricing', 'pricing.html'],
+  ['/contact', 'contact.html'],
+  ['/terms', 'terms.html'],
+  ['/privacy', 'privacy.html'],
   ['/join', 'join.html'],
   ['/exclusives', 'exclusives.html'],
   ['/free-pick', 'free-pick.html'],
