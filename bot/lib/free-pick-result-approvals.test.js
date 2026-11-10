@@ -60,7 +60,7 @@ test('verified result is private until Kobe separately approves; one stable X re
   let rows = [row];
   const engine = createFreePickResultApprovals({ root, config: { reviewChannelId: '555', startAt: 0 },
     channelFor: async () => channel, rowsFor: async () => rows, freePickChannelId: '456',
-    reviewerIds: new Set(['kobe']), guildId: '123', environment, fetchImpl });
+    reviewerIds: new Set(['kobe', 'owner']), guildId: '123', environment, fetchImpl });
   const first = await engine.scan(rows);
   assert.equal(first[0].status, 'AWAITING_APPROVAL');
   assert.equal(saved.size, 1);
@@ -70,7 +70,7 @@ test('verified result is private until Kobe separately approves; one stable X re
   const editId = card.components[0].components[1].custom_id;
   const approveId = card.components?.[0]?.components?.[0]?.custom_id;
   const context = { userId: 'kobe', requestGuildId: '123', channelId: '555', messageId: card.id };
-  await assert.rejects(engine.decide({ ...context, customId: approveId, userId: 'other' }), /Only Kobe/);
+  await assert.rejects(engine.decide({ ...context, customId: approveId, userId: 'other' }), /Only Kobe or the KBH owner/);
   const draft = await engine.beginEdit({ ...context, customId: editId });
   await engine.edit({ ...context, key: draft.key, digest: draft.digest, opener: 'Nice read.' });
   assert.match(card.embeds[0].description, /Nice read/);
@@ -83,6 +83,27 @@ test('verified result is private until Kobe separately approves; one stable X re
   assert.equal(calls.length, 2);
   rows = [{ ...row, score_or_outcome: '4 made threes' }];
   assert.equal((await engine.scan(rows)).length, 0); // A changed settled result never silently republishes.
+});
+
+test('KBH owner can separately approve a verified result in the private Discord channel', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-owner-result-approval-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const { channel, saved } = fakeChannel();
+  let publicRequests = 0;
+  const fetchImpl = async url => {
+    if (String(url).includes('/parent?')) return new Response(JSON.stringify({ xPostId: '2119921137475895375' }));
+    publicRequests++;
+    return new Response(JSON.stringify({ status: 'requested' }), { status: 201 });
+  };
+  const engine = createFreePickResultApprovals({ root, config: { reviewChannelId: '555', startAt: 0 },
+    channelFor: async () => channel, rowsFor: async () => [row], freePickChannelId: '456',
+    reviewerIds: new Set(['kobe', 'owner']), guildId: '123', environment, fetchImpl });
+  await engine.scan([row]);
+  const card = [...saved.values()][0];
+  const decision = await engine.decide({ customId: card.components[0].components[0].custom_id,
+    userId: 'owner', requestGuildId: '123', channelId: '555', messageId: card.id });
+  assert.equal(decision.status, 'X_REQUESTED');
+  assert.equal(publicRequests, 1);
 });
 
 test('rejection does not call public publisher', async t => {

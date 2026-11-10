@@ -32,7 +32,7 @@ const { buildPublicResults } = require('./lib/public-results');
 const { writeupChannelIds } = require('./lib/writeup-record');
 const { publicResultRows } = require('./lib/public-result-rows');
 const { recordEligibility } = require('./lib/record-eligibility');
-const { approvalUserIds, arbitrageApprovalUserIds } = require('./lib/approval-access');
+const { approvalUserIds, arbitrageApprovalUserIds, freePickResultApprovalUserIds } = require('./lib/approval-access');
 const { MARKER: COLLECTOR_HEALTH_MARKER, collectorHealthPayload } = require('./lib/collector-health');
 const { recoverResultsBacklog, readResultsBacklogCursor } = require('./lib/results-backlog');
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
@@ -258,6 +258,7 @@ const trendsChannelMap = new Map(
 // The same authorized Kobe account can decide every private approval card,
 // including picks, trends, expert sheets, and arbitrage, without Render setup.
 const pickApproverUserIds = approvalUserIds(process.env.PICK_APPROVER_USER_IDS);
+const freePickResultReviewerIds = freePickResultApprovalUserIds();
 const reviewQueueRoot = reviewQueuePath();
 const writeupFreeMirrorRoot = path.join(path.dirname(pickLogPath()), 'writeup-free-mirrors');
 const trendsInboxQueueUrl = (process.env.TRENDS_INBOX_QUEUE_URL || '').replace(/\/$/, '');
@@ -739,10 +740,10 @@ function startFreePickResultReplies() {
     if (!approvalMode && !resultReplyConfig()) return;
     if (approvalMode) {
       resultReplyConfig({ ...process.env, FREE_PICK_X_RESULT_REPLIES_ENABLED: 'true' });
-      if (!pickApproverUserIds.size) throw new Error('At least one Kobe reviewer ID is required.');
+      if (freePickResultReviewerIds.size !== 2) throw new Error('Kobe and the KBH owner must be result reviewers.');
       freePickResultApprovals = createFreePickResultApprovals({
         root: path.join(path.dirname(pickLogPath()), 'free-pick-result-approvals'),
-        config: approvalMode, freePickChannelId, reviewerIds: pickApproverUserIds,
+        config: approvalMode, freePickChannelId, reviewerIds: freePickResultReviewerIds,
         guildId: process.env.DISCORD_GUILD_ID, rowsFor: readPickLog,
         channelFor: async (id) => {
           const channel = await client.channels.fetch(id, { force: true });
@@ -754,6 +755,12 @@ function startFreePickResultReplies() {
           if (![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks,
             PermissionFlagsBits.ReadMessageHistory].every(flag => permissions?.has(flag)))
             throw new Error('Kobe Bot lacks required permissions in the Free Pick result review channel.');
+          for (const reviewerId of freePickResultReviewerIds) {
+            const member = await channel.guild.members.fetch(reviewerId);
+            if (![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory].every(flag =>
+              channel.permissionsFor(member)?.has(flag)))
+              throw new Error(`Result reviewer ${reviewerId} cannot read the private review channel.`);
+          }
           return channel;
         },
       });
@@ -788,7 +795,7 @@ function startFreePickResultReplies() {
   freePickResultReplyTimer = setInterval(run, 5 * 60 * 1000);
   freePickResultReplyTimer.unref();
   console.log(approvalMode
-    ? 'Verified Free Pick result approvals active: 5-minute scan; X replies require Kobe approval and Instagram remains manual.'
+    ? 'Verified Free Pick result approvals active: 5-minute scan; X replies require Kobe or KBH owner approval and Instagram remains manual.'
     : 'Verified Free Pick X result replies active: 5-minute scan after an official final.');
 }
 

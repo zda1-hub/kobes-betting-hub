@@ -93,7 +93,7 @@ function createFreePickResultApprovals({ root, config, channelFor, rowsFor, free
   }
   function authorized({ userId, requestGuildId, channelId }) {
     if (requestGuildId !== guildId || channelId !== config.reviewChannelId || !reviewerIds.has(userId))
-      throw new Error('Only Kobe can approve results in the private result review channel.');
+      throw new Error('Only Kobe or the KBH owner can approve results in the private result review channel.');
   }
   return {
     scan(rows) { return serialize(async () => {
