@@ -36,7 +36,8 @@
     "figureNote": "before other costs or promos",
     "body": ["At −110 odds, winning half your bets", "still loses money over time."],
     "action": ["Check the price and the record.", "Don't judge by wins alone."],
-    "xText": "At -110 odds, a bettor needs about 52.4% wins to break even before other costs. A 5-5 record can still lose money. Track price, stake, wins and losses together. Free Discord: https://discord.gg/sB9vzGz2xj"
+    "xText": "At -110 odds, a bettor needs about 52.4% wins to break even before other costs. A 5-5 record can still lose money. Track price, stake, wins and losses together. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-11-18 wed0900"
   },
   {
     "id": "parlay-probability",
@@ -45,7 +46,8 @@
     "figureNote": "every leg must hit",
     "body": ["A bigger payout also means the whole", "ticket is harder to land."],
     "action": ["Price each leg on its own.", "Read the payout before you bet."],
-    "xText": "A parlay needs every leg to hit. More legs can raise the payout, but they also give the ticket more ways to lose. Check each price and the combined payout before betting. Free Discord: https://discord.gg/sB9vzGz2xj"
+    "xText": "A parlay needs every leg to hit. More legs can raise the payout, but they also give the ticket more ways to lose. Check each price and the combined payout before betting. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-11-18 wed1430"
   },
   {
     "id": "stop-rule",
@@ -54,7 +56,8 @@
     "figureNote": "choose your own limit first",
     "body": ["A stop rule can cap one bad night.", "It does not make the next pick win."],
     "action": ["Write the rule before the first bet.", "Close the apps when it is reached."],
-    "xText": "Set a stop rule before the first bet, such as three losses or a dollar amount you can afford. When it hits, close the apps. The rule limits a bad night; it doesn't predict the next game. Free Discord: https://discord.gg/sB9vzGz2xj"
+    "xText": "Set a stop rule before the first bet, such as three losses or a dollar amount you can afford. When it hits, close the apps. The rule limits a bad night; it doesn't predict the next game. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-11-20 fri0900"
   },
   {
     "id": "bet-log",
@@ -63,7 +66,8 @@
     "figureNote": "then record the result",
     "body": ["A record without stake and odds", "doesn't show how the money moved."],
     "action": ["Log each ticket when you place it.", "Grade wins and losses alike."],
-    "xText": "A bet log should include date, wager, odds, stake and final result. Wins alone won't show whether the account is up. Record losses the same way you record wins. Free Discord: https://discord.gg/sB9vzGz2xj"
+    "xText": "A bet log should include date, wager, odds, stake and final result. Wins alone won't show whether the account is up. Record losses the same way you record wins. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-11-25 wed0900"
   },
   {
     "id": "line-movement",
@@ -72,7 +76,8 @@
     "figureNote": "compare the same market",
     "body": ["A move can reflect news, action or", "a price adjustment. Check why."],
     "action": ["Write down the number you saw.", "Decide at the current number."],
-    "xText": "When a line moves, compare the opener and current price on the same market. Check for news, then decide if the current number still works for you. A move alone is not a pick. Free Discord: https://discord.gg/sB9vzGz2xj"
+    "xText": "When a line moves, compare the opener and current price on the same market. Check for news, then decide if the current number still works for you. A move alone is not a pick. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-11-25 wed1430"
   },
   {
     "id": "injury-check",
@@ -81,7 +86,8 @@
     "figureNote": "status can change late",
     "body": ["An injury update can change minutes,", "usage and the price you get."],
     "action": ["Recheck the official status.", "Look at the current line again."],
-    "xText": "Before a player prop, recheck the player's status and the teammates who affect minutes or usage. Then recheck the line. Early research can be right while the price becomes stale. Free Discord: https://discord.gg/sB9vzGz2xj"
+    "xText": "Before a player prop, recheck the player's status and the teammates who affect minutes or usage. Then recheck the line. Early research can be right while the price becomes stale. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-11-27 fri0900"
   },
   {
     "id": "market-match",
@@ -90,7 +96,8 @@
     "figureNote": "both numbers matter",
     "body": ["Over 20.5 and over 21.5 are", "different bets, even at the same odds."],
     "action": ["Match the player, market and line.", "Then compare the price."],
-    "xText": "When shopping a prop, match the player, market and line first. Over 20.5 and over 21.5 are different bets even if the odds look similar. Compare both the number and the price. Free Discord: https://discord.gg/sB9vzGz2xj"
+    "xText": "When shopping a prop, match the player, market and line first. Over 20.5 and over 21.5 are different bets even if the odds look similar. Compare both the number and the price. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-12-02 wed0900"
   },
   {
     "id": "pushes-voids",
@@ -99,7 +106,8 @@
     "figureNote": "grade each outcome plainly",
     "body": ["A push returns the stake under", "standard grading; voids vary by rule."],
     "action": ["Read the market's house rules.", "Keep pushes and voids in the log."],
-    "xText": "Keep wins, losses, pushes and voids separate in your bet log. A push usually returns the stake under standard grading; void rules depend on the market and book. Check the house rules. Free Discord: https://discord.gg/sB9vzGz2xj"
+    "xText": "Keep wins, losses, pushes and voids separate in your bet log. A push usually returns the stake under standard grading; void rules depend on the market and book. Check the house rules. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-12-02 wed1430"
   },
   {
     "id": "profit-vs-record",
@@ -108,6 +116,7 @@
     "figureNote": "odds and stakes matter",
     "body": ["A winning record can still lose", "if the prices or stakes are poor."],
     "action": ["Report the full W/L/P/V record.", "Calculate return from every stake."],
-    "xText": "A winning record doesn't automatically mean profit. Odds and stake size matter. For an honest recap, include every win, loss, push and void, then calculate return from the actual tickets. Free Discord: https://discord.gg/sB9vzGz2xj"
+    "xText": "A winning record doesn't automatically mean profit. Odds and stake size matter. For an honest recap, include every win, loss, push and void, then calculate return from the actual tickets. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "slot": "2026-12-04 fri0900"
   }
 ]
