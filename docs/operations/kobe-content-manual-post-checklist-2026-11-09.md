@@ -2,6 +2,8 @@
 
 This is a working checklist, not a live posting calendar. Kobe's emails specify four slots per day but do not identify a time zone. The owner has selected **3:00 Thursday** for the arbitrage slot; the time zone and review-slot conflict remain open. Do not activate the calendar until those are resolved. Count the existing automated Free Pick, Story, Reel, email and X deliveries toward the four daily slots; do not create duplicate publishers.
 
+Production hold: the old automatic X result-reply switch was set to `false` on November 9 at about 5:18 PM Arizona time. Render deploy `dep-dbp65gm1egvs73b663m0` reached `live`; its startup logs no longer announce the automatic result-reply scan. The approval-card code in draft PR #373 is **not deployed**. Until it is reviewed, merged, configured and observed live, verified results can be graded but cannot be assumed to appear on X. A human may post only the exact verified result after Kobe approves that result and checks for an existing reply.
+
 ## Already working or implemented locally
 
 | Workflow | Evidence and current boundary |
