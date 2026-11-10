@@ -167,6 +167,7 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname === "/api/queue/x" && request.method === "GET") return listRecentPosts(request, env);
   if (url.pathname === "/api/calendar/approved" && request.method === "POST") return enqueueCalendarPost(request, env);
   if (url.pathname === "/api/calendar/approved" && request.method === "GET") return listCalendarPosts(request, env);
+  if (url.pathname === "/api/calendar/caption" && request.method === "PATCH") return editCalendarCaption(request, env);
   if (/^\/media\/calendar\/cal-\d{8}-[a-z0-9]{7}\/[^/]+\.jpg$/.test(url.pathname) && request.method === "GET") return getCalendarImage(request, env);
   if (url.pathname === "/api/queue/x/parent" && request.method === "GET") return getFreePickXParent(request, env);
   if (url.pathname === "/api/queue/daily-picks" && request.method === "POST") return enqueueDailyPick(request, env);
@@ -1304,10 +1305,32 @@ async function enqueueCalendarPost(request, env) {
 async function listCalendarPosts(request, env) {
   if (!(await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET) || await hasBearer(request, env.QUEUE_INGEST_SECRET))) return json({ error: 'Unauthorized' }, 401);
   await ensureCalendarTable(env);
-  const rows = await env.DB.prepare(`SELECT id, pacific_date AS date, slot, scheduled_at AS scheduledAt, x_state AS xState,
+  const rows = await env.DB.prepare(`SELECT id, pacific_date AS date, slot, scheduled_at AS scheduledAt, x_text AS xText, x_state AS xState,
     x_post_id AS xPostId, x_error AS xError, ig_state AS igState, ig_media_id AS igMediaId,
     ig_error AS igError FROM calendar_posts ORDER BY scheduled_at DESC LIMIT 30`).all();
   return json({ posts: rows.results });
+}
+
+async function editCalendarCaption(request, env) {
+  if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({ error: 'Unauthorized' }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Expected JSON' }, 400); }
+  const id = String(body?.id || '');
+  const expectedText = String(body?.expectedText || '');
+  const xText = String(body?.xText || '').trim();
+  const approvedBy = String(body?.approvedBy || '');
+  if (!/^cal-\d{8}-[a-z]{3}\d{4}$/.test(id) || !expectedText || !xText
+    || xText.length > 280 || !xText.includes('https://discord.gg/sB9vzGz2xj')
+    || !/^\d{15,25}$/.test(approvedBy)) return json({ error: 'Invalid approved caption' }, 422);
+  await ensureCalendarTable(env);
+  // Both destinations must be untouched. This CAS also loses safely to either
+  // publisher's claim and to another editor's change.
+  const changed = await env.DB.prepare(`UPDATE calendar_posts SET x_text=?, approved_by=?
+    WHERE id=? AND x_text=? AND x_state='approved' AND ig_state='approved'
+      AND scheduled_at > ? AND x_post_id IS NULL AND ig_media_id IS NULL`)
+    .bind(xText, approvedBy, id, expectedText, new Date(Date.now() + 10 * 60_000).toISOString()).run();
+  if (changed.meta.changes !== 1) return json({ error: 'Caption changed, dispatch started, or slot is within 10 minutes; refresh status' }, 409);
+  return json({ id, status: 'edited', xText, approvedBy }, 200);
 }
 
 async function getCalendarImage(request, env) {
@@ -1407,7 +1430,7 @@ async function calendarCapacityUsed(env, date, currentId) {
 async function dispatchCalendarX(scheduledTime, env) {
   await ensureCalendarTable(env);
   const now = new Date(scheduledTime || Date.now()).toISOString();
-  const rows = await env.DB.prepare(`SELECT id, pacific_date AS date, x_text AS xText, media_key AS mediaKey FROM calendar_posts
+  const rows = await env.DB.prepare(`SELECT id, pacific_date AS date, media_key AS mediaKey FROM calendar_posts
     WHERE x_state = 'approved' AND scheduled_at <= ? AND scheduled_at >= ? ORDER BY scheduled_at LIMIT 10`)
     .bind(now, new Date(Date.parse(now) - 20 * 60_000).toISOString()).all();
   for (const row of rows.results) {
@@ -1418,9 +1441,13 @@ async function dispatchCalendarX(scheduledTime, env) {
     const claim = await env.DB.prepare("UPDATE calendar_posts SET x_state='publishing', x_attempted_at=? WHERE id=? AND x_state='approved'").bind(now, row.id).run();
     if (claim.meta.changes !== 1) continue;
     try {
+      // Read after the claim so a concurrent caption edit cannot publish the
+      // stale text selected before the edit transaction committed.
+      const copy = await env.DB.prepare('SELECT x_text AS xText FROM calendar_posts WHERE id=? AND x_state=\'publishing\'').bind(row.id).first();
+      if (!copy?.xText) throw new Error('APPROVED_CAPTION_MISSING');
       const asset = await getFreePickObject(env, row.mediaKey);
       if (!asset) throw new Error('APPROVED_IMAGE_MISSING');
-      const postId = await publishFreePickToX(new Blob([asset.body], { type: 'image/jpeg' }), 'image/jpeg', row.xText, env, 'approved_calendar_post');
+      const postId = await publishFreePickToX(new Blob([asset.body], { type: 'image/jpeg' }), 'image/jpeg', copy.xText, env, 'approved_calendar_post');
       await env.DB.prepare("UPDATE calendar_posts SET x_state='published', x_post_id=?, x_error=NULL WHERE id=? AND x_state='publishing'").bind(postId, row.id).run();
     } catch (error) {
       // Provider calls can succeed while their response is lost. Never retry
