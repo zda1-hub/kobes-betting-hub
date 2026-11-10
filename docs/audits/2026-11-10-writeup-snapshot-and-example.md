@@ -24,3 +24,8 @@
 - [PR #394](https://github.com/zda1-hub/kobes-betting-hub/pull/394) was merged as `9725c2a5aa7a652c63468e13fbd0681df47cb647`. The clean `origin/main` public build was deployed to Cloudflare Worker `kobes-betting-hub` version `53ea3b1d-a10e-4d24-8cb6-2f422ef7804e` on November 10, 2026.
 - Wrangler uploaded exactly seven changed public assets: `index.html`, `results.html`, `recaps.html`, `home-writeup-proof.js`, `home-writeup-proof.css`, `writeup-record.js` and `writeup-record.css`. No checkout or bot service was deployed.
 - Live HTTP checks confirmed the versioned script references and the published historical figures and corrected Brown result. The live homepage was visually inspected in a browser and its results API loaded the separate 72–76 current tracked record. The 320px, 390px and desktop geometry checks above were on the local preview; the live browser screenshot was desktop.
+
+## Follow-up — public aggregate removed
+
+- Owner requested that the 72–76 tracked writeup record not appear on the website. `index.html`, `results.html`, and `recaps.html` now contain only the dated Kobe-reported 68%/66%/60% sport snapshot and no longer load `writeup-record.js`, which had rendered the dynamic aggregate. The individual verified winning-play cards still load and update through their existing scripts.
+- The homepage explanation now distinguishes the dated sport snapshot from the live individual cards. `scripts/bento-release.test.mjs` checks that the aggregate placeholders and script are absent. This follow-up was initially local; release and live checks are recorded below when completed.
