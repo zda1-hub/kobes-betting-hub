@@ -29,3 +29,9 @@
 
 - Owner requested that the 72–76 tracked writeup record not appear on the website. `index.html`, `results.html`, and `recaps.html` now contain only the dated Kobe-reported 68%/66%/60% sport snapshot and no longer load `writeup-record.js`, which had rendered the dynamic aggregate. The individual verified winning-play cards still load and update through their existing scripts.
 - The homepage explanation now distinguishes the dated sport snapshot from the live individual cards. `scripts/bento-release.test.mjs` checks that the aggregate placeholders and script are absent. This follow-up was initially local; release and live checks are recorded below when completed.
+
+### Follow-up release verification
+
+- [PR #396](https://github.com/zda1-hub/kobes-betting-hub/pull/396) merged as `5cbab8184b24e64ec4327108c5d09025f0651cb3`. The public site Worker was deployed from that merged commit as version `179a2854-a5ca-47bd-9da3-225928f25dc8`. Wrangler uploaded only `index.html`, `results.html`, and `recaps.html`; checkout, bot, and email services were not deployed.
+- Live HTTP checks returned 200 for the homepage, Recent Wins, recaps, robots.txt, sitemap, About, Pricing, Contact, Terms, and Privacy. The three affected HTML pages include the dated 68%/66%/60% snapshot and no `writeup-record.js` reference or 72–76 aggregate. The live homepage's browser accessibility tree showed the static rates and newly loaded individual winning-play cards.
+- Build prepared 117 public entries; 16 focused tests passed; local preview was inspected at desktop, 390px, and 320px widths. The site remains visually consistent with the approved design. OpenAI Business Hub verification remains gated in the signed-in Arc UI after the owner reported finishing the ID step; no Business Hub claim or agent publication was made.
