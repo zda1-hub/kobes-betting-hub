@@ -1,6 +1,6 @@
 # Kobe content handoff — November 9, 2026
 
-This is a working checklist, not a live posting calendar. Kobe's emails specify four slots per day but do not identify a time zone. The owner has selected **3:00 Thursday** for the arbitrage slot; the time zone and review-slot conflict remain open. Do not activate the calendar until those are resolved. Count the existing automated Free Pick, Story, Reel, email and X deliveries toward the four daily slots; do not create duplicate publishers.
+This is a working checklist, not a live posting calendar. The owner confirmed Kobe is in California, so every proposed slot below uses **America/Los_Angeles** and follows daylight-saving changes. The owner selected **Thursday 3:00 PM Pacific** for arbitrage. The member-review slots still conflict; do not activate those slots until a single time is chosen. Count the existing automated Free Pick, Story, Reel, email and X deliveries toward the four daily slots; do not create duplicate publishers.
 
 Production hold: the old automatic X result-reply switch was set to `false` on November 9 at about 5:18 PM Arizona time. Render deploy `dep-dbp65gm1egvs73b663m0` reached `live`; its startup logs no longer announce the automatic result-reply scan. The approval-card code in draft PR #373 is **not deployed**. Until it is reviewed, merged, configured and observed live, verified results can be graded but cannot be assumed to appear on X. A human may post only the exact verified result after Kobe approves that result and checks for an existing reply.
 
@@ -23,7 +23,7 @@ Production hold: the old automatic X result-reply switch was set to `false` on N
 
 ## Awaiting verified content, schedule or manual app action
 
-The following times are exactly as written in Kobe's proposed table unless noted. **Every time zone is unconfirmed.** No item below has been scheduled or posted by this handoff.
+The following times are Pacific local time (`America/Los_Angeles`) exactly as written in Kobe's proposed table unless noted. On November 9, 2026 this is PST; the zone will switch to PDT seasonally. No item below has been scheduled or posted by this handoff.
 
 | Day / proposed time | Content and asset | Destination | Approval, verification and human posting step |
 | --- | --- | --- | --- |
@@ -41,7 +41,7 @@ The following times are exactly as written in Kobe's proposed table unless noted
 | Wed 6:00 | Current VIP access CTA | X + IG Story | Verify live offer and checkout terms. The supplied promo artwork says `VIP20`, `20% off`, `1,300+ active members`, `24/7 handicappers`, and `limited time`; these claims are **unverified**. Do not use that graphic until each is proven or replaced. For Story, a person adds and tests the actual link sticker. |
 | Thu 9:00 | Current game pick'em | Instagram native Story poll + optional X poll | Team manually adds poll sticker/options after matchup check; static artwork alone is not a poll. |
 | Thu 11:30 | Newly approved Free Pick | Same Free Pick destinations | Same canonical approval and delivery checks. |
-| Thu **3:00** | Latest real arbitrage/EV opportunity | X + IG Story | Owner resolved 3:00 versus 3:30 as 3:00; time zone remains open. Apply Monday's privacy and odds checks. |
+| Thu **3:00 PM Pacific** | Latest real arbitrage/EV opportunity | X + IG Story | Owner resolved 3:00 versus 3:30 as 3:00 Pacific. Apply Monday's privacy and odds checks. |
 | Thu 7:30 **or 5:00** | Original member review/slip screenshot | X + IG Story | Resolve review-time conflict; verify consent and preserve screenshot unchanged. |
 | Fri 9:00 | Bankroll education | X + IG Story | Factual, approved tip; respect 12-topic rotation. |
 | Fri 11:30 | Newly approved Free Pick | Same Free Pick destinations | Same canonical approval and delivery checks. |
@@ -63,4 +63,4 @@ The following times are exactly as written in Kobe's proposed table unless noted
 - **24 video attachments** were listed in email, but the connected Gmail reader cannot download that MP4 MIME type. Obtain the files through an authorized accessible source before using or claiming inspection.
 - **Poll example** is a static postgame Notre Dame–Miami graphic. A person must create the native Instagram poll; no interactive poll was verified from that image.
 - **Promo Story example** has no tappable link in its pixels. A person must add the free Discord or verified current VIP destination as an Instagram link sticker and tap-test it. The offer, code and member-count claims remain on hold.
-- **No manual item is fully ready to post** until its event/offer/result and asset are verified, Kobe approves the specific public message, and the proposed time zone is confirmed. Send completed assets to the owner for review; do not message Kobe from this workflow.
+- **No manual item is fully ready to post** until its event/offer/result and asset are verified and Kobe approves the specific public message. Member-review slots also need the 5:00-versus-table-time conflict resolved. Send completed assets to the owner for review; do not message Kobe from this workflow.
