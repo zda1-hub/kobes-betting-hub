@@ -1427,7 +1427,7 @@ async function calendarCapacityUsed(env, date, currentId) {
   return Math.max(Number(reels?.count || 0), freeXCount) + Number(calendar?.count || 0);
 }
 
-async function dispatchCalendarX(scheduledTime, env) {
+async function dispatchCalendarX(scheduledTime, env, publishImage = publishFreePickToX) {
   await ensureCalendarTable(env);
   const now = new Date(scheduledTime || Date.now()).toISOString();
   const rows = await env.DB.prepare(`SELECT id, pacific_date AS date, media_key AS mediaKey FROM calendar_posts
@@ -1447,7 +1447,7 @@ async function dispatchCalendarX(scheduledTime, env) {
       if (!copy?.xText) throw new Error('APPROVED_CAPTION_MISSING');
       const asset = await getFreePickObject(env, row.mediaKey);
       if (!asset) throw new Error('APPROVED_IMAGE_MISSING');
-      const postId = await publishFreePickToX(new Blob([asset.body], { type: 'image/jpeg' }), 'image/jpeg', copy.xText, env, 'approved_calendar_post');
+      const postId = await publishImage(new Blob([asset.body], { type: 'image/jpeg' }), 'image/jpeg', copy.xText, env, 'approved_calendar_post');
       await env.DB.prepare("UPDATE calendar_posts SET x_state='published', x_post_id=?, x_error=NULL WHERE id=? AND x_state='publishing'").bind(postId, row.id).run();
     } catch (error) {
       // Provider calls can succeed while their response is lost. Never retry
