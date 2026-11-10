@@ -28,6 +28,7 @@ const { buildFreePickRecapEmbed, freePickRecapRows } = require('./lib/free-recap
 const { buildFreePickResults, freeRows, verified } = require('./lib/free-pick-results');
 const { approvedSlot } = require('./lib/marketing-calendar');
 const { educationDrafts, educationReviewPayload, parseEducationButton, MARKER: CALENDAR_EDUCATION_MARKER } = require('./lib/calendar-education-review');
+const { editorialDrafts, editorialReviewPayload, parseEditorialButton, MARKER: CALENDAR_EDITORIAL_MARKER } = require('./lib/calendar-editorial-review');
 const { safeXPostLength } = require('./lib/free-pick-x');
 const { syncFreePickResultReplies, resultReplyConfig } = require('./lib/free-pick-result-replies');
 const { approvalConfig: freeResultApprovalConfig, createFreePickResultApprovals } = require('./lib/free-pick-result-approvals');
@@ -266,6 +267,7 @@ const freePickResultReviewerIds = freePickResultApprovalUserIds();
 // original-pick approval and does not widen the pick approver set.
 const calendarApproverIds = new Set(['1209660006383755265', '832944927884312606']);
 const calendarEducationDecisionsInFlight = new Set();
+const calendarEditorialDecisionsInFlight = new Set();
 
 async function submitApprovedCalendar({ slot, xText, bytes, approvedBy, evidence, triggerType }) {
   if (!xText.includes('https://discord.gg/sB9vzGz2xj') || safeXPostLength(xText) > 280 || xText.length > 280)
@@ -326,6 +328,44 @@ async function prepareCalendarEducationCards() {
   for (const draft of drafts) {
     if (markers.has(draft.marker)) { existing++; continue; }
     await channel.send(educationReviewPayload(draft));
+    prepared++;
+  }
+  return { prepared, existing, channelId: channel.id, ids: drafts.map(draft => draft.slot.id) };
+}
+
+async function prepareCalendarEditorialCards() {
+  if (!pickApprovalChannelId) throw new Error('PICK_APPROVAL_CHANNEL_ID is required for editorial review cards.');
+  const channel = await client.channels.fetch(pickApprovalChannelId, { force: true });
+  if (!channel?.isTextBased() || channel.guildId !== process.env.DISCORD_GUILD_ID || !/approval/i.test(channel.name || ''))
+    throw new Error('Editorial drafts need the configured private pick approval channel.');
+  const everyone = channel.guild.roles.everyone;
+  const websiteVip = channel.guild.roles.cache.get(recapWorkflow.website_vip_role_id);
+  if (channel.permissionsFor(everyone)?.has(PermissionFlagsBits.ViewChannel)
+    || (websiteVip && channel.permissionsFor(websiteVip)?.has(PermissionFlagsBits.ViewChannel)))
+    throw new Error('Editorial review channel must not be visible to free or VIP members.');
+  const permissions = channel.permissionsFor(client.user);
+  if (![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks,
+    PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory].every(flag => permissions?.has(flag)))
+    throw new Error('Kobe Bot needs private editorial card and image permissions.');
+  const drafts = await editorialDrafts();
+  if (!drafts.length) return { prepared: 0, existing: 0 };
+  const markers = new Set();
+  let before;
+  for (let page = 0; page < 5; page += 1) {
+    const messages = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+    if (!messages.size) break;
+    for (const message of messages.values()) {
+      if (message.author?.id !== client.user.id) continue;
+      const marker = message.embeds?.[0]?.footer?.text;
+      if (marker?.startsWith(`${CALENDAR_EDITORIAL_MARKER} `)) markers.add(marker);
+    }
+    if (messages.size < 100) break;
+    before = [...messages.keys()].reduce((oldest, id) => !oldest || BigInt(id) < BigInt(oldest) ? id : oldest, null);
+  }
+  let prepared = 0, existing = 0;
+  for (const draft of drafts) {
+    if (markers.has(draft.marker)) { existing++; continue; }
+    await channel.send(editorialReviewPayload(draft));
     prepared++;
   }
   return { prepared, existing, channelId: channel.id, ids: drafts.map(draft => draft.slot.id) };
@@ -3146,6 +3186,12 @@ client.once(Events.ClientReady, async (readyClient) => {
   setInterval(() => void prepareCalendarEducationCards()
     .then(receipt => { if (receipt.prepared) console.log('Private education calendar draft receipts:', JSON.stringify(receipt)); })
     .catch(error => console.error('Private education calendar drafts need attention:', error.message)), 6 * 60 * 60 * 1000);
+  void prepareCalendarEditorialCards()
+    .then(receipt => console.log('Private editorial calendar draft receipts:', JSON.stringify(receipt)))
+    .catch(error => console.error('Private editorial calendar drafts need attention:', error.message));
+  setInterval(() => void prepareCalendarEditorialCards()
+    .then(receipt => { if (receipt.prepared) console.log('Private editorial calendar draft receipts:', JSON.stringify(receipt)); })
+    .catch(error => console.error('Private editorial calendar drafts need attention:', error.message)), 6 * 60 * 60 * 1000);
   void clarifyStartHereArbitrage(readyClient).catch(error => console.error('Start-here wording update needs attention:', error.message));
   if (discordJoinAttribution) {
     const guild = process.env.DISCORD_GUILD_ID ? readyClient.guilds.cache.get(process.env.DISCORD_GUILD_ID) : null;
@@ -3335,6 +3381,44 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isButton() && interaction.customId.startsWith('calendar-editorial:')) {
+    let lockedMessageId;
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      const action = parseEditorialButton(interaction.customId);
+      if (!action || interaction.guildId !== process.env.DISCORD_GUILD_ID
+        || interaction.channelId !== pickApprovalChannelId || !calendarApproverIds.has(interaction.user.id)
+        || interaction.message.author?.id !== client.user.id)
+        throw new Error('Only Kobe or the KBH owner can decide an authentic private editorial draft.');
+      if (calendarEditorialDecisionsInFlight.has(interaction.message.id)) throw new Error('This draft decision is already in progress.');
+      calendarEditorialDecisionsInFlight.add(interaction.message.id);
+      lockedMessageId = interaction.message.id;
+      const current = await interaction.channel.messages.fetch(interaction.message.id);
+      const active = current.components.flatMap(row => row.toJSON().components)
+        .some(button => button.custom_id === interaction.customId && button.disabled !== true);
+      if (!active) throw new Error('This draft was already decided. No new post was queued.');
+      const draft = (await editorialDrafts()).find(item => item.slot.id === action.id);
+      if (!draft || draft.digest !== action.digest || current.embeds?.[0]?.footer?.text !== draft.marker)
+        throw new Error('This draft changed or its slot closed. No post was scheduled.');
+      if (action.action === 'reject') {
+        await current.edit({ components: editorialReviewPayload(draft, true).components });
+        await interaction.editReply('Draft rejected. No X post or Instagram Story was queued.');
+        return;
+      }
+      const result = await submitApprovedCalendar({ slot: draft.slot, xText: draft.draft.xText,
+        bytes: draft.bytes, approvedBy: interaction.user.id,
+        evidence: `${draft.draft.evidence}; Kobe calendar email 2026-11-09; exact private card ${interaction.message.id}`,
+        triggerType: 'approved_editorial_calendar_card' });
+      await current.edit({ components: editorialReviewPayload(draft, true).components });
+      await interaction.editReply(result.status === 409
+        ? `${draft.slot.id} was already queued. No duplicate was created; check /calendar-status.`
+        : `${draft.slot.id} approved for ${draft.slot.scheduledAt}. X and Instagram Story are queued separately; check /calendar-status for receipts.`);
+    } catch (error) {
+      console.error('Editorial calendar decision needs attention:', error.message);
+      await respondToInteractionFailure(interaction, `${error.message || 'Calendar draft needs attention.'} Check /calendar-status before retrying an uncertain queue.`, 'Editorial calendar interaction');
+    } finally { if (lockedMessageId) calendarEditorialDecisionsInFlight.delete(lockedMessageId); }
+    return;
+  }
   if (interaction.isButton() && interaction.customId.startsWith('calendar-education:')) {
     let lockedMessageId;
     try {
