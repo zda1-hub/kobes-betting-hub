@@ -1,0 +1,52 @@
+[
+  {
+    "id": "bos-phi-poll",
+    "slot": "2026-11-10 tue0900",
+    "manualOnly": true,
+    "kicker": "MATCHUP DISCUSSION · NOT A PICK",
+    "title": ["BOSTON OR", "PHILLY?"],
+    "figure": "BOS @ PHI",
+    "figureNote": "Tue Nov 10 · 5:00 PM PST",
+    "body": ["Who wins tonight?", "Which matchup decides it?"],
+    "action": ["Tap a side in the poll.", "Then tell us why."],
+    "pollOptions": ["Celtics", "76ers"],
+    "xText": "Celtics or 76ers Tuesday night? Who wins, and which matchup decides it? Tip is 5 PM Pacific. Tell us in the replies, then join the free Discord: https://discord.gg/sB9vzGz2xj",
+    "evidence": "https://www.nba.com/games?date=2026-11-10"
+  },
+  {
+    "id": "research-checklist",
+    "slot": "2026-11-10 tue1500",
+    "kicker": "BEHIND THE RESEARCH · NO PICK",
+    "title": ["BEFORE A", "PLAYER PROP"],
+    "figure": "STATUS → MINUTES",
+    "figureNote": "then the current line and price",
+    "body": ["The injury report is a starting point.", "The number can change after the read."],
+    "action": ["Check the same market again", "before placing a ticket."],
+    "xText": "Before a player prop: check the schedule, official injury report, expected minutes, then the current line and odds. A good angle can disappear when the number moves. What do you check first? Free Discord: https://discord.gg/sB9vzGz2xj",
+    "evidence": "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-11-09_04_30PM.pdf"
+  },
+  {
+    "id": "vip-standard-offer",
+    "slot": "2026-11-11 wed1800",
+    "kicker": "FREE DISCORD · VIP OPTION",
+    "title": ["START FREE.", "EXPLORE VIP."],
+    "figure": "2 DAYS FREE",
+    "figureNote": "then $32.99/month until canceled",
+    "body": ["Card required at checkout.", "Cancel before trial ends to avoid charge."],
+    "action": ["Free picks when approved.", "VIP adds writeups and expert plays."],
+    "xText": "Free KBH Discord: approved free picks with the reasoning. VIP adds writeups, expert plays and arb alerts. Standard monthly: 2 days free, then $32.99/mo until canceled. Card required; cancel before trial ends to avoid charge. Join: https://discord.gg/sB9vzGz2xj",
+    "evidence": "https://kobesbettinghub.com/terms"
+  },
+  {
+    "id": "weekend-vip-prep",
+    "slot": "2026-11-13 fri1500",
+    "kicker": "WEEKEND PREP · NO PICK",
+    "title": ["THE WEEKEND", "BOARD STARTS HERE"],
+    "figure": "NEWS → NUMBER",
+    "figureNote": "then decide whether to bet",
+    "body": ["Check injuries and current prices.", "Skip a play if the number is gone."],
+    "action": ["Approved free picks in Discord.", "VIP writeups after approval."],
+    "xText": "Weekend prep: check injuries, matchup context and current prices before staking a play. Skip a bet if the number you liked is gone. Approved free picks and VIP writeups appear after review. Free Discord: https://discord.gg/sB9vzGz2xj",
+    "evidence": "https://kobesbettinghub.com/terms"
+  }
+]
