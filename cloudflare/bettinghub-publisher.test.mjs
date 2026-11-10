@@ -79,6 +79,39 @@ function memoryD1() {
   };
 }
 
+test('a separately approved Free Pick result reserves one Instagram Story without an X post', async () => {
+  const env = { DB: memoryD1(), FREE_PICK_KV: memoryKv(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret' };
+  const bytes = Buffer.alloc(1024, 0);
+  bytes[0] = 0xff; bytes[1] = 0xd8; bytes[1022] = 0xff; bytes[1023] = 0xd9;
+  const form = new FormData();
+  for (const [key, value] of Object.entries({ pickId: '20261109-181-X', resultDigest: 'a'.repeat(20),
+    approvedBy: '1209660006383755265', verifiedAt: new Date().toISOString(),
+    source: 'https://www.nba.com/game/box-score',
+    copy: 'FREE PICK RESULT: WIN\nExact wager | -110\nFinal: 2 made threes' })) form.set(key, value);
+  form.set('image', new Blob([bytes], { type: 'image/jpeg' }), 'result.jpg');
+  const post = () => worker.fetch(new Request('https://publisher.test/api/free-pick/result-story', {
+    method: 'POST', headers: { authorization: 'Bearer fixture-secret' }, body: form }), env);
+  const created = await post();
+  assert.equal(created.status, 201);
+  const receipt = await created.json();
+  assert.equal(receipt.status, 'approved');
+  assert.equal((await post()).status, 200);
+  const image = await worker.fetch(new Request(receipt.imageUrl), env);
+  assert.equal(image.status, 200);
+  assert.deepEqual(Buffer.from(await image.arrayBuffer()), bytes);
+  const status = await worker.fetch(new Request('https://publisher.test/api/free-pick/result-story?pickId=20261109-181-X',
+    { headers: { authorization: 'Bearer fixture-secret' } }), env);
+  assert.equal((await status.json()).state, 'approved');
+  form.set('resultDigest', 'b'.repeat(20));
+  assert.equal((await post()).status, 409);
+  form.set('pickId', '20261109-182-X');
+  form.set('resultDigest', 'c'.repeat(20));
+  form.set('source', 'Official box score: game 123');
+  assert.equal((await post()).status, 201);
+  assert.equal((await worker.fetch(new Request('https://publisher.test/api/free-pick/result-story'), env)).status, 401);
+  env.DB.close();
+});
+
 test('approved calendar image is queued once at the exact Pacific slot with separate platform states', async () => {
   const env = { DB: memoryD1(), FREE_PICK_KV: memoryKv(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret' };
   let slot;

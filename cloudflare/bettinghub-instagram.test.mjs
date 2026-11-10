@@ -286,6 +286,38 @@ test('approved calendar Story uses existing Instagram connection and publishes o
   assert.equal(calls.filter(call => call.url.endsWith('/media_publish')).length, 1);
 });
 
+test('separately approved Free Pick result publishes one Story through the existing Instagram connection', async () => {
+  const env = environment();
+  env.INSTAGRAM_PUBLISHING_ENABLED = 'true';
+  env.FREE_PICK_API_ORIGIN = 'https://bettinghub-publisher.kobedirwin.workers.dev';
+  assert.equal((await connected(env)).result.status, 200);
+  assert.deepEqual(await __test.deliverApprovedResultStories(env), { status: 'empty' });
+  const pickId = '20261109-181-X', hash = 'a'.repeat(64);
+  env.DB.sql.prepare(`INSERT INTO instagram_result_stories
+    (pick_id,result_digest,image_key,approved_by,verified_at,source,approved_copy,created_at)
+    VALUES (?,?,?,?,?,?,?,?)`).run(pickId, 'b'.repeat(20), `free-picks/result-story/${pickId}-${hash}.jpg`,
+      '1209660006383755265', new Date().toISOString(), 'https://www.nba.com/game/box-score',
+      'FREE PICK RESULT: WIN\nExact wager\nFinal: 2 made threes', new Date().toISOString());
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push(String(url));
+    if (String(url).endsWith('/media')) {
+      assert.equal(init.body.get('media_type'), 'STORIES');
+      assert.equal(init.body.get('image_url'), `${env.FREE_PICK_API_ORIGIN}/media/free-pick/result-story/${pickId}/${hash}.jpg`);
+      return Response.json({ id: '123456789' });
+    }
+    if (String(url).includes('fields=status_code')) return Response.json({ status_code: 'FINISHED' });
+    if (String(url).endsWith('/media_publish')) return Response.json({ id: '987654321' });
+    throw new Error('unexpected endpoint');
+  };
+  assert.deepEqual(await __test.deliverApprovedResultStories(env, fetchImpl), { status: 'checked', count: 1 });
+  assert.equal(env.DB.sql.prepare('SELECT state FROM instagram_result_stories').get().state, 'published');
+  assert.equal(env.DB.sql.prepare('SELECT media_id FROM instagram_result_stories').get().media_id, '987654321');
+  assert.deepEqual(await __test.deliverApprovedResultStories(env, fetchImpl), { status: 'empty' });
+  assert.equal(calls.filter(url => url.endsWith('/media')).length, 1);
+  assert.equal(calls.filter(url => url.endsWith('/media_publish')).length, 1);
+});
+
 test('calendar Story is held when four confirmed Free Pick reels used the Pacific day', async () => {
   const env = environment();
   env.INSTAGRAM_PUBLISHING_ENABLED = 'true';

@@ -388,6 +388,30 @@ async function ensureArbitrageChannels() {
   return { reviewChannel, destinationChannel };
 }
 
+async function ensureWriteupRecapReviewChannel() {
+  if (!writeupRecapWorkflow.enabled) return;
+  const configuredId = writeupRecapWorkflow.review_channel_id;
+  try {
+    const existing = await approvedTextChannel(configuredId);
+    if (existing.name === 'writeup-recap-approvals' && existing.guildId === recapWorkflow.guild_id) return;
+    throw new Error('Configured writeup recap review channel has the wrong identity.');
+  } catch (error) {
+    if (!isUnknownDiscordChannel(error)) throw error;
+  }
+  const channel = await ensureArbitrageChannel({
+    configuredId: '', name: 'writeup-recap-approvals', sourceId: exclusiveRecapWorkflow.review_channel_id,
+    topic: 'Private verified writeup recaps. Kobe approves each exact card before member publication.',
+    reason: 'Restore the missing private writeup recap review channel.'
+  });
+  const everyone = channel.permissionOverwrites.cache.get(channel.guildId);
+  const vip = channel.permissionOverwrites.cache.get(writeupRecapWorkflow.website_vip_role_id);
+  if (!everyone?.deny.has(PermissionFlagsBits.ViewChannel) || vip?.allow.has(PermissionFlagsBits.ViewChannel))
+    throw new Error('Writeup recap review channel must remain private.');
+  writeupRecapWorkflow.review_channel_id = channel.id;
+  allowedChannelIds.add(channel.id);
+  console.log(`Writeup recap review channel restored: ${channel.id} (replaced stale ${configuredId}).`);
+}
+
 async function startArbitragePaperTest() {
   if (process.env.ARBITRAGE_PAPER_TEST_ENABLED !== 'true') return;
   if (!process.env.ODDS_API_KEY) throw new Error('ODDS_API_KEY is required for the private arbitrage paper test.');
@@ -806,7 +830,7 @@ function startFreePickResultReplies() {
   freePickResultReplyTimer = setInterval(run, 5 * 60 * 1000);
   freePickResultReplyTimer.unref();
   console.log(approvalMode
-    ? 'Verified Free Pick result approvals active: 5-minute scan; X replies require Kobe or KBH owner approval and Instagram remains manual.'
+    ? 'Verified Free Pick result approvals active: 5-minute scan; X reply and Instagram result Story require Kobe or KBH owner approval.'
     : 'Verified Free Pick X result replies active: 5-minute scan after an official final.');
 }
 
@@ -3037,6 +3061,8 @@ async function holdGenericExclusiveApprovalCards() {
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  try { await ensureWriteupRecapReviewChannel(); }
+  catch (error) { console.error('Private writeup recap review channel needs attention:', error.message); }
   void clarifyStartHereArbitrage(readyClient).catch(error => console.error('Start-here wording update needs attention:', error.message));
   if (discordJoinAttribution) {
     const guild = process.env.DISCORD_GUILD_ID ? readyClient.guilds.cache.get(process.env.DISCORD_GUILD_ID) : null;

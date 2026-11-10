@@ -58,9 +58,11 @@ test('verified result is private until Kobe separately approves; one stable X re
     return new Response(JSON.stringify({ status: 'published' }), { status: 201 });
   };
   let rows = [row];
+  const instagram = [];
   const engine = createFreePickResultApprovals({ root, config: { reviewChannelId: '555', startAt: 0 },
     channelFor: async () => channel, rowsFor: async () => rows, freePickChannelId: '456',
-    reviewerIds: new Set(['kobe', 'owner']), guildId: '123', environment, fetchImpl });
+    reviewerIds: new Set(['kobe', 'owner']), guildId: '123', environment, fetchImpl,
+    queueInstagram: async request => { instagram.push(request); return { status: 'approved' }; } });
   assert.equal(await engine.verifyChannel(), true);
   assert.equal(calls.length, 0);
   const first = await engine.scan(rows);
@@ -78,7 +80,11 @@ test('verified result is private until Kobe separately approves; one stable X re
   assert.match(card.embeds[0].description, /Nice read/);
   const decision = await engine.decide({ ...context, customId: approveId });
   assert.equal(decision.status, 'X_REQUESTED');
+  assert.equal(decision.instagram, 'QUEUED');
+  assert.equal(instagram.length, 1);
+  assert.match(instagram[0].copy, /Nice read\.[\s\S]*FREE PICK RESULT: WIN/);
   assert.equal(calls.length, 2);
+  assert.equal(instagram.length, 1);
   assert.match(JSON.parse(calls[1].init.body).body, /Nice read\.[\s\S]*FREE PICK RESULT: WIN/);
   await assert.rejects(engine.decide({ ...context, customId: approveId }), /stale or already decided/);
   assert.equal((await engine.scan(rows)).length, 0);
@@ -121,6 +127,22 @@ test('rejection does not call public publisher', async t => {
   const result = await engine.decide({ customId: card.components[0].components[2].custom_id,
     userId: 'kobe', requestGuildId: '123', channelId: '555', messageId: card.id });
   assert.equal(result.status, 'REJECTED');
+});
+
+test('safe Kobe result reactions rotate in private drafts without consecutive repeats', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-result-rotation-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const { channel, saved } = fakeChannel();
+  const second = { ...row, pick_id: '20261109-182-X' };
+  const engine = createFreePickResultApprovals({ root, config: { reviewChannelId: '555', startAt: 0 },
+    channelFor: async () => channel, rowsFor: async () => [row, second], freePickChannelId: '456',
+    reviewerIds: new Set(['kobe']), guildId: '123', environment,
+    randomIndex: () => 0, fetchImpl: async () => { throw new Error('No public request before approval'); } });
+  await engine.scan([row, second]);
+  const descriptions = [...saved.values()].map(message => message.embeds[0].description);
+  assert.match(descriptions[0], /^CASHHH/);
+  assert.match(descriptions[1], /^ANOTHER ONE/);
+  assert.ok(descriptions.every(value => value.includes('FREE PICK RESULT: WIN')));
 });
 
 test('approved result waits for original X receipt and does not need a second approval', async t => {
