@@ -18,3 +18,9 @@
 - The historical 68/66/60 figures are owner-provided, **not an audited record**. No sport-by-sport wins/losses or exact cutoff were supplied; do not present them in an OpenAI business profile or Business Agent as independently verified. The live tracked record is a distinct cohort and may show a different percentage.
 - The supplied screenshot was used as a format reference. Its detailed chance-rate claims and 9-rebound closing line are not published. Past results do not guarantee future outcomes.
 - This audit initially describes local changes. Append the release commit, production version and live verification below after publication.
+
+## Production release follow-up
+
+- [PR #394](https://github.com/zda1-hub/kobes-betting-hub/pull/394) was merged as `9725c2a5aa7a652c63468e13fbd0681df47cb647`. The clean `origin/main` public build was deployed to Cloudflare Worker `kobes-betting-hub` version `53ea3b1d-a10e-4d24-8cb6-2f422ef7804e` on November 10, 2026.
+- Wrangler uploaded exactly seven changed public assets: `index.html`, `results.html`, `recaps.html`, `home-writeup-proof.js`, `home-writeup-proof.css`, `writeup-record.js` and `writeup-record.css`. No checkout or bot service was deployed.
+- Live HTTP checks confirmed the versioned script references and the published historical figures and corrected Brown result. The live homepage was visually inspected in a browser and its results API loaded the separate 72–76 current tracked record. The 320px, 390px and desktop geometry checks above were on the local preview; the live browser screenshot was desktop.
