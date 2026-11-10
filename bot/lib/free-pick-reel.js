@@ -26,7 +26,7 @@ async function renderFreePickReel(packet, { cardRenderer = renderFreePickChatCar
       '-hide_banner', '-loglevel', 'error', '-y', '-filter_threads', '1',
       '-loop', '1', '-framerate', '24', '-i', image,
       '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=48000',
-      '-t', '6', '-vf', 'scale=540:960:flags=fast_bilinear',
+      '-t', '6', '-vf', 'scale=540:960:flags=fast_bilinear,fade=t=in:st=0:d=0.45,fade=t=out:st=5.45:d=0.55',
       '-c:v', 'libx264', '-threads', '1', '-preset', 'ultrafast', '-crf', '24',
       '-pix_fmt', 'yuv420p', '-r', '24',
       '-c:a', 'aac', '-b:a', '32k', '-ar', '48000', '-shortest',

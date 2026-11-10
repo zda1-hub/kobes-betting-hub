@@ -27,6 +27,7 @@ const recapWorkflowConfigs = [exclusiveRecapWorkflow, writeupRecapWorkflow].filt
 const { buildFreePickRecapEmbed, freePickRecapRows } = require('./lib/free-recap');
 const { buildFreePickResults, freeRows, verified } = require('./lib/free-pick-results');
 const { syncFreePickResultReplies, resultReplyConfig } = require('./lib/free-pick-result-replies');
+const { approvalConfig: freeResultApprovalConfig, createFreePickResultApprovals } = require('./lib/free-pick-result-approvals');
 const { buildPublicResults } = require('./lib/public-results');
 const { writeupChannelIds } = require('./lib/writeup-record');
 const { publicResultRows } = require('./lib/public-result-rows');
@@ -315,6 +316,7 @@ let freeRecapTimer = null;
 let freeRecapInProgress = false;
 let freePickDeliveryTimer = null;
 let freePickResultReplyTimer = null;
+let freePickResultApprovals = null;
 let injuryTimer = null;
 let injuryDelivery = null;
 let telegramTimer = null;
@@ -731,7 +733,32 @@ function startFreePickDelivery() {
 
 function startFreePickResultReplies() {
   if (!freePickChannelId || freePickResultReplyTimer) return;
-  try { if (!resultReplyConfig()) return; } catch (error) { console.error('Free Pick result replies are not configured:', error.message); return; }
+  let approvalMode = null;
+  try {
+    approvalMode = freeResultApprovalConfig();
+    if (!approvalMode && !resultReplyConfig()) return;
+    if (approvalMode) {
+      resultReplyConfig({ ...process.env, FREE_PICK_X_RESULT_REPLIES_ENABLED: 'true' });
+      if (!pickApproverUserIds.size) throw new Error('At least one Kobe reviewer ID is required.');
+      freePickResultApprovals = createFreePickResultApprovals({
+        root: path.join(path.dirname(pickLogPath()), 'free-pick-result-approvals'),
+        config: approvalMode, freePickChannelId, reviewerIds: pickApproverUserIds,
+        guildId: process.env.DISCORD_GUILD_ID, rowsFor: readPickLog,
+        channelFor: async (id) => {
+          const channel = await client.channels.fetch(id, { force: true });
+          if (!channel?.isTextBased() || channel.guildId !== process.env.DISCORD_GUILD_ID)
+            throw new Error('Unexpected Free Pick result review channel.');
+          if (!channel.permissionOverwrites.cache.get(channel.guildId)?.deny.has(PermissionFlagsBits.ViewChannel))
+            throw new Error('Free Pick result review channel must be private.');
+          const permissions = channel.permissionsFor(client.user);
+          if (![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks,
+            PermissionFlagsBits.ReadMessageHistory].every(flag => permissions?.has(flag)))
+            throw new Error('Kobe Bot lacks required permissions in the Free Pick result review channel.');
+          return channel;
+        },
+      });
+    }
+  } catch (error) { console.error('Free Pick result replies are not configured:', error.message); return; }
   let running = false;
   let weeklyRecordLogged = false;
   const run = async () => {
@@ -750,7 +777,9 @@ function startFreePickResultReplies() {
         console.log('Verified Free Pick seven-day record:', JSON.stringify({ start, end, ...snapshot.overall, pending: snapshot.pending }));
         weeklyRecordLogged = true;
       }
-      const receipts = await syncFreePickResultReplies(rows, freePickChannelId);
+      const receipts = approvalMode
+        ? await freePickResultApprovals.scan(rows)
+        : await syncFreePickResultReplies(rows, freePickChannelId);
       for (const receipt of receipts.filter((item) => item.status !== 'already_requested')) console.log('Free Pick result reply:', JSON.stringify(receipt));
     } catch (error) { console.error('Free Pick result reply scan needs attention:', error.message); }
     finally { running = false; }
@@ -758,7 +787,9 @@ function startFreePickResultReplies() {
   void run();
   freePickResultReplyTimer = setInterval(run, 5 * 60 * 1000);
   freePickResultReplyTimer.unref();
-  console.log('Verified Free Pick X result replies active: 5-minute scan after an official final.');
+  console.log(approvalMode
+    ? 'Verified Free Pick result approvals active: 5-minute scan; X replies require Kobe approval and Instagram remains manual.'
+    : 'Verified Free Pick X result replies active: 5-minute scan after an official final.');
 }
 
 function startFreePickResultsSync() {
@@ -3177,6 +3208,47 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isButton() && interaction.customId.startsWith('free-result:')) {
+    try {
+      if (!freePickResultApprovals) throw new Error('Free Pick result approvals are not configured.');
+      const context = { customId: interaction.customId, userId: interaction.user.id,
+        requestGuildId: interaction.guildId, channelId: interaction.channelId, messageId: interaction.message.id };
+      if (interaction.customId.startsWith('free-result:edit:')) {
+        const draft = await freePickResultApprovals.beginEdit(context);
+        const modal = new ModalBuilder()
+          .setCustomId(`free-result-edit:${draft.key}:${draft.digest}:${draft.messageId}`)
+          .setTitle('Customize Free Pick result');
+        modal.addComponents(new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('opener').setLabel('Optional opener; wager and final stay locked')
+            .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(80).setValue(draft.opener || '')));
+        await interaction.showModal(modal);
+      } else {
+        await interaction.deferReply({ ephemeral: true });
+        const result = await freePickResultApprovals.decide(context);
+        await interaction.editReply(result.status === 'REJECTED'
+          ? 'Result rejected. No X reply or Instagram result was posted.'
+          : result.receipt?.status === 'awaiting_original_post'
+            ? 'Result approved. The X reply is waiting for the original X post receipt; Instagram still needs a manual post.'
+            : result.receipt?.status === 'needs_attention'
+              ? 'Result approved, but X delivery needs attention. Do not retry without checking the queue; Instagram still needs a manual post.'
+              : 'Result approved and the X reply requested. Check its delivery receipt; Instagram still needs a manual post.');
+      }
+    } catch (error) { await respondToInteractionFailure(interaction, error.message || 'Result approval needs attention.', 'Free Pick result approval'); }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('free-result-edit:')) {
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      if (!freePickResultApprovals) throw new Error('Free Pick result approvals are not configured.');
+      const match = interaction.customId.match(/^free-result-edit:([a-f0-9]{20}):([a-f0-9]{20}):(\d+)$/);
+      if (!match) throw new Error('Invalid Free Pick result edit form.');
+      await freePickResultApprovals.edit({ key: match[1], digest: match[2], messageId: match[3],
+        opener: interaction.fields.getTextInputValue('opener'), userId: interaction.user.id,
+        requestGuildId: interaction.guildId, channelId: interaction.channelId });
+      await interaction.editReply('The result opener was updated on the private card. Review it, then approve or reject.');
+    } catch (error) { await respondToInteractionFailure(interaction, error.message || 'Result edit needs attention.', 'Free Pick result edit'); }
+    return;
+  }
   if (interaction.isButton() && interaction.customId.startsWith('arbitrage-review:')) {
     try {
       await interaction.deferReply({ ephemeral: true });
