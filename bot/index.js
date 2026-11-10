@@ -27,6 +27,7 @@ const recapWorkflowConfigs = [exclusiveRecapWorkflow, writeupRecapWorkflow].filt
 const { buildFreePickRecapEmbed, freePickRecapRows } = require('./lib/free-recap');
 const { buildFreePickResults, freeRows, verified } = require('./lib/free-pick-results');
 const { approvedSlot } = require('./lib/marketing-calendar');
+const { educationDrafts, educationReviewPayload, parseEducationButton, MARKER: CALENDAR_EDUCATION_MARKER } = require('./lib/calendar-education-review');
 const { safeXPostLength } = require('./lib/free-pick-x');
 const { syncFreePickResultReplies, resultReplyConfig } = require('./lib/free-pick-result-replies');
 const { approvalConfig: freeResultApprovalConfig, createFreePickResultApprovals } = require('./lib/free-pick-result-approvals');
@@ -264,6 +265,71 @@ const freePickResultReviewerIds = freePickResultApprovalUserIds();
 // The KBH owner explicitly authorized the calendar; this is separate from
 // original-pick approval and does not widen the pick approver set.
 const calendarApproverIds = new Set(['1209660006383755265', '832944927884312606']);
+const calendarEducationDecisionsInFlight = new Set();
+
+async function submitApprovedCalendar({ slot, xText, bytes, approvedBy, evidence, triggerType }) {
+  if (!xText.includes('https://discord.gg/sB9vzGz2xj') || safeXPostLength(xText) > 280 || xText.length > 280)
+    throw new Error('The exact X copy must fit and link directly to the free Discord.');
+  const metadata = await require('sharp')(bytes).metadata();
+  if (metadata.format !== 'jpeg' || metadata.width !== 1080 || metadata.height !== 1920 || metadata.pages > 1 || bytes.length > 5 * 1024 * 1024)
+    throw new Error('The approved Story image must be a single 1080 × 1920 JPEG under 5 MB.');
+  const secret = process.env.FREE_PICK_SITE_PUBLISH_SECRET;
+  if (!secret) throw new Error('Calendar publisher credential is not configured.');
+  const origin = (process.env.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
+  const form = new FormData();
+  form.set('id', slot.id);
+  form.set('scheduledAt', slot.scheduledAt);
+  form.set('xText', xText);
+  form.set('approvedBy', approvedBy);
+  form.set('evidence', evidence);
+  form.set('image', new Blob([bytes], { type: 'image/jpeg' }), `${slot.id}.jpg`);
+  const response = await auditedFetch(`${origin}/api/calendar/approved`, {
+    method: 'POST', headers: { authorization: `Bearer ${secret}` }, body: form,
+    signal: AbortSignal.timeout(20000)
+  }, { service: 'cloudflare-worker', endpointClass: '/api/calendar/approved', callerComponent: 'bot/index', triggerType, workflowId: slot.id });
+  const receipt = await response.json().catch(() => ({}));
+  if (response.status !== 409 && !response.ok)
+    throw new Error(`Calendar queue rejected ${slot.id} (${response.status}): ${receipt.error || 'Unknown error'}`);
+  return { status: response.status, receipt };
+}
+
+async function prepareCalendarEducationCards() {
+  if (!pickApprovalChannelId) throw new Error('PICK_APPROVAL_CHANNEL_ID is required for education review cards.');
+  const channel = await client.channels.fetch(pickApprovalChannelId, { force: true });
+  if (!channel?.isTextBased() || channel.guildId !== process.env.DISCORD_GUILD_ID || !/approval/i.test(channel.name || ''))
+    throw new Error('Education drafts need the configured private pick approval channel.');
+  const everyone = channel.guild.roles.everyone;
+  const websiteVip = channel.guild.roles.cache.get(recapWorkflow.website_vip_role_id);
+  if (channel.permissionsFor(everyone)?.has(PermissionFlagsBits.ViewChannel)
+    || (websiteVip && channel.permissionsFor(websiteVip)?.has(PermissionFlagsBits.ViewChannel)))
+    throw new Error('Education review channel must not be visible to free or VIP members.');
+  const permissions = channel.permissionsFor(client.user);
+  if (![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks,
+    PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory].every(flag => permissions?.has(flag)))
+    throw new Error('Kobe Bot needs private education card and image permissions.');
+  const drafts = await educationDrafts();
+  if (!drafts.length) return { prepared: 0, existing: 0 };
+  const markers = new Set();
+  let before;
+  for (let page = 0; page < 5; page += 1) {
+    const messages = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+    if (!messages.size) break;
+    for (const message of messages.values()) {
+      if (message.author?.id !== client.user.id) continue;
+      const marker = message.embeds?.[0]?.footer?.text;
+      if (marker?.startsWith(`${CALENDAR_EDUCATION_MARKER} `)) markers.add(marker);
+    }
+    if (messages.size < 100) break;
+    before = [...messages.keys()].reduce((oldest, id) => !oldest || BigInt(id) < BigInt(oldest) ? id : oldest, null);
+  }
+  let prepared = 0, existing = 0;
+  for (const draft of drafts) {
+    if (markers.has(draft.marker)) { existing++; continue; }
+    await channel.send(educationReviewPayload(draft));
+    prepared++;
+  }
+  return { prepared, existing, channelId: channel.id, ids: drafts.map(draft => draft.slot.id) };
+}
 const reviewQueueRoot = reviewQueuePath();
 const writeupFreeMirrorRoot = path.join(path.dirname(pickLogPath()), 'writeup-free-mirrors');
 const trendsInboxQueueUrl = (process.env.TRENDS_INBOX_QUEUE_URL || '').replace(/\/$/, '');
@@ -3063,6 +3129,9 @@ client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
   try { await ensureWriteupRecapReviewChannel(); }
   catch (error) { console.error('Private writeup recap review channel needs attention:', error.message); }
+  void prepareCalendarEducationCards()
+    .then(receipt => console.log('Private education calendar draft receipts:', JSON.stringify(receipt)))
+    .catch(error => console.error('Private education calendar drafts need attention:', error.message));
   void clarifyStartHereArbitrage(readyClient).catch(error => console.error('Start-here wording update needs attention:', error.message));
   if (discordJoinAttribution) {
     const guild = process.env.DISCORD_GUILD_ID ? readyClient.guilds.cache.get(process.env.DISCORD_GUILD_ID) : null;
@@ -3252,6 +3321,44 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isButton() && interaction.customId.startsWith('calendar-education:')) {
+    let lockedMessageId;
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      const action = parseEducationButton(interaction.customId);
+      if (!action || interaction.guildId !== process.env.DISCORD_GUILD_ID
+        || interaction.channelId !== pickApprovalChannelId || !calendarApproverIds.has(interaction.user.id)
+        || interaction.message.author?.id !== client.user.id)
+        throw new Error('Only Kobe or the KBH owner can decide an authentic private education draft.');
+      if (calendarEducationDecisionsInFlight.has(interaction.message.id)) throw new Error('This draft decision is already in progress.');
+      calendarEducationDecisionsInFlight.add(interaction.message.id);
+      lockedMessageId = interaction.message.id;
+      const current = await interaction.channel.messages.fetch(interaction.message.id);
+      const active = current.components.flatMap(row => row.toJSON().components)
+        .some(button => button.custom_id === interaction.customId && button.disabled !== true);
+      if (!active) throw new Error('This draft was already decided. No new post was queued.');
+      const draft = (await educationDrafts()).find(item => item.slot.id === action.id);
+      if (!draft || draft.digest !== action.digest || current.embeds?.[0]?.footer?.text !== draft.marker)
+        throw new Error('This draft changed or its slot closed. No post was scheduled.');
+      if (action.action === 'reject') {
+        await current.edit({ components: educationReviewPayload(draft, true).components });
+        await interaction.editReply('Draft rejected. No X post or Instagram Story was queued.');
+        return;
+      }
+      const result = await submitApprovedCalendar({ slot: draft.slot, xText: draft.topic.xText,
+        bytes: draft.bytes, approvedBy: interaction.user.id,
+        evidence: `Kobe education email 2026-11-09; KBH original ${draft.topic.id}; exact private card ${interaction.message.id}`,
+        triggerType: 'approved_education_calendar_card' });
+      await current.edit({ components: educationReviewPayload(draft, true).components });
+      await interaction.editReply(result.status === 409
+        ? `${draft.slot.id} was already queued. No duplicate was created; check /calendar-status.`
+        : `${draft.slot.id} approved for ${draft.slot.scheduledAt}. X and Instagram Story are queued separately; check /calendar-status for receipts.`);
+    } catch (error) {
+      console.error('Education calendar decision needs attention:', error.message);
+      await respondToInteractionFailure(interaction, `${error.message || 'Calendar draft needs attention.'} Check /calendar-status before retrying an uncertain queue.`, 'Education calendar interaction');
+    } finally { if (lockedMessageId) calendarEducationDecisionsInFlight.delete(lockedMessageId); }
+    return;
+  }
   if (interaction.isButton() && interaction.customId.startsWith('free-result:')) {
     try {
       if (!freePickResultApprovals) throw new Error('Free Pick result approvals are not configured.');
@@ -3272,10 +3379,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.editReply(result.status === 'REJECTED'
           ? 'Result rejected. No X reply or Instagram result was posted.'
           : result.receipt?.status === 'awaiting_original_post'
-            ? 'Result approved. The X reply is waiting for the original X post receipt; Instagram still needs a manual post.'
+            ? 'Result approved. The X reply is waiting for the original X post receipt; check the Instagram Story queue separately.'
             : result.receipt?.status === 'needs_attention'
-              ? 'Result approved, but X delivery needs attention. Do not retry without checking the queue; Instagram still needs a manual post.'
-              : 'Result approved and the X reply requested. Check its delivery receipt; Instagram still needs a manual post.');
+              ? 'Result approved, but X delivery needs attention. Do not retry without checking the queue; check the Instagram Story receipt separately.'
+              : 'Result approved and the X reply requested. Check its delivery receipt and the Instagram Story receipt separately.');
       }
     } catch (error) { await respondToInteractionFailure(interaction, error.message || 'Result approval needs attention.', 'Free Pick result approval'); }
     return;
@@ -3627,27 +3734,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!imageResponse.ok) throw new Error('Discord image could not be downloaded.');
       const bytes = Buffer.from(await imageResponse.arrayBuffer());
       if (bytes.length > 5 * 1024 * 1024) throw new Error('Image exceeds 5 MB.');
-      const metadata = await require('sharp')(bytes).metadata();
-      if (metadata.format !== 'jpeg' || metadata.width !== 1080 || metadata.height !== 1920 || metadata.pages > 1) throw new Error('The approved Story image must be a single 1080 × 1920 JPEG.');
-      const secret = process.env.FREE_PICK_SITE_PUBLISH_SECRET;
-      if (!secret) throw new Error('Calendar publisher credential is not configured.');
-      const origin = (process.env.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
-      const form = new FormData();
-      form.set('id', slot.id);
-      form.set('scheduledAt', slot.scheduledAt);
-      form.set('xText', xText);
-      form.set('approvedBy', interaction.user.id);
-      form.set('evidence', interaction.options.getString('evidence', true).trim());
-      form.set('image', new Blob([bytes], { type: 'image/jpeg' }), `${slot.id}.jpg`);
-      const response = await auditedFetch(`${origin}/api/calendar/approved`, {
-        method: 'POST', headers: { authorization: `Bearer ${secret}` }, body: form,
-        signal: AbortSignal.timeout(20000)
-      }, { service: 'cloudflare-worker', endpointClass: '/api/calendar/approved', callerComponent: 'bot/index', triggerType: 'approved_calendar_post', workflowId: slot.id });
-      const receipt = await response.json().catch(() => ({}));
-      if (response.status === 409) {
+      const result = await submitApprovedCalendar({ slot, xText, bytes, approvedBy: interaction.user.id,
+        evidence: interaction.options.getString('evidence', true).trim(), triggerType: 'approved_calendar_post' });
+      if (result.status === 409) {
         await interaction.editReply(`Slot ${slot.id} already exists. Check /calendar-status before changing anything; no duplicate was queued.`);
-      } else if (!response.ok) {
-        throw new Error(`Calendar queue rejected ${slot.id} (${response.status}): ${receipt.error || 'Unknown error'}`);
       } else {
         await interaction.editReply(`Approved ${slot.id} for ${slot.scheduledAt} (Pacific slot ${slot.time}). X and Instagram Story are queued separately. Check /calendar-status for each receipt.`);
       }
