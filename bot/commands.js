@@ -178,6 +178,36 @@ module.exports = [
       .setDescription('Queue verified writeup and exclusive recap cards for Kobe’s approval')
   ),
   gradePickOptions,
+  new SlashCommandBuilder()
+    .setName('approve-calendar-post')
+    .setDescription('Approve one verified Pacific-time X post and Instagram Story')
+    .addStringOption(option => option.setName('date').setDescription('Pacific date, YYYY-MM-DD').setRequired(true).setMinLength(10).setMaxLength(10))
+    .addStringOption(option => option.setName('slot').setDescription('Approved calendar slot, Pacific time').setRequired(true).addChoices(
+      { name: 'Monday 9 AM · verified recap', value: 'mon0900' },
+      { name: 'Monday 3 PM · arbitrage', value: 'mon1500' },
+      { name: 'Monday 6:30 PM · member review', value: 'mon1830' },
+      { name: 'Tuesday 3 PM · research', value: 'tue1500' },
+      { name: 'Tuesday 7 PM · member review', value: 'tue1900' },
+      { name: 'Wednesday 9 AM · bankroll', value: 'wed0900' },
+      { name: 'Wednesday 2:30 PM · education', value: 'wed1430' },
+      { name: 'Wednesday 6 PM · VIP CTA', value: 'wed1800' },
+      { name: 'Thursday 3:30 PM · arbitrage', value: 'thu1530' },
+      { name: 'Thursday 7:30 PM · member review', value: 'thu1930' },
+      { name: 'Friday 9 AM · education', value: 'fri0900' },
+      { name: 'Friday 3 PM · VIP tease', value: 'fri1500' },
+      { name: 'Friday 7 PM · recap or review', value: 'fri1900' },
+      { name: 'Saturday 3 PM · arbitrage', value: 'sat1500' },
+      { name: 'Saturday 6:30 PM · settled slips', value: 'sat1830' },
+      { name: 'Sunday 11:30 AM · VIP tease', value: 'sun1130' },
+      { name: 'Sunday 8:30 PM · recap or review', value: 'sun2030' }
+    ))
+    .addStringOption(option => option.setName('x_text').setDescription('Exact approved public X copy').setRequired(true).setMaxLength(280))
+    .addAttachmentOption(option => option.setName('story_image').setDescription('Approved 1080 × 1920 JPEG for the X post and Story').setRequired(true))
+    .addStringOption(option => option.setName('evidence').setDescription('Source/consent reference for the internal receipt').setRequired(true).setMaxLength(1000))
+    .addBooleanOption(option => option.setName('rights_confirmed').setDescription('I verified facts, image rights and any member consent').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('calendar-status')
+    .setDescription('Check X and Instagram receipts for approved calendar slots'),
   trendOptions(
     new SlashCommandBuilder()
       .setName('preview-trends')
