@@ -133,6 +133,17 @@ function createRecapApprovals({ root, config, channelFor, loadGroups, audit = as
       for (const group of groups) {
         let state = await read(group.key);
         if (state?.status === 'PUBLISHED' || state?.status === 'PUBLISHING') continue;
+        const reviewMoved = state && (state.reviewChannelId
+          ? state.reviewChannelId !== config.review_channel_id
+          : Boolean(config.replaced_review_channel_id));
+        if (reviewMoved) {
+          // The old review channel was deleted. Its message IDs cannot prove
+          // delivery in the replacement private channel.
+          state.reviewReceipts = [];
+          state.reviewChannelId = config.review_channel_id;
+          state.needsRefresh = true;
+          await save(state);
+        }
         if (!state?.needsRefresh && state?.controlsVersion === 2 && (state?.sourceDigest || state?.digest) === group.digest && state.reviewReceipts?.length === state.parts.length
           && state.reviewReceipts.every(receipt => receipt?.id)) continue;
         // Do not overwrite a snapshot that still has an uncertain delivery.
@@ -140,7 +151,8 @@ function createRecapApprovals({ root, config, channelFor, loadGroups, audit = as
         const previousParts = state?.parts.length || 0;
         const revisionChanged = (state?.sourceDigest || state?.digest) !== group.digest;
         const note = revisionChanged ? '' : (state?.editorNote || '');
-        state = { ...state, ...group, workflowId, controlsVersion: 2, sourceDigest: group.digest, editorNote: note,
+        state = { ...state, ...group, workflowId, controlsVersion: 2, reviewChannelId: config.review_channel_id,
+          sourceDigest: group.digest, editorNote: note,
           digest: note ? hash([group.digest, note]).slice(0, 20) : group.digest,
           body: note ? `${group.body}\n\nKobe's note: ${note}` : group.body,
           parts: note ? splitRecapBody(`${group.body}\n\nKobe's note: ${note}`, 3400) : group.parts,

@@ -211,6 +211,25 @@ test('certain public permission failure can retry only after owner approval; no 
   assert.equal(f.channels.wins.sends, 2);
 });
 
+test('deleted review channel receipts are replaced in the new private channel', async () => {
+  const f = await fixture();
+  await f.create().prepare(f.groups());
+  const file = path.join(f.root, `${f.groups()[0].key}.json`);
+  const prior = JSON.parse(await fs.readFile(file, 'utf8'));
+  delete prior.reviewChannelId; // Legacy receipt written before channel tracking.
+  await fs.writeFile(file, JSON.stringify(prior));
+  const migrated = createRecapApprovals({ root: f.root,
+    config: { ...config, review_channel_id: 'wins', replaced_review_channel_id: 'review' },
+    channelFor: async id => f.channels[id], loadGroups: async () => f.groups() });
+  const receipts = await migrated.prepare(f.groups());
+  assert.equal(receipts.length, 1);
+  assert.equal(f.channels.review.sends, 1);
+  assert.equal(f.channels.wins.sends, 1);
+  assert.equal(JSON.parse(await fs.readFile(file, 'utf8')).reviewChannelId, 'wins');
+  assert.deepEqual(await migrated.prepare(f.groups()), []);
+  assert.equal(f.channels.wins.sends, 1);
+});
+
 test('long recaps are losslessly split with one control card; no pings or hidden truncation', async () => {
   const rows = Array.from({ length: 50 }, (_, i) => ({ ...row, pick_id: `wager-${i}`, selection: `Original wager ${i}: ${'long terms '.repeat(12)}` }));
   const f = await fixture(rows), engine = f.create();
