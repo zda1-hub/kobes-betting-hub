@@ -5,8 +5,8 @@
 
   const proof = document.createElement('article');
   proof.className = 'home-writeup-proof';
-  proof.setAttribute('aria-label', 'Real KBH write-up example');
-  proof.innerHTML = `<p class="proof-meta"><span>Write-up example</span><time datetime="2026-10-23" aria-label="October 23, 2026">Oct 23 ’26</time></p><strong class="proof-line">Jalen Smith over 19.5 points + rebounds (-115)</strong><ul><li>23 in the opener despite 0-for-3 from deep.</li><li>The write-up flagged Milwaukee’s paint defense.</li><li>It projected more minutes in a closer Bulls game.</li><li>It expected a back-and-forth game with a high total.</li></ul><p class="proof-result"><span>✓ WIN</span><span class="proof-result-full">14 pts + 13 reb = 27</span><span class="proof-result-compact">27 total</span></p><button class="proof-toggle" type="button" aria-expanded="false" aria-label="See all four write-up reasons">4 reasons ↓</button><p class="proof-note">Posted before tip in KBH’s #writeups. <a href="https://www.nba.com/game/chi-vs-mil-0022600099" target="_blank" rel="noopener noreferrer">NBA game recap</a>. Past results do not guarantee future outcomes.</p>`;
+  proof.setAttribute('aria-label', 'KBH write-up example');
+  proof.innerHTML = `<p class="proof-meta"><span>Write-up example</span><time datetime="2026-11-04" aria-label="November 4, 2026">Nov 4 ’26</time></p><strong class="proof-line">Jaylen Brown · Philadelphia 76ers<br>Over 5.5 rebounds (-150)</strong><ul><li>The supplied writeup focused on Brown’s rebound chances.</li><li>It compared his chances against slower-paced opponents.</li><li>It looked at his recent rebounding volume and minutes.</li></ul><p class="proof-result"><span>✓ This play cashed</span><span class="proof-result-full">7 rebounds vs. Detroit</span><span class="proof-result-compact">7 rebounds</span></p><button class="proof-toggle" type="button" aria-expanded="false" aria-label="See all three write-up points">3 points ↓</button><p class="proof-note">Kobe-supplied analysis example; the historical chance-rate claims in the image were not independently verified. The KBH tracked result lists this Nov 4 pick as a win, and the <a href="https://statsdmz.nba.com/pdfs/20261104/20261104_PHIDET.pdf" target="_blank" rel="noopener noreferrer">official NBA box score</a> shows 7 rebounds. Past results do not guarantee future outcomes.</p>`;
   card.after(proof);
 
   const toggle = proof.querySelector('.proof-toggle');
@@ -14,7 +14,7 @@
     const expanded = proof.dataset.expanded !== 'true';
     proof.dataset.expanded = String(expanded);
     toggle.setAttribute('aria-expanded', String(expanded));
-    toggle.textContent = expanded ? 'Show less ↑' : '4 reasons ↓';
-    toggle.setAttribute('aria-label', expanded ? 'Show fewer write-up reasons' : 'See all four write-up reasons');
+    toggle.textContent = expanded ? 'Show less ↑' : '3 points ↓';
+    toggle.setAttribute('aria-label', expanded ? 'Show fewer write-up points' : 'See all three write-up points');
   });
 })();
