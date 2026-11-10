@@ -3869,6 +3869,44 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (interaction.commandName === 'edit-calendar-caption') {
+    await interaction.deferReply({ ephemeral: true });
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID || !calendarApproverIds.has(interaction.user.id)) {
+      await interaction.editReply('Only Kobe or the KBH owner can edit calendar captions.');
+      return;
+    }
+    try {
+      if (interaction.options.getBoolean('reviewed', true) !== true) throw new Error('Review and approve the replacement copy first.');
+      const id = interaction.options.getString('post_id', true).trim();
+      const xText = interaction.options.getString('x_text', true).trim();
+      if (!/^cal-\d{8}-[a-z]{3}\d{4}$/.test(id) || !xText.includes('https://discord.gg/sB9vzGz2xj') || safeXPostLength(xText) > 280)
+        throw new Error('Use a valid calendar ID and X copy within 280 weighted characters with the direct Discord invite.');
+      const secret = process.env.FREE_PICK_SITE_PUBLISH_SECRET;
+      if (!secret) throw new Error('Calendar publisher credential is not configured.');
+      const origin = (process.env.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
+      const headers = { authorization: `Bearer ${secret}` };
+      const statusResponse = await auditedFetch(`${origin}/api/calendar/approved`, { headers, signal: AbortSignal.timeout(10000) },
+        { service: 'cloudflare-worker', endpointClass: '/api/calendar/approved', callerComponent: 'bot/index', triggerType: 'calendar_caption_read', workflowId: id });
+      if (!statusResponse.ok) throw new Error(`Calendar status unavailable (${statusResponse.status}).`);
+      const { posts = [] } = await statusResponse.json();
+      const current = posts.find(post => post.id === id);
+      if (!current) throw new Error('Calendar post not in the recent queue; no copy changed.');
+      if (current.xState !== 'approved' || current.igState !== 'approved') throw new Error('A platform has started or held this post; its caption is locked.');
+      if (current.xText === xText) throw new Error('That is already the queued caption.');
+      const editResponse = await auditedFetch(`${origin}/api/calendar/caption`, {
+        method: 'PATCH', headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({ id, expectedText: current.xText, xText, approvedBy: interaction.user.id }),
+        signal: AbortSignal.timeout(10000)
+      }, { service: 'cloudflare-worker', endpointClass: '/api/calendar/caption', callerComponent: 'bot/index', triggerType: 'calendar_caption_edit', workflowId: id });
+      const receipt = await editResponse.json().catch(() => ({}));
+      if (!editResponse.ok) throw new Error(`Caption edit held (${editResponse.status}): ${receipt.error || 'Refresh /calendar-status'}`);
+      await interaction.editReply(`${id} X caption updated and approved by you. The Story artwork is unchanged. Check /calendar-status before its slot.`);
+    } catch (error) {
+      await interaction.editReply(error.message || 'Caption edit failed; no change confirmed.');
+    }
+    return;
+  }
+
   if (interaction.commandName === 'post-welcome-invite') {
     await interaction.deferReply({ ephemeral: true });
     if (!isAdministrator(interaction)) {

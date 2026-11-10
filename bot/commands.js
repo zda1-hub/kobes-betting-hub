@@ -208,6 +208,12 @@ module.exports = [
   new SlashCommandBuilder()
     .setName('calendar-status')
     .setDescription('Check X and Instagram receipts for approved calendar slots'),
+  new SlashCommandBuilder()
+    .setName('edit-calendar-caption')
+    .setDescription('Edit an approved calendar X caption before either platform starts publishing')
+    .addStringOption(option => option.setName('post_id').setDescription('Calendar ID, for example cal-20261111-wed0900').setRequired(true))
+    .addStringOption(option => option.setName('x_text').setDescription('Replacement X caption with the free Discord link').setRequired(true).setMaxLength(280))
+    .addBooleanOption(option => option.setName('reviewed').setDescription('I reviewed the replacement copy and its claims').setRequired(true)),
   trendOptions(
     new SlashCommandBuilder()
       .setName('preview-trends')

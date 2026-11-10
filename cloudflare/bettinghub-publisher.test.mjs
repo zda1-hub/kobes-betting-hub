@@ -153,6 +153,33 @@ test('calendar timestamp must match the slot, including Pacific daylight saving'
   assert.equal(workerTest.calendarDateTime('cal-20269999-thu1530', '2026-11-12T23:30:00Z'), null);
 });
 
+test('calendar caption edit preserves the slot and refuses partial delivery or stale copy', async () => {
+  const env = { DB: memoryD1(), FREE_PICK_KV: memoryKv(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret' };
+  const id = 'cal-20261118-wed0900';
+  const original = 'Original approved copy https://discord.gg/sB9vzGz2xj';
+  const updated = 'Revised approved copy https://discord.gg/sB9vzGz2xj';
+  await env.DB.prepare(`CREATE TABLE calendar_posts (id TEXT PRIMARY KEY, pacific_date TEXT, slot TEXT, scheduled_at TEXT,
+    x_text TEXT, media_key TEXT, approved_by TEXT, evidence TEXT, created_at TEXT, x_state TEXT, x_post_id TEXT,
+    x_attempted_at TEXT, x_error TEXT, ig_state TEXT, ig_container_id TEXT, ig_media_id TEXT, ig_attempted_at TEXT, ig_error TEXT)`).run();
+  await env.DB.prepare("INSERT INTO calendar_posts (id,scheduled_at,x_text,approved_by,x_state,ig_state) VALUES (?,?,?,?,'approved','approved')")
+    .bind(id, new Date(Date.now() + 86400000).toISOString(), original, '1209660006383755265').run();
+  const edit = (expectedText = original, xText = updated) => worker.fetch(new Request('https://publisher.test/api/calendar/caption', {
+    method: 'PATCH', headers: { authorization: 'Bearer fixture-secret', 'content-type': 'application/json' },
+    body: JSON.stringify({ id, expectedText, xText, approvedBy: '832944927884312606' })
+  }), env);
+  assert.equal((await edit()).status, 200);
+  assert.equal((await edit()).status, 409);
+  const row = await env.DB.prepare('SELECT x_text AS xText, approved_by AS approvedBy FROM calendar_posts WHERE id=?').bind(id).first();
+  assert.equal(row.xText, updated);
+  assert.equal(row.approvedBy, '832944927884312606');
+  await env.DB.prepare("UPDATE calendar_posts SET ig_state='creating_container' WHERE id=?").bind(id).run();
+  assert.equal((await edit(updated, original)).status, 409);
+  await env.DB.prepare("UPDATE calendar_posts SET ig_state='approved', x_state='publishing' WHERE id=?").bind(id).run();
+  assert.equal((await edit(updated, original)).status, 409);
+  assert.equal((await worker.fetch(new Request('https://publisher.test/api/calendar/caption', { method: 'PATCH' }), env)).status, 401);
+  env.DB.close();
+});
+
 test('calendar dispatch holds a slot when four Free Pick reels already used the day', async () => {
   const env = { DB: memoryD1(), FREE_PICK_KV: memoryKv() };
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
