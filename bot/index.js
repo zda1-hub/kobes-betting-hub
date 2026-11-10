@@ -360,14 +360,25 @@ const discordJoinAttribution = discordJoinAttributionEnabled ? createDiscordJoin
 }) : null;
 
 async function ensureFreeWriteupsChannel() {
-  if (configuredFreeWriteupsChannelId) return approvedTextChannel(configuredFreeWriteupsChannelId);
+  if (configuredFreeWriteupsChannelId) {
+    try {
+      return await approvedTextChannel(configuredFreeWriteupsChannelId);
+    } catch (error) {
+      if (error?.code !== 10003) throw error;
+      console.warn(`Configured Free Writeups channel ${configuredFreeWriteupsChannelId} no longer exists; looking for the current channel.`);
+    }
+  }
   if (!freePickChannelId) throw new Error('FREE_PICK_CHANNEL_ID is required to create the public Free Writeups channel safely.');
   const source = await approvedTextChannel(freePickChannelId);
   const channels = await source.guild.channels.fetch();
   const existing = channels.find((channel) => channel?.isTextBased?.() && channel.name === 'free-writeups');
-  if (existing) return existing;
+  if (existing) {
+    allowedChannelIds.add(existing.id);
+    return existing;
+  }
   const created = await source.clone({ name: 'free-writeups', reason: 'Owner requested a separate public writeup-preview channel.' });
   await created.setTopic('Free previews of today’s writeups. Exact plays, lines, odds, and full reasoning remain inside VIP.');
+  allowedChannelIds.add(created.id);
   console.log(`Created public Free Writeups channel ${created.id} from the existing Free Pick permissions.`);
   return created;
 }
@@ -3220,7 +3231,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.log('Free writeups preview receipt:', JSON.stringify({ ...receipt, channelId: channel.id }));
     setInterval(() => void freeWriteupBoard.refresh().catch(error => console.error('Free writeups preview needs attention:', error.message)), 60000);
   } catch (error) {
-    console.error('Free writeups preview setup needs attention:', error.message);
+    console.error('Free writeups preview setup needs attention:', error.stack || error.message);
   }
   if (vipExpertList) {
     void vipExpertList.refresh()
