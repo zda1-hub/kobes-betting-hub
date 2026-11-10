@@ -21,6 +21,15 @@ Production hold: the old automatic X result-reply switch was set to `false` on N
 | Free Pick Reel fade change | Instagram Reel via existing publisher | On each newly approved pick, subject to the four-slot cap; no fixed time | Review a locally rendered real approved pick, merge/deploy the branch, then verify the next Reel receipt and visual fade. Do not backfill an old pick. |
 | Free Pick result approval gate | Private Discord result-review card, then X reply | After official final and verified grade; no fixed clock time | Set the private review channel and cutover timestamp, deploy, verify Kobe's and the owner's access, have either person approve each **result**. An original-pick approval does not approve its result. For Instagram, use the approved copy and a genuine result graphic through a human posting flow until its result publisher exists. |
 
+### Result-approval activation and live check
+
+1. Verify the Render worker points at the intended GitHub branch and a persistent pick-log path. Confirm the existing X publisher URL, queue secret, reply start time, original-pick receipt, and Discord guild and Free Pick channel settings. Do not print secret values in logs or the handoff.
+2. Use a private Discord review channel where Kobe, the KBH owner and Kobe Bot can read, and Kobe Bot can send and edit embeds. The bot checks these permissions before it posts a review card. Keep the existing `FREE_PICK_X_RESULT_REPLIES_ENABLED=false` during the cutover.
+3. After the merged bot build is live, set `FREE_PICK_RESULT_REVIEW_CHANNEL_ID` to that channel, `FREE_PICK_RESULT_APPROVAL_START_AT` to an explicit UTC cutover time, and `FREE_PICK_RESULT_APPROVALS_ENABLED=true`. The approval flow uses the existing X queue credentials while the old automatic-reply switch stays off.
+4. Verify the startup log announces the approval scan. For the next officially graded Free Pick, confirm one private card with exact wager, grade, final and source evidence; confirm no public reply before approval. Either Kobe or the owner may edit the opener and approve or reject. Do not use a live result as a throwaway test.
+5. After a real approval, check the deterministic X queue receipt and the public reply under the exact original pick; check a later scan does not duplicate it. If an X reply was posted manually during the hold, exclude that pick from the cutover or add its ID to `FREE_PICK_X_RESULT_REPLY_SKIP_PICK_IDS` before enabling the gate.
+6. If any permission, source, queue or delivery check fails, set `FREE_PICK_RESULT_APPROVALS_ENABLED=false` and leave the old automatic-reply switch off. Investigate the existing receipt before retrying; use an approved, verified manual result only when its original post has no reply.
+
 ## Awaiting verified content, schedule or manual app action
 
 The following times are Pacific local time (`America/Los_Angeles`) exactly as written in Kobe's proposed table unless noted. On November 9, 2026 this is PST; the zone will switch to PDT seasonally. No item below has been scheduled or posted by this handoff.
