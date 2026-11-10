@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildFreePickXPost, freePickXPostId, freePickXSyncConfig, shouldRunTextXFallback, syncApprovedFreePickToX } = require('./free-pick-x');
+const { buildFreePickXPost, safeXPostLength, freePickXPostId, freePickXSyncConfig, shouldRunTextXFallback, syncApprovedFreePickToX } = require('./free-pick-x');
 
 const packet = {
   pick_id: '20260829-MLB-001',
@@ -14,9 +14,11 @@ const packet = {
 
 test('formats the approved free pick with the direct free Discord invite', () => {
   const body = buildFreePickXPost(packet);
-  assert.match(body, /^Arizona Diamondbacks ML \(-115\)\n\nFree Discord: https:\/\/discord\.gg\/sB9vzGz2xj\n21\+ where permitted\. Bet responsibly\.$/);
+  assert.match(body, /^Arizona Diamondbacks ML \(-115\)\n\nJoin our free Discord for more approved plays like this: https:\/\/discord\.gg\/sB9vzGz2xj\n21\+ where permitted\. Bet responsibly\.$/);
   assert.equal(buildFreePickXPost(packet), body);
   assert.match(freePickXPostId(packet.pick_id), /^free-x-[a-f0-9]{40}$/);
+  assert.doesNotMatch(body, /multiple plays like this everyday/i);
+  assert.ok(safeXPostLength(body) <= 280);
 });
 
 test('adds complete verified evidence bullets when they fit', () => {
@@ -31,14 +33,14 @@ test('adds complete verified evidence bullets when they fit', () => {
   assert.match(body, /^Arizona Diamondbacks ML \(-115\)\n\n- Arizona has won 7 of its last 10 games/m);
   assert.match(body, /- The starter allowed two or fewer earned runs in four straight starts/);
   assert.doesNotMatch(body, /deliberately long/);
-  assert.ok(body.length <= 280);
+  assert.ok(safeXPostLength(body) <= 280);
 });
 
 test('different approved picks use the same current direct invite', () => {
   const first = buildFreePickXPost(packet);
   const second = buildFreePickXPost({ ...packet, pick_id: '20260829-MLB-002' });
-  assert.match(first, /Free Discord: https:\/\/discord\.gg\/sB9vzGz2xj/);
-  assert.match(second, /Free Discord: https:\/\/discord\.gg\/sB9vzGz2xj/);
+  assert.match(first, /Join our free Discord for more approved plays like this: https:\/\/discord\.gg\/sB9vzGz2xj/);
+  assert.match(second, /Join our free Discord for more approved plays like this: https:\/\/discord\.gg\/sB9vzGz2xj/);
   assert.doesNotMatch(second, /kobesbettinghub\.com\/free-pick/);
 });
 
@@ -51,17 +53,24 @@ test('never truncates evidence or removes approved wager terms to fit X', () => 
   assert.match(body, /Arizona Diamondbacks ML \(-115\)/);
   assert.doesNotMatch(body, /matchup advantage/);
   assert.match(body, /21\+ where permitted\. Bet responsibly\./);
-  assert.ok(body.length <= 280);
+  assert.ok(safeXPostLength(body) <= 280);
 });
 
 test('publishes the approved player when the selection contains only the prop market', () => {
   const prop = { analysis: { extraction: { player_name: 'DeVaughn Vele', selection: 'Over 3.5 receptions', line: '3.5', odds_american: '-125', event: 'New Orleans Saints @ Minnesota Vikings', source_claims: ['He has gone over this line in 3/4 games'] } } };
   assert.match(buildFreePickXPost(prop), /DeVaughn Vele Over 3\.5 receptions \(-125\)/);
-  assert.ok(buildFreePickXPost(prop).length <= 280);
+  assert.ok(safeXPostLength(buildFreePickXPost(prop)) <= 280);
   prop.analysis.extraction.odds_american = '+350';
   assert.match(buildFreePickXPost(prop), /\(\+350\)/);
   delete prop.analysis.extraction.player_name;
   assert.throws(() => buildFreePickXPost(prop), /player’s full name/);
+});
+
+test('counts the direct Discord URL as 23 X characters and conservatively weights other text', () => {
+  const invite = 'https://discord.gg/sB9vzGz2xj';
+  assert.equal(safeXPostLength(`a ${invite}`), 25);
+  assert.equal(safeXPostLength(`中 ${invite}`), 26);
+  assert.equal(safeXPostLength(`a ${invite}.`), 26);
 });
 
 test('fails closed when mandatory approved terms cannot fit safely', () => {
