@@ -15,6 +15,13 @@
       target.querySelector('[data-writeup-detail]').textContent = model.detail;
       target.querySelector('[data-writeup-period]').textContent = model.period;
     });
+    targets.forEach(target => {
+      const history = document.createElement('div');
+      history.className = 'writeup-historical';
+      history.innerHTML = '<p class="writeup-historical-title">Kobe-reported historical writeup rates</p><div class="writeup-historical-grid"><span><b>NBA</b><strong>68%</strong></span><span><b>NFL</b><strong>66%</strong></span><span><b>MLB</b><strong>60%</strong></span></div><small>Reported for plays since the 2024 NBA season; snapshot supplied Nov 10, 2026. Win/loss counts for these sport rates have not been supplied or independently audited. Results are not guaranteed.</small>';
+      target.prepend(history);
+      target.querySelector('.writeup-record-heading span').textContent = 'Current tracked writeup win rate';
+    });
     root.KBHVerifiedResults.then(snapshot => paint(api.presentation(snapshot))).catch(() => paint(api.unavailable()));
   }
 })(typeof globalThis !== 'undefined' ? globalThis : this, () => {
@@ -30,8 +37,8 @@
     const date = value => new Date(value + 'T12:00:00-07:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Phoenix' });
     return {
       rate: decided ? `${(100 * r.wins / decided).toFixed(1)}%` : '—',
-      detail: `${r.wins} wins · ${r.losses} losses · ${decided} decided writeups. ${r.pushes} pushes · ${r.voids} voids · ${r.pending} pending.`,
-      period: `${r.trackingSince ? `${date(r.trackingSince)}–${date(r.through)}` : 'No tracked writeups yet'}. Win rate = wins ÷ (wins + losses). ${decided ? '' : 'No settled win/loss percentage yet. '}Last sync ${new Date(generated).toLocaleString('en-US', { timeZone: 'America/Phoenix' })} MST. Tracked writeup-channel plays; excludes expert-only picks. Past results do not guarantee future outcomes.`,
+      detail: `${r.wins} wins · ${r.losses} losses · ${decided} decided writeups. ${r.pushes} ${r.pushes === 1 ? 'push' : 'pushes'} · ${r.voids} ${r.voids === 1 ? 'void' : 'voids'} · ${r.pending} pending.`,
+      period: `${r.trackingSince ? `${date(r.trackingSince)}–${date(r.through)}` : 'No tracked writeups yet'}. This current tracked set is separate from Kobe's historical sport rates above. Win rate = wins ÷ (wins + losses). ${decided ? '' : 'No settled win/loss percentage yet. '}Last sync ${new Date(generated).toLocaleString('en-US', { timeZone: 'America/Phoenix' })} MST. Tracked writeup-channel plays; excludes expert-only picks. Past results do not guarantee future outcomes.`,
     };
   }
   return { presentation, unavailable };
