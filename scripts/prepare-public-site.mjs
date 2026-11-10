@@ -24,6 +24,10 @@ const guideFiles = [
 ];
 
 const publicFiles = [
+  'about.html',
+  'pricing.html',
+  'contact.html',
+  'business-info.css',
   'proof.html',
   'approach.html',
   'site.css',
