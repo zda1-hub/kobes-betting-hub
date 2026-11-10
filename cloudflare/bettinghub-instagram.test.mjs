@@ -21,6 +21,7 @@ function database() {
       const statement = {
         bind(...values) { args.push(...values); return statement; },
         async first() { return sql.prepare(query).get(...args) || null; },
+        async all() { return { results: sql.prepare(query).all(...args) }; },
         async run() { return { meta: { changes: sql.prepare(query).run(...args).changes } }; },
       };
       return statement;
@@ -253,6 +254,58 @@ test('approved current Free Pick publishes one Reel with a short rotating captio
   assert.equal(env.DB.sql.prepare('SELECT state FROM instagram_reel_deliveries').get().state, 'published');
 });
 
+test('approved calendar Story uses existing Instagram connection and publishes once', async () => {
+  const env = environment();
+  env.INSTAGRAM_PUBLISHING_ENABLED = 'true';
+  env.FREE_PICK_API_ORIGIN = 'https://bettinghub-publisher.kobedirwin.workers.dev';
+  assert.equal((await connected(env)).result.status, 200);
+  env.DB.sql.exec(`CREATE TABLE calendar_posts (id TEXT PRIMARY KEY, pacific_date TEXT NOT NULL,
+    scheduled_at TEXT NOT NULL, media_key TEXT NOT NULL, x_state TEXT NOT NULL,
+    ig_state TEXT NOT NULL, ig_container_id TEXT, ig_media_id TEXT, ig_attempted_at TEXT, ig_error TEXT)`);
+  const id = 'cal-20261109-mon1830';
+  const digest = 'a'.repeat(64);
+  env.DB.sql.prepare('INSERT INTO calendar_posts (id,pacific_date,scheduled_at,media_key,x_state,ig_state) VALUES (?,?,?,?,?,?)')
+    .run(id, __test.pacificDate(), new Date(Date.now() - 60000).toISOString(), `calendar/${id}-${digest}.jpg`, 'approved', 'approved');
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), body: init.body });
+    if (String(url).endsWith('/media')) {
+      assert.equal(init.body.get('media_type'), 'STORIES');
+      assert.equal(init.body.get('image_url'), `${env.FREE_PICK_API_ORIGIN}/media/calendar/${id}/${digest}.jpg`);
+      return Response.json({ id: '123456789' });
+    }
+    if (String(url).includes('fields=status_code')) return Response.json({ status_code: 'FINISHED' });
+    if (String(url).endsWith('/media_publish')) return Response.json({ id: '987654321' });
+    throw new Error('unexpected endpoint');
+  };
+  assert.deepEqual(await __test.deliverCalendarStories(env, fetchImpl), { status: 'checked', count: 1 });
+  assert.equal(env.DB.sql.prepare('SELECT ig_state FROM calendar_posts').get().ig_state, 'published');
+  assert.equal(env.DB.sql.prepare('SELECT ig_media_id FROM calendar_posts').get().ig_media_id, '987654321');
+  assert.deepEqual(await __test.deliverCalendarStories(env, fetchImpl), { status: 'checked', count: 0 });
+  assert.equal(calls.filter(call => call.url.endsWith('/media')).length, 1);
+  assert.equal(calls.filter(call => call.url.endsWith('/media_publish')).length, 1);
+});
+
+test('calendar Story is held when four confirmed Free Pick reels used the Pacific day', async () => {
+  const env = environment();
+  env.INSTAGRAM_PUBLISHING_ENABLED = 'true';
+  env.FREE_PICK_API_ORIGIN = 'https://bettinghub-publisher.kobedirwin.workers.dev';
+  assert.equal((await connected(env)).result.status, 200);
+  env.DB.sql.exec(`CREATE TABLE calendar_posts (id TEXT PRIMARY KEY, pacific_date TEXT NOT NULL,
+    scheduled_at TEXT NOT NULL, media_key TEXT NOT NULL, x_state TEXT NOT NULL,
+    ig_state TEXT NOT NULL, ig_container_id TEXT, ig_media_id TEXT, ig_attempted_at TEXT, ig_error TEXT)`);
+  const date = __test.pacificDate();
+  const id = 'cal-20261109-mon1830';
+  env.DB.sql.prepare('INSERT INTO calendar_posts (id,pacific_date,scheduled_at,media_key,x_state,ig_state) VALUES (?,?,?,?,?,?)')
+    .run(id, date, new Date(Date.now() - 60000).toISOString(), `calendar/${id}-${'a'.repeat(64)}.jpg`, 'approved', 'approved');
+  for (let n = 0; n < 4; n += 1) env.DB.sql.prepare("INSERT INTO instagram_reel_deliveries (pick_id,operating_date,reel_url,state,updated_at) VALUES (?,?,?,'published',?)")
+    .run(`cap-pick-${n}`, date, 'https://example.test/video', Date.now());
+  assert.deepEqual(await __test.deliverCalendarStories(env, () => { throw new Error('provider must not run'); }), { status: 'checked', count: 1 });
+  const held = env.DB.sql.prepare('SELECT ig_state,ig_error FROM calendar_posts').get();
+  assert.equal(held.ig_state, 'held');
+  assert.equal(held.ig_error, 'FOUR_DAILY_CONTENT_SLOTS_USED');
+});
+
 test('Reel captions rotate approved openers without claiming an ungraded win', () => {
   const first = __test.freePickReelCaption(0);
   const second = __test.freePickReelCaption(1);
@@ -402,7 +455,7 @@ nodeTest('OAuth config disables URL-bearing logs, isolates staging, and schedule
   for (const secretName of ['INSTAGRAM_APP_SECRET', 'INSTAGRAM_OPERATOR_SECRET', 'INSTAGRAM_TOKEN_ENCRYPTION_KEY']) assert.equal(Object.hasOwn(config.vars, secretName), false);
 });
 
-nodeTest('Story delivery is limited to the official current Free Pick and remains feature-gated', () => {
+nodeTest('Story delivery remains feature-gated and uses the verified Instagram publisher', () => {
   assert.match(source, /media_publish/);
   assert.match(source, /media_type: 'STORIES'/);
   assert.match(source, /INSTAGRAM_PUBLISHING_ENABLED/);

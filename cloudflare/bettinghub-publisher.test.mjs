@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { approvedSlot } = require('../bot/lib/marketing-calendar.js');
 
 const source = await fs.readFile(new URL('./bettinghub-publisher.js', import.meta.url), 'utf8');
 const workerModule = await import('./bettinghub-publisher.js');
@@ -75,6 +78,65 @@ function memoryD1() {
     close() { sqlite.close(); },
   };
 }
+
+test('approved calendar image is queued once at the exact Pacific slot with separate platform states', async () => {
+  const env = { DB: memoryD1(), FREE_PICK_KV: memoryKv(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret' };
+  let slot;
+  for (let offset = 1; offset <= 8 && !slot; offset += 1) {
+    const date = new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
+    try { slot = approvedSlot(date, 'mon0900'); } catch { /* next date */ }
+  }
+  assert.ok(slot);
+  const bytes = Buffer.alloc(1024, 0);
+  bytes[0] = 0xff; bytes[1] = 0xd8; bytes[1022] = 0xff; bytes[1023] = 0xd9;
+  const form = new FormData();
+  for (const [key, value] of Object.entries({ id: slot.id, scheduledAt: slot.scheduledAt, xText: 'Verified weekly record and context. Free Discord: https://discord.gg/sB9vzGz2xj', approvedBy: '1209660006383755265', evidence: 'internal verified ledger' })) form.set(key, value);
+  form.set('image', new Blob([bytes], { type: 'image/jpeg' }), 'approved.jpg');
+  const post = () => worker.fetch(new Request('https://publisher.test/api/calendar/approved', { method: 'POST', headers: { authorization: 'Bearer fixture-secret' }, body: form }), env);
+  const queued = await post();
+  assert.equal(queued.status, 201);
+  const receipt = await queued.json();
+  assert.equal(receipt.scheduledAt, slot.scheduledAt);
+  assert.equal(receipt.xState, 'approved');
+  assert.equal(receipt.igState, 'approved');
+  assert.equal((await post()).status, 409);
+  form.set('xText', 'No Discord destination');
+  assert.equal((await post()).status, 422);
+  form.set('xText', 'Verified weekly record and context. Free Discord: https://discord.gg/sB9vzGz2xj');
+  const image = await worker.fetch(new Request(receipt.imageUrl), env);
+  assert.equal(image.status, 200);
+  assert.deepEqual(Buffer.from(await image.arrayBuffer()), bytes);
+  const list = await worker.fetch(new Request('https://publisher.test/api/calendar/approved', { headers: { authorization: 'Bearer fixture-secret' } }), env);
+  assert.equal((await list.json()).posts[0].id, slot.id);
+  assert.equal((await worker.fetch(new Request('https://publisher.test/api/calendar/approved'), env)).status, 401);
+  env.DB.close();
+});
+
+test('calendar timestamp must match the slot, including Pacific daylight saving', () => {
+  assert.equal(workerTest.calendarDateTime('cal-20261112-thu1530', '2026-11-12T23:30:00Z')?.slot, 'thu1530');
+  assert.equal(workerTest.calendarDateTime('cal-20270708-thu1530', '2027-07-08T22:30:00Z')?.slot, 'thu1530');
+  assert.equal(workerTest.calendarDateTime('cal-20261112-thu1530', '2026-11-12T22:30:00Z'), null);
+  assert.equal(workerTest.calendarDateTime('cal-20261112-thu1130', '2026-11-12T19:30:00Z'), null);
+  assert.equal(workerTest.calendarDateTime('cal-20269999-thu1530', '2026-11-12T23:30:00Z'), null);
+});
+
+test('calendar dispatch holds a slot when four Free Pick reels already used the day', async () => {
+  const env = { DB: memoryD1(), FREE_PICK_KV: memoryKv() };
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const id = `cal-${date.replaceAll('-', '')}-mon0900`;
+  await env.DB.prepare(`CREATE TABLE calendar_posts (id TEXT PRIMARY KEY, pacific_date TEXT, scheduled_at TEXT,
+    x_text TEXT, media_key TEXT, x_state TEXT, x_error TEXT, x_attempted_at TEXT, ig_state TEXT)`).run();
+  await env.DB.prepare(`CREATE TABLE instagram_reel_deliveries (pick_id TEXT PRIMARY KEY, operating_date TEXT, state TEXT)`).run();
+  await env.DB.prepare(`CREATE TABLE approved_posts (id TEXT PRIMARY KEY, scheduled_at TEXT, status TEXT)`).run();
+  await env.DB.prepare("INSERT INTO calendar_posts (id,pacific_date,scheduled_at,x_text,media_key,x_state,ig_state) VALUES (?,?,?,?,?,'approved','approved')")
+    .bind(id, date, new Date(Date.now() - 60000).toISOString(), 'approved copy', 'unused', ).run();
+  for (let n = 0; n < 4; n += 1) await env.DB.prepare("INSERT INTO instagram_reel_deliveries VALUES (?,?,'published')").bind(`pick-${n}`, date).run();
+  await workerTest.dispatchCalendarX(Date.now(), env);
+  const held = await env.DB.prepare('SELECT x_state AS state,x_error AS error FROM calendar_posts').first();
+  assert.equal(held.state, 'held');
+  assert.equal(held.error, 'FOUR_DAILY_CONTENT_SLOTS_USED');
+  env.DB.close();
+});
 
 test('VIP preview feed strips all private fields and expires by operating date', async () => {
   const env = { FREE_PICK_KV: memoryKv(), FREE_PICK_SITE_PUBLISH_SECRET: 'fixture-secret' };

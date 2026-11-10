@@ -137,7 +137,7 @@ export default {
   },
 
   scheduled(controller, env, ctx) {
-    ctx.waitUntil(Promise.all([dispatchDuePosts(controller.scheduledTime, env), deliverPendingLeadEmails(env), deliverPendingFreePickEmails(env), dispatchSocialEmails(env, socialEmailHelpers())]));
+    ctx.waitUntil(Promise.all([dispatchDuePosts(controller.scheduledTime, env), dispatchCalendarX(controller.scheduledTime, env), deliverPendingLeadEmails(env), deliverPendingFreePickEmails(env), dispatchSocialEmails(env, socialEmailHelpers())]));
   },
 };
 
@@ -165,6 +165,9 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname === CALLBACK_PATH) return completeXAuthorization(url, env);
   if (url.pathname === "/api/queue/x" && request.method === "POST") return enqueueXPost(request, env);
   if (url.pathname === "/api/queue/x" && request.method === "GET") return listRecentPosts(request, env);
+  if (url.pathname === "/api/calendar/approved" && request.method === "POST") return enqueueCalendarPost(request, env);
+  if (url.pathname === "/api/calendar/approved" && request.method === "GET") return listCalendarPosts(request, env);
+  if (/^\/media\/calendar\/cal-\d{8}-[a-z0-9]{7}\/[^/]+\.jpg$/.test(url.pathname) && request.method === "GET") return getCalendarImage(request, env);
   if (url.pathname === "/api/queue/x/parent" && request.method === "GET") return getFreePickXParent(request, env);
   if (url.pathname === "/api/queue/daily-picks" && request.method === "POST") return enqueueDailyPick(request, env);
   if (url.pathname === "/api/queue/daily-picks" && request.method === "GET") return listDailyPicks(request, env);
@@ -1227,6 +1230,134 @@ async function getFreePickReel(request, env) {
   return new Response(body, { headers });
 }
 
+const CALENDAR_SLOTS = new Set([
+  'mon0900', 'mon1500', 'mon1830', 'tue1500', 'tue1900',
+  'wed0900', 'wed1430', 'wed1800', 'thu1530', 'thu1930',
+  'fri0900', 'fri1500', 'fri1900', 'sat1500', 'sat1830',
+  'sun1130', 'sun2030',
+]);
+async function ensureCalendarTable(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS calendar_posts (
+    id TEXT PRIMARY KEY, pacific_date TEXT NOT NULL, slot TEXT NOT NULL,
+    scheduled_at TEXT NOT NULL, x_text TEXT NOT NULL, media_key TEXT NOT NULL,
+    approved_by TEXT NOT NULL, evidence TEXT NOT NULL, created_at TEXT NOT NULL,
+    x_state TEXT NOT NULL DEFAULT 'approved', x_post_id TEXT, x_attempted_at TEXT, x_error TEXT,
+    ig_state TEXT NOT NULL DEFAULT 'approved', ig_container_id TEXT, ig_media_id TEXT,
+    ig_attempted_at TEXT, ig_error TEXT,
+    UNIQUE(pacific_date, slot)
+  )`).run();
+}
+
+function calendarDateTime(id, scheduledAt) {
+  const match = /^cal-(\d{4})(\d{2})(\d{2})-([a-z]{3}\d{4})$/.exec(id);
+  if (!match || !CALENDAR_SLOTS.has(match[4])) return null;
+  const date = `${match[1]}-${match[2]}-${match[3]}`;
+  const instant = Date.parse(scheduledAt);
+  const midday = new Date(`${date}T12:00:00Z`);
+  if (!Number.isFinite(instant) || !Number.isFinite(midday.getTime()) || midday.toISOString().slice(0, 10) !== date) return null;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short'
+  }).formatToParts(new Date(instant)).filter(p => p.type !== 'literal').map(p => [p.type, p.value]));
+  if (`${parts.year}-${parts.month}-${parts.day}` !== date
+    || `${parts.hour}${parts.minute}` !== match[4].slice(3)
+    || parts.weekday.toLowerCase() !== match[4].slice(0, 3)) return null;
+  return { date, slot: match[4], instant };
+}
+
+async function enqueueCalendarPost(request, env) {
+  if (!(await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET) || await hasBearer(request, env.QUEUE_INGEST_SECRET))) return json({ error: 'Unauthorized' }, 401);
+  if (!hasFreePickStore(env)) return json({ error: 'Calendar media storage is not configured' }, 503);
+  if (Number(request.headers.get('content-length') || 0) > FREE_PICK_MAX_BYTES + 64 * 1024) return json({ error: 'Upload exceeds 5 MB' }, 413);
+  let form;
+  try { form = await request.formData(); }
+  catch { return json({ error: 'Could not read calendar upload' }, 400); }
+  const id = String(form.get('id') || '');
+  const scheduledAt = String(form.get('scheduledAt') || '');
+  const xText = String(form.get('xText') || '').trim();
+  const approvedBy = String(form.get('approvedBy') || '');
+  const evidence = String(form.get('evidence') || '').trim();
+  const image = form.get('image');
+  const timing = calendarDateTime(id, scheduledAt);
+  if (!timing || timing.instant < Date.now() + 10 * 60_000 || timing.instant > Date.now() + 14 * 86_400_000) return json({ error: 'Invalid or stale Pacific calendar slot' }, 422);
+  if (!xText.includes('https://discord.gg/sB9vzGz2xj') || xText.length > 280 || !/^\d{15,25}$/.test(approvedBy) || !evidence || evidence.length > 1000) return json({ error: 'Approved copy or evidence is invalid' }, 422);
+  if (!(image instanceof File) || image.type !== 'image/jpeg' || image.size < 100 || image.size > FREE_PICK_MAX_BYTES) return json({ error: 'A JPEG Story image is required' }, 422);
+  const bytes = await image.arrayBuffer();
+  const magic = new Uint8Array(bytes);
+  if (magic[0] !== 0xff || magic[1] !== 0xd8 || magic[magic.length - 2] !== 0xff || magic[magic.length - 1] !== 0xd9) return json({ error: 'Image is not a complete JPEG' }, 422);
+  await ensureCalendarTable(env);
+  const existing = await env.DB.prepare('SELECT x_state AS xState, x_post_id AS xPostId, ig_state AS igState, ig_media_id AS igMediaId FROM calendar_posts WHERE id = ?').bind(id).first();
+  if (existing) return json({ id, status: 'already_queued', ...existing }, 409);
+  const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(n => n.toString(16).padStart(2, '0')).join('');
+  const mediaKey = `calendar/${id}-${digest}.jpg`;
+  await putFreePickObject(env, mediaKey, bytes, 'image/jpeg', 'public, max-age=31536000, immutable');
+  const result = await env.DB.prepare(`INSERT INTO calendar_posts (id, pacific_date, slot, scheduled_at, x_text, media_key, approved_by, evidence, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`)
+    .bind(id, timing.date, timing.slot, new Date(timing.instant).toISOString(), xText, mediaKey, approvedBy, evidence, new Date().toISOString()).run();
+  if (result.meta.changes !== 1) return json({ id, status: 'already_queued' }, 409);
+  return json({ id, status: 'approved', scheduledAt: new Date(timing.instant).toISOString(), xState: 'approved', igState: 'approved', imageUrl: `${new URL(request.url).origin}/media/calendar/${id}/${digest}.jpg` }, 201);
+}
+
+async function listCalendarPosts(request, env) {
+  if (!(await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET) || await hasBearer(request, env.QUEUE_INGEST_SECRET))) return json({ error: 'Unauthorized' }, 401);
+  await ensureCalendarTable(env);
+  const rows = await env.DB.prepare(`SELECT id, pacific_date AS date, slot, scheduled_at AS scheduledAt, x_state AS xState,
+    x_post_id AS xPostId, x_error AS xError, ig_state AS igState, ig_media_id AS igMediaId,
+    ig_error AS igError FROM calendar_posts ORDER BY scheduled_at DESC LIMIT 30`).all();
+  return json({ posts: rows.results });
+}
+
+async function getCalendarImage(request, env) {
+  const segments = new URL(request.url).pathname.split('/');
+  const id = segments[3], digest = segments[4]?.replace(/\.jpg$/, '');
+  if (!/^cal-\d{8}-[a-z]{3}\d{4}$/.test(id || '') || !/^[a-f0-9]{64}$/.test(digest || '')) return new Response(null, { status: 404 });
+  await ensureCalendarTable(env);
+  const row = await env.DB.prepare('SELECT media_key AS mediaKey FROM calendar_posts WHERE id = ?').bind(id).first();
+  if (row?.mediaKey !== `calendar/${id}-${digest}.jpg`) return new Response(null, { status: 404 });
+  const asset = await getFreePickObject(env, row.mediaKey);
+  if (!asset) return new Response(null, { status: 404 });
+  return new Response(asset.body, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' } });
+}
+
+function pacificCalendarDate(instant) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(instant));
+}
+
+async function calendarCapacityUsed(env, date, currentId) {
+  const reels = await env.DB.prepare("SELECT COUNT(DISTINCT pick_id) AS count FROM instagram_reel_deliveries WHERE operating_date=? AND state='published'").bind(date).first().catch(() => ({ count: 0 }));
+  const freeX = await env.DB.prepare("SELECT scheduled_at AS scheduledAt FROM approved_posts WHERE id LIKE 'free-x-%' AND status='published' AND scheduled_at >= ? AND scheduled_at < ?")
+    .bind(`${date}T00:00:00Z`, new Date(Date.parse(`${date}T00:00:00Z`) + 2 * 86400000).toISOString()).all();
+  const freeXCount = freeX.results.filter(post => pacificCalendarDate(post.scheduledAt) === date).length;
+  const calendar = await env.DB.prepare("SELECT COUNT(*) AS count FROM calendar_posts WHERE pacific_date=? AND id<>? AND (x_state='published' OR ig_state='published')").bind(date, currentId).first();
+  return Math.max(Number(reels?.count || 0), freeXCount) + Number(calendar?.count || 0);
+}
+
+async function dispatchCalendarX(scheduledTime, env) {
+  await ensureCalendarTable(env);
+  const now = new Date(scheduledTime || Date.now()).toISOString();
+  const rows = await env.DB.prepare(`SELECT id, pacific_date AS date, x_text AS xText, media_key AS mediaKey FROM calendar_posts
+    WHERE x_state = 'approved' AND scheduled_at <= ? AND scheduled_at >= ? ORDER BY scheduled_at LIMIT 10`)
+    .bind(now, new Date(Date.parse(now) - 20 * 60_000).toISOString()).all();
+  for (const row of rows.results) {
+    if (await calendarCapacityUsed(env, row.date, row.id) >= 4) {
+      await env.DB.prepare("UPDATE calendar_posts SET x_state='held', x_error='FOUR_DAILY_CONTENT_SLOTS_USED' WHERE id=? AND x_state='approved'").bind(row.id).run();
+      continue;
+    }
+    const claim = await env.DB.prepare("UPDATE calendar_posts SET x_state='publishing', x_attempted_at=? WHERE id=? AND x_state='approved'").bind(now, row.id).run();
+    if (claim.meta.changes !== 1) continue;
+    try {
+      const asset = await getFreePickObject(env, row.mediaKey);
+      if (!asset) throw new Error('APPROVED_IMAGE_MISSING');
+      const postId = await publishFreePickToX(new Blob([asset.body], { type: 'image/jpeg' }), 'image/jpeg', row.xText, env, 'approved_calendar_post');
+      await env.DB.prepare("UPDATE calendar_posts SET x_state='published', x_post_id=?, x_error=NULL WHERE id=? AND x_state='publishing'").bind(postId, row.id).run();
+    } catch (error) {
+      // Provider calls can succeed while their response is lost. Never retry
+      // automatically or create a second post under a new ID.
+      await env.DB.prepare("UPDATE calendar_posts SET x_state='held', x_error=? WHERE id=? AND x_state='publishing'").bind(String(error?.message || error).slice(0, 200), row.id).run();
+    }
+  }
+}
+
 async function readFreePick(env) {
   const stored = await getFreePickText(env, FREE_PICK_STATE_KEY);
   if (!stored) return null;
@@ -1314,15 +1445,15 @@ function normalizeFreePickDetails(input) {
   };
 }
 
-async function publishFreePickToX(image, contentType, caption, env) {
-  const token = await getUsableXToken(env, "free_pick_publish");
+async function publishFreePickToX(image, contentType, caption, env, triggerType = "free_pick_publish") {
+  const token = await getUsableXToken(env, triggerType);
   const encodedImage = base64FromArrayBuffer(await image.arrayBuffer());
   const mediaResponse = await auditedXFetch(env, MEDIA_UPLOAD_ENDPOINT, {
     method: "POST",
     headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" },
     body: JSON.stringify({ media: encodedImage, media_category: "tweet_image" }),
   }, {
-    triggerType: "free_pick_publish",
+    triggerType,
     requestShape: { mediaCategory: "tweet_image", mediaPresent: true },
   });
   const mediaPayload = await mediaResponse.json().catch(() => ({}));
@@ -1334,7 +1465,7 @@ async function publishFreePickToX(image, contentType, caption, env) {
     headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" },
     body: JSON.stringify({ text: caption, media: { media_ids: [String(mediaId)] } }),
   }, {
-    triggerType: "free_pick_publish",
+    triggerType,
     requestShape: { mediaCount: 1, textPresent: true },
   });
   const postPayload = await postResponse.json().catch(() => ({}));
@@ -1619,4 +1750,6 @@ export const __test = {
   auditedXFetch,
   redactedResponseShape,
   xPostPayload,
+  calendarDateTime,
+  dispatchCalendarX,
 };

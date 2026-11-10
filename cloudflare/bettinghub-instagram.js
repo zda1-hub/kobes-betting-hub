@@ -342,6 +342,70 @@ async function deliverCurrentMedia(env, fetchImpl = fetch, kind = 'story') {
 }
 const deliverCurrentStory = (env, fetchImpl = fetch) => deliverCurrentMedia(env, fetchImpl, 'story');
 const deliverCurrentReel = (env, fetchImpl = fetch) => deliverCurrentMedia(env, fetchImpl, 'reel');
+
+async function deliverCalendarStories(env, fetchImpl = fetch) {
+  if (!configured(env) || !publishingEnabled(env)) return { status: 'disabled' };
+  await schema(env);
+  let rows;
+  try {
+    rows = await env.DB.prepare(`SELECT id, pacific_date AS date, scheduled_at AS scheduledAt, media_key AS mediaKey,
+      ig_state AS state, ig_container_id AS containerId FROM calendar_posts
+      WHERE ig_state IN ('approved','container_created') AND scheduled_at <= ?
+      ORDER BY scheduled_at LIMIT 10`).bind(new Date().toISOString()).all();
+  } catch { return { status: 'calendar_table_unavailable' }; }
+  const connection = await env.DB.prepare('SELECT * FROM instagram_connections_v2 WHERE target = ?').bind(TARGET).first();
+  if (!connection || connection.expires_at <= Date.now()) return { status: 'not_connected', pending: rows.results.length };
+  const token = await decrypt(connection.encrypted_token, env);
+  const publisherOrigin = String(env.FREE_PICK_API_ORIGIN || '').replace(/\/$/, '');
+  if (!/^https:\/\/[^/]+$/.test(publisherOrigin)) throw new SafeError('CALENDAR_MEDIA_ORIGIN_INVALID', 503);
+  for (const row of rows.results) {
+    const operation = crypto.randomUUID();
+    if (row.state === 'approved') {
+      const reels = await env.DB.prepare("SELECT COUNT(DISTINCT pick_id) AS count FROM instagram_reel_deliveries WHERE operating_date=? AND state='published'").bind(row.date).first();
+      let freeXCount = 0;
+      try {
+        const freeX = await env.DB.prepare("SELECT scheduled_at AS scheduledAt FROM approved_posts WHERE id LIKE 'free-x-%' AND status='published' AND scheduled_at >= ? AND scheduled_at < ?")
+          .bind(`${row.date}T00:00:00Z`, new Date(Date.parse(`${row.date}T00:00:00Z`) + 2 * 86400000).toISOString()).all();
+        freeXCount = freeX.results.filter(post => pacificDate(new Date(post.scheduledAt)) === row.date).length;
+      } catch { /* Existing Reel receipts still provide the floor. */ }
+      const calendar = await env.DB.prepare("SELECT COUNT(*) AS count FROM calendar_posts WHERE pacific_date=? AND id<>? AND (x_state='published' OR ig_state='published')").bind(row.date, row.id).first();
+      if (Math.max(Number(reels?.count || 0), freeXCount) + Number(calendar?.count || 0) >= 4) {
+        await env.DB.prepare("UPDATE calendar_posts SET ig_state='held', ig_error='FOUR_DAILY_CONTENT_SLOTS_USED' WHERE id=? AND ig_state='approved'").bind(row.id).run();
+        continue;
+      }
+    }
+    if (row.state === 'approved' && Date.now() - Date.parse(row.scheduledAt) > 20 * 60_000) {
+      await env.DB.prepare("UPDATE calendar_posts SET ig_state='held', ig_error='MISSED_APPROVED_SLOT' WHERE id=? AND ig_state='approved'").bind(row.id).run();
+      continue;
+    }
+    if (!/^calendar\/cal-\d{8}-[a-z]{3}\d{4}-[a-f0-9]{64}\.jpg$/.test(row.mediaKey)) {
+      await env.DB.prepare("UPDATE calendar_posts SET ig_state='held', ig_error='INVALID_MEDIA_KEY' WHERE id=? AND ig_state='approved'").bind(row.id).run();
+      continue;
+    }
+    try {
+      let containerId = row.containerId;
+      if (row.state === 'approved') {
+        const claim = await env.DB.prepare("UPDATE calendar_posts SET ig_state='creating_container', ig_attempted_at=? WHERE id=? AND ig_state='approved'").bind(new Date().toISOString(), row.id).run();
+        if (claim.meta.changes !== 1) continue;
+        const match = /^calendar\/(cal-\d{8}-[a-z]{3}\d{4})-([a-f0-9]{64})\.jpg$/.exec(row.mediaKey);
+        const mediaUrl = `${publisherOrigin}/media/calendar/${match[1]}/${match[2]}.jpg`;
+        containerId = await providerPost(env, operation, 'story_create', { accountId: connection.account_id, mediaUrl, token }, fetchImpl);
+        await env.DB.prepare("UPDATE calendar_posts SET ig_state='container_created', ig_container_id=?, ig_error=NULL WHERE id=? AND ig_state='creating_container'").bind(containerId, row.id).run();
+      }
+      const container = await provider(env, operation, `container_status:${containerId}`, { token }, fetchImpl);
+      if (String(container.status_code || '').toUpperCase() !== 'FINISHED') continue;
+      const claim = await env.DB.prepare("UPDATE calendar_posts SET ig_state='publishing' WHERE id=? AND ig_state='container_created'").bind(row.id).run();
+      if (claim.meta.changes !== 1) continue;
+      const mediaId = await providerPost(env, operation, 'story_publish', { accountId: connection.account_id, containerId, token }, fetchImpl);
+      await env.DB.prepare("UPDATE calendar_posts SET ig_state='published', ig_media_id=?, ig_error=NULL WHERE id=? AND ig_state='publishing'").bind(mediaId, row.id).run();
+      await audit(env, operation, 'CALENDAR_STORY_PUBLISHED', 'SUCCEEDED');
+    } catch (error) {
+      await env.DB.prepare("UPDATE calendar_posts SET ig_state='held', ig_error=? WHERE id=? AND ig_state IN ('creating_container','container_created','publishing')").bind(error instanceof SafeError ? error.message : 'CALENDAR_PROVIDER_UNCERTAIN', row.id).run();
+      console.error(JSON.stringify({ service: 'calendar-story', id: row.id, error: error instanceof SafeError ? error.message : 'CALENDAR_PROVIDER_UNCERTAIN' }));
+    }
+  }
+  return { status: 'checked', count: rows.results.length };
+}
 function single(data) {
   if (Array.isArray(data?.data)) {
     if (data.data.length !== 1) throw new SafeError('INSTAGRAM_AMBIGUOUS_ACCOUNT', 403);
@@ -535,7 +599,8 @@ const worker = {
   scheduled: (_controller, env, ctx) => ctx.waitUntil((async () => {
     await deliverCurrentStory(env).catch(error => console.error(JSON.stringify({ service: 'instagram-story', error: error instanceof SafeError ? error.message : 'STORY_DELIVERY_FAILED' })));
     await deliverCurrentReel(env).catch(error => console.error(JSON.stringify({ service: 'instagram-reel', error: error instanceof SafeError ? error.message : 'REEL_DELIVERY_FAILED' })));
+    await deliverCalendarStories(env).catch(error => console.error(JSON.stringify({ service: 'calendar-story', error: error instanceof SafeError ? error.message : 'CALENDAR_DELIVERY_FAILED' })));
   })()),
 };
 export default worker;
-export const __test = { configured, encrypt, decrypt, identity, hash, readJson, pacificDate, publishingEnabled, reelsEnabled, publicationDateAllowed, deliverCurrentStory, deliverCurrentReel, freePickReelCaption, SCOPES };
+export const __test = { configured, encrypt, decrypt, identity, hash, readJson, pacificDate, publishingEnabled, reelsEnabled, publicationDateAllowed, deliverCurrentStory, deliverCurrentReel, deliverCalendarStories, freePickReelCaption, SCOPES };

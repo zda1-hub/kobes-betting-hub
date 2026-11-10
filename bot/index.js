@@ -26,6 +26,8 @@ const writeupRecapWorkflow = {
 const recapWorkflowConfigs = [exclusiveRecapWorkflow, writeupRecapWorkflow].filter((config) => config.enabled);
 const { buildFreePickRecapEmbed, freePickRecapRows } = require('./lib/free-recap');
 const { buildFreePickResults, freeRows, verified } = require('./lib/free-pick-results');
+const { approvedSlot } = require('./lib/marketing-calendar');
+const { safeXPostLength } = require('./lib/free-pick-x');
 const { syncFreePickResultReplies, resultReplyConfig } = require('./lib/free-pick-result-replies');
 const { approvalConfig: freeResultApprovalConfig, createFreePickResultApprovals } = require('./lib/free-pick-result-approvals');
 const { buildPublicResults } = require('./lib/public-results');
@@ -259,6 +261,9 @@ const trendsChannelMap = new Map(
 // including picks, trends, expert sheets, and arbitrage, without Render setup.
 const pickApproverUserIds = approvalUserIds(process.env.PICK_APPROVER_USER_IDS);
 const freePickResultReviewerIds = freePickResultApprovalUserIds();
+// The KBH owner explicitly authorized the calendar; this is separate from
+// original-pick approval and does not widen the pick approver set.
+const calendarApproverIds = new Set(['1209660006383755265', '832944927884312606']);
 const reviewQueueRoot = reviewQueuePath();
 const writeupFreeMirrorRoot = path.join(path.dirname(pickLogPath()), 'writeup-free-mirrors');
 const trendsInboxQueueUrl = (process.env.TRENDS_INBOX_QUEUE_URL || '').replace(/\/$/, '');
@@ -3571,6 +3576,81 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } catch (error) {
       console.error('Unable to read pick audit timeline:', error);
       await interaction.editReply('The database audit timeline could not be read. Check the database connection before relying on this workflow.');
+    }
+    return;
+  }
+
+  if (interaction.commandName === 'approve-calendar-post') {
+    await interaction.deferReply({ ephemeral: true });
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID || !calendarApproverIds.has(interaction.user.id)) {
+      await interaction.editReply('Only Kobe or the KBH owner can approve calendar content.');
+      return;
+    }
+    try {
+      if (interaction.options.getBoolean('rights_confirmed', true) !== true) throw new Error('Confirm the facts, image rights and member consent before scheduling.');
+      const slot = approvedSlot(interaction.options.getString('date', true), interaction.options.getString('slot', true));
+      if (slot.kind === 'arbitrage' && Date.parse(slot.scheduledAt) - Date.now() > 45 * 60_000) {
+        throw new Error('Arbitrage odds must be rechecked within 45 minutes of the slot.');
+      }
+      const xText = interaction.options.getString('x_text', true).trim();
+      if (!xText.includes('https://discord.gg/sB9vzGz2xj')) throw new Error('The X copy must send readers directly to the approved free Discord invite.');
+      if (safeXPostLength(xText) > 280) throw new Error(`X copy is ${safeXPostLength(xText)} weighted characters; shorten the exact copy before approval.`);
+      const attachment = interaction.options.getAttachment('story_image', true);
+      if (attachment.contentType !== 'image/jpeg' || attachment.size > 5 * 1024 * 1024) throw new Error('Attach a JPEG no larger than 5 MB.');
+      const imageResponse = await fetch(attachment.url, { signal: AbortSignal.timeout(15000) });
+      if (!imageResponse.ok) throw new Error('Discord image could not be downloaded.');
+      const bytes = Buffer.from(await imageResponse.arrayBuffer());
+      if (bytes.length > 5 * 1024 * 1024) throw new Error('Image exceeds 5 MB.');
+      const metadata = await require('sharp')(bytes).metadata();
+      if (metadata.format !== 'jpeg' || metadata.width !== 1080 || metadata.height !== 1920 || metadata.pages > 1) throw new Error('The approved Story image must be a single 1080 × 1920 JPEG.');
+      const secret = process.env.FREE_PICK_SITE_PUBLISH_SECRET;
+      if (!secret) throw new Error('Calendar publisher credential is not configured.');
+      const origin = (process.env.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
+      const form = new FormData();
+      form.set('id', slot.id);
+      form.set('scheduledAt', slot.scheduledAt);
+      form.set('xText', xText);
+      form.set('approvedBy', interaction.user.id);
+      form.set('evidence', interaction.options.getString('evidence', true).trim());
+      form.set('image', new Blob([bytes], { type: 'image/jpeg' }), `${slot.id}.jpg`);
+      const response = await auditedFetch(`${origin}/api/calendar/approved`, {
+        method: 'POST', headers: { authorization: `Bearer ${secret}` }, body: form,
+        signal: AbortSignal.timeout(20000)
+      }, { service: 'cloudflare-worker', endpointClass: '/api/calendar/approved', callerComponent: 'bot/index', triggerType: 'approved_calendar_post', workflowId: slot.id });
+      const receipt = await response.json().catch(() => ({}));
+      if (response.status === 409) {
+        await interaction.editReply(`Slot ${slot.id} already exists. Check /calendar-status before changing anything; no duplicate was queued.`);
+      } else if (!response.ok) {
+        throw new Error(`Calendar queue rejected ${slot.id} (${response.status}): ${receipt.error || 'Unknown error'}`);
+      } else {
+        await interaction.editReply(`Approved ${slot.id} for ${slot.scheduledAt} (Pacific slot ${slot.time}). X and Instagram Story are queued separately. Check /calendar-status for each receipt.`);
+      }
+    } catch (error) {
+      console.error('Calendar approval needs attention:', error.message);
+      await interaction.editReply(error.message || 'Calendar approval failed. No post was confirmed.');
+    }
+    return;
+  }
+
+  if (interaction.commandName === 'calendar-status') {
+    await interaction.deferReply({ ephemeral: true });
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID || !calendarApproverIds.has(interaction.user.id)) {
+      await interaction.editReply('Only Kobe or the KBH owner can inspect calendar receipts.');
+      return;
+    }
+    try {
+      const secret = process.env.FREE_PICK_SITE_PUBLISH_SECRET;
+      if (!secret) throw new Error('Calendar publisher credential is not configured.');
+      const origin = (process.env.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
+      const response = await auditedFetch(`${origin}/api/calendar/approved`, { headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(10000) },
+        { service: 'cloudflare-worker', endpointClass: '/api/calendar/approved', callerComponent: 'bot/index', triggerType: 'calendar_receipt' });
+      if (!response.ok) throw new Error(`Calendar receipts unavailable (${response.status}).`);
+      const { posts = [] } = await response.json();
+      await interaction.editReply(posts.length
+        ? posts.slice(0, 12).map(post => `${post.id}: X ${post.xState}${post.xPostId ? ` (${post.xPostId})` : ''}; IG ${post.igState}${post.igMediaId ? ` (${post.igMediaId})` : ''}${post.xError || post.igError ? ' · review held state' : ''}`).join('\n').slice(0, 1900)
+        : 'No approved calendar posts are queued. Free Picks still use their existing publisher.');
+    } catch (error) {
+      await interaction.editReply(error.message || 'Calendar receipts could not be read.');
     }
     return;
   }
