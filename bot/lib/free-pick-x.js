@@ -5,9 +5,29 @@ const { auditedFetch } = require('../../pipeline/api-client');
 const MAX_X_POST_LENGTH = 280;
 const MAX_X_EVIDENCE_POINTS = 3;
 const X_FOOTER_LEGAL = '21+ where permitted. Bet responsibly.';
+const FREE_DISCORD_INVITE = 'https://discord.gg/sB9vzGz2xj';
+const X_URL_LENGTH = 23;
+
+// X's URL weight is 23. Count other text conservatively: X gives some Unicode
+// characters a weight of two, so treating all non-ASCII code points as two
+// avoids accepting a post that its composer could reject.
+function safeXPostLength(body) {
+  const textWeight = text => [...text].reduce((count, character) =>
+    count + (character.codePointAt(0) <= 0x7f ? 1 : 2), 0);
+  let count = 0;
+  let position = 0;
+  for (const match of body.matchAll(/https?:\/\/[^\s]+/g)) {
+    count += textWeight(body.slice(position, match.index));
+    const url = match[0].replace(/[.,!?;:)\]\}]+$/u, '');
+    count += url === FREE_DISCORD_INVITE ? X_URL_LENGTH : Math.max(url.length, X_URL_LENGTH);
+    count += textWeight(match[0].slice(url.length));
+    position = match.index + match[0].length;
+  }
+  return count + textWeight(body.slice(position));
+}
 
 function freePickXFooter() {
-  return `Free Discord: https://discord.gg/sB9vzGz2xj\n${X_FOOTER_LEGAL}`;
+  return `Join our free Discord for more approved plays like this: ${FREE_DISCORD_INVITE}\n${X_FOOTER_LEGAL}`;
 }
 
 function freePickXPostId(pickId) {
@@ -32,8 +52,8 @@ function buildFreePickXPost(packet) {
   const footer = freePickXFooter();
   const fixedSections = [terms.join('\n'), footer];
   let body = fixedSections.join('\n\n');
-  if (body.length > MAX_X_POST_LENGTH) {
-    throw new Error(`The approved free-pick post is ${body.length} characters before evidence; X allows ${MAX_X_POST_LENGTH}.`);
+  if (safeXPostLength(body) > MAX_X_POST_LENGTH) {
+    throw new Error(`The approved free-pick post is ${safeXPostLength(body)} weighted characters before evidence; X allows ${MAX_X_POST_LENGTH}.`);
   }
 
   // Lead with the actual play, then short factual lines like a capper's post.
@@ -43,7 +63,7 @@ function buildFreePickXPost(packet) {
   for (const claim of evidence) {
     const candidateEvidence = [...acceptedEvidence, `- ${claim}`];
     const candidate = [terms.join('\n'), candidateEvidence.join('\n'), footer].join('\n\n');
-    if (candidate.length <= MAX_X_POST_LENGTH) acceptedEvidence.push(`- ${claim}`);
+    if (safeXPostLength(candidate) <= MAX_X_POST_LENGTH) acceptedEvidence.push(`- ${claim}`);
   }
 
   return acceptedEvidence.length
@@ -110,4 +130,4 @@ async function readFreePickXReceipt(packet, { fetchImpl = fetch, environment = p
   return payload.posts?.find((post) => post.id === freePickXPostId(packet.pick_id)) || { status: 'not_requested' };
 }
 
-module.exports = { buildFreePickXPost, freePickXPostId, freePickXSyncConfig, shouldRunTextXFallback, syncApprovedFreePickToX, readFreePickXReceipt };
+module.exports = { buildFreePickXPost, safeXPostLength, freePickXPostId, freePickXSyncConfig, shouldRunTextXFallback, syncApprovedFreePickToX, readFreePickXReceipt };
