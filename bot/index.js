@@ -3143,6 +3143,9 @@ client.once(Events.ClientReady, async (readyClient) => {
   void prepareCalendarEducationCards()
     .then(receipt => console.log('Private education calendar draft receipts:', JSON.stringify(receipt)))
     .catch(error => console.error('Private education calendar drafts need attention:', error.message));
+  setInterval(() => void prepareCalendarEducationCards()
+    .then(receipt => { if (receipt.prepared) console.log('Private education calendar draft receipts:', JSON.stringify(receipt)); })
+    .catch(error => console.error('Private education calendar drafts need attention:', error.message)), 6 * 60 * 60 * 1000);
   void clarifyStartHereArbitrage(readyClient).catch(error => console.error('Start-here wording update needs attention:', error.message));
   if (discordJoinAttribution) {
     const guild = process.env.DISCORD_GUILD_ID ? readyClient.guilds.cache.get(process.env.DISCORD_GUILD_ID) : null;
