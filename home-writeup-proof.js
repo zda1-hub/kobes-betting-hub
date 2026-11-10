@@ -5,16 +5,14 @@
 
   const proof = document.createElement('article');
   proof.className = 'home-writeup-proof';
-  proof.setAttribute('aria-label', 'Real KBH write-up example');
-  proof.innerHTML = `<p class="proof-meta"><span>Write-up example</span><time datetime="2026-10-23" aria-label="October 23, 2026">Oct 23 ’26</time></p><strong class="proof-line">Jalen Smith over 19.5 points + rebounds (-115)</strong><ul><li>23 in the opener despite 0-for-3 from deep.</li><li>The write-up flagged Milwaukee’s paint defense.</li><li>It projected more minutes in a closer Bulls game.</li><li>It expected a back-and-forth game with a high total.</li></ul><p class="proof-result"><span>✓ WIN</span><span class="proof-result-full">14 pts + 13 reb = 27</span><span class="proof-result-compact">27 total</span></p><button class="proof-toggle" type="button" aria-expanded="false" aria-label="See all four write-up reasons">4 reasons ↓</button><p class="proof-note">Posted before tip in KBH’s #writeups. <a href="https://www.nba.com/game/chi-vs-mil-0022600099" target="_blank" rel="noopener noreferrer">NBA game recap</a>. Past results do not guarantee future outcomes.</p>`;
+  proof.setAttribute('aria-label', 'Jaylen Brown writeup example from November 4, 2026');
+  proof.innerHTML = `<p class="proof-meta"><span>Real writeup example</span><time datetime="2026-11-04">Nov 4 ’26</time></p>
+    <h3 class="proof-line">Jaylen Brown over 5.5 rebounds (−150)</h3>
+    <a class="proof-image-link" href="assets/social/jaylen-brown-writeup-example-20261110.jpg" target="_blank" rel="noopener" aria-label="Open the original Jaylen Brown writeup image in full size">
+      <img src="assets/social/jaylen-brown-writeup-example-20261110.jpg" alt="Original KBH Jaylen Brown over 5.5 rebounds writeup, showing Kobe's pregame reasons" width="1206" height="946" loading="lazy" decoding="async">
+      <span>Open full-size writeup ↗</span>
+    </a>
+    <p class="proof-result"><span class="proof-win">✓ WIN</span><span>This play cashed. Brown finished with 7 rebounds in Philadelphia’s 112–106 win over Detroit.</span></p>
+    <p class="proof-note">Posted before tip in KBH’s <a href="https://discord.com/channels/1215407647155683358/1539061878062583848/1567582256120209542" target="_blank" rel="noopener noreferrer">free-picks channel</a>. <a href="https://www.nba.com/game/0022600173/box-score" target="_blank" rel="noopener noreferrer">NBA box score</a>. Past results do not guarantee future outcomes.</p>`;
   card.after(proof);
-
-  const toggle = proof.querySelector('.proof-toggle');
-  toggle.addEventListener('click', () => {
-    const expanded = proof.dataset.expanded !== 'true';
-    proof.dataset.expanded = String(expanded);
-    toggle.setAttribute('aria-expanded', String(expanded));
-    toggle.textContent = expanded ? 'Show less ↑' : '4 reasons ↓';
-    toggle.setAttribute('aria-label', expanded ? 'Show fewer write-up reasons' : 'See all four write-up reasons');
-  });
 })();
