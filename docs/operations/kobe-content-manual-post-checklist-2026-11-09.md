@@ -19,7 +19,7 @@ Live result gate: the old automatic X result-reply switch remains `false`. PRs #
 | Item | Destination | Schedule | Required approval and human step |
 | --- | --- | --- | --- |
 | Free Pick Reel fade change | Instagram Reel via existing publisher | On each newly approved pick, subject to the four-slot cap; no fixed time | Deployed; verify the next real Reel receipt and visible fade. Do not backfill an old pick. |
-| Free Pick result approval gate | Private Discord result-review card, then X reply and Instagram Story | After official final and verified grade; no fixed clock time | X approval gate deployed and channel permissions verified. Instagram Story queue is implemented locally and awaits deployment. Observe the next real card, then have Kobe or the owner separately approve that **result**; check the X receipt, original-post reply, Instagram Story media receipt and visible Story. An original-pick approval does not approve its result. |
+| Free Pick result approval gate | Private Discord result-review card, then X reply and Instagram Story | After official final and verified grade; no fixed clock time | X approval gate and Instagram Story queue are deployed; channel permissions and the production Story table were verified. Observe the next real card, then have Kobe or the owner separately approve that **result**; check the X receipt, original-post reply, Instagram Story media receipt and visible Story. An original-pick approval does not approve its result. |
 
 ### Result-approval activation and live check
 
