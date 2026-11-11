@@ -52,7 +52,9 @@ function combinationSelections(selection) {
     const prefix = cleaned.slice(start, index);
     const slash = char === '/' && /\b(?:ML|moneyline|BTTS|NRFI|YRFI)\b|\b(?:over|under)\s+\d|(?:^|\s)[+-]\d|\d+\+\s+(?:passing|rushing|receiving|yards)/i.test(prefix);
     const combinedTackles = /\btackles?\s*$/i.test(prefix) && /^\s*assists?\b/i.test(cleaned.slice(index + 1));
-    const plus = char === '+' && !combinedTackles && /\s/.test(cleaned[index - 1] || '') && /^\s+[A-Za-z]/.test(cleaned.slice(index + 1));
+    const combinedBasketballStats = /\b(?:points|rebounds|assists)\s*$/i.test(prefix)
+      && /^\s*(?:points|rebounds|assists)\b/i.test(cleaned.slice(index + 1));
+    const plus = char === '+' && !combinedTackles && !combinedBasketballStats && /\s/.test(cleaned[index - 1] || '') && /^\s+[A-Za-z]/.test(cleaned.slice(index + 1));
     if (slash || plus) { parts.push(prefix.trim()); start = index + 1; }
   }
   parts.push(cleaned.slice(start).trim());

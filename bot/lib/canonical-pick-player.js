@@ -15,7 +15,9 @@ function hydrateCanonicalPlayer(row, packet) {
   const selection = text(row.selection);
   // Already named selections are immutable, including a name that disagrees
   // with later packet edits. Such discrepancies need human review.
-  if (!/^(?:over|under)\b/i.test(selection) || text(play.selection || extraction.selection) !== selection) return row;
+  const unnamedThreshold = /^(?:over|under)\b/i.test(selection)
+    || /^\d+\+\s+(?:points|rebounds|assists|passing yards|rushing yards|receiving yards|hits|strikeouts|receptions)\b/i.test(selection);
+  if (!unnamedThreshold || text(play.selection || extraction.selection) !== selection) return row;
   if (text(play.line || extraction.line) !== text(row.published_line)
     || text(play.odds_american || extraction.odds_american) !== text(row.published_odds_american)) return row;
   for (const field of ['event', 'league', 'sport']) {

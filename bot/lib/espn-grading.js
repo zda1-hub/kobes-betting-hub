@@ -152,6 +152,17 @@ function statSpec(row, entries) {
   if (/\b(?:threes|three[- ]pointers?|3[- ]pointers?|3pm)\b/.test(text) && !/\b(?:attempts?|3pa)\b/.test(text)) {
     return pick('basketball', ['threePointFieldGoalsMade', 'threePointFieldGoalsMade-threePointFieldGoalsAttempted'], 'three-pointers made');
   }
+  const combinedStats = String(row.selection || '').match(/\b(?:points|rebounds|assists)(?:\s*\+\s*(?:points|rebounds|assists))+\b/i);
+  if (combinedStats) {
+    // Do not silently grade a supported fragment of an unsupported sum.
+    const prefix = String(row.selection || '').slice(0, combinedStats.index);
+    const remainder = String(row.selection || '').slice(combinedStats.index + combinedStats[0].length);
+    if (/\+\s*$/.test(prefix) || /^\s*\+/.test(remainder)) return null;
+    const keys = combinedStats[0].toLowerCase().split(/\s*\+\s*/);
+    if (keys.length > 3 || new Set(keys).size !== keys.length) return null;
+    return { ...pick('basketball', keys, keys.join(' + ')), sum: true };
+  }
+  if (/\b(?:points|rebounds|assists)\s*\+|\+\s*(?:points|rebounds|assists)\b/i.test(row.selection || '')) return null;
   if (/\bpoints\b/.test(text)) return pick('basketball', 'points', 'points');
   if (/\brebounds\b/.test(text)) return pick('basketball', 'rebounds', 'rebounds');
   if (/\bassists\b/.test(text)) return pick('basketball', 'assists', 'assists');
