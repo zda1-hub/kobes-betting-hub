@@ -162,7 +162,7 @@ function statSpec(row, entries) {
     if (keys.length > 3 || new Set(keys).size !== keys.length) return null;
     return { ...pick('basketball', keys, keys.join(' + ')), sum: true };
   }
-  if (/\b(?:points|rebounds|assists)\s*\+|\+\s*(?:points|rebounds|assists)\b/i.test(row.selection || '')) return null;
+  if (/\b(?:points|rebounds|assists)\s*\+|\b[a-z]+\s*\+\s*(?:points|rebounds|assists)\b/i.test(row.selection || '')) return null;
   if (/\bpoints\b/.test(text)) return pick('basketball', 'points', 'points');
   if (/\brebounds\b/.test(text)) return pick('basketball', 'rebounds', 'rebounds');
   if (/\bassists\b/.test(text)) return pick('basketball', 'assists', 'assists');
