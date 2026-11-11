@@ -272,7 +272,7 @@ async function resolveStraightWager(row, fetchImpl) {
   // on the exact date before accepting it; never treat bare team names as ML.
   const opposedMoneyline = selection.match(/^([A-Za-z .'-]+)\s+(?:\([+-]\d{3,4}\)|[+-]\d{3,4})\s+over\s+([A-Za-z .'-]+)(?:\s+\(\d+(?:\.\d+)?-?UNITS?\))?$/i);
   const moneyline = selection.match(/^(.+?)\s+(?:ML|moneyline)(?:\s|$)/i)
-    || selection.match(/^([A-Za-z .'-]+)\s+[+-]\d{3,4}(?:\s*\(\d+(?:\.\d+)?\s*U\))?$/i)
+    || selection.match(/^([A-Za-z .'-]+)\s+(?:\([+-]\d{3,4}\)|[+-]\d{3,4})(?:\s*(?:\(\d+(?:\.\d+)?\s*U\)|\d+(?:\.\d+)?\s*U))?$/i)
     || opposedMoneyline;
   const spread = selection.match(/^(.+?)\s+([+-]\d{1,2}(?:\.\d+)?)(?=\s|$)/);
   const total = selection.match(/^(.+?)\s+(?:over|under)\s+\d+(?:\.\d+)?/i);
@@ -295,7 +295,7 @@ async function resolveStraightWager(row, fetchImpl) {
     for (const event of scoreboard.events || []) {
       const competitors = event.competitions?.[0]?.competitors || [];
       if (competitors.length !== 2) continue;
-      const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, ...([LEAGUES.ncaaf, LEAGUES.ncaab].includes(league) ? [c.team?.location, / State$/.test(c.team?.location || '') ? c.team.location.replace(/ State$/, ' St') : ''] : [])].map(compact).filter(Boolean));
+      const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, known === LEAGUES.nhl ? c.team?.location : '', ...([LEAGUES.ncaaf, LEAGUES.ncaab].includes(league) ? [c.team?.location, / State$/.test(c.team?.location || '') ? c.team.location.replace(/ State$/, ' St') : ''] : [])].map(compact).filter(Boolean));
       const matched = names.map(name => aliases.flatMap((values, index) => values.includes(name) ? [index] : []));
       if (!matched.every(indices => indices.length === 1) || new Set(matched.flat()).size !== names.length) continue;
       const team = (moneyline || spread) && competitors[matched[0][0]];
