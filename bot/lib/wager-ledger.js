@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 const { isPublishedRow } = require('./recap');
 const { netUnitsFor, resultFor } = require('./pick-log');
 const { publicationGradeHold } = require('./recap-review');
+const { recoverReviewedSourceHeadings } = require('./reviewed-source-heading-recovery');
 
 function sourcePacketPath(root, id) {
   const match = String(id).match(/^(?:(\d{8})-\d+(?:-\d+)?-X|tg-(\d{8})-\d+-\d+|manual-(\d{8})-[a-f0-9]{20})$/);
@@ -14,7 +15,7 @@ function sourcePacketPath(root, id) {
 
 function expandPublication(row, packet) {
   if (!packet || packet.pick_id !== row.pick_id) return null;
-  const extraction = packet.analysis?.extraction;
+  const extraction = recoverReviewedSourceHeadings(row, packet) || packet.analysis?.extraction;
   const plays = extraction?.plays;
   // Only lossless source terms can be reconstructed from the review packet.
   // Independently rewritten publications must not inherit source-only wagers.
@@ -34,6 +35,7 @@ function expandPublication(row, packet) {
       parent_pick_id: row.pick_id,
       pick_id: `${row.pick_id}-W${String(index + 1).padStart(3, '0')}${leg ? 'B' : 'A'}`,
       wager_scope: 'individual',
+      ...(extraction.source_heading_recovery ? { source_heading_recovery: extraction.source_heading_recovery } : {}),
       league_from_group: plays.length > 1 && !play.league && !play.sport,
       selection: `${team.trim()} ML`,
       source_selection: selection,
@@ -51,6 +53,7 @@ function expandPublication(row, packet) {
       parent_pick_id: row.pick_id,
       pick_id: `${row.pick_id}-W${String(index + 1).padStart(3, '0')}`,
       wager_scope: 'individual',
+      ...(extraction.source_heading_recovery ? { source_heading_recovery: extraction.source_heading_recovery } : {}),
       league_from_group: plays.length > 1 && !play.league && !play.sport,
       selection,
       // Do not copy the first wager's terms or result onto any sibling.
