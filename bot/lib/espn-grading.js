@@ -270,8 +270,10 @@ async function resolveStraightWager(row, fetchImpl) {
   // A standalone team followed only by a signed three/four-digit price is
   // conventional moneyline shorthand, not a spread. Resolve the team uniquely
   // on the exact date before accepting it; never treat bare team names as ML.
+  const opposedMoneyline = selection.match(/^([A-Za-z .'-]+)\s+(?:\([+-]\d{3,4}\)|[+-]\d{3,4})\s+over\s+([A-Za-z .'-]+)(?:\s+\(\d+(?:\.\d+)?-?UNITS?\))?$/i);
   const moneyline = selection.match(/^(.+?)\s+(?:ML|moneyline)(?:\s|$)/i)
-    || selection.match(/^([A-Za-z .'-]+)\s+[+-]\d{3,4}(?:\s*\(\d+(?:\.\d+)?\s*U\))?$/i);
+    || selection.match(/^([A-Za-z .'-]+)\s+[+-]\d{3,4}(?:\s*\(\d+(?:\.\d+)?\s*U\))?$/i)
+    || opposedMoneyline;
   const spread = selection.match(/^(.+?)\s+([+-]\d{1,2}(?:\.\d+)?)(?=\s|$)/);
   const total = selection.match(/^(.+?)\s+(?:over|under)\s+\d+(?:\.\d+)?/i);
   const firstInning = selection.match(/^(.+?)\s+(?:NRFI|YRFI)\b/i);
@@ -279,10 +281,11 @@ async function resolveStraightWager(row, fetchImpl) {
   const prefix = (moneyline?.[1] || spread?.[1] || total?.[1] || firstInning?.[1] || btts?.[1])?.replace(/\s+team total\s*$/i, '');
   if (!prefix) return null;
   const names = prefix.split(/\s*(?:\/|\bvs\.?\b|\bat\b)\s*/i).map(compact);
+  if (opposedMoneyline) names.push(compact(opposedMoneyline[2]));
   // A total requires both teams; a team-total or player prop is not a game total.
   const teamTotal = /\bteam total\b/i.test(selection);
   if (total && !moneyline && !spread && names.length !== (teamTotal ? 1 : 2)) return null;
-  if ((!total || moneyline || spread) && !firstInning && !btts && names.length !== 1) return null;
+  if ((!total || moneyline || spread) && !firstInning && !btts && names.length !== (opposedMoneyline ? 2 : 1)) return null;
   if (firstInning && names.length !== 2) return null;
   if (btts && names.length !== 2) return null;
   const known = leagueFor(row);
@@ -292,7 +295,7 @@ async function resolveStraightWager(row, fetchImpl) {
     for (const event of scoreboard.events || []) {
       const competitors = event.competitions?.[0]?.competitors || [];
       if (competitors.length !== 2) continue;
-      const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, [LEAGUES.ncaaf, LEAGUES.ncaab].includes(league) ? c.team?.location : ''].map(compact).filter(Boolean));
+      const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, ...([LEAGUES.ncaaf, LEAGUES.ncaab].includes(league) ? [c.team?.location, / State$/.test(c.team?.location || '') ? c.team.location.replace(/ State$/, ' St') : ''] : [])].map(compact).filter(Boolean));
       const matched = names.map(name => aliases.flatMap((values, index) => values.includes(name) ? [index] : []));
       if (!matched.every(indices => indices.length === 1) || new Set(matched.flat()).size !== names.length) continue;
       const team = (moneyline || spread) && competitors[matched[0][0]];
