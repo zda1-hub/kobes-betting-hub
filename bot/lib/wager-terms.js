@@ -8,7 +8,8 @@ function leadingWagerTerms(value) {
   for (let pass = 0; pass < 8; pass++) {
     const before = selection;
     selection = selection
-      .replace(/^(?:\d+(?:\.\d+)?|\.\d+)\s*(?:U\b|units?\b|\*|%)\s*(?:-\s*)?/i, '')
+      .replace(/^\((?:\d+(?:\.\d+)?|\.\d+)\s*u(?:nits?)?\)\s+/i, '')
+      .replace(/^(?:\d+(?:\.\d+)?|\.\d+)\s*(?:U\b|units?\b|\*|%)\s*(?:(?:-|,)\s*)?/i, '')
       .replace(/^\d{1,4}(?::\d{2})?\s*(?:am|pm)\s+/i, '')
       .replace(/^(CFB|NCAAF|NFL|MLB)\b\s*:?\s*/i, (_, league) => {
         leagues.add(league.toUpperCase() === 'CFB' ? 'NCAAF' : league.toUpperCase());
@@ -27,6 +28,7 @@ function normalizeSelection(value) {
     .replace(/\b([ou])\s*(\d+(?:\.\d+)?)/gi, (_, side, line) => `${side.toLowerCase() === 'o' ? 'Over' : 'Under'} ${line}`)
     .replace(/(\d+)[’'](?=\s|\(|$)/g, '$1.5')
     .replace(/([+-])\s+(\d)/g, '$1$2')
+    .replace(/\bML(?=[+-]\d{3,4}(?:\s|\)|$))/gi, 'ML ')
     .replace(/\bTT\b/gi, 'Team Total')
     .replace(/\bNo Run First Inning\b/gi, 'NRFI')
     .replace(/\b(?:Yes Run First Inning|Run First Inning)\b/gi, 'YRFI')

@@ -258,6 +258,12 @@ async function getJson(url, fetchImpl) {
   return response.json();
 }
 
+function scoreboardUrl(league, date) {
+  // ESPN defaults college basketball to a ranked-only slate, even with a high limit.
+  // Group 50 requests all Division I games; other leagues retain their existing feed.
+  return `${ESPN_BASE_URL}/${league.path}/scoreboard?dates=${date}&limit=${league === LEAGUES.ncaab ? '1000&groups=50' : '100'}`;
+}
+
 async function resolveStraightWager(row, fetchImpl) {
   if (row.event) return null;
   const selection = String(row.selection || '').replace(/\b(?:F5|1H|2H|first half|second half|first five)\b/gi, '').replace(/\s+/g, ' ').trim();
@@ -282,11 +288,11 @@ async function resolveStraightWager(row, fetchImpl) {
   const known = leagueFor(row);
   const candidates = [];
   for (const league of known ? [known] : Object.values(LEAGUES)) {
-    const scoreboard = await getJson(`${ESPN_BASE_URL}/${league.path}/scoreboard?dates=${eventDate(row.operating_date)}&limit=100`, fetchImpl);
+    const scoreboard = await getJson(scoreboardUrl(league, eventDate(row.operating_date)), fetchImpl);
     for (const event of scoreboard.events || []) {
       const competitors = event.competitions?.[0]?.competitors || [];
       if (competitors.length !== 2) continue;
-      const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, league === LEAGUES.ncaaf ? c.team?.location : ''].map(compact).filter(Boolean));
+      const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, [LEAGUES.ncaaf, LEAGUES.ncaab].includes(league) ? c.team?.location : ''].map(compact).filter(Boolean));
       const matched = names.map(name => aliases.flatMap((values, index) => values.includes(name) ? [index] : []));
       if (!matched.every(indices => indices.length === 1) || new Set(matched.flat()).size !== names.length) continue;
       const team = (moneyline || spread) && competitors[matched[0][0]];
@@ -311,7 +317,7 @@ async function resolvePlayerWager(row, fetchImpl) {
     const candidates = [];
     let scheduled = 0;
     for (const league of leagues) {
-      const scoreboard = await getJson(`${ESPN_BASE_URL}/${league.path}/scoreboard?dates=${date}&limit=100`, fetchImpl);
+      const scoreboard = await getJson(scoreboardUrl(league, date), fetchImpl);
       const events = scoreboard.events || [];
       scheduled += events.length;
       // No partial scan: if a slate exceeds the safe limit, exact event identity is required.
@@ -346,7 +352,7 @@ async function resolveLeagueFromMatchup(row, fetchImpl) {
   if (!leagues.length) return null;
   const candidates = [];
   for (const league of leagues) {
-    const scoreboard = await getJson(`${ESPN_BASE_URL}/${league.path}/scoreboard?dates=${eventDate(row.operating_date)}&limit=100`, fetchImpl);
+    const scoreboard = await getJson(scoreboardUrl(league, eventDate(row.operating_date)), fetchImpl);
     const event = matchingEvent(row, scoreboard.events);
     if (event) candidates.push({ league, event, market: row.market, selection: row.selection });
   }
@@ -444,7 +450,7 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
   }
   let scoreboard;
   try {
-    scoreboard = await getJson(`${ESPN_BASE_URL}/${league.path}/scoreboard?dates=${date}&limit=100`, fetchImpl);
+    scoreboard = await getJson(scoreboardUrl(league, date), fetchImpl);
   } catch (error) {
     return { status: 'PENDING', reason: error.message };
   }
