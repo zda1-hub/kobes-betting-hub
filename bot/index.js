@@ -42,6 +42,7 @@ const { recoverResultsBacklog, readResultsBacklogCursor } = require('./lib/resul
 const { createGradingFetch, gradePickFromEspn } = require('./lib/espn-grading');
 const { buildRecapReview, publicationGradeHold, splitRecapBody } = require('./lib/recap-review');
 const { gradeWagerRows, sourcePacketPath } = require('./lib/wager-ledger');
+const { planPendingRecapNotice, queuedPendingRecapNotice } = require('./lib/pending-recap-notice');
 const { hydrateCanonicalPlayer } = require('./lib/canonical-pick-player');
 const { appendOfficialPick, appendOrRetryPermissionFailedPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm, buildVipWelcome, vipRoleIds } = require('./lib/welcome');
@@ -1365,10 +1366,9 @@ async function publishDueFreeRecap(date) {
         return;
       }
       const pendingIds = pending.map((row) => row.pick_id).join(', ');
-      const notificationId = `free-recap-pending-${date}-${pending.map((row) => row.pick_id).join('-').slice(0, 80)}`;
       const previous = state.dates?.[date] || {};
-      const emailAlreadyHandled = ['QUEUED', 'ALREADY_QUEUED'].includes(previous.email_status);
-      if (previous.pending_ids !== pendingIds || !emailAlreadyHandled) {
+      const notice = planPendingRecapNotice({ date, pendingIds, previous });
+      if (notice.shouldQueue) {
         const pendingContent = `Pending verified results: ${pendingIds}`;
         await recordRecapRun({
           operatingDate: date,
@@ -1379,7 +1379,7 @@ async function publishDueFreeRecap(date) {
           details: { pending_ids: pendingIds }
         });
         const emailStatus = await queueRecapNotification({
-          id: notificationId,
+          id: notice.id,
           subject: `Kobe's Betting Hub — Daily recap waiting (${date})`,
           body: `The daily recap for ${date} is waiting for verified results for: ${pendingIds}.\n\nThe bot will retry ESPN grading and email the recap for Kobe's review once every result is settled.`
         });
@@ -1391,7 +1391,10 @@ async function publishDueFreeRecap(date) {
           content: pendingContent,
           details: { pending_ids: pendingIds }
         });
-        state.dates = { ...(state.dates || {}), [date]: { ...state.dates?.[date], status: 'PENDING_RESULTS', pending_ids: pendingIds, notified_at: new Date().toISOString(), email_status: emailStatus } };
+        state.dates = { ...(state.dates || {}), [date]: queuedPendingRecapNotice(notice, emailStatus, new Date().toISOString()) };
+        await saveFreeRecapState(state);
+      } else if (previous.pending_ids !== pendingIds) {
+        state.dates = { ...(state.dates || {}), [date]: notice.state };
         await saveFreeRecapState(state);
       }
       console.log(`Official recap for ${date} is waiting for ${pending.length} verified result(s).`);
