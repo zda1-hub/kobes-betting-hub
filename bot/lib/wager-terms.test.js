@@ -46,7 +46,7 @@ test('combined tackles and assists are one market while separate wagers remain a
 test('only recognized leading unit wrappers and joined ML prices normalize',()=>{
  assert.equal(normalizeSelection('(1u) Ohio Bobcats +2 (-120)'), 'Ohio Bobcats +2 (-120)');
  assert.equal(normalizeSelection('2.5u, Illinois ML-130'), 'Illinois ML -130');
- assert.equal(normalizeSelection('(4u) Wisconsin -25/-120'), 'Wisconsin -25/-120');
+ assert.equal(normalizeSelection('(4u) Wisconsin -25/-120'), 'Wisconsin -25 -120');
  assert.equal(normalizeSelection('(1) Ohio Bobcats +2 (-120)'), '(1) Ohio Bobcats +2 (-120)');
  assert.equal(normalizeSelection('2.5, Illinois ML-130'), '2.5, Illinois ML -130');
  assert.equal(normalizeSelection('1u - Player Over 2.5 Hits'), 'Player Over 2.5 Hits');

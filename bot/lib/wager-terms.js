@@ -15,6 +15,7 @@ function leadingWagerTerms(value) {
         leagues.add(league.toUpperCase() === 'CFB' ? 'NCAAF' : league.toUpperCase());
         return '';
       })
+      .replace(/^Moneyline of the day\s*-\s*/i, '')
       .replace(/^MAX\s+(?:WHALEPLAY|BET)\b\s*:?\s*/i, '').trim();
     if (selection === before) break;
   }
@@ -28,6 +29,7 @@ function normalizeSelection(value) {
     .replace(/\b([ou])\s*(\d+(?:\.\d+)?)/gi, (_, side, line) => `${side.toLowerCase() === 'o' ? 'Over' : 'Under'} ${line}`)
     .replace(/(\d+)[’'](?=\s|\(|$)/g, '$1.5')
     .replace(/([+-])\s+(\d)/g, '$1$2')
+    .replace(/^([A-Za-z][A-Za-z .'-]*\s+[+-]\d{1,2}(?:\.\d+)?)\/([+-]\d{3,4})$/, '$1 $2')
     .replace(/\bML(?=[+-]\d{3,4}(?:\s|\)|$))/gi, 'ML ')
     .replace(/\bTT\b/gi, 'Team Total')
     .replace(/\bNo Run First Inning\b/gi, 'NRFI')

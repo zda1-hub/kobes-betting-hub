@@ -348,7 +348,7 @@ async function resolveLeagueFromMatchup(row, fetchImpl) {
   const leagues = /basketball/.test(sport) ? [LEAGUES.nba, LEAGUES.wnba, LEAGUES.ncaab]
     : /football/.test(sport) ? [LEAGUES.nfl, LEAGUES.ncaaf]
       : /hockey/.test(sport) ? [LEAGUES.nhl]
-        : /baseball/.test(sport) ? [LEAGUES.mlb] : [];
+        : /baseball/.test(sport) ? [LEAGUES.mlb] : !sport.trim() ? Object.values(LEAGUES) : [];
   if (!leagues.length) return null;
   const candidates = [];
   for (const league of leagues) {
