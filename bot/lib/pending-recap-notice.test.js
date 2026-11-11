@@ -1,0 +1,13 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {planPendingRecapNotice,queuedPendingRecapNotice}=require('./pending-recap-notice');
+const date='2026-11-10';const at='2026-11-11T13:05:00Z';
+test('historical confirmed waiting notice suppresses changing pending sets and preserves delivery evidence',()=>{
+ for(const email_status of ['QUEUED','ALREADY_QUEUED']){const previous={status:'PENDING_RESULTS',pending_ids:'a, b',notified_at:at,email_status,private_review:'preserved'};const plan=planPendingRecapNotice({date,pendingIds:'b',previous});assert.equal(plan.shouldQueue,false);assert.deepEqual(plan.state,{...previous,pending_ids:'b'});assert.equal(previous.pending_ids,'a, b');}
+});
+test('successful first notice coalesces all subsequent changes for the date',()=>{let state={};let sends=0;for(const pendingIds of ['a, b, c','b, c','c','new, c']){const p=planPendingRecapNotice({date,pendingIds,previous:state});state=p.shouldQueue?(sends++,queuedPendingRecapNotice(p,'QUEUED',at)):p.state;}assert.equal(sends,1);assert.equal(state.pending_ids,'new, c');assert.equal(state.notified_at,at);});
+test('failed or missing first-notice evidence retries with stable date key even as pending IDs change',()=>{
+ const first=planPendingRecapNotice({date,pendingIds:'a'});assert.equal(first.shouldQueue,true);
+ for(const previous of [{},{email_status:'FAILED',notified_at:at},{email_status:'QUEUED'},{notified_at:at}]){const retry=planPendingRecapNotice({date,pendingIds:'b, c',previous});assert.equal(retry.shouldQueue,true);assert.equal(retry.id,first.id);}
+});
+test('uncertain successful external queue retry deduplicates using same key and records ALREADY_QUEUED',()=>{const plan=planPendingRecapNotice({date,pendingIds:'a'});const retry=planPendingRecapNotice({date,pendingIds:'b'});assert.equal(plan.id,retry.id);const state=queuedPendingRecapNotice(retry,'ALREADY_QUEUED',at);assert.equal(planPendingRecapNotice({date,pendingIds:'c',previous:state}).shouldQueue,false);});
+test('new dates use distinct keys and failed statuses cannot be recorded as success',()=>{assert.notEqual(planPendingRecapNotice({date,pendingIds:'a'}).id,planPendingRecapNotice({date:'2026-11-11',pendingIds:'a'}).id);assert.throws(()=>queuedPendingRecapNotice(planPendingRecapNotice({date,pendingIds:'a'}),'FAILED',at));});
+test('first successful retry records its successful timestamp instead of a failed-attempt stamp',()=>{const p=planPendingRecapNotice({date,pendingIds:'a',previous:{email_status:'FAILED',notified_at:'old'}});assert.equal(queuedPendingRecapNotice(p,'QUEUED',at).notified_at,at);});
