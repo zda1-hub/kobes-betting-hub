@@ -7,8 +7,8 @@ const cases=[
  ['Ace Bailey Over 21.5 Total Points + Rebounds (-125) 0.5u','Ace Bailey','401909963',{points:23,rebounds:7,assists:2},'W','30 points + rebounds']
 ];
 // Exact event/stat values checked against ESPN summary endpoints Nov 11.
-function fixture(name,id,values){
- const competitors=[{team:{displayName:'Home Team'}},{team:{displayName:'Away Team'}}];
+function fixture(name,id,values,teams=['Home Team','Away Team']){
+ const competitors=[{team:{displayName:teams[0]}},{team:{displayName:teams[1]}}];
  const event={id,competitions:[{competitors}],status:{type:{completed:true}}};
  const summary={header:{competitions:[{id,competitors,status:{type:{completed:true}}}]},boxscore:{players:[{statistics:[{keys:Object.keys(values),athletes:[{athlete:{id:'123',displayName:name},stats:Object.values(values).map(String)}]}]}]}};
  return async url=>({ok:true,json:async()=>url.includes('/summary?')?summary:{events:[event]}});
@@ -31,4 +31,17 @@ test('PRA uses all three components and refuses duplicated or unsupported sums',
  const entry={name:'Anthony Black',category:'basketball',values:{points:'26',rebounds:'7',assists:'5'}};
  assert.deepEqual(statSpec({selection:'Anthony Black over 30.5 points + rebounds + assists'},[entry]).key,['points','rebounds','assists']);
  for(const terms of ['points + points','points + rebounds + assists + points','points + rebounds + blocks','points + blocks','blocks + points + rebounds','blocks + points'])assert.equal(statSpec({selection:`Anthony Black over 30.5 ${terms}`},[entry]),null);
+});
+
+test('exact hydrated canonical milestone grades end to end rather than rejecting numeric plus', async () => {
+ const { hydrateCanonicalPlayer } = require('./canonical-pick-player');
+ const row = { pick_id: '20261110-073-03-X', operating_date: '2026-11-10', selection: '25+ points', published_line: '25+ points', published_odds_american: '-120', market: 'Points parlay', sport: 'Basketball', league: 'NBA', event: 'Milwaukee Bucks @ New York Knicks' };
+ const packet = { pick_id: row.pick_id, operating_date: row.operating_date, analysis: { extraction: { selection: row.selection, line: row.published_line, odds_american: '-120', player_name: 'Jalen Brunson', event: row.event, sport: row.sport, league: row.league } } };
+ const hydrated = hydrateCanonicalPlayer(row, packet);
+ assert.equal(hydrated.selection, 'Jalen Brunson 25+ points');
+ for (const [points, result] of [[23, 'L'], [24, 'L'], [25, 'W'], [26, 'W']]) {
+  const grade = await gradePickFromEspn(hydrated, { fetchImpl: fixture('Jalen Brunson', '401909960', { points }, ['Milwaukee Bucks','New York Knicks']) });
+  assert.equal(grade.status, 'GRADED'); assert.equal(grade.result, result);
+  assert.equal(grade.outcome, `Jalen Brunson: ${points} points`);
+ }
 });
