@@ -19,11 +19,13 @@ const resultOpeners = Object.freeze({
 
 function approvalConfig(environment = process.env) {
   if (environment.FREE_PICK_RESULT_APPROVALS_ENABLED !== 'true') return null;
-  const reviewChannelId = environment.FREE_PICK_RESULT_REVIEW_CHANNEL_ID || environment.PICK_APPROVAL_CHANNEL_ID;
+  const reviewChannelId = environment.SOCIAL_POST_APPROVAL_CHANNEL_ID;
   const startAt = Date.parse(environment.FREE_PICK_RESULT_APPROVAL_START_AT || '');
   if (!/^\d+$/.test(reviewChannelId || '') || !Number.isFinite(startAt))
     throw new Error('Result approvals require a private review channel and a valid activation timestamp.');
-  return { reviewChannelId, startAt };
+  if (reviewChannelId === environment.PICK_APPROVAL_CHANNEL_ID || reviewChannelId === environment.FREE_PICK_RESULT_REVIEW_CHANNEL_ID)
+    throw new Error('Social result approvals must use a separate channel from pick approvals.');
+  return { reviewChannelId, legacyReviewChannelId: environment.FREE_PICK_RESULT_REVIEW_CHANNEL_ID || environment.PICK_APPROVAL_CHANNEL_ID, startAt };
 }
 
 function snapshot(row) {
@@ -92,7 +94,7 @@ function createFreePickResultApprovals({ root, config, channelFor, rowsFor, free
   async function reviewChannel() { return channelFor(config.reviewChannelId); }
   async function updateCard(state) {
     if (!state.messageId) return;
-    const channel = await reviewChannel();
+    const channel = await channelFor(state.channelId || config.legacyReviewChannelId || config.reviewChannelId);
     await (await channel.messages.fetch(state.messageId)).edit(card(state));
   }
   async function requestX(state, row) {
@@ -139,6 +141,29 @@ function createFreePickResultApprovals({ root, config, channelFor, rowsFor, free
           }
           continue;
         }
+        if (state?.digest === rowDigest && state.messageId && state.status === 'AWAITING_APPROVAL'
+          && (state.channelId || config.legacyReviewChannelId) !== config.reviewChannelId) {
+          const oldChannelId = state.channelId || config.legacyReviewChannelId;
+          const oldMessageId = state.messageId;
+          const channel = await reviewChannel();
+          const marker = `KBH free-result-review ${key} ${rowDigest}`;
+          const recent = await channel.messages.fetch({ limit: 100 });
+          const existing = [...recent.values()].find(message => message.author?.id === channel.client.user.id
+            && message.embeds?.[0]?.footer?.text?.startsWith(marker));
+          const message = existing || await channel.send({ ...card(state), nonce: rowDigest, enforceNonce: true });
+          state.messageId = message.id;
+          state.channelId = config.reviewChannelId;
+          await save(state);
+          if (oldChannelId && oldChannelId !== config.reviewChannelId) {
+            try {
+              const oldChannel = await channelFor(oldChannelId);
+              const oldMessage = await oldChannel.messages.fetch(oldMessageId);
+              await oldMessage.edit({ components: card({ ...state, status: 'REJECTED' }).components });
+            } catch (error) { console.error('Legacy result card could not be disabled:', error.message); }
+          }
+          receipts.push({ pickId: row.pick_id, status: state.status, messageId: state.messageId, migrated: true });
+          continue;
+        }
         if (state?.digest === rowDigest && state.messageId) continue;
         if (state && finalStatuses.has(state.status)) continue;
         const opener = await nextOpener(row);
@@ -155,6 +180,7 @@ function createFreePickResultApprovals({ root, config, channelFor, rowsFor, free
           const message = await channel.send({ ...card(state), nonce: rowDigest, enforceNonce: true });
           state.messageId = message.id;
         }
+        state.channelId = config.reviewChannelId;
         await save(state);
         receipts.push({ pickId: row.pick_id, status: state.status, messageId: state.messageId });
       }
