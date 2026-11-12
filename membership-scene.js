@@ -28,6 +28,7 @@
   scene.append(panel);
   // Referral rewards apply to monthly memberships; keep the other offers private on referral arrivals.
   const arrival=new URLSearchParams(location.search);
+  const discordFirst5=arrival.get('deal')==='discord-first5' && !arrival.has('checkout');
   const cardStartsCheckout=!['success','connected'].includes(arrival.get('checkout'));
   const primaryCheckout=panel.querySelector('[data-primary-membership-checkout]');
   const originalCardLabel=card.getAttribute('aria-label');
@@ -111,8 +112,8 @@
     history.scrollRestoration='manual';
     hideHome();panel.hidden=false;scene.dataset.open='true';card.removeAttribute('href');
     if(cardStartsCheckout){
-      card.dataset.cardCheckout='monthly';card.setAttribute('role','button');card.setAttribute('tabindex','0');
-      card.setAttribute('aria-label','Start 2 days free and connect Discord');card.setAttribute('aria-describedby','monthly-membership-terms');
+      card.dataset.cardCheckout=discordFirst5?'first_month_back':'monthly';card.setAttribute('role','button');card.setAttribute('tabindex','0');
+      card.setAttribute('aria-label',discordFirst5?'Join for $5 first month and connect Discord':'Start 2 days free and connect Discord');card.setAttribute('aria-describedby','monthly-membership-terms');
     }else card.setAttribute('tabindex','-1');
     updateTriggers();
     if(home&&push)history.pushState({...history.state,kbhMembership:true},'',location.href);

@@ -130,6 +130,22 @@ test('new customers retain the ordinary membership offers', () => {
   assert.ok(page.buttons.every(button => !button.disabled));
 });
 
+test('Discord first-five arrival shows paid terms and sends the deal only after status is ready', async () => {
+  const requests = [];
+  const page = checkoutPage(async (url, options) => {
+    requests.push({ url, body: options?.body ? JSON.parse(options.body) : null });
+    if (url.endsWith('/promotions/discord-first5')) return Response.json({ ready: true });
+    return Response.json({ url: 'https://discord.com/oauth2/authorize?client_id=fixture' });
+  }, { search: '?deal=discord-first5' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(page.promotionTerms.textContent, /\$5 today, then \$32\.99/);
+  assert.match(page.promotionTerms.textContent, /No free trial/);
+  await page.buttons[0].click();
+  assert.equal(requests[1].body.offer, 'first_month_back');
+  assert.equal(requests[1].body.deal, 'discord_first5');
+  assert.deepEqual(page.assignedUrls, ['https://discord.com/oauth2/authorize?client_id=fixture']);
+});
+
 test('checkout retries reuse an in-flight request ID and clear it after Stripe returns a URL', async () => {
   const requestIds = [];
   let attempt = 0;

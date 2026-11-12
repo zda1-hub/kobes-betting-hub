@@ -55,6 +55,29 @@ const FIRST20_COUPON_ID = 'kbh_first20_20261022';
 // The owner retired the $5 promotion early. Keep its historical identifiers for
 // existing payment records, but reject all new discounted checkout attempts.
 const first20Active = () => false;
+const DISCORD_FIRST5_COUPON_ID = 'kbh_discord_first5_20261111';
+const discordFirst5Deal = (offer, deal) => offer === 'first_month_back' && deal === 'discord_first5';
+
+async function discordFirst5Coupon(env) {
+  const price = await first20Price(env);
+  const coupon = await stripeGet(env, `/coupons/${DISCORD_FIRST5_COUPON_ID}`);
+  if (coupon?.id !== DISCORD_FIRST5_COUPON_ID || coupon.amount_off !== 2799
+    || coupon.currency !== 'usd' || coupon.duration !== 'once'
+    || coupon.max_redemptions !== 5 || coupon.valid !== true
+    || Number(coupon.times_redeemed || 0) >= 5 || price.unit_amount - coupon.amount_off !== 500) {
+    throw new Error('The $5 first-month offer is unavailable or has filled.');
+  }
+  return coupon.id;
+}
+
+async function discordFirst5Status(env) {
+  try {
+    await discordFirst5Coupon(env);
+    return { state: 'open', ready: true, firstMonthCents: 500, renewalCents: 3299, limit: 5 };
+  } catch {
+    return { state: 'unavailable', ready: false };
+  }
+}
 
 function validFirst20Coupon(coupon) {
   return coupon?.id === FIRST20_COUPON_ID && coupon.amount_off === 2799
@@ -1802,6 +1825,16 @@ async function finishDiscordConnection(request, env) {
       if (!association || new Date(association.expires_at).getTime() <= Date.now()) throw new Error('That checkout verification expired. Please select your offer again.');
       if (!['PENDING_DISCORD', 'DISCORD_VERIFIED'].includes(association.status)) throw new Error('That checkout verification was already used.');
       const linked = await membershipCustomerForDiscord(env, user.id);
+      if (association.attribution?.promotion === 'discord_first5') {
+        if (linked?.stripe_customer_id) throw new Error('The $5 first-month offer is for new KBH VIP members only.');
+        let member;
+        try {
+          member = await discordRequest(`/guilds/${env.DISCORD_GUILD_ID}/members/${user.id}`, {
+            headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
+          }, env, { memberId: user.id, triggerType: 'discord_first5_eligibility' });
+        } catch { throw new Error('Join the free KBH Discord before using this member offer.'); }
+        if (member?.user?.id !== user.id || member.pending === true) throw new Error('Complete your KBH Discord membership before using this offer.');
+      }
       if (linked?.stripe_customer_id && linked.current_subscription_id) {
         const current = await stripeGet(env, `/subscriptions/${encodeURIComponent(linked.current_subscription_id)}`);
         if (ACTIVE_SUBSCRIPTION_STATUSES.has(current.status)) {
@@ -1936,13 +1969,18 @@ async function prepareCheckout(request, env, origin) {
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
   if (!MEMBERSHIP_OFFERS.has(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
   const first20 = data.offer === 'first_month_back' && data.deal === 'first20';
-  if (data.offer === 'first_month_back' && !first20 && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
+  const first5 = discordFirst5Deal(data.offer, data.deal);
+  if (data.offer === 'first_month_back' && !first20 && !first5 && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
   if (first20 && !first20Active()) return json({ error: 'The limited $5 offer is not open.' }, 400, origin);
   const referralCode = String(data.referral_code || '').toUpperCase();
-  if (first20 && referralCode) return json({ error: 'This limited offer cannot be combined with a referral offer.' }, 400, origin);
+  if ((first20 || first5) && referralCode) return json({ error: 'This limited offer cannot be combined with a referral offer.' }, 400, origin);
   if (first20) {
     try { await first20Price(env); await first20Coupon(env); }
     catch { return json({ error: 'The limited $5 offer is unavailable or has filled. Please choose a current plan.' }, 409, origin); }
+  }
+  if (first5) {
+    try { await discordFirst5Coupon(env); }
+    catch { return json({ error: 'The $5 first-month offer is unavailable or has filled.' }, 409, origin); }
   }
   let referralOwner = null;
   if (data.offer === 'referral_trial' || (['first_month_back', 'monthly'].includes(data.offer) && referralCode)) {
@@ -1957,7 +1995,7 @@ async function prepareCheckout(request, env, origin) {
     body: {
       public_token_hash: await sha256Text(token), offer: data.offer,
       referral_code: referralOwner ? referralCode : null,
-      analytics_session_id: sessionId, attribution: { ...cleanAttribution(data.attribution), ...(first20 ? { promotion: 'first20' } : {}) },
+      analytics_session_id: sessionId, attribution: { ...cleanAttribution(data.attribution), ...(first20 ? { promotion: 'first20' } : {}), ...(first5 ? { promotion: 'discord_first5' } : {}) },
       expires_at: new Date(Date.now() + CHECKOUT_ASSOCIATION_TTL_MS).toISOString(),
     },
   });
@@ -1970,12 +2008,14 @@ async function prepareCheckout(request, env, origin) {
 
 async function createAssociatedCheckout(env, association, publicToken, discordUserId) {
   const first20 = association.offer === 'first_month_back' && association.attribution?.promotion === 'first20';
-  if (association.offer === 'first_month_back' && !first20 && !firstMonthBackActive()) throw new Error('The first-month offer has ended. Please choose a current plan.');
+  const first5 = association.offer === 'first_month_back' && association.attribution?.promotion === 'discord_first5';
+  if (association.offer === 'first_month_back' && !first20 && !first5 && !firstMonthBackActive()) throw new Error('The first-month offer has ended. Please choose a current plan.');
   if (first20 && !first20Active()) throw new Error('The limited $5 offer has ended. Please choose a current plan.');
   if (first20) {
     try { await first20Price(env); await first20Coupon(env); }
     catch { throw new Error('The limited $5 offer is unavailable or has filled. Please choose a current plan.'); }
   }
+  if (first5) await discordFirst5Coupon(env);
   const longTerm = ['six_month', 'annual'].includes(association.offer);
   const priceId = association.offer === 'six_month' ? env.STRIPE_SIX_MONTH_PRICE_ID
     : association.offer === 'annual' ? env.STRIPE_ANNUAL_PRICE_ID : env.STRIPE_MONTHLY_PRICE_ID;
@@ -1990,9 +2030,9 @@ async function createAssociatedCheckout(env, association, publicToken, discordUs
     'subscription_data[metadata][offer]': association.offer,
     'subscription_data[metadata][checkout_association_id]': association.id,
   };
-  if (first20) {
-    values['metadata[promotion]'] = 'first20';
-    values['subscription_data[metadata][promotion]'] = 'first20';
+  if (first20 || first5) {
+    values['metadata[promotion]'] = first5 ? 'discord_first5' : 'first20';
+    values['subscription_data[metadata][promotion]'] = first5 ? 'discord_first5' : 'first20';
   }
   if (!longTerm && association.offer !== 'first_month_back') {
     values['subscription_data[trial_period_days]'] = association.offer === 'starter' ? 7 : 2;
@@ -2015,7 +2055,7 @@ async function createAssociatedCheckout(env, association, publicToken, discordUs
     values['line_items[1][price]'] = env.STRIPE_STARTER_PRICE_ID;
     values['line_items[1][quantity]'] = 1;
   }
-  if (association.offer === 'first_month_back') values['discounts[0][coupon]'] = first20 ? await first20Coupon(env) : await firstMonthBackCoupon(env);
+  if (association.offer === 'first_month_back') values['discounts[0][coupon]'] = first5 ? await discordFirst5Coupon(env) : first20 ? await first20Coupon(env) : await firstMonthBackCoupon(env);
   const checkout = await stripe(env, '/checkout/sessions', values, { idempotencyKey: `precheckout-${association.id}`, clientRequestId: association.id });
   await updateCheckoutAssociation(env, association.id, { stripe_checkout_session_id: checkout.id, status: 'CHECKOUT_STARTED' }, ['DISCORD_VERIFIED']);
   await recordAnalyticsEvent(env, {
@@ -2029,6 +2069,7 @@ async function createCheckout(request, env, origin) {
   let data;
   try { data = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400, origin); }
   if (!MEMBERSHIP_OFFERS.has(data.offer)) return json({ error: 'Choose an available membership offer.' }, 400, origin);
+  if (discordFirst5Deal(data.offer, data.deal)) return json({ error: 'Connect your existing KBH Discord account through the member offer page.' }, 400, origin);
   const first20 = data.offer === 'first_month_back' && data.deal === 'first20';
   if (data.offer === 'first_month_back' && !first20 && !firstMonthBackActive()) return json({ error: 'The first-month offer has ended.' }, 400, origin);
   if (first20 && !first20Active()) return json({ error: 'The limited $5 offer is not open.' }, 400, origin);
@@ -2545,7 +2586,7 @@ function memberWelcomeMessage(session, subscription, env) {
   if (offer !== subscription.metadata?.offer) return null;
   const plans = {
     starter: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — $10 first 7 days'],
-    first_month_back: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, session.metadata?.promotion === 'first20' ? 'Monthly membership — $5 first month' : 'Monthly membership — $19.99 first month'],
+    first_month_back: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, ['first20', 'discord_first5'].includes(session.metadata?.promotion) ? 'Monthly membership — $5 first month' : 'Monthly membership — $19.99 first month'],
     monthly: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, subscription.status === 'trialing' ? 'Monthly membership — 2 days free, then $32.99/month' : 'Monthly membership — $32.99 per month'],
     trial_2_day: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — 2 days free'],
     referral_trial: [env.STRIPE_MONTHLY_PRICE_ID, 3299, 1, 'Monthly membership — 2 days free'],
@@ -4015,6 +4056,10 @@ export default {
     if (request.method === 'GET' && url.pathname === '/promotions/first20') {
       const limited = await checkoutRateLimitResponse(request, env, origin);
       return limited || json(await first20Status(env), 200, origin);
+    }
+    if (request.method === 'GET' && url.pathname === '/promotions/discord-first5') {
+      const limited = await checkoutRateLimitResponse(request, env, origin);
+      return limited || json(await discordFirst5Status(env), 200, origin);
     }
     if (url.pathname.startsWith('/ops/member-welcomes')) {
       return handleMemberWelcomeQueue(request, env);
