@@ -68,6 +68,35 @@ const clearCheckoutRequestId = (offer) => {
   try { window.sessionStorage.removeItem(checkoutRequestStorageKey(offer)); } catch { /* Browser storage may be unavailable. */ }
 };
 const checkoutState = new URLSearchParams(window.location.search).get('checkout');
+const discordFirst5 = new URLSearchParams(window.location.search).get('deal') === 'discord-first5' && !checkoutState;
+if (discordFirst5) {
+  const button = document.querySelector('[data-primary-membership-checkout]');
+  const terms = document.querySelector('[data-primary-membership-terms]');
+  const note = document.querySelector('.scene-renewal-note');
+  const promise = document.querySelector('.scene-promise');
+  const cardLabel = document.querySelector('.membership-card-promo span');
+  if (button && terms && note) {
+    button.dataset.checkout = 'first_month_back';
+    button.dataset.deal = 'discord_first5';
+    button.textContent = 'Join for $5 first month →';
+    if (promise) promise.textContent = '$5 first month for the first five eligible Discord members.';
+    setCheckoutMessage('Connect your KBH Discord account first, then review the $5 first-month charge and $32.99 monthly renewal in Stripe. VIP access follows successful payment.');
+    terms.textContent = 'For the first five eligible Discord members: $5 today, then $32.99 billed monthly until canceled. No free trial. Card required.';
+    note.textContent = 'First-month offer is limited to five redemptions, for new VIP members already in the free KBH Discord. Cancel before renewal to avoid the next $32.99 monthly charge. Not combined with referral offers.';
+    if (cardLabel) cardLabel.textContent = '$5 first month for eligible Discord members. View membership →';
+    const otherPlans = document.querySelector('.scene-other');
+    if (otherPlans) otherPlans.hidden = true;
+    fetch(`${membershipConfig?.workerOrigin || ''}/promotions/discord-first5`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((status) => {
+        if (status?.ready === true) return;
+        button.disabled = true;
+        button.textContent = 'Offer unavailable';
+        setCheckoutMessage('The $5 first-month offer is unavailable or has filled. Open the standard membership page to see current plans.');
+      })
+      .catch(() => { button.disabled = true; setCheckoutMessage('Offer status could not be verified. Try again later.'); });
+  }
+}
 const checkoutSession = new URLSearchParams(window.location.search).get('session_id')
   || (checkoutState === 'success' && typeof window.history?.state?.kbhCheckoutSession === 'string' ? window.history.state.kbhCheckoutSession : null);
 if (checkoutSession) {
@@ -132,6 +161,7 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
       headers: { 'Content-Type': 'application/json', 'X-Checkout-Request-Id': requestId },
       body: JSON.stringify({
         offer,
+        ...(button.dataset.deal === 'discord_first5' ? { deal: 'discord_first5' } : {}),
         ...(offer === 'monthly' && referralCode ? { referral_code: referralCode } : {}),
         analytics_session_id: window.KBHConsent?.allowed() ? window.KBHAnalytics?.sessionId || null : null,
         attribution: window.KBHConsent?.allowed() ? window.KBHAnalytics?.attribution || {} : {},
