@@ -285,20 +285,31 @@ async function resolveStraightWager(row, fetchImpl) {
   if (opposedMoneyline) names.push(compact(opposedMoneyline[2]));
   // A total requires both teams; a team-total or player prop is not a game total.
   const teamTotal = /\bteam total\b/i.test(selection);
-  if (total && !moneyline && !spread && names.length !== (teamTotal ? 1 : 2)) return null;
+  const joinedTotal = Boolean(total && !moneyline && !spread && !teamTotal && names.length === 1 && /^[A-Za-z .'-]+$/.test(prefix) && /\b(?:over|under)\s+\d+(?:\.\d+)?(?:\s+\(?[+-]\d{3,4}\)?)?(?:\s+\(?\d+(?:\.\d+)?\s*u(?:nits?)?\)?)?$/i.test(selection));
+  if (total && !moneyline && !spread && !joinedTotal && names.length !== (teamTotal ? 1 : 2)) return null;
   if ((!total || moneyline || spread) && !firstInning && !btts && names.length !== (opposedMoneyline ? 2 : 1)) return null;
   if (firstInning && names.length !== 2) return null;
   if (btts && names.length !== 2) return null;
   const known = leagueFor(row);
+  if (joinedTotal && !known && !row.league_from_group && `${row.league || ''}${row.sport || ''}`.trim()) return null;
   const candidates = [];
   for (const league of known ? [known] : Object.values(LEAGUES)) {
     const scoreboard = await getJson(scoreboardUrl(league, eventDate(row.operating_date)), fetchImpl);
+    // A capped or malformed feed cannot establish cross-league uniqueness.
+    if (joinedTotal && (!Array.isArray(scoreboard.events) || scoreboard.events.length >= (league === LEAGUES.ncaab ? 1000 : 100))) return null;
     for (const event of scoreboard.events || []) {
       const competitors = event.competitions?.[0]?.competitors || [];
       if (competitors.length !== 2) continue;
       const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, known === LEAGUES.nhl ? c.team?.location : '', ...([LEAGUES.ncaaf, LEAGUES.ncaab].includes(league) ? [c.team?.location, / State$/.test(c.team?.location || '') ? c.team.location.replace(/ State$/, ' St') : ''] : [])].map(compact).filter(Boolean));
       const matched = names.map(name => aliases.flatMap((values, index) => values.includes(name) ? [index] : []));
-      if (!matched.every(indices => indices.length === 1) || new Set(matched.flat()).size !== names.length) continue;
+      if (joinedTotal) {
+        // Match the entire prefix as two separate official aliases, not substring
+        // hits, guessed spellings, or two aliases of the same competitor.
+        const exactAliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name].filter(Boolean).map(value => words(value).trim()).filter(value => value.length >= 2));
+        const target = words(prefix).trim();
+        const pair = exactAliases[0].some(a => exactAliases[1].some(b => a !== b && (target === `${a} ${b}` || target === `${b} ${a}`)));
+        if (!pair) continue;
+      } else if (!matched.every(indices => indices.length === 1) || new Set(matched.flat()).size !== names.length) continue;
       const team = (moneyline || spread || teamTotal) && competitors[matched[0][0]];
       const resolvedTeam = team ? { id: String(team.team?.id || team.id || ''), displayName: team.team?.displayName || '' } : undefined;
       candidates.push({ league, event, resolvedTeam, market: moneyline ? 'Moneyline' : spread ? 'Spread' : firstInning ? 'First inning runs' : btts ? 'BTTS' : teamTotal ? 'Team total' : 'Full game total' });

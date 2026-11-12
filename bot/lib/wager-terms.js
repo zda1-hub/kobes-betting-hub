@@ -55,6 +55,12 @@ function normalizeSelection(value) {
 }
 
 function combinationSelections(selection) {
+  // A single quoted price/stake after two bare team names and a shared ML
+  // describes one moneyline combination. Do not invent prices for its legs.
+  const sharedMoneyline = String(selection || '').match(/^([A-Za-z][A-Za-z .'-]*?)\s+\+\s+([A-Za-z][A-Za-z .'-]*?)\s+(?:ML|moneyline)\s+\([+-]\d{3,4}\)(?:\s+\d+(?:\.\d+)?\s*U)?$/i);
+  if (sharedMoneyline && sharedMoneyline[1].toLowerCase().replace(/[^a-z]/g, '') !== sharedMoneyline[2].toLowerCase().replace(/[^a-z]/g, '') && !/\b(?:over|under|ML|moneyline|spread|points|rebounds|assists|parlay|teaser)\b/i.test(`${sharedMoneyline[1]} ${sharedMoneyline[2]}`)) {
+    return [`${sharedMoneyline[1]} ML`, `${sharedMoneyline[2]} ML`];
+  }
   const cleaned = basketballStatTerms(selection).replace(/^Parlay\s*\d*\s*:\s*/i, '')
     .replace(/\s*\([^)]*\bparlay\b[^)]*\)\s*$/i, '')
     .replace(/\bparlay\b/gi, '').trim();
