@@ -36,8 +36,38 @@ test('approval mode requires a private-channel ID and explicit cutover', () => {
   assert.equal(approvalConfig({}), null);
   assert.throws(() => approvalConfig({ FREE_PICK_RESULT_APPROVALS_ENABLED: 'true' }), /private review channel/);
   assert.deepEqual(approvalConfig({ FREE_PICK_RESULT_APPROVALS_ENABLED: 'true',
-    FREE_PICK_RESULT_REVIEW_CHANNEL_ID: '555', FREE_PICK_RESULT_APPROVAL_START_AT: '2026-11-10T00:00:00Z' }),
-  { reviewChannelId: '555', startAt: Date.parse('2026-11-10T00:00:00Z') });
+    SOCIAL_POST_APPROVAL_CHANNEL_ID: '555', PICK_APPROVAL_CHANNEL_ID: '444',
+    FREE_PICK_RESULT_APPROVAL_START_AT: '2026-11-10T00:00:00Z' }),
+  { reviewChannelId: '555', legacyReviewChannelId: '444', startAt: Date.parse('2026-11-10T00:00:00Z') });
+  assert.throws(() => approvalConfig({ FREE_PICK_RESULT_APPROVALS_ENABLED: 'true',
+    PICK_APPROVAL_CHANNEL_ID: '444', FREE_PICK_RESULT_APPROVAL_START_AT: '2026-11-10T00:00:00Z' }),
+  /private review channel/);
+});
+
+test('pending legacy result card moves to the social channel and old buttons are disabled', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-result-migration-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const old = fakeChannel();
+  const social = fakeChannel();
+  const channels = { '444': old.channel, '555': social.channel };
+  const config = { reviewChannelId: '444', startAt: 0 };
+  const args = { root, freePickChannelId: '456', reviewerIds: new Set(['kobe', 'owner']), guildId: '123',
+    rowsFor: async () => [row], environment, channelFor: async id => channels[id] };
+  await createFreePickResultApprovals({ ...args, config }).scan([row]);
+  const oldMessage = [...old.saved.values()][0];
+  const oldStateFile = (await fs.readdir(root)).find(name => name.endsWith('.json') && name !== 'opener-rotation.json');
+  const oldState = JSON.parse(await fs.readFile(path.join(root, oldStateFile), 'utf8'));
+  delete oldState.channelId; // Production cards created before channel tracking was added.
+  await fs.writeFile(path.join(root, oldStateFile), JSON.stringify(oldState));
+  const migrated = createFreePickResultApprovals({ ...args,
+    config: { reviewChannelId: '555', legacyReviewChannelId: '444', startAt: 0 } });
+  const receipt = await migrated.scan([row]);
+  assert.equal(receipt[0].migrated, true);
+  assert.equal(social.saved.size, 1);
+  assert.equal(oldMessage.components[0].components[0].disabled, true);
+  assert.equal((await migrated.scan([row])).length, 0);
+  await assert.rejects(migrated.decide({ customId: oldMessage.components[0].components[0].custom_id,
+    userId: 'kobe', requestGuildId: '123', channelId: '444', messageId: oldMessage.id }), /private result review channel/);
 });
 
 test('optional opener cannot alter locked result facts or claim certainty', () => {

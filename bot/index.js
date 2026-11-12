@@ -251,6 +251,7 @@ if ((vipExpertPulseChannelId || vipExpertPulseApprovalChannelId) && !expertPulse
   console.error('VIP expert pulse is held: both private review and private destination channel IDs are required.');
 }
 const pickApprovalChannelId = process.env.PICK_APPROVAL_CHANNEL_ID;
+const socialPostApprovalChannelId = process.env.SOCIAL_POST_APPROVAL_CHANNEL_ID;
 const exclusivePickApprovalChannelId = exclusiveApprovalChannelId();
 const sourcesPath = path.join(__dirname, '..', 'data', 'twitter-sources.json');
 const pickWorkflowPath = path.join(__dirname, '..', 'data', 'pick-workflow.json');
@@ -296,11 +297,57 @@ async function submitApprovedCalendar({ slot, xText, bytes, approvedBy, evidence
   return { status: response.status, receipt };
 }
 
+async function calendarReviewMessages(channel, markerPrefix) {
+  const found = new Map();
+  let before;
+  for (let page = 0; page < 5; page += 1) {
+    const messages = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+    if (!messages.size) break;
+    for (const message of messages.values()) {
+      if (message.author?.id !== client.user.id) continue;
+      const marker = message.embeds?.[0]?.footer?.text;
+      if (marker?.startsWith(`${markerPrefix} `) && !found.has(marker)) found.set(marker, message);
+    }
+    if (messages.size < 100) break;
+    before = [...messages.keys()].reduce((oldest, id) => !oldest || BigInt(id) < BigInt(oldest) ? id : oldest, null);
+  }
+  return found;
+}
+
+function activeCalendarButtons(message) {
+  return message.components.some(row => row.toJSON().components.some(button => button.type === 2 && !button.disabled));
+}
+
+async function retireCalendarButtons(message) {
+  if (!activeCalendarButtons(message)) return;
+  await message.edit({ components: message.components.map(row => {
+    const copy = row.toJSON();
+    copy.components = copy.components.map(button => button.type === 2 ? { ...button, disabled: true } : button);
+    return copy;
+  }), allowedMentions: { parse: [] } });
+}
+
+async function legacyCalendarReviewMessages(markerPrefix) {
+  if (!pickApprovalChannelId || pickApprovalChannelId === socialPostApprovalChannelId) return new Map();
+  const channel = await client.channels.fetch(pickApprovalChannelId);
+  if (!channel?.isTextBased() || channel.guildId !== process.env.DISCORD_GUILD_ID)
+    throw new Error('Legacy pick approval channel is unavailable for social card migration.');
+  return calendarReviewMessages(channel, markerPrefix);
+}
+
+async function retireLegacyCalendarCards() {
+  for (const prefix of [CALENDAR_EDUCATION_MARKER, CALENDAR_EDITORIAL_MARKER]) {
+    const messages = await legacyCalendarReviewMessages(prefix);
+    for (const message of messages.values()) await retireCalendarButtons(message);
+  }
+}
+
 async function prepareCalendarEducationCards() {
-  if (!pickApprovalChannelId) throw new Error('PICK_APPROVAL_CHANNEL_ID is required for education review cards.');
-  const channel = await client.channels.fetch(pickApprovalChannelId, { force: true });
+  if (!socialPostApprovalChannelId) throw new Error('SOCIAL_POST_APPROVAL_CHANNEL_ID is required for education review cards.');
+  if (socialPostApprovalChannelId === pickApprovalChannelId) throw new Error('Social drafts require a separate channel from pick approvals.');
+  const channel = await client.channels.fetch(socialPostApprovalChannelId, { force: true });
   if (!channel?.isTextBased() || channel.guildId !== process.env.DISCORD_GUILD_ID || !/approval/i.test(channel.name || ''))
-    throw new Error('Education drafts need the configured private pick approval channel.');
+    throw new Error('Education drafts need the configured private social approval channel.');
   const everyone = channel.guild.roles.everyone;
   const websiteVip = channel.guild.roles.cache.get(recapWorkflow.website_vip_role_id);
   if (channel.permissionsFor(everyone)?.has(PermissionFlagsBits.ViewChannel)
@@ -312,22 +359,11 @@ async function prepareCalendarEducationCards() {
     throw new Error('Kobe Bot needs private education card and image permissions.');
   const drafts = await educationDrafts();
   if (!drafts.length) return { prepared: 0, existing: 0 };
-  const markers = new Set();
-  let before;
-  for (let page = 0; page < 5; page += 1) {
-    const messages = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
-    if (!messages.size) break;
-    for (const message of messages.values()) {
-      if (message.author?.id !== client.user.id) continue;
-      const marker = message.embeds?.[0]?.footer?.text;
-      if (marker?.startsWith(`${CALENDAR_EDUCATION_MARKER} `)) markers.add(marker);
-    }
-    if (messages.size < 100) break;
-    before = [...messages.keys()].reduce((oldest, id) => !oldest || BigInt(id) < BigInt(oldest) ? id : oldest, null);
-  }
+  const markers = await calendarReviewMessages(channel, CALENDAR_EDUCATION_MARKER);
+  const legacy = await legacyCalendarReviewMessages(CALENDAR_EDUCATION_MARKER);
   let prepared = 0, existing = 0;
   for (const draft of drafts) {
-    if (markers.has(draft.marker)) { existing++; continue; }
+    if (markers.has(draft.marker) || (legacy.has(draft.marker) && !activeCalendarButtons(legacy.get(draft.marker)))) { existing++; continue; }
     await channel.send(educationReviewPayload(draft));
     prepared++;
   }
@@ -335,10 +371,11 @@ async function prepareCalendarEducationCards() {
 }
 
 async function prepareCalendarEditorialCards() {
-  if (!pickApprovalChannelId) throw new Error('PICK_APPROVAL_CHANNEL_ID is required for editorial review cards.');
-  const channel = await client.channels.fetch(pickApprovalChannelId, { force: true });
+  if (!socialPostApprovalChannelId) throw new Error('SOCIAL_POST_APPROVAL_CHANNEL_ID is required for editorial review cards.');
+  if (socialPostApprovalChannelId === pickApprovalChannelId) throw new Error('Social drafts require a separate channel from pick approvals.');
+  const channel = await client.channels.fetch(socialPostApprovalChannelId, { force: true });
   if (!channel?.isTextBased() || channel.guildId !== process.env.DISCORD_GUILD_ID || !/approval/i.test(channel.name || ''))
-    throw new Error('Editorial drafts need the configured private pick approval channel.');
+    throw new Error('Editorial drafts need the configured private social approval channel.');
   const everyone = channel.guild.roles.everyone;
   const websiteVip = channel.guild.roles.cache.get(recapWorkflow.website_vip_role_id);
   if (channel.permissionsFor(everyone)?.has(PermissionFlagsBits.ViewChannel)
@@ -350,22 +387,11 @@ async function prepareCalendarEditorialCards() {
     throw new Error('Kobe Bot needs private editorial card and image permissions.');
   const drafts = await editorialDrafts();
   if (!drafts.length) return { prepared: 0, existing: 0 };
-  const markers = new Set();
-  let before;
-  for (let page = 0; page < 5; page += 1) {
-    const messages = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
-    if (!messages.size) break;
-    for (const message of messages.values()) {
-      if (message.author?.id !== client.user.id) continue;
-      const marker = message.embeds?.[0]?.footer?.text;
-      if (marker?.startsWith(`${CALENDAR_EDITORIAL_MARKER} `)) markers.add(marker);
-    }
-    if (messages.size < 100) break;
-    before = [...messages.keys()].reduce((oldest, id) => !oldest || BigInt(id) < BigInt(oldest) ? id : oldest, null);
-  }
+  const markers = await calendarReviewMessages(channel, CALENDAR_EDITORIAL_MARKER);
+  const legacy = await legacyCalendarReviewMessages(CALENDAR_EDITORIAL_MARKER);
   let prepared = 0, existing = 0;
   for (const draft of drafts) {
-    if (markers.has(draft.marker)) { existing++; continue; }
+    if (markers.has(draft.marker) || (legacy.has(draft.marker) && !activeCalendarButtons(legacy.get(draft.marker)))) { existing++; continue; }
     await channel.send(editorialReviewPayload(draft));
     prepared++;
   }
@@ -3183,15 +3209,16 @@ client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
   try { await ensureWriteupRecapReviewChannel(); }
   catch (error) { console.error('Private writeup recap review channel needs attention:', error.message); }
-  void prepareCalendarEducationCards()
-    .then(receipt => console.log('Private education calendar draft receipts:', JSON.stringify(receipt)))
-    .catch(error => console.error('Private education calendar drafts need attention:', error.message));
+  void Promise.all([prepareCalendarEducationCards(), prepareCalendarEditorialCards()])
+    .then(async ([education, editorial]) => {
+      console.log('Private education calendar draft receipts:', JSON.stringify(education));
+      console.log('Private editorial calendar draft receipts:', JSON.stringify(editorial));
+      await retireLegacyCalendarCards();
+    })
+    .catch(error => console.error('Private social calendar drafts need attention:', error.message));
   setInterval(() => void prepareCalendarEducationCards()
     .then(receipt => { if (receipt.prepared) console.log('Private education calendar draft receipts:', JSON.stringify(receipt)); })
     .catch(error => console.error('Private education calendar drafts need attention:', error.message)), 6 * 60 * 60 * 1000);
-  void prepareCalendarEditorialCards()
-    .then(receipt => console.log('Private editorial calendar draft receipts:', JSON.stringify(receipt)))
-    .catch(error => console.error('Private editorial calendar drafts need attention:', error.message));
   setInterval(() => void prepareCalendarEditorialCards()
     .then(receipt => { if (receipt.prepared) console.log('Private editorial calendar draft receipts:', JSON.stringify(receipt)); })
     .catch(error => console.error('Private editorial calendar drafts need attention:', error.message)), 6 * 60 * 60 * 1000);
@@ -3390,7 +3417,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.deferReply({ ephemeral: true });
       const action = parseEditorialButton(interaction.customId);
       if (!action || interaction.guildId !== process.env.DISCORD_GUILD_ID
-        || interaction.channelId !== pickApprovalChannelId || !calendarApproverIds.has(interaction.user.id)
+        || interaction.channelId !== socialPostApprovalChannelId || !calendarApproverIds.has(interaction.user.id)
         || interaction.message.author?.id !== client.user.id)
         throw new Error('Only Kobe or the KBH owner can decide an authentic private editorial draft.');
       if (calendarEditorialDecisionsInFlight.has(interaction.message.id)) throw new Error('This draft decision is already in progress.');
@@ -3428,7 +3455,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.deferReply({ ephemeral: true });
       const action = parseEducationButton(interaction.customId);
       if (!action || interaction.guildId !== process.env.DISCORD_GUILD_ID
-        || interaction.channelId !== pickApprovalChannelId || !calendarApproverIds.has(interaction.user.id)
+        || interaction.channelId !== socialPostApprovalChannelId || !calendarApproverIds.has(interaction.user.id)
         || interaction.message.author?.id !== client.user.id)
         throw new Error('Only Kobe or the KBH owner can decide an authentic private education draft.');
       if (calendarEducationDecisionsInFlight.has(interaction.message.id)) throw new Error('This draft decision is already in progress.');
