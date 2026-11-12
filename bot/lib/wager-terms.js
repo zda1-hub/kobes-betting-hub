@@ -11,8 +11,10 @@ function leadingWagerTerms(value) {
       .replace(/^\((?:\d+(?:\.\d+)?|\.\d+)\s*u(?:nits?)?\)\s+/i, '')
       .replace(/^(?:\d+(?:\.\d+)?|\.\d+)\s*(?:U\b|units?\b|\*|%)\s*(?:(?:-|,)\s*)?/i, '')
       .replace(/^\d{1,4}(?::\d{2})?\s*(?:am|pm)\s+/i, '')
-      .replace(/^(CFB|NCAAF|NFL|MLB)\b\s*:?\s*/i, (_, league) => {
-        leagues.add(league.toUpperCase() === 'CFB' ? 'NCAAF' : league.toUpperCase());
+      .replace(/^Early\s+(?=CBB\b)/i, '')
+      .replace(/^(?:\((CFB|CBB|NCAAF|NCAAB|NFL|NBA|WNBA|NHL|MLB)\)|((?:CFB|CBB|NCAAF|NCAAB|NFL|NBA|WNBA|NHL|MLB))(?=\s|:|$))\s*:?\s*(?:(?:PLAY|Add)\b\s*)?/i, (_, parenthesized, bare) => {
+        const league = (parenthesized || bare).toUpperCase();
+        leagues.add(({ CFB: 'NCAAF', CBB: 'NCAAB' })[league] || league);
         return '';
       })
       .replace(/^Moneyline of the day\s*-\s*/i, '')
@@ -22,8 +24,16 @@ function leadingWagerTerms(value) {
   return { selection, league: leagues.size === 1 ? [...leagues][0] : '', conflictingLeagues: leagues.size > 1 };
 }
 
+// Normalize only stat terms after a numeric player threshold, never names.
+function basketballStatTerms(value) {
+  return String(value).replace(/((?:\b(?:over|under)\s+\d+(?:\.\d+)?|\b\d+\+)\s+(?:total\s+)?)([A-Za-z]+(?:\s*\+\s*[A-Za-z]+)*)/gi, (_, prefix, market) => {
+    const aliases = { pts:'points', pt:'points', reb:'rebounds', rebs:'rebounds', ast:'assists', asts:'assists' };
+    return prefix + market.split(/(\s*\+\s*)/).map(term => aliases[term.toLowerCase()] || term).join('');
+  });
+}
+
 function normalizeSelection(value) {
-  return leadingWagerTerms(value).selection
+  const normalized = leadingWagerTerms(value).selection
     .replace(/^(?:\d+(?:\.\d+)?|\.\d+)\s*(?:U\s*-|u\s*-|\*|%|units?\s+(?:NFL|MLB|CFB)\s*:?)\s*/i, '')
     .replace(/^\d{1,4}(?::\d{2})?\s*(?:am|pm)\s+/i, '')
     .replace(/\b([ou])\s*(\d+(?:\.\d+)?)/gi, (_, side, line) => `${side.toLowerCase() === 'o' ? 'Over' : 'Under'} ${line}`)
@@ -39,11 +49,13 @@ function normalizeSelection(value) {
     .replace(/^(.+?)\s+\(([+-]\d{1,2}(?:\.\d+)?)\)(?=\s|$)/, '$1 $2')
     .replace(/\((?:[A-Z]{2,3})\)\s*(?=Over|Under|Anytime|\d+\+)/gi, '')
     .replace(/\s+@\s+/g, ' at ')
+    .replace(/([+-]\d{3,4})\.$/, '$1')
     .replace(/\s+/g, ' ').trim();
+  return basketballStatTerms(normalized);
 }
 
 function combinationSelections(selection) {
-  const cleaned = selection.replace(/^Parlay\s*\d*\s*:\s*/i, '')
+  const cleaned = basketballStatTerms(selection).replace(/^Parlay\s*\d*\s*:\s*/i, '')
     .replace(/\s*\([^)]*\bparlay\b[^)]*\)\s*$/i, '')
     .replace(/\bparlay\b/gi, '').trim();
   const parts = [];

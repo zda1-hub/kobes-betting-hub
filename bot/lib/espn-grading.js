@@ -95,6 +95,7 @@ function athleteEntries(summary) {
     (group.athletes || []).map((athlete) => ({
       name: athlete.athlete?.displayName || '',
       athleteId: athlete.athlete?.id || '',
+      didNotPlay: athlete.didNotPlay === true,
       category: group.type || group.name || group.displayName || '',
       values: Object.fromEntries((group.keys || []).map((key, index) => [key, athlete.stats?.[index]]))
     }))
@@ -102,7 +103,7 @@ function athleteEntries(summary) {
 }
 
 function selectedPlayerPrefix(row) {
-  return String(row.selection || '').split(/\b(?:over|under|longest|anytime|first TD|1st TD|first touchdown|passing|rushing|receiving|pass attempts|pass completions|carries|receptions|targets|field goals)\b|\s\d+(?:\.\d+)?\+/i)[0].trim();
+  return String(row.selection || '').split(/\b(?:(?:to record (?:a )?)?double[- ]double|over|under|longest|anytime|first TD|1st TD|first touchdown|passing|rushing|receiving|pass attempts|pass completions|carries|receptions|targets|field goals)\b|\s\d+(?:\.\d+)?\+/i)[0].trim();
 }
 function selectedPlayerName(row) {
   return compact(selectedPlayerPrefix(row));
@@ -157,7 +158,7 @@ function statSpec(row, entries) {
     // Do not silently grade a supported fragment of an unsupported sum.
     const prefix = String(row.selection || '').slice(0, combinedStats.index);
     const remainder = String(row.selection || '').slice(combinedStats.index + combinedStats[0].length);
-    if (/\+\s*$/.test(prefix) || /^\s*\+/.test(remainder)) return null;
+    if (/\b[a-z]+\s*\+\s*$/i.test(prefix) || /^\s*\+/.test(remainder)) return null;
     const keys = combinedStats[0].toLowerCase().split(/\s*\+\s*/);
     if (keys.length > 3 || new Set(keys).size !== keys.length) return null;
     return { ...pick('basketball', keys, keys.join(' + ')), sum: true };
@@ -298,7 +299,7 @@ async function resolveStraightWager(row, fetchImpl) {
       const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, known === LEAGUES.nhl ? c.team?.location : '', ...([LEAGUES.ncaaf, LEAGUES.ncaab].includes(league) ? [c.team?.location, / State$/.test(c.team?.location || '') ? c.team.location.replace(/ State$/, ' St') : ''] : [])].map(compact).filter(Boolean));
       const matched = names.map(name => aliases.flatMap((values, index) => values.includes(name) ? [index] : []));
       if (!matched.every(indices => indices.length === 1) || new Set(matched.flat()).size !== names.length) continue;
-      const team = (moneyline || spread) && competitors[matched[0][0]];
+      const team = (moneyline || spread || teamTotal) && competitors[matched[0][0]];
       const resolvedTeam = team ? { id: String(team.team?.id || team.id || ''), displayName: team.team?.displayName || '' } : undefined;
       candidates.push({ league, event, resolvedTeam, market: moneyline ? 'Moneyline' : spread ? 'Spread' : firstInning ? 'First inning runs' : btts ? 'BTTS' : teamTotal ? 'Team total' : 'Full game total' });
     }
@@ -323,8 +324,10 @@ async function resolvePlayerWager(row, fetchImpl) {
       const scoreboard = await getJson(scoreboardUrl(league, date), fetchImpl);
       const events = scoreboard.events || [];
       scheduled += events.length;
-      // No partial scan: if a slate exceeds the safe limit, exact event identity is required.
-      if (events.length > 40) return null;
+      // Complete cross-league scan, bounded to 100 events total. The full Division I
+      // slate commonly exceeds 40; never discard uniqueness checking or use only
+      // the first league. Larger slates still require exact event identity.
+      if (scheduled > 100) return null;
       for (const event of events) {
         if (!event.id) continue;
         const summary = await getJson(`${ESPN_BASE_URL}/${league.path}/summary?event=${event.id}`, fetchImpl);
@@ -492,7 +495,7 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
       return finish({ result: (/BTTS\s*(?:no|false)/i.test(terms) ? !both : both) ? 'W' : 'L', outcome: `90-minute BTTS: ${scores.join('–')}` });
     }
   }
-  const special = specialMarketGrade(row, summary, league.path);
+  const special = specialMarketGrade(row, summary, league.path, resolved?.resolvedTeam);
   if (special) return special.status === 'PENDING' ? special : finish(special);
   const moneyline = moneylineGrade(row, summary, resolved?.resolvedTeam);
   if (moneyline) return finish(moneyline);
@@ -500,6 +503,16 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
   if (gameTotal) return finish(gameTotal);
   const spread = spreadGrade(row, summary, resolved?.resolvedTeam);
   if (spread) return finish(spread);
+  if (/\bdouble[- ]double\b/i.test(row.selection)) {
+    if (!league.path.startsWith('basketball/') || !/^.+?\s+(?:to record (?:a )?)?double[- ]double(?:\s+(?:yes))?(?:\s*\([+-]\d{3,4}\))?(?:\s+[+-]\d{3,4})?(?:\s+\d+(?:\.\d+)?u)?\s*$/i.test(row.selection)) return { status:'PENDING', reason:'Double-double requires an explicit positive full-game player market.' };
+    const entries = athleteEntries(summary).filter(entry=>playerNameMatches(selectedPlayerPrefix(row),entry.name));
+    if (entries.length !== 1) return { status:'PENDING', reason:'Double-double requires one exact player box-score entry.' };
+    const entry = entries[0], keys = ['points','rebounds','assists','steals','blocks'];
+    const values = keys.map(key=>statValue(entry,key));
+    if (entry.didNotPlay || !(statValue(entry,'minutes') > 0) || values.some(value=>!Number.isInteger(value)||value<0)) return { status:'PENDING', reason:'Double-double requires participation and all five final numeric statistics.' };
+    const count = values.filter(value=>value>=10).length;
+    return finish({ result:count>=2?'W':'L', outcome:`${entry.name}: ${keys.map((key,i)=>`${values[i]} ${key}`).join(', ')}; ${count} double-digit categories` });
+  }
   const comparison = directionAndLine(row);
   if (!comparison) return { status: 'PENDING', reason: 'No clear over/under line was found.' };
   const spec = statSpec(row, athleteEntries(summary));

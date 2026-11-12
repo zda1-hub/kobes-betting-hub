@@ -8,7 +8,14 @@ function pending(reason) { return { status: 'PENDING', reason }; }
 function compare(actual, direction, line) {
   return actual === line ? 'P' : (direction.toLowerCase() === 'over' ? actual > line : actual < line) ? 'W' : 'L';
 }
-function selectedTeam(selection, competitors) {
+function selectedTeam(selection, competitors, resolvedTeam) {
+  // Use only the uniquely resolved scoreboard identity, never a first-team guess.
+  if (resolvedTeam?.id || resolvedTeam?.displayName) {
+    const exact = competitors.filter(c => resolvedTeam.id
+      ? String(c.team?.id || c.id || '') === String(resolvedTeam.id)
+      : compact(c.team?.displayName) === compact(resolvedTeam.displayName));
+    return exact.length === 1 ? exact[0] : null;
+  }
   const prefix = compact(String(selection).split(/\b(?:ML|moneyline|over|under|team total|F5|1H|2H|first half|second half|first five)\b|\s[+-]\d/i)[0]);
   const matches = competitors.filter(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name]
     .map(compact).filter(Boolean).includes(prefix));
@@ -24,12 +31,12 @@ function periodScores(competitors, start, end) {
   });
   return scores.every(Number.isFinite) ? scores : null;
 }
-function specialMarketGrade(row, summary, leaguePath) {
+function specialMarketGrade(row, summary, leaguePath, resolvedTeam) {
   const text = `${row.selection || ''} ${row.market || ''} ${row.published_line || ''}`;
   const competitors = summary.header?.competitions?.[0]?.competitors || [];
   if (leaguePath.startsWith('soccer/') && /\b(?:ML|moneyline)\b/i.test(text)) {
     if (/draw no bet|double chance|to qualify|advance|asian/i.test(text)) return pending('This soccer market requires its original settlement rules.');
-    const team = selectedTeam(row.selection, competitors);
+    const team = selectedTeam(row.selection, competitors, resolvedTeam);
     const scores = competitors.map(c => number(c.score));
     if (!team || scores.length !== 2 || !scores.every(Number.isFinite)) return pending('Exact soccer team and final goal scores are required.');
     const index = competitors.indexOf(team);
@@ -39,7 +46,7 @@ function specialMarketGrade(row, summary, leaguePath) {
   const nrfi = /\b(?:NRFI|YRFI)\b/i.test(text);
   if (!period && /\bteam total\b/i.test(text)) {
     const comparison = text.match(/\b(over|under)\s*(\d+(?:\.\d+)?)/i);
-    const team = selectedTeam(row.selection, competitors);
+    const team = selectedTeam(row.selection, competitors, resolvedTeam);
     const score = number(team?.score);
     if (!comparison || !team || !Number.isFinite(score)) return pending('An exact team and final numeric score are required for this team total.');
     return { result: compare(score, comparison[1], Number(comparison[2])), outcome: `${team.team.displayName} team total: ${score}` };
@@ -62,7 +69,7 @@ function specialMarketGrade(row, summary, leaguePath) {
     if (second && !/regulation only|excludes overtime/i.test(text)) return pending('Second-half overtime treatment needs the original sportsbook rules.');
     if (nrfi) return { result: (/\bNRFI\b/i.test(text) ? total === 0 : total > 0) ? 'W' : 'L', outcome: `${label}: ${total} runs` };
     const comparison = text.match(/\b(over|under)\s*(\d+(?:\.\d+)?)/i);
-    const team = selectedTeam(row.selection, competitors);
+    const team = selectedTeam(row.selection, competitors, resolvedTeam);
     if (comparison) {
       if (!/\btotal\b/i.test(row.market || '') && !/\b(?:game|match|team) total\b/i.test(text) && !/\b(?:vs|at)\b|\//i.test(row.selection || '')) return pending('A period total must explicitly identify a game total or team total.');
       const teamTotal = /\bteam total\b/i.test(text);
