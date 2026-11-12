@@ -272,6 +272,7 @@ async function resolveStraightWager(row, fetchImpl) {
   // conventional moneyline shorthand, not a spread. Resolve the team uniquely
   // on the exact date before accepting it; never treat bare team names as ML.
   const opposedMoneyline = selection.match(/^([A-Za-z .'-]+)\s+(?:\([+-]\d{3,4}\)|[+-]\d{3,4})\s+over\s+([A-Za-z .'-]+)(?:\s+\(\d+(?:\.\d+)?-?UNITS?\))?$/i);
+  const opposedSpread = selection.match(/^([A-Za-z .'-]+)\s+([+-]\d{1,2}(?:\.\d+)?)\s+over\s+([A-Za-z .'-]+)(?:\s+\(\d+(?:\.\d+)?-?UNITS?\))?$/i);
   const moneyline = selection.match(/^(.+?)\s+(?:ML|moneyline)(?:\s|$)/i)
     || selection.match(/^([A-Za-z .'-]+)\s+(?:\([+-]\d{3,4}\)|[+-]\d{3,4})(?:\s*(?:\(\d+(?:\.\d+)?\s*U\)|\d+(?:\.\d+)?\s*U))?$/i)
     || opposedMoneyline;
@@ -283,11 +284,12 @@ async function resolveStraightWager(row, fetchImpl) {
   if (!prefix) return null;
   const names = prefix.split(/\s*(?:\/|\bvs\.?\b|\bat\b)\s*/i).map(compact);
   if (opposedMoneyline) names.push(compact(opposedMoneyline[2]));
+  if (opposedSpread) names.push(compact(opposedSpread[3]));
   // A total requires both teams; a team-total or player prop is not a game total.
   const teamTotal = /\bteam total\b/i.test(selection);
   const joinedTotal = Boolean(total && !moneyline && !spread && !teamTotal && names.length === 1 && /^[A-Za-z .'-]+$/.test(prefix) && /\b(?:over|under)\s+\d+(?:\.\d+)?(?:\s+\(?[+-]\d{3,4}\)?)?(?:\s+\(?\d+(?:\.\d+)?\s*u(?:nits?)?\)?)?$/i.test(selection));
   if (total && !moneyline && !spread && !joinedTotal && names.length !== (teamTotal ? 1 : 2)) return null;
-  if ((!total || moneyline || spread) && !firstInning && !btts && names.length !== (opposedMoneyline ? 2 : 1)) return null;
+  if ((!total || moneyline || spread) && !firstInning && !btts && names.length !== (opposedMoneyline || opposedSpread ? 2 : 1)) return null;
   if (firstInning && names.length !== 2) return null;
   if (btts && names.length !== 2) return null;
   const known = leagueFor(row);
@@ -301,6 +303,15 @@ async function resolveStraightWager(row, fetchImpl) {
       const competitors = event.competitions?.[0]?.competitors || [];
       if (competitors.length !== 2) continue;
       const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, known === LEAGUES.nhl ? c.team?.location : '', ...([LEAGUES.ncaaf, LEAGUES.ncaab].includes(league) ? [c.team?.location, / State$/.test(c.team?.location || '') ? c.team.location.replace(/ State$/, ' St') : ''] : [])].map(compact).filter(Boolean));
+      if (opposedMoneyline || opposedSpread) {
+        competitors.forEach((c,index)=>{
+          // Exact official components from the SAME team, not fuzzy token hits.
+          for(const place of [c.team?.location,c.team?.abbreviation]) for(const nick of [c.team?.name,c.team?.shortDisplayName]) if(place&&nick) aliases[index].push(compact(`${place} ${nick}`));
+          // Official Cleveland brand: https://www.nba.com/cavaliers/ uses “Cavs”.
+          // Keep this alias bound to NBA team ID + full identity, not all sports.
+          if(league===LEAGUES.nba && String(c.team?.id)==='5' && c.team?.displayName==='Cleveland Cavaliers') aliases[index].push('clevelandcavs');
+        });
+      }
       const matched = names.map(name => aliases.flatMap((values, index) => values.includes(name) ? [index] : []));
       if (joinedTotal) {
         // Match the entire prefix as two separate official aliases, not substring
