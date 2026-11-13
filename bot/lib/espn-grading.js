@@ -105,13 +105,22 @@ function athleteEntries(summary) {
 function selectedPlayerPrefix(row) {
   return String(row.selection || '').split(/\b(?:(?:to record (?:a )?)?double[- ]double|over|under|longest|anytime|first TD|1st TD|first touchdown|passing|rushing|receiving|pass attempts|pass completions|carries|receptions|targets|field goals)\b|\s\d+(?:\.\d+)?\+/i)[0].trim();
 }
+// Official Maryland roster uses Chigoziem and Chig for this athlete:
+// https://umterps.com/sports/football/roster/chigoziem-okonkwo/9484
+// ESPN NFL athlete 4360635 identifies the Maryland TE as Chig Okonkwo.
+function exactPlayerEntryMatches(prefix, entry, league) {
+  return playerNameMatches(prefix, entry.name) || (
+    league?.path === 'football/nfl' && String(entry.athleteId) === '4360635' &&
+    compact(prefix) === 'chigoziemokonkwo' && compact(entry.name) === 'chigokonkwo'
+  );
+}
 function selectedPlayerName(row) {
   return compact(selectedPlayerPrefix(row));
 }
 
-function statSpec(row, entries) {
+function statSpec(row, entries, league) {
   const text = `${row.selection || ''} ${row.market || ''} ${row.published_line || ''}`.toLowerCase();
-  const names = new Set(entries.filter(entry => playerNameMatches(selectedPlayerPrefix(row), entry.name) && compact(entry.name).length >= 5).map(entry => compact(entry.name)));
+  const names = new Set(entries.filter(entry => exactPlayerEntryMatches(selectedPlayerPrefix(row), entry, league) && compact(entry.name).length >= 5).map(entry => compact(entry.name)));
   if (names.size !== 1) return null;
   const player = entries.find(entry => names.has(compact(entry.name)));
   if (!player) return null;
@@ -132,6 +141,12 @@ function statSpec(row, entries) {
   if (/total bases?/.test(text)) return pick('batting', 'totalBases', 'total bases');
   if (/\bhits?\b/.test(text)) return pick('batting', 'hits', 'hits');
   if (/\bruns?\b/.test(text)) return pick('batting', 'runs', 'runs');
+  const footballYards = String(row.selection || '').match(/\b(rushing|receiving)(?:\s+yards?)?\s*\+\s*(rushing|receiving)\s+yards?\b/i);
+  if (footballYards) {
+    const prefix=String(row.selection).slice(0,footballYards.index), suffix=String(row.selection).slice(footballYards.index+footballYards[0].length);
+    if(footballYards[1].toLowerCase()===footballYards[2].toLowerCase() || /\b[a-z]+\s*\+\s*$/i.test(prefix) || /^\s*\+/.test(suffix)) return null;
+    return { ...pick('football-combined',null,'rushing + receiving yards'), components:[['rushing','rushingYards'],['receiving','receivingYards']] };
+  }
   if (/passing yards?/.test(text)) return pick('passing', 'passingYards', 'passing yards');
   if (/pass(?:ing)? completions?/.test(text)) return pick('passing', ['completions', 'passingCompletions', 'completions/passingAttempts'], 'pass completions', value => Number(String(value).split('/')[0]));
   if (/pass(?:ing)? attempts?/.test(text)) return pick('passing', ['passingAttempts', 'attempts', 'completions/passingAttempts'], 'pass attempts', value => Number(String(value).split('/').at(-1)));
@@ -294,13 +309,20 @@ async function resolveStraightWager(row, fetchImpl) {
   if (btts && names.length !== 2) return null;
   const known = leagueFor(row);
   if (joinedTotal && !known && !row.league_from_group && `${row.league || ''}${row.sport || ''}`.trim()) return null;
+  // Unknown-league standalone team calls may use an exact official location,
+  // but only a complete all-supported-league scan can establish uniqueness.
+  const locationScan = !known && names.length === 1 && Boolean(moneyline || spread)
+    && (row.league_from_group || !`${row.league || ''}${row.sport || ''}`.trim());
+  let completeLocationScan = Boolean(eventDate(row.operating_date));
   const candidates = [];
   for (const league of known ? [known] : Object.values(LEAGUES)) {
     const scoreboard = await getJson(scoreboardUrl(league, eventDate(row.operating_date)), fetchImpl);
     // A capped or malformed feed cannot establish cross-league uniqueness.
     if (joinedTotal && (!Array.isArray(scoreboard.events) || scoreboard.events.length >= (league === LEAGUES.ncaab ? 1000 : 100))) return null;
+    if (locationScan && (!Array.isArray(scoreboard.events) || scoreboard.events.length >= (league === LEAGUES.ncaab ? 1000 : 100))) completeLocationScan = false;
     for (const event of scoreboard.events || []) {
       const competitors = event.competitions?.[0]?.competitors || [];
+      if (locationScan && (!event.id || competitors.length !== 2 || competitors.some(c => !c.team?.id || !c.team?.displayName))) completeLocationScan = false;
       if (competitors.length !== 2) continue;
       const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, known === LEAGUES.nhl ? c.team?.location : '', ...([LEAGUES.ncaaf, LEAGUES.ncaab].includes(league) ? [c.team?.location, / State$/.test(c.team?.location || '') ? c.team.location.replace(/ State$/, ' St') : ''] : [])].map(compact).filter(Boolean));
       if (opposedMoneyline || opposedSpread) {
@@ -312,6 +334,12 @@ async function resolveStraightWager(row, fetchImpl) {
           if(league===LEAGUES.nba && String(c.team?.id)==='5' && c.team?.displayName==='Cleveland Cavaliers') aliases[index].push('clevelandcavs');
         });
       }
+      const usedLocation = locationScan && !aliases.some(values => values.includes(names[0]))
+        && competitors.some(c => compact(c.team?.location) === names[0]);
+      if (locationScan) competitors.forEach((c, index) => {
+        const location = compact(c.team?.location);
+        if (location.length >= 3) aliases[index].push(location);
+      });
       const matched = names.map(name => aliases.flatMap((values, index) => values.includes(name) ? [index] : []));
       if (joinedTotal) {
         // Match the entire prefix as two separate official aliases, not substring
@@ -323,11 +351,11 @@ async function resolveStraightWager(row, fetchImpl) {
       } else if (!matched.every(indices => indices.length === 1) || new Set(matched.flat()).size !== names.length) continue;
       const team = (moneyline || spread || teamTotal) && competitors[matched[0][0]];
       const resolvedTeam = team ? { id: String(team.team?.id || team.id || ''), displayName: team.team?.displayName || '' } : undefined;
-      candidates.push({ league, event, resolvedTeam, market: moneyline ? 'Moneyline' : spread ? 'Spread' : firstInning ? 'First inning runs' : btts ? 'BTTS' : teamTotal ? 'Team total' : 'Full game total' });
+      candidates.push({ league, event, resolvedTeam, usedLocation, market: moneyline ? 'Moneyline' : spread ? 'Spread' : firstInning ? 'First inning runs' : btts ? 'BTTS' : teamTotal ? 'Team total' : 'Full game total' });
     }
   }
   // Ambiguous names and doubleheaders remain pending; no arbitrary first match.
-  return candidates.length === 1 ? candidates[0] : null;
+  return candidates.length === 1 && (!candidates[0].usedLocation || completeLocationScan) ? candidates[0] : null;
 }
 
 async function resolvePlayerWager(row, fetchImpl) {
@@ -353,7 +381,7 @@ async function resolvePlayerWager(row, fetchImpl) {
       for (const event of events) {
         if (!event.id) continue;
         const summary = await getJson(`${ESPN_BASE_URL}/${league.path}/summary?event=${event.id}`, fetchImpl);
-        const matches = [...new Set(athleteEntries(summary).filter(entry => playerNameMatches(selectedPlayerPrefix(row), entry.name)).map(entry => entry.name))];
+        const matches = [...new Set(athleteEntries(summary).filter(entry => exactPlayerEntryMatches(selectedPlayerPrefix(row), entry, league)).map(entry => entry.name))];
         if (matches.length === 1) candidates.push({ league, event, summary, market: row.market, selection: row.selection.replace(selectedPlayerPrefix(row), matches[0]) });
       }
     }
@@ -537,8 +565,19 @@ async function gradePickFromEspn(row, { fetchImpl = fetch, includeContext = fals
   }
   const comparison = directionAndLine(row);
   if (!comparison) return { status: 'PENDING', reason: 'No clear over/under line was found.' };
-  const spec = statSpec(row, athleteEntries(summary));
+  const spec = statSpec(row, athleteEntries(summary), league);
   if (!spec) return { status: 'PENDING', reason: 'No supported, exact player-stat match was found.' };
+  if (spec.components) {
+    if (!league.path.startsWith('football/') || !spec.player.athleteId) return {status:'PENDING',reason:'Combined football yards require exact football athlete identity.'};
+    const entries=athleteEntries(summary);
+    const values=spec.components.map(([category,key])=>{
+      const matches=entries.filter(candidate=>candidate.athleteId===spec.player.athleteId && compact(candidate.name)===compact(spec.player.name) && candidate.category===category && !candidate.didNotPlay);
+      return matches.length===1?statValue(matches[0],key):NaN;
+    });
+    if(!values.every(Number.isFinite)) return {status:'PENDING',reason:'Combined rushing and receiving yards require both explicit final category values; missing is not zero.'};
+    const actual=values.reduce((a,b)=>a+b,0);
+    return finish({result:compare(actual,comparison),outcome:`${spec.player.name}: ${actual} rushing + receiving yards (${values[0]} rushing, ${values[1]} receiving)`});
+  }
   const entry = athleteEntries(summary).find((candidate) => compact(candidate.name) === compact(spec.player.name) && (candidate.category === spec.category || spec.category === 'basketball' && league.path.startsWith('basketball/')));
   const components = spec.sum ? spec.key.map(key => statValue(entry, key)) : [];
   let actual = spec.sum ? components.every(Number.isFinite) ? components.reduce((a,b)=>a+b,0) : NaN : spec.transform(statValue(entry, spec.key));

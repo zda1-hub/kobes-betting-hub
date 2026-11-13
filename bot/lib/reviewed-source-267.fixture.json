@@ -1,0 +1,59 @@
+{
+  "row": {
+    "pick_id": "20261112-267-X",
+    "operating_date": "2026-11-12",
+    "selection": "Minnesota Wild ML",
+    "published_line": "First Period",
+    "published_odds_american": "-145",
+    "units_risked": "4%",
+    "sport": "NHL",
+    "league": "",
+    "market": "",
+    "approver": "1209660006383755265",
+    "published_by": "1539103276107046955",
+    "approved_at": "2026-11-13T00:05:55.074Z",
+    "published_at": "2026-11-13T00:05:55.644Z",
+    "post_reference": "https://discord.com/channels/1215407647155683358/1557117816228806786/1570590503999897601"
+  },
+  "packet": {
+    "pick_id": "20261112-267-X",
+    "source": {
+      "post_id": "2121002511247229356",
+      "post_url": "https://x.com/Capperleaked/status/2121002511247229356",
+      "posted_at": "2026-11-12T22:09:39.000Z",
+      "text": "🗼Tokyo Brandon (14-2 NHL SEASON)🔥 \n\nFirst Period Minnesota Wild ML -145 (4%) \nRegulation Minnesota Wild ML (5%)\nRegulations New York Rangers -130 (2%)\n\nRare 5 &amp; 4% Plays."
+    },
+    "analysis": {
+      "extraction": {
+        "sport": "NHL",
+        "league": "",
+        "plays": [
+          {
+            "selection": "Minnesota Wild ML",
+            "line": "First Period",
+            "odds_american": "-145",
+            "units": "4%",
+            "event": "",
+            "player_name": ""
+          },
+          {
+            "selection": "Minnesota Wild ML",
+            "line": "Regulation",
+            "odds_american": "",
+            "units": "5%",
+            "event": "",
+            "player_name": ""
+          },
+          {
+            "selection": "New York Rangers",
+            "line": "Regulations",
+            "odds_american": "-130",
+            "units": "2%",
+            "event": "",
+            "player_name": ""
+          }
+        ]
+      }
+    }
+  }
+}

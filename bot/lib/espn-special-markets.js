@@ -34,6 +34,19 @@ function periodScores(competitors, start, end) {
 function specialMarketGrade(row, summary, leaguePath, resolvedTeam) {
   const text = `${row.selection || ''} ${row.market || ''} ${row.published_line || ''}`;
   const competitors = summary.header?.competitions?.[0]?.competitors || [];
+  if (leaguePath === 'hockey/nhl' && /\b(?:first period|1st period|regulations?)\b/i.test(text)) {
+    const first = /\b(?:first period|1st period)\b/i.test(text);
+    const regulation = /\bregulations?\b/i.test(text);
+    if (first && regulation || !/\b(?:ML|moneyline)\b/i.test(text) || /\b(?:over|under|spread|puck line|draw no bet|double chance)\b/i.test(text)) return pending('Unsupported NHL period market; original terms and settlement rules are required.');
+    const team = selectedTeam(row.selection, competitors, resolvedTeam);
+    // Require a complete final regulation box score, even for the first period.
+    const all = periodScores(competitors, 0, 3);
+    const scores = first ? periodScores(competitors, 0, 1) : all;
+    if (!team || !all || !scores) return pending('Exact NHL team and complete numeric regulation period scores are required.');
+    const index = competitors.indexOf(team);
+    if (scores[index] === scores[1-index]) return pending('Tied NHL period or regulation moneyline requires original sportsbook tie-settlement rules.');
+    return {result:scores[index] > scores[1-index] ? 'W' : 'L', outcome:`${first ? 'First period' : 'Regulation'} moneyline: ${scores[index]}–${scores[1-index]}`};
+  }
   if (leaguePath.startsWith('soccer/') && /\b(?:ML|moneyline)\b/i.test(text)) {
     if (/draw no bet|double chance|to qualify|advance|asian/i.test(text)) return pending('This soccer market requires its original settlement rules.');
     const team = selectedTeam(row.selection, competitors, resolvedTeam);

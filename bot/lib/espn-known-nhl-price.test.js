@@ -5,8 +5,8 @@ const row={pick_id:'20261110-183-X-W001',operating_date:'2026-11-10',selection:'
 const fetcher=(events=[event])=>async url=>new Response(JSON.stringify(url.includes('/summary?')?summary:{events:url.includes('/hockey/nhl/')?events:[]}));
 test('explicit NHL exact location and parenthesized signed price with bare units resolve original wager',async()=>assert.equal((await gradePickFromEspn(row,{fetchImpl:fetcher()})).result,'L'));
 test('duplicate explicit league location candidates remain pending',async()=>{const d=structuredClone(event);d.id='other';assert.equal((await gradePickFromEspn(row,{fetchImpl:fetcher([event,d])})).status,'PENDING');});
-test('no location expansion when league is absent or only inherited from multi-sport group',async()=>{
- for(const patch of [{league:'',sport:''},{league_from_group:true}])assert.equal((await gradePickFromEspn({...row,...patch},{fetchImpl:fetcher()})).status,'PENDING');
+test('unknown or inherited league can use location only after complete unique cross-league scan',async()=>{
+ for(const patch of [{league:'',sport:''},{league_from_group:true}])assert.equal((await gradePickFromEspn({...row,...patch},{fetchImpl:fetcher()})).result,'L');
 });
 test('no grade for unpriced bare teams or malformed brackets',async()=>{
  for(const selection of ['Ottawa 0.5u','Ottawa (-130 0.5u','Ottawa -130) 0.5u'])assert.equal((await gradePickFromEspn({...row,selection},{fetchImpl:fetcher()})).status,'PENDING');

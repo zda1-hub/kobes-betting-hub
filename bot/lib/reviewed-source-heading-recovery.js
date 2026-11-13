@@ -1,3 +1,4 @@
+const { recoverReviewed267 } = require('./reviewed-source-267');
 const { recoverReviewed264 } = require('./reviewed-source-264');
 const { createHash } = require('node:crypto');
 const PICK_ID = '20261110-216-X';
@@ -9,7 +10,7 @@ const SOURCE_SHA256 = '4b9655066f38ebf3bffd0d52657644d5b945d2745271530729bd615e4
 // moneylines with explicit per-pick sport headings. Recover only metadata the
 // original extractor omitted; never change stored packets or approved terms.
 function recoverReviewedSourceHeadings(row, packet) {
-  const reviewed = recoverReviewed264(row, packet) || recoverNov11PeriodHeading(row, packet) || recoverNov11SourceHeadings(row, packet);
+  const reviewed = recoverReviewed267(row, packet) || recoverReviewed264(row, packet) || recoverNov11PeriodHeading(row, packet) || recoverNov11SourceHeadings(row, packet);
   if (reviewed) return reviewed;
   const extraction = packet?.analysis?.extraction;
   if (row.pick_id !== PICK_ID || packet?.pick_id !== PICK_ID || row.operating_date !== '2026-11-10'
