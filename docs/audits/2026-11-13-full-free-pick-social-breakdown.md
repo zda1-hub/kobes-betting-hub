@@ -11,3 +11,5 @@ After: the original X post keeps the exact wager and direct free Discord invitat
 Verification: focused bot, publisher, and Instagram tests passed (90/90). Full repository suite had seven failures outside these files in ESPN, offer, and learning-page tests; no affected focused test failed. No real social post was created by these tests.
 
 Limit: the existing single-frame Instagram Story still shows a concise breakdown. A full-length Story sequence would need a separate multi-slide design and publisher change to remain readable on a phone. Live deployment and first real delivery receipt: pending.
+
+Compatibility follow-up: today's Reel was already published before the release, and its public pick has no structured breakdown. The Instagram worker now checks the existing published receipt before it requires the new caption fields. This avoids treating a completed Reel as a failed new delivery.
