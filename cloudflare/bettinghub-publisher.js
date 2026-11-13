@@ -811,8 +811,11 @@ async function enqueueXPost(request, env) {
 
   const id = typeof input.id === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(input.id) ? input.id : crypto.randomUUID();
   if (id.startsWith('result-x-') && !/^result-x-\d{1,25}-[a-f0-9]{20}$/.test(id)) return json({ error: 'Invalid result post id' }, 400);
+  if (id.startsWith('breakdown-x-') && !/^breakdown-x-\d{1,25}-[a-f0-9]{20}-\d{2}$/.test(id)) return json({ error: 'Invalid breakdown reply id' }, 400);
   const replyMatch = /^result-x-(\d{1,25})-([a-f0-9]{20})$/.exec(id);
+  const breakdownMatch = /^breakdown-x-(\d{1,25})-[a-f0-9]{20}-\d{2}$/.exec(id);
   if (replyMatch?.[1] === '0') return json({ error: 'A free-pick result requires the original X post ID for a reply' }, 422);
+  if (breakdownMatch?.[1] === '0') return json({ error: 'A breakdown requires the original X post ID for a reply' }, 422);
   if (replyMatch) {
     // The previous publisher used result-x-0 IDs for standalone results. Never
     // create a second post for one of those picks during the reply cutover.
@@ -1532,6 +1535,12 @@ function publicFreePick(pick, origin) {
 function normalizeFreePickDetails(input) {
   const source = input && typeof input === "object" ? input : {};
   const read = (key, fallback = "") => dailyPickText(source[key] ?? fallback, 500);
+  let breakdown = [];
+  try {
+    const supplied = Array.isArray(source.breakdown) ? source.breakdown : JSON.parse(source.breakdownJson || '[]');
+    if (Array.isArray(supplied) && supplied.length <= 8 && supplied.every(claim => typeof claim === 'string' && claim.trim() && claim.length <= 500))
+      breakdown = supplied.map(claim => claim.trim());
+  } catch { /* Older manual Free Picks may not have a structured breakdown. */ }
   return {
     sport: read("sport"),
     event: read("event"),
@@ -1541,6 +1550,7 @@ function normalizeFreePickDetails(input) {
     odds: read("odds"),
     units: read("units"),
     reason: read("reason"),
+    breakdown,
   };
 }
 
@@ -1593,17 +1603,17 @@ async function recoverStuckPosts(now, env) {
   const cutoff = new Date(Date.parse(now) - 15 * 60 * 1000).toISOString();
   await env.DB.prepare(
     `UPDATE approved_posts SET status = 'approved', last_error = 'Recovered after interrupted publish attempt'
-     WHERE status = 'publishing' AND id NOT LIKE 'result-x-%' AND scheduled_at < ?`,
+     WHERE status = 'publishing' AND id NOT LIKE 'result-x-%' AND id NOT LIKE 'breakdown-x-%' AND scheduled_at < ?`,
   ).bind(cutoff).run();
   await env.DB.prepare(
-    `UPDATE approved_posts SET status = 'failed', last_error = 'Interrupted result post; check X before retrying'
-     WHERE status = 'publishing' AND id LIKE 'result-x-%' AND scheduled_at < ?`,
+    `UPDATE approved_posts SET status = 'failed', last_error = 'Interrupted reply; check X before retrying'
+     WHERE status = 'publishing' AND (id LIKE 'result-x-%' OR id LIKE 'breakdown-x-%') AND scheduled_at < ?`,
   ).bind(cutoff).run();
 }
 
 async function publishXPost(post, env, triggerType) {
   try {
-    const replyMatch = /^result-x-(\d{1,25})-[a-f0-9]{20}$/.exec(post.id);
+    const replyMatch = /^(?:result-x-\d{1,25}-[a-f0-9]{20}|breakdown-x-\d{1,25}-[a-f0-9]{20}-\d{2})$/.test(post.id);
     const xBody = xPostPayload(post);
     const token = await getUsableXToken(env, triggerType);
     const response = await auditedXFetch(env, CREATE_POST_ENDPOINT, {
@@ -1627,7 +1637,7 @@ async function publishXPost(post, env, triggerType) {
     }
     await recordDeliveryFailure(post.id, response.status, xErrorDetail(payload, response.status), !replyMatch && (response.status === 429 || response.status >= 500), env);
   } catch (error) {
-    await recordDeliveryFailure(post.id, null, "Network or token error while publishing", !post.id.startsWith('result-x-'), env);
+    await recordDeliveryFailure(post.id, null, "Network or token error while publishing", !/^(?:result|breakdown)-x-/.test(post.id), env);
     console.error("X publish failed", { postId: post.id, message: String(error) });
   }
 }
@@ -1639,9 +1649,10 @@ function xPostPayload(post) {
     ? post.body.split('\n').filter(line => !/^❤️?\s*10 likes and we[’']ll post another free pick\.$/u.test(line.trim())).join('\n').replace(/\n{3,}/g, '\n\n').trim()
     : post.body;
   const resultMatch = /^result-x-(\d{1,25})-[a-f0-9]{20}$/.exec(post.id);
+  const breakdownMatch = /^breakdown-x-(\d{1,25})-[a-f0-9]{20}-\d{2}$/.exec(post.id);
   if (resultMatch?.[1] === '0') throw new Error('Standalone free-pick result posts are disabled');
-  return resultMatch
-    ? { text, reply: { in_reply_to_tweet_id: resultMatch[1] } }
+  return resultMatch || breakdownMatch
+    ? { text, reply: { in_reply_to_tweet_id: (resultMatch || breakdownMatch)[1] } }
     : { text };
 }
 

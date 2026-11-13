@@ -16,6 +16,7 @@ async function setup(t, overrides = {}) {
   const options = { root, channelId: '2', today: () => date, readRows: async () => [row], loadPacket: async () => packet,
     verifyPost: async () => true, publishSite: async (_packet, options) => { calls.push(['site', options]); return { status: 'published' }; },
     readX: async () => ({ status: 'not_requested' }), publishX: async () => { calls.push(['x']); return { status: 'published', xPostId: 'receipt' }; },
+    publishBreakdown: async () => ({ status: 'published', replies: 0 }),
     notify: async () => ({ status: 'sent', messageId: 'email-receipt' }),
     logger: { error() {}, warn() {} }, ...overrides };
   return { calls, options, delivery: createFreePickDelivery(options) };
