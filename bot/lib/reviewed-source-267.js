@@ -1,0 +1,14 @@
+const {createHash}=require('node:crypto');
+const hash=s=>createHash('sha256').update(s).digest('hex');
+const EXPECTED={"row": {"pick_id": "20261112-267-X", "operating_date": "2026-11-12", "selection": "Minnesota Wild ML", "published_line": "First Period", "published_odds_american": "-145", "units_risked": "4%", "sport": "NHL", "league": "", "market": "", "approver": "1209660006383755265", "published_by": "1539103276107046955", "approved_at": "2026-11-13T00:05:55.074Z", "published_at": "2026-11-13T00:05:55.644Z", "post_reference": "https://discord.com/channels/1215407647155683358/1557117816228806786/1570590503999897601"}, "packet": {"pick_id": "20261112-267-X", "source": {"post_id": "2121002511247229356", "post_url": "https://x.com/Capperleaked/status/2121002511247229356", "posted_at": "2026-11-12T22:09:39.000Z", "text": "🗼Tokyo Brandon (14-2 NHL SEASON)🔥 \n\nFirst Period Minnesota Wild ML -145 (4%) \nRegulation Minnesota Wild ML (5%)\nRegulations New York Rangers -130 (2%)\n\nRare 5 &amp; 4% Plays."}, "analysis": {"extraction": {"sport": "NHL", "league": "", "plays": [{"selection": "Minnesota Wild ML", "line": "First Period", "odds_american": "-145", "units": "4%", "event": "", "player_name": ""}, {"selection": "Minnesota Wild ML", "line": "Regulation", "odds_american": "", "units": "5%", "event": "", "player_name": ""}, {"selection": "New York Rangers", "line": "Regulations", "odds_american": "-130", "units": "2%", "event": "", "player_name": ""}]}}}};
+const DESCRIPTION="Tokyo Brandon\n• Minnesota Wild ML First Period -145 (4%)\n• Minnesota Wild ML Regulation (5%)\n• New York Rangers Regulations -130 (2%)";
+function recoverReviewed267(row,packet){
+ const x=packet?.analysis?.extraction,s=packet?.source;
+ if(!x||!s||packet.pick_id!==EXPECTED.row.pick_id)return null;
+ for(const [key,value] of Object.entries(EXPECTED.row))if(row[key]!==value)return null;
+ for(const key of ['post_id','post_url','posted_at'])if(s[key]!==EXPECTED.packet.source[key])return null;
+ if(hash(String(s.text||'').replace(/\r\n/g,'\n').trim())!==hash(EXPECTED.packet.source.text)||x.sport!=='NHL'||x.league||!Array.isArray(x.plays)||x.plays.length!==3)return null;
+ for(let i=0;i<3;i++){for(const [key,value] of Object.entries(EXPECTED.packet.analysis.extraction.plays[i]))if((x.plays[i][key]||'')!==value)return null;if(x.plays[i].market||x.plays[i].sport||x.plays[i].league)return null;}
+ return {...x,lossless_text_terms:true,plays:x.plays.map(p=>({...p,sport:'NHL',league:'NHL'})),source_heading_recovery:{source_post_id:s.post_id,source_sha256:hash(EXPECTED.packet.source.text),reviewed_at:'2026-11-13',publication_reference:row.post_reference,publication_description_sha256:hash(DESCRIPTION),publication_message_timestamp:'2026-11-13T00:05:56.314Z',publication_verified_unedited_on:'2026-11-13'}};
+}
+module.exports={recoverReviewed267};

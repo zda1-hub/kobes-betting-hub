@@ -1,3 +1,4 @@
+const { reviewedRepostIdentity } = require('./reviewed-repost-nov12');
 const { recapRows } = require('./recap');
 const { resultFor } = require('./pick-log');
 
@@ -15,6 +16,8 @@ function wagerIdentity(row) {
   // A copied/re-posted selection is one capper call, not a fresh win. Keep
   // the price and stake in the identity so genuinely changed terms are not
   // silently collapsed.
+  const reviewed = reviewedRepostIdentity(row);
+  if (reviewed) return reviewed;
   return [row.selection, row.published_line, row.published_odds_american,
     row.units_risked, row.event, row.market]
     .map(value => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()).join('\u001f');
@@ -71,7 +74,7 @@ function buildCapperRecap({ date, rows, attempts = new Map() }) {
       const result = verifiedResult(row);
       const selection = String(row.selection || 'Published terms missing').replace(/[\r\n]+/g, ' ');
       return `${selection} ${SYMBOLS[result]}`;
-    }).join('\n') + (repeated ? `\n\n${repeated} identical reposted listing${repeated === 1 ? '' : 's'} excluded from this record.` : '');
+    }).join('\n') + (repeated ? `\n\n${repeated} ${entries.some(entry => reviewedRepostIdentity(entry.row)) ? 'reviewed repeated' : 'identical reposted'} listing${repeated === 1 ? '' : 's'} excluded from this record.` : '');
     sections.push(body);
     reviews.push({ name, body, pending: counts.PENDING, total: wagers.length,
       includedPickIds: listed.map(row => row.pick_id),

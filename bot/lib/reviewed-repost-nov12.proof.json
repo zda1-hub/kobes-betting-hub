@@ -1,0 +1,9 @@
+{
+ "reviewed_on":"2026-11-13",
+ "author":"1539103276107046955",
+ "publications":[
+  {"pick_id":"20261112-055-X-W001","source_url":"https://x.com/BettingBuddyy/status/2120923192189505727","source_sha256":"f2c512a25931271ba6eec2c88522c9b0fbb85fee8867d74b6db82f3d15a691be","description_sha256":"c5f9a3e82c7d472fec0cbbe6637fb977c5099abc59e1d8dce42c13b7d3ad173a","message_timestamp":"2026-11-12T20:15:02.460Z","edited_timestamp":null},
+  {"pick_id":"20261112-176-X-W001","source_url":"https://x.com/EZMSports/status/2120961667177816078","source_sha256":"7d885a02ad8db8f7608b420c20d12c1ad1b97637d0c5399054d3b3bde2b8a90d","description_sha256":"2a86442754b3da03a63f8e24628d8e6153a710f598dbff1a219790200b6dbc7a","message_timestamp":"2026-11-12T20:15:29.513Z","edited_timestamp":null},
+  {"pick_id":"20261112-347-X","source_url":"https://x.com/CappersCash_/status/2121025963496726968","source_sha256":"dcc99fb287fb5bdcae2e98a9b816a2981433cc806beb79fe5be032e38b24eeb8","description_sha256":"732b6c7bdc6f0cc54563ba0ac8c4cdba9aef1139bf67712d7eaee136777393b7","message_timestamp":"2026-11-13T01:01:40.712Z","edited_timestamp":null,"image_url":"https://pbs.twimg.com/media/HW9lyGwX0AA8y5L.jpg","image_sha256":"b257d373415661145e190f3fb4638653e2a3d01716130d9524de756ac53b5804"}
+ ]
+}

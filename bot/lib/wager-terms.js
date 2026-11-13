@@ -8,6 +8,9 @@ function leadingWagerTerms(value) {
   for (let pass = 0; pass < 8; pass++) {
     const before = selection;
     selection = selection
+      .replace(/^•\s+/, '')
+      .replace(/^ADD:\s+/i, '')
+      .replace(/^NBA\s*\/\s*CBB:\s*(?=.+\bML\s*\+\s*.+\bML\s*\()/i, '')
       .replace(/^\((?:\d+(?:\.\d+)?|\.\d+)\s*u(?:nits?)?\)\s+/i, '')
       .replace(/^(?:\d+(?:\.\d+)?|\.\d+)\s*(?:U\b|units?\b|\*|%)\s*(?:(?:-|,)\s*)?/i, '')
       .replace(/^\d{1,4}(?::\d{2})?\s*(?:am|pm)\s+/i, '')
@@ -34,11 +37,17 @@ function basketballStatTerms(value) {
 
 function normalizeSelection(value) {
   const normalized = leadingWagerTerms(value).selection
+    // Price comparisons are annotations, not markets (HR here means a book).
+    .replace(/\(\s*[+-]\d{3,4}\s+(?:at|@)\s+[A-Z]{2,12}(?:\s*,\s*[+-]\d{3,4}\s+(?:at|@)\s+[A-Z]{2,12})*\s*\)/gi, '')
     .replace(/^(?:\d+(?:\.\d+)?|\.\d+)\s*(?:U\s*-|u\s*-|\*|%|units?\s+(?:NFL|MLB|CFB)\s*:?)\s*/i, '')
     .replace(/^\d{1,4}(?::\d{2})?\s*(?:am|pm)\s+/i, '')
     .replace(/\b([ou])\s*(\d+(?:\.\d+)?)/gi, (_, side, line) => `${side.toLowerCase() === 'o' ? 'Over' : 'Under'} ${line}`)
     .replace(/(\d+)[’'](?=\s|\(|$)/g, '$1.5')
     .replace(/([+-])\s+(\d)/g, '$1$2')
+    .replace(/([+-]\d{1,2})\s+1\/2(?=\s|$)/g, '$1.5')
+    .replace(/([+-]\d{1,2}(?:\.\d+)?)([+-]\d{3,4})(?=\s|$)/g, '$1 $2')
+    .replace(/\bML(?=\([+-]\d{3,4}\))/gi, 'ML ')
+    .replace(/(\d+(?:\.\d+)?)\s+UNITS?$/i, '$1U')
     .replace(/^([A-Za-z][A-Za-z .'-]*\s+[+-]\d{1,2}(?:\.\d+)?)\/([+-]\d{3,4})$/, '$1 $2')
     .replace(/\bML(?=[+-]\d{3,4}(?:\s|\)|$))/gi, 'ML ')
     .replace(/\bTT\b/gi, 'Team Total')
@@ -76,7 +85,8 @@ function combinationSelections(selection) {
     const combinedTackles = /\btackles?\s*$/i.test(prefix) && /^\s*assists?\b/i.test(cleaned.slice(index + 1));
     const combinedBasketballStats = /\b(?:points|rebounds|assists)\s*$/i.test(prefix)
       && /^\s*(?:points|rebounds|assists)\b/i.test(cleaned.slice(index + 1));
-    const plus = char === '+' && !combinedTackles && !combinedBasketballStats && /\s/.test(cleaned[index - 1] || '') && /^\s+[A-Za-z]/.test(cleaned.slice(index + 1));
+    const combinedFootballYards = /\b(?:rushing|receiving)(?:\s+yards?)?\s*$/i.test(prefix) && /^\s*(?:rushing|receiving)\s+yards?\b/i.test(cleaned.slice(index + 1));
+    const plus = char === '+' && !combinedFootballYards && !combinedTackles && !combinedBasketballStats && /\s/.test(cleaned[index - 1] || '') && /^\s+[A-Za-z]/.test(cleaned.slice(index + 1));
     if (slash || plus) { parts.push(prefix.trim()); start = index + 1; }
   }
   parts.push(cleaned.slice(start).trim());
