@@ -256,6 +256,25 @@ test('approved current Free Pick publishes one Reel with a short rotating captio
   assert.equal(env.DB.sql.prepare('SELECT state FROM instagram_reel_deliveries').get().state, 'published');
 });
 
+test('an existing Reel receipt remains valid when its older pick lacks structured breakdown', async () => {
+  const env = environment();
+  env.INSTAGRAM_REELS_ENABLED = 'true';
+  env.INSTAGRAM_REEL_NOT_BEFORE_DATE = '2026-11-08';
+  env.INSTAGRAM_NOT_BEFORE_DATE = '2026-09-21';
+  assert.equal((await connected(env)).result.status, 200);
+  const date = __test.pacificDate();
+  const pickId = 'legacy-reel-fixture';
+  env.DB.sql.prepare("INSERT INTO instagram_reel_deliveries (pick_id, operating_date, reel_url, state, media_id, updated_at) VALUES (?, ?, ?, 'published', ?, ?)")
+    .run(pickId, date, `https://bettinghub-publisher.kobedirwin.workers.dev/media/free-pick/reel/${date}`, '987654321', Date.now());
+  const result = await __test.deliverCurrentReel(env, async url => {
+    assert.match(String(url), /\/api\/free-pick\/current$/);
+    return Response.json({ pickId, publishedDate: date,
+      reelUrl: `https://bettinghub-publisher.kobedirwin.workers.dev/media/free-pick/reel/${date}`,
+      caption: 'Approved free pick. Free Discord: https://discord.gg/sB9vzGz2xj', details: {} });
+  });
+  assert.deepEqual(result, { status: 'published', mediaId: '987654321' });
+});
+
 test('approved calendar Story uses existing Instagram connection and publishes once', async () => {
   const env = environment();
   env.INSTAGRAM_PUBLISHING_ENABLED = 'true';

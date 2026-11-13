@@ -293,7 +293,6 @@ async function currentFreePick(env, fetchImpl = fetch, kind = 'story') {
   const selection = String(data?.details?.selection || '');
   const line = String(data?.details?.line || '');
   const odds = String(data?.details?.odds || '');
-  if (kind === 'reel' && (!Array.isArray(breakdown) || !breakdown.length || !selection)) throw new SafeError('FREE_PICK_BREAKDOWN_MISSING', 409);
   return { pickId, operatingDate, mediaUrl, caption, breakdown, selection, line, odds };
 }
 
