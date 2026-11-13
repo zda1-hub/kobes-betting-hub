@@ -64,6 +64,7 @@ const {
   approvalCopySha256
 } = require('./lib/source-review');
 const { fillMissingEvidence } = require('./lib/espn-pick-research');
+const { preparedFreePick, prepareExclusiveFreePick } = require('./lib/exclusive-free-pick');
 const { createFreePickDelivery } = require('./lib/free-pick-delivery');
 const { manualFreePickRecord } = require('./lib/manual-free-pick');
 const { createInjuryDelivery, injuryConfig } = require('./lib/injury-reports');
@@ -2579,7 +2580,23 @@ async function handleShareWriteupToFree(interaction) {
   await interaction.editReply(`Same approved play shared to free plays: ${state.freeReference}. One Pick ID and one grading record; no X post was requested.`);
 }
 
+const activeSourceReviewIds = new Set();
+
 async function handleSourceReviewButton(interaction) {
+  const [, pickId] = interaction.customId.split(':');
+  if (activeSourceReviewIds.has(pickId)) {
+    await interaction.reply({ content: 'This approval card is already being processed. Try again when it finishes.', ephemeral: true });
+    return;
+  }
+  activeSourceReviewIds.add(pickId);
+  try {
+    await handleSourceReviewButtonUnlocked(interaction);
+  } finally {
+    activeSourceReviewIds.delete(pickId);
+  }
+}
+
+async function handleSourceReviewButtonUnlocked(interaction) {
   const [, pickId, action] = interaction.customId.split(':');
   const startedAt = Date.now();
   const trace = (stage) => console.log(`[approval:${pickId}] ${stage} after ${Date.now() - startedAt}ms`);
@@ -2589,7 +2606,7 @@ async function handleSourceReviewButton(interaction) {
     await interaction.editReply('Only Kobe can approve, route, or reject this source draft.');
     return;
   }
-  if (!['free', 'paid', 'reject'].includes(action)) {
+  if (!['free', 'paid', 'reject', 'prepare-free'].includes(action)) {
     await interaction.editReply('This review action is not recognized.');
     return;
   }
@@ -2621,6 +2638,33 @@ async function handleSourceReviewButton(interaction) {
     return;
   }
 
+  if (action === 'prepare-free') {
+    if (!isTermsOnlyMode(packet) || packet.discord_review_message_id !== interaction.message.id
+      || interaction.channelId !== exclusivePickApprovalChannelId || interaction.message.author?.id !== client.user?.id)
+      throw new Error('Choose the current exclusive approval card to prepare a Free Pick.');
+    if (packet.source?.publish_mode === 'terms_only' && !exclusiveSourceIsCurrent(packet))
+      throw new Error('This exclusive is not from today. Use a current card.');
+    if (packet.approval?.free_prepared) {
+      await interaction.editReply('The Free Pick breakdown is already prepared on this card. Review it and choose a destination.');
+      return;
+    }
+    const prepared = await prepareExclusiveFreePick(packet);
+    const latest = JSON.parse(await fs.readFile(packetPath, 'utf8'));
+    if (latest.approval?.decision || latest.approval?.free_prepared
+      || latest.discord_review_message_id !== packet.discord_review_message_id)
+      throw new Error('This approval card changed during research. Reopen its latest state before choosing a destination.');
+    const preview = preparedFreePick(prepared);
+    const embed = buildSourcePickApprovalEmbed(preview, 'FREE PICK');
+    embed.footer = { text: 'Free: independently researched writeup · VIP: original exclusive terms only' };
+    await fs.writeFile(packetPath, `${JSON.stringify(prepared, null, 2)}\n`);
+    await interaction.message.edit({ embeds: [embed], components: reviewButtons(pickId, {
+      showEdit: false, freeLabel: 'Post full writeup to Free Picks',
+      paidLabel: 'Post terms to #expert-picks'
+    }), allowedMentions: { parse: [] } });
+    await interaction.editReply('The independently researched Free Pick is ready above. Review its exact facts, then choose Free Pick or VIP. Nothing was posted to members.');
+    return;
+  }
+
   const approval = packet.approval || {};
   approval.approver = interaction.user.id;
   approval.decided_at = new Date().toISOString();
@@ -2648,14 +2692,20 @@ async function handleSourceReviewButton(interaction) {
   trace('workflow pause check passed');
 
   try {
+    if (action === 'free' && isTermsOnlyMode(packet)
+      && (packet.discord_review_message_id !== interaction.message.id
+        || interaction.channelId !== exclusivePickApprovalChannelId
+        || interaction.message.embeds?.[0]?.description !== packet.approval?.exact_final_copy))
+      throw new Error('The visible Free Pick preview does not match the locked breakdown. No post was made.');
     const configuredTermsOnly = packet.source?.publish_mode === 'terms_only';
     const monitoredTerms = packet.source?.publish_mode === 'monitored_terms';
     const sourcePostingEnabled = process.env.X_SOURCE_PUBLISHING_ENABLED === 'true';
     const monitoringOnly = packet.source?.reuse_permission !== 'CONFIRMED' && !configuredTermsOnly && !monitoredTerms && !sourcePostingEnabled;
-    const publicationPacket = monitoringOnly ? independentWriteupPacket(packet) : packet;
+    const publicationPacket = action === 'free' && isTermsOnlyMode(packet)
+      ? preparedFreePick(packet) : monitoringOnly ? independentWriteupPacket(packet) : packet;
     const termsOnly = isTermsOnlyMode(publicationPacket);
     assertPublishableExtraction(publicationPacket);
-    if (!configuredTermsOnly && !isSupportedSportPick(publicationPacket)) {
+    if (!termsOnly && !isSupportedSportPick(publicationPacket)) {
       throw new Error('Only picks explicitly identified as a supported sport can be published.');
     }
     if (!termsOnly) {
@@ -2670,7 +2720,7 @@ async function handleSourceReviewButton(interaction) {
       && Date.parse(publicationPacket.verification.event_start) <= Date.now()) {
       throw new Error('This verified game has already started. Use a current card.');
     }
-    const timing = configuredTermsOnly ? { status: 'UPCOMING', source: 'SOURCE_TERMS_OWNER_APPROVAL' }
+    const timing = termsOnly ? { status: 'UPCOMING', source: 'SOURCE_TERMS_OWNER_APPROVAL' }
       : await upcomingEventStatus(publicationPacket);
     trace(`event verification ${timing.status}`);
     if (timing.status !== 'UPCOMING') {
@@ -2925,19 +2975,29 @@ async function refreshPendingTermsOnlyApprovals() {
         console.warn(`Held invalid expert-picks approval card ${packet.pick_id}: ${error.message}`);
         continue;
       }
+      let preview = null;
+      if (packet.approval?.free_prepared) {
+        try { preview = preparedFreePick(packet); }
+        catch (error) {
+          packet.approval.free_prepared = false;
+          packet.hold_reason = `Free Pick preparation invalid: ${error.message}`;
+          await fs.writeFile(path.join(directory, file), `${JSON.stringify(packet, null, 2)}\n`);
+        }
+      }
+      const embed = buildSourcePickApprovalEmbed(preview || packet, 'APPROVED PICK');
+      if (preview) embed.footer = { text: 'Free: independently researched writeup · VIP: original exclusive terms only' };
       await message.edit({
-        embeds: [buildSourcePickApprovalEmbed(packet, 'APPROVED PICK')],
-        components: reviewButtons(packet.pick_id, {
-          paidOnly: true,
-          paidLabel
-        })
+        embeds: [embed],
+        components: preview ? reviewButtons(packet.pick_id, {
+          showEdit: false, freeLabel: 'Post full writeup to Free Picks', paidLabel: 'Post terms to #expert-picks'
+        }) : reviewButtons(packet.pick_id, { paidOnly: true, prepareFree: true, paidLabel })
       });
       refreshed += 1;
     } catch (error) {
       console.error(`Could not refresh expert-picks approval card ${packet.pick_id}:`, error);
     }
   }
-  if (refreshed) console.log(`Refreshed ${refreshed} pending approval card(s) to the expert-picks-only route.`);
+  if (refreshed) console.log(`Refreshed ${refreshed} pending exclusive approval card(s).`);
 }
 
 async function refreshVisibleTermsOnlyApprovalControls() {
@@ -2948,7 +3008,8 @@ async function refreshVisibleTermsOnlyApprovalControls() {
   let refreshed = 0;
   for (const message of messages.values()) {
     const components = expertOnlyButtonsFromMessage(message.components);
-    if (!components || message.components?.[0]?.components?.length === 2) continue;
+    const ids = (message.components || []).flatMap(row => row.components || []).map(button => button.customId || button.custom_id);
+    if (!components || ids.some(id => id?.endsWith(':free') || id?.endsWith(':prepare-free'))) continue;
     await message.edit({ components });
     refreshed += 1;
   }

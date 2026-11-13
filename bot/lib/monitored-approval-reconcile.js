@@ -33,7 +33,7 @@ async function consolidatePendingMonitoredApprovals({ directory, channel, paidLa
       // Lock old controls before changing the saved packet. If interrupted,
       // startup retries from the durable queue.
       for (const message of messages) await message.edit({ components: [] });
-      const components = reviewButtons(merged.pick_id, { paidOnly: true, paidLabel });
+      const components = reviewButtons(merged.pick_id, { paidOnly: true, prepareFree: true, paidLabel });
       await fs.writeFile(rows[0].packetPath, `${JSON.stringify(merged, null, 2)}\n`);
       await recordRevision(merged, { messageId: merged.discord_review_message_id,
         payload: { embeds: [embed], components } });
