@@ -39,6 +39,7 @@ async function publishApprovedFreePickToSite(packet, { fetchImpl = fetch, enviro
     odds: firstPlay.odds_american || extraction.odds_american || '',
     units: firstPlay.units || extraction.units || '',
     reason: approvedEvidence.join(' • '),
+    breakdownJson: JSON.stringify(sourceEvidence(packet)),
   };
   // Image-backed and text-only Free Picks use one X copy builder so a source
   // image cannot silently fall back to the old caption format.

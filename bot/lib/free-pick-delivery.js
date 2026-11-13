@@ -5,6 +5,7 @@ const { pacificOperatingDate } = require('./pick-log');
 const { freePickRecapRows } = require('./free-recap');
 const { publishApprovedFreePickToSite } = require('./free-pick-site');
 const { syncApprovedFreePickToX, readFreePickXReceipt } = require('./free-pick-x');
+const { syncApprovedFreePickBreakdown } = require('./free-pick-breakdown');
 
 function deliveryFile(root, id) {
   return path.join(root, `${createHash('sha256').update(id).digest('hex')}.json`);
@@ -39,7 +40,8 @@ function packetMatchesRow(packet, row) {
 // idempotency key and a verifiable receipt, even after an ambiguous response.
 function createFreePickDelivery({ root, readRows, loadPacket, verifyPost, paused = async () => false,
   publishSite = publishApprovedFreePickToSite, publishX = syncApprovedFreePickToX,
-  readX = readFreePickXReceipt, notify = async () => {}, ingest = async () => {}, channelId,
+  readX = readFreePickXReceipt, publishBreakdown = syncApprovedFreePickBreakdown,
+  notify = async () => {}, ingest = async () => {}, channelId,
   today = pacificOperatingDate, logger = console }) {
   let running = null;
   async function drain() {
@@ -98,8 +100,13 @@ function createFreePickDelivery({ root, readRows, loadPacket, verifyPost, paused
           state.site = await publishSite(packet, { copyImage: false, date });
           await saveDelivery(root, state);
         }
+        if (state.x?.status === 'published' && state.breakdown?.status !== 'published') {
+          state.breakdown = await publishBreakdown(packet, { operatingDate: row.operating_date });
+          await saveDelivery(root, state);
+        } else if (state.x?.status === 'disabled') state.breakdown = { status: 'disabled' };
         state.complete = ['published', 'already_published', 'superseded'].includes(state.site?.status)
-          && ['published', 'disabled'].includes(state.x?.status) && state.notified === true;
+          && ['published', 'disabled'].includes(state.x?.status)
+          && ['published', 'disabled'].includes(state.breakdown?.status) && state.notified === true;
         state.lastError = null;
       } catch (error) {
         // Error text may contain provider response details; retain only a safe
@@ -108,7 +115,9 @@ function createFreePickDelivery({ root, readRows, loadPacket, verifyPost, paused
         logger.error(`Free Pick delivery needs attention for ${row.pick_id}; recovery will check the original receipt.`);
       }
       await saveDelivery(root, state);
-      results.push({ pickId: row.pick_id, site: state.site?.status, x: state.x?.status, email: state.email?.status || null, held: state.held || null, complete: state.complete === true });
+      results.push({ pickId: row.pick_id, site: state.site?.status, x: state.x?.status,
+        breakdown: state.breakdown?.status || null, email: state.email?.status || null,
+        held: state.held || null, complete: state.complete === true });
     }
     return results;
   }

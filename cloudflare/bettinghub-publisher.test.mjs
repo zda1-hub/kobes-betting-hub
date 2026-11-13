@@ -442,6 +442,9 @@ test('verified results reply to the original X pick while ordinary posts stay st
     text: 'LOSS', reply: { in_reply_to_tweet_id: '123456789' },
   });
   assert.deepEqual(workerTest.xPostPayload({ id: 'free-x-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', body: 'PICK' }), { text: 'PICK' });
+  assert.deepEqual(workerTest.xPostPayload({ id: 'breakdown-x-123456789-aaaaaaaaaaaaaaaaaaaa-01', body: 'More on this pick' }), {
+    text: 'More on this pick', reply: { in_reply_to_tweet_id: '123456789' },
+  });
   assert.throws(() => workerTest.xPostPayload({ id: 'result-x-0-aaaaaaaaaaaaaaaaaaaa', body: 'LOSS' }), /Standalone free-pick result posts are disabled/);
 });
 

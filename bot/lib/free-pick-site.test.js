@@ -86,6 +86,7 @@ test('image-backed Free Pick copies exact approved image bytes into one multipar
   assert.match(calls[1].init.body.get('caption'), /21\+ where permitted\. Bet responsibly\.$/);
   assert.ok(calls[1].init.body.get('caption').length <= 280);
   assert.equal(calls[1].init.body.get('selection'), 'Bijan Robinson over 29.5 receiving yards');
+  assert.deepEqual(JSON.parse(calls[1].init.body.get('breakdownJson')), packet.analysis.extraction.source_claims);
 });
 
 test('image retrieval failure falls back to one text-only publish', async () => {

@@ -226,7 +226,8 @@ test('approved current Free Pick publishes one Reel with a short rotating captio
   const date = __test.pacificDate();
   const origin = 'https://bettinghub-publisher.kobedirwin.workers.dev';
   const caption = 'Approved free pick. Join the free Discord: https://discord.gg/sB9vzGz2xj';
-  const pick = { pickId: 'reel-fixture-pick', publishedDate: date, reelUrl: `${origin}/media/free-pick/reel/${date}`, caption };
+  const pick = { pickId: 'reel-fixture-pick', publishedDate: date, reelUrl: `${origin}/media/free-pick/reel/${date}`, caption,
+    details: { selection: 'Player over 5.5 rebounds', line: '5.5 rebounds', odds: '-110', breakdown: ['Recent minutes increased', 'Matchup allows rebounds', 'Player had 8 chances last game', 'Line remains 5.5'] } };
   let stage = 'IN_PROGRESS';
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
@@ -235,7 +236,8 @@ test('approved current Free Pick publishes one Reel with a short rotating captio
     if (String(url).endsWith('/media')) {
       assert.equal(init.body.get('media_type'), 'REELS');
       assert.equal(init.body.get('video_url'), pick.reelUrl);
-      assert.equal(init.body.get('caption'), __test.freePickReelCaption(0));
+      assert.equal(init.body.get('caption'), __test.freePickReelCaption(0, pick.details));
+      assert.match(init.body.get('caption'), /Player over 5\.5 rebounds \(-110\)/);
       assert.equal(init.body.get('share_to_feed'), 'true');
       return Response.json({ id: '123456789' });
     }
@@ -339,14 +341,17 @@ test('calendar Story is held when four confirmed Free Pick reels used the Pacifi
 });
 
 test('Reel captions rotate approved openers without claiming an ungraded win', () => {
-  const first = __test.freePickReelCaption(0);
-  const second = __test.freePickReelCaption(1);
+  const pick = { selection: 'Player over 5.5 rebounds (-110)', breakdown: ['Recent minutes increased', 'Matchup allows rebounds'] };
+  const first = __test.freePickReelCaption(0, pick);
+  const second = __test.freePickReelCaption(1, pick);
   assert.match(first, /^She's gettin what she needs 😂/);
   assert.match(second, /^Happy wife, happy life 🤝/);
   assert.notEqual(first, second);
-  assert.ok(first.includes('https://discord.gg/sB9vzGz2xj'));
+  assert.ok(first.includes('• Recent minutes increased\n• Matchup allows rebounds'));
+  assert.ok(first.includes('Free Discord in bio.'));
+  assert.ok(!first.includes('https://'));
   assert.ok(!first.includes('green slip'));
-  assert.equal(__test.freePickReelCaption(9), first);
+  assert.equal(__test.freePickReelCaption(9, pick), first);
 });
 
 test('wrong username, Creator account, missing grant and invalid expiration cannot install credentials', async () => {

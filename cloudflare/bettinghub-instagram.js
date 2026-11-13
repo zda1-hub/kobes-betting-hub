@@ -19,11 +19,17 @@ const REEL_OPENERS = Object.freeze([
   'Anything for her ❤',
 ]);
 
-function freePickReelCaption(index) {
+function freePickReelCaption(index, pick) {
   // This Reel is published before the game is final. The suggested "green
   // slip" line would imply a verified win, so it is ineligible here.
   const opener = REEL_OPENERS[index % REEL_OPENERS.length];
-  return `${opener}\nFollow for free picks.\nFree Discord: ${FREE_DISCORD_INVITE}`;
+  const breakdown = pick?.breakdown;
+  if (!Array.isArray(breakdown) || !breakdown.length || breakdown.some(claim => typeof claim !== 'string' || !claim.trim()))
+    throw new SafeError('FREE_PICK_BREAKDOWN_MISSING', 409);
+  const wager = `${pick.selection}${pick.line && !pick.selection.includes(pick.line) ? ` ${pick.line}` : ''}${pick.odds ? ` (${pick.odds})` : ''}`;
+  const caption = `${opener}\nFollow for free picks.\n\n${wager}\n\nWhy:\n${breakdown.map(claim => `• ${claim.trim()}`).join('\n')}\n\nFree Discord in bio.`;
+  if (caption.length > 2200) throw new SafeError('FREE_PICK_BREAKDOWN_TOO_LONG', 409);
+  return caption;
 }
 
 class SafeError extends Error {
@@ -283,7 +289,12 @@ async function currentFreePick(env, fetchImpl = fetch, kind = 'story') {
   if (!/^[A-Za-z0-9_-]{4,160}$/.test(pickId) || !/^\d{4}-\d{2}-\d{2}$/.test(operatingDate) || mediaUrl !== `${origin}/media/free-pick/${kind}/${operatingDate}`) throw new SafeError(`FREE_PICK_${kind.toUpperCase()}_INVALID`, 409);
   if (kind === 'reel' && (!caption.includes(FREE_DISCORD_INVITE) || caption.length > 2200)) throw new SafeError('FREE_PICK_REEL_CAPTION_INVALID', 409);
   if (operatingDate !== pacificDate()) throw new SafeError('FREE_PICK_NOT_TODAY', 409);
-  return { pickId, operatingDate, mediaUrl, caption };
+  const breakdown = data?.details?.breakdown;
+  const selection = String(data?.details?.selection || '');
+  const line = String(data?.details?.line || '');
+  const odds = String(data?.details?.odds || '');
+  if (kind === 'reel' && (!Array.isArray(breakdown) || !breakdown.length || !selection)) throw new SafeError('FREE_PICK_BREAKDOWN_MISSING', 409);
+  return { pickId, operatingDate, mediaUrl, caption, breakdown, selection, line, odds };
 }
 
 async function deliverCurrentMedia(env, fetchImpl = fetch, kind = 'story') {
@@ -310,7 +321,7 @@ async function deliverCurrentMedia(env, fetchImpl = fetch, kind = 'story') {
   if (!row) {
     if (kind === 'reel') {
       const sequence = await env.DB.prepare("SELECT COUNT(*) AS count FROM instagram_reel_deliveries WHERE state = 'published'").first();
-      pick.caption = freePickReelCaption(Number(sequence?.count || 0));
+      pick.caption = freePickReelCaption(Number(sequence?.count || 0), pick);
     }
     let reserved;
     try { reserved = await env.DB.prepare(`INSERT INTO ${table} (pick_id, operating_date, ${urlColumn}, state, attempted_at, updated_at) VALUES (?, ?, ?, 'creating_container', ?, ?) ON CONFLICT DO NOTHING`).bind(pick.pickId, pick.operatingDate, pick.mediaUrl, Date.now(), Date.now()).run(); }
