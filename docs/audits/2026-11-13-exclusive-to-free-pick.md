@@ -10,4 +10,4 @@ Affected files: `bot/index.js`, `bot/lib/exclusive-free-pick.js`, `bot/lib/sourc
 
 Verification: `node --check bot/index.js` passed; 103 focused tests passed. No real member-facing post was created during testing.
 
-Release status: local change; production approval-card refresh and the first real Free Pick from an exclusive still require live verification.
+Release follow-up: PR #416 merged as `de9375d`; Render bot deployment `dep-dbrpoteq1p3s73e2qel0` reached `live` and logged in as Kobe Bot. A real approval-card click and the first Free Pick publication from an exclusive have not yet been observed. No member-facing post was created during release verification.
