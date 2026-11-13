@@ -2,7 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { isPublishedRow } = require('./recap');
-const { netUnitsFor, resultFor } = require('./pick-log');
+const { netUnitsFor, resultFor, safeNetUnitsRow } = require('./pick-log');
 const { publicationGradeHold } = require('./recap-review');
 const { recoverReviewedSourceHeadings } = require('./reviewed-source-heading-recovery');
 
@@ -148,7 +148,7 @@ async function gradeWagerRows({ rows, date, root, file, grade, onAttempt = async
       expanded.push(current);
     }
   }
-  return { rows: expanded, attempts };
+  return { rows: expanded.map(safeNetUnitsRow), attempts };
 }
 
 module.exports = { expandPublication, gradeWagerRows, sourcePacketPath, wagerFingerprint };

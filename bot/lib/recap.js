@@ -1,5 +1,5 @@
 const { validatePick } = require('./pick');
-const { netUnitsFor, resultFor } = require('./pick-log');
+const { netUnitsFor, resultFor, percentageStake } = require('./pick-log');
 
 function makeResults(rawResults) {
   const items = rawResults
@@ -37,6 +37,7 @@ function buildRecapEmbed({ date, record, results, summary, imageUrl, imageAttach
 }
 
 function units(value) {
+  if (percentageStake(value)) return `${String(value).trim()} (percentage stake; units unspecified)`;
   const cleaned = String(value ?? '').replace(/[^0-9.+-]/g, '');
   if (!cleaned || cleaned === '+' || cleaned === '-' || cleaned === '.') return 'not stated';
   const number = Number(cleaned);
