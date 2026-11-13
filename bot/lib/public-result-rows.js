@@ -1,3 +1,4 @@
+const { safeNetUnitsRow } = require('./pick-log');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { isPublishedRow } = require('./recap');
@@ -75,7 +76,7 @@ async function publicResultRows({ rows, root, directory, readFile = fs.readFile 
     groups.get(key).push(row);
   }
   return [...groups.values()].flatMap(group => distinctCapperWagers(group).map(entry => ({
-    ...entry.row,
+    ...safeNetUnitsRow(entry.row),
     // Preserve channel provenance when the same call was also posted among
     // expert picks; deduplication must not erase its writeup publication.
     publication_channel_ids: [...new Set(entry.sources.map(row => String(row.post_reference || '')

@@ -23,6 +23,19 @@ const LEAGUES = {
   ucl: { path: 'soccer/uefa.champions', url: 'https://www.espn.com/soccer/match/_/gameId/' }
 };
 
+// Reviewed primary identity sources, not fuzzy spelling expansion:
+// https://okstate.com/game-center/12388 (Okla St = Oklahoma State men's team)
+// https://shop.giants.com/ (NY Giants = New York Giants)
+// https://louisiana.edu/news/media/proper-use-university-louisiana-lafayettes-name
+// School aliases apply to both supported college sports, never a guessed sport.
+function reviewedTeamAliases(league, team) {
+  const id = String(team?.id || '');
+  if ([LEAGUES.ncaab, LEAGUES.ncaaf].includes(league) && id === '197' && team.displayName === 'Oklahoma State Cowboys') return ['oklast'];
+  if ([LEAGUES.ncaab, LEAGUES.ncaaf].includes(league) && id === '309' && team.displayName === "Louisiana Ragin' Cajuns") return ['ullafayette'];
+  if (league === LEAGUES.nfl && id === '19' && team.displayName === 'New York Giants') return ['nygiants'];
+  return [];
+}
+
 function compact(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
@@ -313,16 +326,19 @@ async function resolveStraightWager(row, fetchImpl) {
   // but only a complete all-supported-league scan can establish uniqueness.
   const locationScan = !known && names.length === 1 && Boolean(moneyline || spread)
     && (row.league_from_group || !`${row.league || ''}${row.sport || ''}`.trim());
+  const reviewedAliasScan = names.length === 1 && ['oklast', 'ullafayette', 'nygiants'].includes(names[0])
+    && (known || row.league_from_group || !`${row.league || ''}${row.sport || ''}`.trim());
+  const identityScan = locationScan || reviewedAliasScan;
   let completeLocationScan = Boolean(eventDate(row.operating_date));
   const candidates = [];
   for (const league of known ? [known] : Object.values(LEAGUES)) {
     const scoreboard = await getJson(scoreboardUrl(league, eventDate(row.operating_date)), fetchImpl);
     // A capped or malformed feed cannot establish cross-league uniqueness.
     if (joinedTotal && (!Array.isArray(scoreboard.events) || scoreboard.events.length >= (league === LEAGUES.ncaab ? 1000 : 100))) return null;
-    if (locationScan && (!Array.isArray(scoreboard.events) || scoreboard.events.length >= (league === LEAGUES.ncaab ? 1000 : 100))) completeLocationScan = false;
+    if (identityScan && (!Array.isArray(scoreboard.events) || scoreboard.events.length >= (league === LEAGUES.ncaab ? 1000 : 100))) completeLocationScan = false;
     for (const event of scoreboard.events || []) {
       const competitors = event.competitions?.[0]?.competitors || [];
-      if (locationScan && (!event.id || competitors.length !== 2 || competitors.some(c => !c.team?.id || !c.team?.displayName))) completeLocationScan = false;
+      if (identityScan && (!event.id || competitors.length !== 2 || competitors.some(c => !c.team?.id || !c.team?.displayName))) completeLocationScan = false;
       if (competitors.length !== 2) continue;
       const aliases = competitors.map(c => [c.team?.displayName, c.team?.shortDisplayName, c.team?.abbreviation, c.team?.name, known === LEAGUES.nhl ? c.team?.location : '', ...([LEAGUES.ncaaf, LEAGUES.ncaab].includes(league) ? [c.team?.location, / State$/.test(c.team?.location || '') ? c.team.location.replace(/ State$/, ' St') : ''] : [])].map(compact).filter(Boolean));
       if (opposedMoneyline || opposedSpread) {
@@ -334,6 +350,9 @@ async function resolveStraightWager(row, fetchImpl) {
           if(league===LEAGUES.nba && String(c.team?.id)==='5' && c.team?.displayName==='Cleveland Cavaliers') aliases[index].push('clevelandcavs');
         });
       }
+      const usedReviewedAlias = reviewedAliasScan && !aliases.some(values => values.includes(names[0]))
+        && competitors.some(c => reviewedTeamAliases(league, c.team).includes(names[0]));
+      if (reviewedAliasScan) competitors.forEach((c, index) => aliases[index].push(...reviewedTeamAliases(league, c.team)));
       const usedLocation = locationScan && !aliases.some(values => values.includes(names[0]))
         && competitors.some(c => compact(c.team?.location) === names[0]);
       if (locationScan) competitors.forEach((c, index) => {
@@ -351,7 +370,7 @@ async function resolveStraightWager(row, fetchImpl) {
       } else if (!matched.every(indices => indices.length === 1) || new Set(matched.flat()).size !== names.length) continue;
       const team = (moneyline || spread || teamTotal) && competitors[matched[0][0]];
       const resolvedTeam = team ? { id: String(team.team?.id || team.id || ''), displayName: team.team?.displayName || '' } : undefined;
-      candidates.push({ league, event, resolvedTeam, usedLocation, market: moneyline ? 'Moneyline' : spread ? 'Spread' : firstInning ? 'First inning runs' : btts ? 'BTTS' : teamTotal ? 'Team total' : 'Full game total' });
+      candidates.push({ league, event, resolvedTeam, usedLocation: usedLocation || usedReviewedAlias, market: moneyline ? 'Moneyline' : spread ? 'Spread' : firstInning ? 'First inning runs' : btts ? 'BTTS' : teamTotal ? 'Team total' : 'Full game total' });
     }
   }
   // Ambiguous names and doubleheaders remain pending; no arbitrary first match.

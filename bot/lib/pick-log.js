@@ -153,7 +153,18 @@ function resultFor(row) {
   return ['W', 'L', 'P', 'V', 'PENDING'].includes(value) ? value : 'PENDING';
 }
 
+function percentageStake(value) {
+  return /[%％]|\bper\s*cent(?:age)?\b/i.test(String(value ?? ''));
+}
+
+// Suppress only derived unit amounts in returned views. Preserve source stakes,
+// verified grades and historical ledger records; no bankroll conversion exists.
+function safeNetUnitsRow(row) {
+  return percentageStake(row.units_risked) ? { ...row, net_units: '' } : row;
+}
+
 function netUnitsFor(row) {
+  if (percentageStake(row.units_risked)) return null;
   const saved = numeric(row.net_units);
   if (saved !== null) return saved;
   const units = numeric(row.units_risked);
@@ -187,6 +198,8 @@ module.exports = {
   appendOrRetryPermissionFailedPick,
   makePickId,
   netUnitsFor,
+  percentageStake,
+  safeNetUnitsRow,
   pacificOperatingDate,
   pickLogPath,
   readPickLog,
