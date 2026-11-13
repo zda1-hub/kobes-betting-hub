@@ -47,7 +47,7 @@ test('replaces separate pending cards from one X capper with one actionable appr
   const finalEdit = messages.get('message-62').edits.at(-1);
   assert.equal(finalEdit.embeds[0].description,
     '@AlexCaruso\n• Caleb Williams Under 19.5 Rush Yards -113\n• A.J. Brown Over 69.5 receiving yards -114');
-  assert.deepEqual(finalEdit.components[0].components.map(button => button.label), ['Post to #expert-picks', 'Reject']);
+  assert.deepEqual(finalEdit.components[0].components.map(button => button.label), ['Post to #expert-picks', 'Prepare as Free Pick', 'Reject']);
   assert.deepEqual(revisions, [rows[0].pick_id]);
   assert.deepEqual(superseded, [rows[1].pick_id]);
   assert.equal(messages.get('message-64').edits.length, 0);

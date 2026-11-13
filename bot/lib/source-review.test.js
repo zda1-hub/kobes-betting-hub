@@ -432,7 +432,7 @@ test('uses destination names directly on approval buttons', () => {
   assert.deepEqual(expertOnly[0].components.map((button) => button.label), ['Post to #expert-picks', 'Reject']);
 
   const normalized = require('./source-review').expertOnlyButtonsFromMessage(monitoringOnly);
-  assert.deepEqual(normalized[0].components.map((button) => button.label), ['Post terms to #nfl-writeups', 'Reject']);
+  assert.deepEqual(normalized[0].components.map((button) => button.label), ['Post terms to #nfl-writeups', 'Prepare as Free Pick', 'Reject']);
   assert.equal(normalized[0].components[0].disabled, false);
 });
 

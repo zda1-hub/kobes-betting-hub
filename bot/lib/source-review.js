@@ -588,14 +588,16 @@ function researchHoldLabel(reason) {
   return 'Verified research unavailable';
 }
 
-function reviewButtons(pickId, { testOnly = false, freeDisabled = false, paidOnly = false, freeLabel, paidLabel } = {}) {
+function reviewButtons(pickId, { testOnly = false, freeDisabled = false, paidOnly = false, prepareFree = false,
+  showEdit = !paidOnly, freeLabel, paidLabel } = {}) {
   const components = [];
   if (!paidOnly) {
     components.push({ type: ComponentType.Button, style: ButtonStyle.Success, label: buttonLabel(freeLabel, 'Post to #daily-free-play'), custom_id: `source-review:${pickId}:free`, disabled: testOnly || freeDisabled });
   }
   components.push(
     { type: ComponentType.Button, style: ButtonStyle.Primary, label: buttonLabel(paidLabel, 'Post to paid channel'), custom_id: `source-review:${pickId}:paid`, disabled: testOnly },
-    ...(!paidOnly ? [{ type: ComponentType.Button, style: ButtonStyle.Secondary, label: 'Edit details', custom_id: `source-review:${pickId}:edit`, disabled: testOnly }] : []),
+    ...(prepareFree ? [{ type: ComponentType.Button, style: ButtonStyle.Secondary, label: 'Prepare as Free Pick', custom_id: `source-review:${pickId}:prepare-free`, disabled: testOnly }] : []),
+    ...(showEdit ? [{ type: ComponentType.Button, style: ButtonStyle.Secondary, label: 'Edit details', custom_id: `source-review:${pickId}:edit`, disabled: testOnly }] : []),
     { type: ComponentType.Button, style: ButtonStyle.Danger, label: 'Reject', custom_id: `source-review:${pickId}:reject` }
   );
   return [{
@@ -611,10 +613,12 @@ function expertOnlyButtonsFromMessage(rows) {
   const paid = buttons.find((button) => /^source-review:.+:paid$/.test(idFor(button)));
   const reject = buttons.find((button) => /^source-review:.+:reject$/.test(idFor(button)));
   if (!paid || !reject) return null;
+  const pickId = idFor(paid).split(':')[1];
   return [{
     type: ComponentType.ActionRow,
     components: [
       { type: ComponentType.Button, style: ButtonStyle.Primary, label: buttonLabel(paid.label, 'Post to #expert-picks'), custom_id: idFor(paid), disabled: Boolean(paid.disabled) },
+      { type: ComponentType.Button, style: ButtonStyle.Secondary, label: 'Prepare as Free Pick', custom_id: `source-review:${pickId}:prepare-free`, disabled: Boolean(paid.disabled) },
       { type: ComponentType.Button, style: ButtonStyle.Danger, label: 'Reject', custom_id: idFor(reject), disabled: Boolean(reject.disabled) }
     ]
   }];

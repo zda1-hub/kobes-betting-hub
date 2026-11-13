@@ -556,6 +556,7 @@ async function approvalButtonLabels(packet) {
   const paid = await discordChannelLabel(paidChannelId, paidFallback);
   return {
     paidOnly: termsOnly,
+    prepareFree: termsOnly,
     freeDisabled: termsOnly,
     freeLabel: termsOnly ? 'Free unavailable for expert picks' : `Post to ${free}`,
     paidLabel: `Post to ${paid}`
