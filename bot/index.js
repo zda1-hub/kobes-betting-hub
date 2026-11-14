@@ -2154,28 +2154,19 @@ async function postAndLogOfficialPick({ channel, payload, entry, packet = null }
     console.error('Published pick was not synced to Daily Picks; retry is safe because the queue is idempotent.', { pickId: entry.pick_id, message: error instanceof Error ? error.message : String(error) });
   }
   if (dailyWriteupBoard && /writeups?/i.test(entry.destination || '')) {
-    try {
-      const receipt = await dailyWriteupBoard.refresh();
-      console.log('Daily writeups board receipt:', JSON.stringify(receipt));
-    } catch (error) {
-      console.error('Daily writeups board needs attention:', error instanceof Error ? error.message : String(error));
-    }
+    void dailyWriteupBoard.refresh()
+      .then(receipt => console.log('Daily writeups board receipt:', JSON.stringify(receipt)))
+      .catch(error => console.error('Daily writeups board needs attention:', error instanceof Error ? error.message : String(error)));
   }
   if (freeWriteupBoard && /writeups?/i.test(entry.destination || '')) {
-    try {
-      const receipt = await freeWriteupBoard.refresh();
-      console.log('Free writeups preview receipt:', JSON.stringify(receipt));
-    } catch (error) {
-      console.error('Free writeups preview needs attention:', error instanceof Error ? error.message : String(error));
-    }
+    void freeWriteupBoard.refresh()
+      .then(receipt => console.log('Free writeups preview receipt:', JSON.stringify(receipt)))
+      .catch(error => console.error('Free writeups preview needs attention:', error instanceof Error ? error.message : String(error)));
   }
   if (vipExpertList && channel.id === expertPicksChannelId) {
-    try {
-      const receipt = await vipExpertList.refresh();
-      console.log('VIP expert list receipt:', JSON.stringify(receipt));
-    } catch (error) {
-      console.error('VIP expert list needs attention:', error instanceof Error ? error.message : String(error));
-    }
+    void vipExpertList.refresh()
+      .then(receipt => console.log('VIP expert list receipt:', JSON.stringify(receipt)))
+      .catch(error => console.error('VIP expert list needs attention:', error instanceof Error ? error.message : String(error)));
   }
   if (refreshExpertPulse && channel.id === expertPicksChannelId) {
     void refreshExpertPulse().catch((error) => console.error('VIP expert pulse needs attention:', error.message));
@@ -2584,8 +2575,11 @@ const activeSourceReviewIds = new Set();
 
 async function handleSourceReviewButton(interaction) {
   const [, pickId] = interaction.customId.split(':');
+  // Discord requires the first response within three seconds. A duplicate
+  // click must be acknowledged before waiting on the in-process card guard.
+  await interaction.deferReply({ ephemeral: true });
   if (activeSourceReviewIds.has(pickId)) {
-    await interaction.reply({ content: 'This approval card is already being processed. Try again when it finishes.', ephemeral: true });
+    await interaction.editReply('This approval card is already being processed. Wait for the first result before trying again.');
     return;
   }
   activeSourceReviewIds.add(pickId);
@@ -2600,7 +2594,6 @@ async function handleSourceReviewButtonUnlocked(interaction) {
   const [, pickId, action] = interaction.customId.split(':');
   const startedAt = Date.now();
   const trace = (stage) => console.log(`[approval:${pickId}] ${stage} after ${Date.now() - startedAt}ms`);
-  await interaction.deferReply({ ephemeral: true });
   trace('interaction acknowledged');
   if (!isPickApprover(interaction)) {
     await interaction.editReply('Only Kobe can approve, route, or reject this source draft.');
@@ -2648,7 +2641,14 @@ async function handleSourceReviewButtonUnlocked(interaction) {
       await interaction.editReply('The Free Pick breakdown is already prepared on this card. Review it and choose a destination.');
       return;
     }
-    const prepared = await prepareExclusiveFreePick(packet);
+    await interaction.editReply('Checking the event and researching a full Free Pick breakdown. Nothing has been posted yet.');
+    let deadline;
+    const prepared = await Promise.race([
+      prepareExclusiveFreePick(packet),
+      new Promise((_, reject) => {
+        deadline = setTimeout(() => reject(new Error('Free Pick research timed out. Nothing was posted; try again later.')), 45000);
+      })
+    ]).finally(() => clearTimeout(deadline));
     const latest = JSON.parse(await fs.readFile(packetPath, 'utf8'));
     if (latest.approval?.decision || latest.approval?.free_prepared
       || latest.discord_review_message_id !== packet.discord_review_message_id)
@@ -2690,6 +2690,7 @@ async function handleSourceReviewButtonUnlocked(interaction) {
     return;
   }
   trace('workflow pause check passed');
+  await interaction.editReply('Checking the game and publishing the selected pick. Please wait for the final receipt.');
 
   try {
     if (action === 'free' && isTermsOnlyMode(packet)
