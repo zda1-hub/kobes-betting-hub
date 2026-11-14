@@ -15,6 +15,9 @@ test('uses the nearest upcoming event and rejects doubleheaders', () => {
   assert.equal(selectEvent(rows, 'Knicks', Date.parse('2026-11-14T20:00:00Z')).id, 'game0001');
   assert.throws(() => selectEvent([rows[0], { ...rows[1], commence_time: '2026-11-15T05:00:00Z' }],
     'Knicks', Date.parse('2026-11-14T20:00:00Z')), /Multiple near-term/);
+  assert.throws(() => selectEvent([], 'Knicks', Date.parse('2026-11-14T20:00:00Z')), /lists no upcoming events/);
+  assert.throws(() => selectEvent(rows, '76ers', Date.parse('2026-11-14T20:00:00Z')),
+    /Provider lists 2 upcoming event\(s\); nearest: Brooklyn Nets at New York Knicks/);
 });
 
 test('one-market live research honors monthly and shared credit limits', async t => {
