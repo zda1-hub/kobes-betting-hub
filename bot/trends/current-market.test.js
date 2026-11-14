@@ -31,7 +31,7 @@ test('one-market live research honors monthly and shared credit limits', async t
       [{ id: 'event1234', home_team: 'New York Knicks', away_team: 'Brooklyn Nets', commence_time: '2026-11-15T02:00:00Z' }] :
       { id: 'event1234', commence_time: '2026-11-15T02:00:00Z', home_team: 'New York Knicks', away_team: 'Brooklyn Nets',
         bookmakers: [{ key: 'book', title: 'Book', markets: [{ key: 'player_points_alternate', last_update: '2026-11-14T19:58:00Z',
-          outcomes: [{ name: 'Over', description: 'Jalen Brunson', point: 20.5, price: -180 }] }] }] };
+          outcomes: [{ name: 'Over', description: 'Jalén Brunson', point: 20.5, price: -180 }] }] }] };
     return { ok: true, headers: { get: name => name === 'x-requests-remaining' ? '9000' : null }, json: async () => data };
   };
   const query = { root, apiKey: 'secret', sport: 'NBA', team: 'Brooklyn', player: 'Jalen Brunson',
