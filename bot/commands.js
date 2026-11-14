@@ -259,7 +259,9 @@ module.exports = [
     .addStringOption(option => option.setName('side').setDescription('How to compare the stat with the line').setRequired(true).addChoices(
       { name: 'Over', value: 'over' }, { name: 'Under', value: 'under' }, { name: 'At least', value: 'at_least' }
     ))
-    .addNumberOption(option => option.setName('line').setDescription('Stat threshold; this is your research input, not a live sportsbook quote').setRequired(true).setMinValue(0).setMaxValue(1000)),
+    .addNumberOption(option => option.setName('line').setDescription('Stat threshold; this is your research input, not a live sportsbook quote').setRequired(true).setMinValue(0).setMaxValue(1000))
+    .addNumberOption(option => option.setName('alternate_1').setDescription('Optional second historical threshold; not a live sportsbook line').setMinValue(0).setMaxValue(1000))
+    .addNumberOption(option => option.setName('alternate_2').setDescription('Optional third historical threshold; not a live sportsbook line').setMinValue(0).setMaxValue(1000)),
   new SlashCommandBuilder()
     .setName('pick-audit')
     .setDescription('Privately inspect the database timeline for one pick or X post')
