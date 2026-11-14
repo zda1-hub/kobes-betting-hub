@@ -13,10 +13,15 @@ const MARKET_BY_STAT = Object.freeze({
 function selectEvent(rows, team, now = Date.now()) {
   const needle = String(team || '').trim().toLocaleLowerCase('en-US');
   if (needle.length < 3) throw new Error('Enter at least three characters of a team name');
-  const matches = rows.filter(row => Date.parse(row.commence_time) > now &&
-    [row.home_team, row.away_team].some(name => String(name || '').toLocaleLowerCase('en-US').includes(needle)))
+  const upcoming = rows.filter(row => Date.parse(row.commence_time) > now)
     .sort((a, b) => Date.parse(a.commence_time) - Date.parse(b.commence_time));
-  if (!matches.length) throw new Error('No upcoming event matches that team');
+  const matches = upcoming.filter(row =>
+    [row.home_team, row.away_team].some(name => String(name || '').toLocaleLowerCase('en-US').includes(needle)));
+  if (!matches.length) {
+    if (!upcoming.length) throw new Error('The Odds API lists no upcoming events for this league right now');
+    const examples = upcoming.slice(0, 3).map(row => `${row.away_team} at ${row.home_team}`).join('; ');
+    throw new Error(`No upcoming event matches that team. Provider lists ${upcoming.length} upcoming event(s); nearest: ${examples}`);
+  }
   if (matches[1] && Date.parse(matches[1].commence_time) - Date.parse(matches[0].commence_time) < 10 * 60 * 60_000)
     throw new Error('Multiple near-term games match; enter the opponent name if it identifies one game');
   return matches[0];
