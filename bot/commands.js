@@ -283,6 +283,21 @@ module.exports = [
     .addNumberOption(option => option.setName('line').setDescription('Your research threshold, not a sportsbook quote').setRequired(true).setMinValue(0).setMaxValue(1000))
     .addStringOption(option => option.setName('team').setDescription('NHL or NBA team abbreviation to resolve identical names').setMaxLength(4)),
   new SlashCommandBuilder()
+    .setName('trends-market')
+    .setDescription('Privately compare one current alternate prop with sourced historical counts')
+    .addStringOption(option => option.setName('sport').setDescription('League').setRequired(true).addChoices(
+      { name: 'NBA', value: 'NBA' }, { name: 'NFL', value: 'NFL' }, { name: 'NHL', value: 'NHL' }, { name: 'MLB', value: 'MLB' }))
+    .addStringOption(option => option.setName('team').setDescription('Team name in the upcoming matchup').setRequired(true).setMinLength(3).setMaxLength(80))
+    .addStringOption(option => option.setName('player').setDescription('Full name shown by the odds board').setRequired(true).setMinLength(3).setMaxLength(100))
+    .addStringOption(option => option.setName('stat').setDescription('Supported stat for this sport').setRequired(true).addChoices(
+      { name: 'Points', value: 'points' }, { name: 'Rebounds', value: 'rebounds' },
+      { name: 'Assists', value: 'assists' }, { name: 'Receptions', value: 'receptions' },
+      { name: 'Receiving yards', value: 'receiving_yards' }, { name: 'Rushing yards', value: 'rushing_yards' },
+      { name: 'Shots on goal', value: 'shots_on_goal' }, { name: 'Hits', value: 'hits' }))
+    .addStringOption(option => option.setName('side').setDescription('Market side').setRequired(true).addChoices(
+      { name: 'Over', value: 'over' }, { name: 'Under', value: 'under' }))
+    .addNumberOption(option => option.setName('line').setDescription('Exact alternate line to research').setRequired(true).setMinValue(0).setMaxValue(1000)),
+  new SlashCommandBuilder()
     .setName('pick-audit')
     .setDescription('Privately inspect the database timeline for one pick or X post')
     .addStringOption((option) => option

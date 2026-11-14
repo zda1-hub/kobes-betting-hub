@@ -31,14 +31,19 @@ async function request(path, { apiKey, fetchImpl = fetch, now = () => new Date()
   return { data, fetchedAt: now().toISOString(), remainingCredits: remaining === null ? null : Number(remaining) };
 }
 
+function quotaStatus(options) {
+  return request('/v4/sports/', options);
+}
+
 function events(sport, options) {
   return request(`/v4/sports/${sportKey(sport)}/events`, options);
 }
 
 async function eventAlternateOdds(sport, eventId, options = {}) {
   if (!/^[a-zA-Z0-9_-]{8,80}$/.test(eventId)) throw new Error('Invalid event ID');
-  const markets = ALT_MARKETS[sport];
+  const markets = options.market ? [options.market] : ALT_MARKETS[sport];
   if (!markets) throw new Error(`Unsupported alternate markets: ${sport}`);
+  if (markets.some(market => !ALT_MARKETS[sport]?.includes(market))) throw new Error('Unsupported alternate market');
   const params = new URLSearchParams({ regions: 'us', oddsFormat: 'american', markets: markets.join(',') });
   const result = await request(`/v4/sports/${sportKey(sport)}/events/${eventId}/odds?${params}`, options);
   return { ...result, selections: normalizeSelections(result.data, sport) };
@@ -66,4 +71,4 @@ function normalizeSelections(event, sport) {
   return selections;
 }
 
-module.exports = { SPORT_KEYS, ALT_MARKETS, events, eventAlternateOdds, normalizeSelections };
+module.exports = { SPORT_KEYS, ALT_MARKETS, quotaStatus, events, eventAlternateOdds, normalizeSelections };

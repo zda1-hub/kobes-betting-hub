@@ -8,6 +8,7 @@ const commands = require('./commands');
 const { research: researchNflTrend, formatResearch: formatNflTrend } = require('./trends/nfl-search');
 const { research: researchFreeLeagueTrend, toCsv: freeLeagueTrendCsv } = require('./trends/free-leagues');
 const { recordSearch: recordTrendSearch } = require('./trends/search-ledger');
+const { currentMarket: researchCurrentMarket } = require('./trends/current-market');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { buildCapperRecap } = require('./lib/capper-recap');
@@ -3947,6 +3948,48 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } catch (error) {
       console.warn('Trends-tool free-league research unavailable:', error);
       await interaction.editReply('That research is unavailable. Check the exact source player name, league and stat, or try after the data release updates.');
+    }
+    return;
+  }
+
+  if (interaction.commandName === 'trends-market') {
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||
+        interaction.channelId !== '1571285899717771365' || !isAdministrator(interaction)) {
+      await interaction.reply({ ephemeral: true, content: 'Current-market research is available to KBH administrators in the private Trends-tool search channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const query = {
+        sport: interaction.options.getString('sport', true), team: interaction.options.getString('team', true),
+        player: interaction.options.getString('player', true), stat: interaction.options.getString('stat', true),
+        side: interaction.options.getString('side', true), line: interaction.options.getNumber('line', true)
+      };
+      const result = await researchCurrentMarket({ root: reviewQueueRoot, apiKey: process.env.ODDS_API_KEY, ...query });
+      let history = 'Historical comparison unavailable from the source right now.';
+      try {
+        let analysis;
+        if (query.sport === 'NFL') {
+          const date = new Date();
+          const year = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric' }).format(date));
+          const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'numeric' }).format(date));
+          analysis = (await researchNflTrend({ ...query, season: month >= 7 ? year : year - 1 })).analysis;
+        } else analysis = (await researchFreeLeagueTrend({ sport: query.sport, name: query.player,
+          stat: query.stat, side: query.side, line: query.line })).analysis;
+        history = `Historical season ${analysis.season.hits}/${analysis.season.sample} · L5 ${analysis.l5.hits}/${analysis.l5.sample} · L10 ${analysis.l10.hits}/${analysis.l10.sample} · L20 ${analysis.l20.hits}/${analysis.l20.sample}.`;
+      } catch (error) { console.warn('Trends-tool current-market history unavailable:', error.message); }
+      const offers = result.offers.length ? result.offers.map(row =>
+        `${row.sportsbook}: ${row.odds > 0 ? '+' : ''}${row.odds} (market updated ${row.updatedAt})`).join('\n') :
+        'No fresh matching alternate offer was returned for that exact player, side and line.';
+      await interaction.editReply({ content:
+        `**Trends-tool · private market research**\n${result.event.away_team} at ${result.event.home_team} · ${result.event.commence_time}\n` +
+        `${query.player}: ${query.side} ${query.line} ${query.stat.replaceAll('_', ' ')}\n${offers}\n${history}\n` +
+        `Checked ${result.fetchedAt}. Odds source: The Odds API. Historical counts are descriptive, not a probability. ` +
+        `Game-day player availability is unverified. Research only; no pick or member post was made. 21+.`,
+        allowedMentions: { parse: [] } });
+    } catch (error) {
+      console.warn('Trends-tool current-market research unavailable:', error.message);
+      await interaction.editReply(`Current-market research could not complete: ${error.message}. No pick or member post was made.`);
     }
     return;
   }
