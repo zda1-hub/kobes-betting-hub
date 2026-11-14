@@ -47,7 +47,7 @@ function currentSeason(sport, date = new Date()) {
 }
 
 async function readCsv(url, { fetchImpl = fetch, now = Date.now() } = {}) {
-  const saved = cache.get(url);
+  const saved = fetchImpl === fetch ? cache.get(url) : null;
   if (saved && now - saved.at < 30 * 60_000) return saved.rows;
   const response = await fetchImpl(url, { signal: AbortSignal.timeout(25000) });
   if (!response.ok) throw new Error(`Free sports source unavailable (${response.status})`);
@@ -55,7 +55,7 @@ async function readCsv(url, { fetchImpl = fetch, now = Date.now() } = {}) {
   if (bytes.length > 15_000_000) throw new Error('Sports file exceeds safe size');
   const text = url.endsWith('.gz') ? gunzipSync(bytes).toString('utf8') : bytes.toString('utf8');
   const rows = parseCsv(text);
-  cache.set(url, { at: now, rows });
+  if (fetchImpl === fetch) cache.set(url, { at: now, rows });
   return rows;
 }
 
@@ -81,8 +81,8 @@ function pickPlayer(rows, name, team) {
   return [...ids][0];
 }
 
-function nbaLogs(rows, { name, team, stat, season, today }) {
-  const id = pickPlayer(rows, name, team);
+function nbaLogs(rows, { name, team, playerId, stat, season, today }) {
+  const id = playerId || pickPlayer(rows, name, team);
   return rows.filter(r => r.player_id === id && r.season_type === 'regular-season' &&
     r.game_date < today && ['W', 'L'].includes(r.wl) && numeric(r.min) > 0)
     .map(r => ({ gameId: r.game_id, date: r.game_date, season: String(season), status: 'final', participated: true,
@@ -93,8 +93,8 @@ function nbaLogs(rows, { name, team, stat, season, today }) {
     .filter(r => Number.isFinite(r.stats[stat]));
 }
 
-function nhlLogs(rows, { name, team, stat, season, today }) {
-  const id = pickPlayer(rows, name, team);
+function nhlLogs(rows, { name, team, playerId, stat, season, today }) {
+  const id = playerId || pickPlayer(rows, name, team);
   return rows.filter(r => r.player_id === id && r.game_date < today && /^\d{4}02\d+/.test(r.game_id) &&
     r.toi && r.toi !== '00:00')
     .map(r => ({ gameId: r.game_id, date: r.game_date, season: String(season), status: 'final', participated: true,
@@ -138,20 +138,40 @@ async function research({ sport, name, team, stat, line, side = 'over', season, 
     await readMlbRows(sourceUrl, { fetchImpl }) : await readCsv(sourceUrl, { fetchImpl, now });
   const today = new Date(now).toISOString().slice(0, 10);
   const args = { name, team, stat, season, today };
-  const logs = sport === 'NBA' ? nbaLogs(rows, args) : sport === 'NHL' ? nhlLogs(rows, args) :
+  const currentLogs = sport === 'NBA' ? nbaLogs(rows, args) : sport === 'NHL' ? nhlLogs(rows, args) :
     mlbLogs(rows, await readCsv(scheduleUrl(season), { fetchImpl, now }), args);
-  if (!logs.length) throw new Error('No final participated games with observed stats for this player');
-  const analysis = analyze(logs, { stat, line, side, season: String(season) });
+  if (!currentLogs.length) throw new Error('No final participated games with observed stats for this player');
+  let logs = currentLogs.map(g => ({ ...g, sourceUrl }));
+  let previousSeasonUnavailable = false;
+  if (logs.length < 20 && (sport === 'NBA' || sport === 'NHL')) {
+    const playerId = pickPlayer(rows, name, team);
+    const previousUrl = releaseUrl(sport, season - 1);
+    try {
+      const previousRows = await readCsv(previousUrl, { fetchImpl, now });
+      const previousLogs = (sport === 'NBA' ? nbaLogs : nhlLogs)(previousRows,
+        { ...args, playerId, team: null, season: season - 1 });
+      const seen = new Set(logs.map(g => g.gameId));
+      logs.push(...previousLogs.filter(g => !seen.has(g.gameId)).map(g => ({ ...g, sourceUrl: previousUrl })));
+    } catch (error) {
+      previousSeasonUnavailable = true;
+    }
+  }
+  const seasonAnalysis = analyze(currentLogs, { stat, line, side, season: String(season) });
+  const recentAnalysis = analyze(logs, { stat, line, side });
+  const analysis = { ...recentAnalysis, season: seasonAnalysis.season };
+  const sourceByGame = new Map(logs.map(g => [g.gameId, g]));
   return { sport, name, team, stat, line, side, season, sourceUrl,
     scheduleUrl: sport === 'MLB' ? scheduleUrl(season) : null,
-    checkedAt: new Date(now).toISOString(), logs: analysis.l20.games, analysis };
+    checkedAt: new Date(now).toISOString(), previousSeasonUnavailable,
+    logs: analysis.l20.games.map(g => ({ ...g, season: sourceByGame.get(g.gameId).season,
+      sourceUrl: sourceByGame.get(g.gameId).sourceUrl })), analysis };
 }
 
 function toCsv(result) {
   const header = 'sport,player,season,game_date,game_id,stat,value,source_url,checked_at';
   const quote = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
-  return [header, ...result.logs.map(g => [result.sport, result.name, result.season, g.date, g.gameId,
-    result.stat, g.value, result.sourceUrl, result.checkedAt].map(quote).join(','))].join('\n') + '\n';
+  return [header, ...result.logs.map(g => [result.sport, result.name, g.season, g.date, g.gameId,
+    result.stat, g.value, g.sourceUrl, result.checkedAt].map(quote).join(','))].join('\n') + '\n';
 }
 
 module.exports = { currentSeason, releaseUrl, nbaLogs, nhlLogs, mlbLogs, research, toCsv, csvRows };

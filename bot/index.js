@@ -3928,6 +3928,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `${result.name}: ${result.side.replace('_', ' ')} ${result.line} ${result.stat.replaceAll('_', ' ')}\n` +
           `Season: ${count(result.analysis.season)} · L5: ${count(result.analysis.l5)} · L10: ${count(result.analysis.l10)} · L20: ${count(result.analysis.l20)}\n` +
           `Attached CSV contains each of the last ${result.analysis.l20.sample} completed games and its source. ` +
+          `Recent windows may include the prior season when fewer than 20 current-season games are available. ` +
+          (result.previousSeasonUnavailable ? `Prior-season file was unavailable, so the recent sample is shorter. ` : '') +
           `Checked ${result.checkedAt}. [Data release](${result.sourceUrl}) (SportsDataverse CC BY 4.0).\n` +
           `Research draft only. Historical counts are not next-game probabilities. Current line, odds, roster, injuries and source rights for paid publication have not been verified.`,
         files: [{ attachment: Buffer.from(csv), name: filename }],

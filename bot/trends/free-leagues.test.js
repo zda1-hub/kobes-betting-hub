@@ -62,3 +62,17 @@ test('research exports sourced per-game rows; no model computes the count', asyn
   assert.match(toCsv(result), /2026-11-10/);
   assert.match(toCsv(result), /sportsdataverse-data\/releases\/download/);
 });
+
+test('early-season last 20 spans seasons while season rate stays current-only', async () => {
+  const header = 'player_id,player_name,team_abbreviation,season_type,game_id,game_date,wl,min,pts,ast\n';
+  const current = header + '1,Sample Player,NYK,regular-season,new,2026-11-10,W,30,25,4\n';
+  const previous = header + '1,Sample Player,NYK,regular-season,old,2026-04-10,L,30,10,4\n';
+  const fetchImpl = async url => ({ ok: true, arrayBuffer: async () => Buffer.from(
+    url.includes('2027.csv') ? current : previous) });
+  const result = await research({ sport: 'NBA', name: 'Sample Player', stat: 'points', line: 19.5,
+    season: 2027, now: Date.parse('2026-11-14T00:00:00Z'), fetchImpl });
+  assert.deepEqual([result.analysis.season.hits, result.analysis.season.sample], [1, 1]);
+  assert.deepEqual([result.analysis.l20.hits, result.analysis.l20.sample], [1, 2]);
+  assert.match(toCsv(result), /"2026","2026-04-10"/);
+  assert.match(toCsv(result), /player_game_logs_2026.csv/);
+});
