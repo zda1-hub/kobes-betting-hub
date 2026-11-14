@@ -7,6 +7,7 @@ const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes, Mo
 const commands = require('./commands');
 const { research: researchNflTrend, formatResearch: formatNflTrend } = require('./trends/nfl-search');
 const { research: researchFreeLeagueTrend, toCsv: freeLeagueTrendCsv } = require('./trends/free-leagues');
+const { recordSearch: recordTrendSearch } = require('./trends/search-ledger');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { buildCapperRecap } = require('./lib/capper-recap');
@@ -3897,6 +3898,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         season: month >= 7 ? year : year - 1
       });
       await interaction.editReply({ content: formatNflTrend(result), allowedMentions: { parse: [] } });
+      try {
+        await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
+          query: { sport: 'NFL', player: result.player, stat: result.stat, side: result.side, line: result.line } });
+      } catch (error) { console.warn('Trends-tool search evidence unavailable:', error); }
     } catch (error) {
       console.warn('Trends-tool NFL search unavailable:', error);
       await interaction.editReply('That NFL research is unavailable right now. Check the full player name or try again after the source feed recovers.');
@@ -3935,6 +3940,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         files: [{ attachment: Buffer.from(csv), name: filename }],
         allowedMentions: { parse: [] }
       });
+      try {
+        await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
+          query: { sport: result.sport, player: result.name, stat: result.stat, side: result.side, line: result.line } });
+      } catch (error) { console.warn('Trends-tool search evidence unavailable:', error); }
     } catch (error) {
       console.warn('Trends-tool free-league research unavailable:', error);
       await interaction.editReply('That research is unavailable. Check the exact source player name, league and stat, or try after the data release updates.');
