@@ -11,3 +11,4 @@ desktop/KobesMonitor/build/
 trackers/x-monitoring/
 .env.*
 !.env.example
+data/trends/private/
