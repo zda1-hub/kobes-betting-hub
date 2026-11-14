@@ -3980,7 +3980,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       } catch (error) { console.warn('Trends-tool current-market history unavailable:', error.message); }
       const offers = result.offers.length ? result.offers.map(row =>
         `${row.sportsbook}: ${row.odds > 0 ? '+' : ''}${row.odds} (market updated ${row.updatedAt})`).join('\n') :
-        'No fresh matching alternate offer was returned for that exact player, side and line.';
+        'No fresh matching alternate offer was returned for that exact player, side and line.' +
+        (result.otherLines.length ? ` Other fresh lines for this player/side (not the requested line): ` +
+          result.otherLines.map(row => `${row.line} ${row.odds > 0 ? '+' : ''}${row.odds} at ${row.sportsbook}`).join('; ') + '.' :
+          ' No fresh offers for this player and side were returned in that market.');
       await interaction.editReply({ content:
         `**Trends-tool · private market research**\n${result.event.away_team} at ${result.event.home_team} · ${result.event.commence_time}\n` +
         `${query.player}: ${query.side} ${query.line} ${query.stat.replaceAll('_', ' ')}\n${offers}\n${history}\n` +

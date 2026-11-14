@@ -31,7 +31,8 @@ test('one-market live research honors monthly and shared credit limits', async t
       [{ id: 'event1234', home_team: 'New York Knicks', away_team: 'Brooklyn Nets', commence_time: '2026-11-15T02:00:00Z' }] :
       { id: 'event1234', commence_time: '2026-11-15T02:00:00Z', home_team: 'New York Knicks', away_team: 'Brooklyn Nets',
         bookmakers: [{ key: 'book', title: 'Book', markets: [{ key: 'player_points_alternate', last_update: '2026-11-14T19:58:00Z',
-          outcomes: [{ name: 'Over', description: 'Jalén Brunson', point: 20.5, price: -180 }] }] }] };
+          outcomes: [{ name: 'Over', description: 'Jalén Brunson', point: 20.5, price: -180 },
+            { name: 'Over', description: 'Jalén Brunson', point: 25.5, price: -110 }] }] }] };
     return { ok: true, headers: { get: name => name === 'x-requests-remaining' ? '9000' : null }, json: async () => data };
   };
   const query = { root, apiKey: 'secret', sport: 'NBA', team: 'Brooklyn', player: 'Jalen Brunson',
@@ -39,6 +40,7 @@ test('one-market live research honors monthly and shared credit limits', async t
   const result = await currentMarket(query);
   assert.equal(result.offers.length, 1);
   assert.equal(result.offers[0].odds, -180);
+  assert.equal(result.otherLines[0].line, 25.5);
   assert.match(seen[2], /markets=player_points_alternate/);
   assert.equal(seen.some(url => url.includes('secret')), false);
   const ledger = JSON.parse(await fs.readFile(path.join(root, 'trends-odds-budget', '2026-11.json'), 'utf8'));
