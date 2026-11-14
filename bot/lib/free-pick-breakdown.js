@@ -11,7 +11,9 @@ function remainingEvidence(packet) {
 }
 
 function breakdownParts(packet) {
-  const claims = remainingEvidence(packet);
+  // The reply must stand on its own as the complete breakdown, even when the
+  // original short pick happened to include one or two of these facts.
+  const claims = sourceEvidence(packet);
   if (!claims.length) return [];
   const body = `Full breakdown:\n${claims.map(claim => `• ${claim}`).join('\n')}`;
   if (body.length > 4000)
