@@ -298,6 +298,13 @@ module.exports = [
       { name: 'Over', value: 'over' }, { name: 'Under', value: 'under' }))
     .addNumberOption(option => option.setName('line').setDescription('Exact alternate line to research').setRequired(true).setMinValue(0).setMaxValue(1000)),
   new SlashCommandBuilder()
+    .setName('trends-combo')
+    .setDescription('Privately register interest in an exact 2–4-leg research combination')
+    .addStringOption(option => option.setName('leg_1').setDescription('SPORT|TEAM|PLAYER|STAT|OVER/UNDER|LINE').setRequired(true).setMaxLength(240))
+    .addStringOption(option => option.setName('leg_2').setDescription('SPORT|TEAM|PLAYER|STAT|OVER/UNDER|LINE').setRequired(true).setMaxLength(240))
+    .addStringOption(option => option.setName('leg_3').setDescription('Optional third exact leg').setMaxLength(240))
+    .addStringOption(option => option.setName('leg_4').setDescription('Optional fourth exact leg').setMaxLength(240)),
+  new SlashCommandBuilder()
     .setName('pick-audit')
     .setDescription('Privately inspect the database timeline for one pick or X post')
     .addStringOption((option) => option
