@@ -1,0 +1,12 @@
+const test=require('node:test'); const assert=require('node:assert/strict');
+const {summarize,analyze,qualify,impliedProbability,combinationWarnings}=require('./analytics');
+const logs=Array.from({length:20},(_,i)=>({gameId:String(i),date:`2026-11-${String(1+i).padStart(2,'0')}`,season:'2026',status:'final',participated:true,stats:{points:15}}));
+const q={stat:'points',line:15,season:'2026'};
+test('over, milestone, pushes and DNP are explicit',()=>{assert.equal(summarize(logs,q).hits,0);assert.equal(summarize(logs,q).pushes,20);assert.equal(summarize(logs,{...q,side:'at_least'}).hits,20);assert.equal(summarize([{...logs[0],participated:false}],q).sample,0)});
+test('empty is unavailable not zero; duplicates fail',()=>{assert.equal(summarize([],q).hitRate,null);assert.throws(()=>summarize([logs[0],logs[0]],q));});
+test('recent windows and season',()=>{const a=analyze(logs,q);assert.equal(a.l5.sample,5);assert.equal(a.l20.sample,20);assert.equal(a.season.sample,20)});
+test('American odds',()=>{assert.equal(impliedProbability(-400),.8);assert.equal(impliedProbability(100),.5);assert.throws(()=>impliedProbability(0));});
+const now=Date.parse('2026-11-21T00:00:00Z');
+const prop={sport:'NBA',available:true,source:'synthetic-test-only',sportsbook:'fixture',updatedAt:new Date(now).toISOString(),rosterVerifiedAt:new Date(now).toISOString(),rosterVerified:true,participationVerified:true,teamId:1,opponentId:2,startsAt:new Date(now+3600000).toISOString(),odds:-400};
+test('fail closed on stale data, odds, roster, participation and samples',()=>{const a=analyze(logs,{...q,line:14.5});assert.equal(qualify(prop,a,{now}).qualifies,true);for(const change of [{odds:-401},{updatedAt:'invalid'},{participationVerified:false},{rosterVerified:false},{startsAt:new Date(now).toISOString()}])assert.equal(qualify({...prop,...change},a,{now}).qualifies,false);assert.equal(qualify(prop,analyze(logs.slice(0,5),{...q,line:14.5}),{now}).qualifies,false)});
+test('no manufactured combination probability',()=>{const x=combinationWarnings([{id:'1',gameId:'g'},{id:'2',gameId:'g'}]);assert.equal(x.combinedProbability,null);assert.equal(x.warnings.length,1)});
