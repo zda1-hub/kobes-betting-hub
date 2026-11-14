@@ -38,7 +38,8 @@ function qualify(prop, analysis, { now=Date.now(), maxOddsAgeMs=300000, maxRoste
   if (prop.participationVerified !== true) reasons.push('unverified participation');
   if (!Number.isFinite(Date.parse(prop.startsAt)) || Date.parse(prop.startsAt)<=now) reasons.push('game started or unknown');
   try { impliedProbability(prop.odds); if(prop.odds < -400) reasons.push('price worse than -400'); } catch { reasons.push('invalid odds'); }
-  if (analysis.season.sample<minSample) reasons.push('insufficient season sample');
+  const sportMinimum = prop.sport === 'NFL' ? 8 : minSample;
+  if (analysis.season.sample<sportMinimum) reasons.push('insufficient season sample');
   if (analysis.season.hitRate === null || analysis.season.hitRate<minHitRate) reasons.push('season hit rate below threshold');
   // Reliability score intentionally uses all windows, never calls it a probability.
   const windows=[analysis.season,analysis.l5,analysis.l10,analysis.l20];

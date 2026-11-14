@@ -1,8 +1,17 @@
 # Trends-tool integration status — November 14, 2026
 
+## Live Discord setup and release candidate
+
+- Created the private `📊・LINEMATE ANALYTICS` category in the KBH guild (`1215407647155683358`). Its six private channels are `popular-trends` (`1571283801592827945`), `🏀・nba-high-hit-rates` (`1571285528882450623`), `🏈・nfl-high-hit-rates` (`1571285640409256056`), `⚾・mlb-high-hit-rates` (`1571285735867424931`), `🏒・nhl-high-hit-rates` (`1571285798827851887`), and `🔎・prop-search-engine` (`1571285899717771365`). Each was created with the existing VIP and Website VIP roles. The new channels contain no trend posts.
+- Added `/trends-nfl` as a private, historical NFL player-stat search in `🔎・prop-search-engine`. It requires a VIP role or administrator access, uses a full player name, stat, side and user-entered threshold, and returns completed-game season/L5/L10/L20 counts with source attribution. It does **not** represent the supplied threshold as a live sportsbook line, recommendation or probability. This command is in the branch pending deployment.
+- The bot has not yet been deployed or the command verified in the live Discord application. No NBA/MLB/NHL search or automatic trends publisher is exposed.
+- The NFL sample minimum was corrected from 20 to 8, because a 20-game current NFL season sample would exclude all regular-season players. This only affects the draft qualification calculation; it does not turn on automated posts.
+- The 2026 nflverse source files were fetched read-only on November 14. A local end-to-end check of Josh Allen over a *user-entered* 225.5 passing-yard threshold yielded 6/8 completed-game hits, with source and date attached. The price, roster and injury status were not verified and this sample was not posted.
+- `node --test bot/trends/*.test.js`: 24 pass. `npm test`: 1,113 pass, 8 fail in existing unrelated ESPN/source recovery and public-site tests; review before release. A local Node network fetch still fails TLS in this workstation environment, so hosting-runtime fetch must be checked after deployment.
+
 ## What is in this checkout
 
-- Integrated Dot's tested calculation, fail-closed qualification, combination warning, Pacific daily-plan, and additive Discord provisioner modules into `bot/trends/` without changing existing bot commands or channels.
+- Integrated Dot's tested calculation, fail-closed qualification, combination warning, Pacific daily-plan, and additive Discord provisioner modules into `bot/trends/`. The private category and six channels above have since been created.
 - Named the tool **Trends-tool**. The proposed category stays `📊・LINEMATE ANALYTICS` per the supplied specification. Discord channel names cannot contain spaces, so the requested “popular trends” channel is `popular-trends`.
 - Added a read-only current alternate-prop odds adapter for The Odds API. It requests one event at a time, sends the API key in a header, and keeps the bookmaker's actual price and update time. It does not fetch until invoked with a configured key.
 - Added a read-only NFL historical game-log adapter for nflverse weekly player stats. It joins to completed regular-season schedules and ignores missing stats. No roster or injury status is inferred from those logs.
@@ -11,10 +20,10 @@
 
 ## Verification
 
-- `node --test bot/trends/*.test.js`: 21 tests pass (including Dot's original 14).
+- The initial foundation had 21 passing tests (including Dot's original 14); the release candidate has 24.
 - A read-only fetch of the 2026 nflverse release and schedules returned 137 completed regular-season games and eight completed rows for an example player on November 14. This confirms a current file exists; it does not verify game results or a current player roster independently.
 - A Node `fetch` smoke attempt from this local runtime failed with `ERR_SSL_WRONG_VERSION_NUMBER`. The Python read-only source check succeeded. The adapter's mocked endpoint test passes, but the Node runtime must be tested in the actual hosting environment before activation.
-- No production data, Discord server, database migration, or automated post has been changed.
+- Only the newly requested private Discord category/channels have been created in the server. No existing channel, production data, database migration, or automated post has been changed.
 
 ## Free-source and rights findings
 
@@ -25,10 +34,10 @@
 
 ## Remaining before release
 
-1. Verify the correct KBH Discord guild, bot permissions and whether new channels should be public or private. Run the provisioner in dry-run mode, then create the category only after visibility is explicitly set. Existing channels, roles and permissions must remain untouched.
+1. Deploy the bot release candidate, verify command registration and exercise `/trends-nfl` as a VIP member or administrator in the new search channel. Confirm live nflverse HTTPS fetch; the local Node runtime has a TLS failure. Existing channels, roles and permissions remain untouched.
 2. Confirm current odds API plan/quota and provider redistribution rights. Select licensed current roster, injuries, lineup and player-game-log sources for each sport. Only NFL historical stats have a tested free adapter so far; NBA, MLB and NHL still lack approved production game-log feeds.
 3. Add a durable database for normalized data, observed KBH searches, source timestamps, per-market publication receipts, and daily idempotency. Never synthesize popularity or use test fixtures in production.
-4. Build interactive search, player/team analysis, alternate-line comparison, and bet-builder views only for verified coverage. The popular card formatter is not a live search tracker or publisher.
+4. Extend the NFL historical search to licensed current roster/injury/odds, player/team analysis and alternate-line comparisons. Add durable search telemetry before calling any combination popular. Build bet-builder views only for verified coverage. The popular card formatter is not a live search tracker or publisher.
 5. Add the midnight Pacific worker with a database lease, retries and late-market checks. Recheck current market, participation, roster and injuries just before every post or edit; retract unavailable or started props. Do not enable automatic posts before these checks work end to end.
 
-This is a functional local research foundation, not a completed or deployed member-facing Trends-tool.
+This is a private Discord shell and a functional NFL research release candidate, not a completed multi-sport Trends-tool. The automated publisher remains off.
