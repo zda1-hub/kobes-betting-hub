@@ -6,13 +6,15 @@ const os = require('node:os');
 const path = require('node:path');
 const { currentMarket, selectEvent } = require('./current-market');
 
-test('matches one upcoming event and rejects ambiguous teams', () => {
+test('uses the nearest upcoming event and rejects doubleheaders', () => {
   const rows = [
     { id: 'game0001', home_team: 'New York Knicks', away_team: 'Brooklyn Nets', commence_time: '2026-11-15T02:00:00Z' },
     { id: 'game0002', home_team: 'New York Knicks', away_team: 'Boston Celtics', commence_time: '2026-11-16T02:00:00Z' }
   ];
   assert.equal(selectEvent(rows, 'Brooklyn', Date.parse('2026-11-14T20:00:00Z')).id, 'game0001');
-  assert.throws(() => selectEvent(rows, 'Knicks', Date.parse('2026-11-14T20:00:00Z')), /Several/);
+  assert.equal(selectEvent(rows, 'Knicks', Date.parse('2026-11-14T20:00:00Z')).id, 'game0001');
+  assert.throws(() => selectEvent([rows[0], { ...rows[1], commence_time: '2026-11-15T05:00:00Z' }],
+    'Knicks', Date.parse('2026-11-14T20:00:00Z')), /Multiple near-term/);
 });
 
 test('one-market live research honors monthly and shared credit limits', async t => {
