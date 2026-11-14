@@ -6,6 +6,7 @@ const path = require('node:path');
 const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const commands = require('./commands');
 const { research: researchNflTrend, formatResearch: formatNflTrend } = require('./trends/nfl-search');
+const { research: researchFreeLeagueTrend, toCsv: freeLeagueTrendCsv } = require('./trends/free-leagues');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { buildCapperRecap } = require('./lib/capper-recap');
@@ -3899,6 +3900,42 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } catch (error) {
       console.warn('Trends-tool NFL search unavailable:', error);
       await interaction.editReply('That NFL research is unavailable right now. Check the full player name or try again after the source feed recovers.');
+    }
+    return;
+  }
+
+  if (interaction.commandName === 'trends-research') {
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||
+        interaction.channelId !== '1571285899717771365' || !isAdministrator(interaction)) {
+      await interaction.reply({ ephemeral: true, content: 'This source-rights review command is available to KBH administrators in the private Trends-tool search channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const result = await researchFreeLeagueTrend({
+        sport: interaction.options.getString('sport', true),
+        name: interaction.options.getString('player', true),
+        team: interaction.options.getString('team'),
+        stat: interaction.options.getString('stat', true),
+        side: interaction.options.getString('side', true),
+        line: interaction.options.getNumber('line', true)
+      });
+      const count = window => `${window.hits}/${window.sample} hits${window.pushes ? `, ${window.pushes} pushes` : ''}`;
+      const csv = freeLeagueTrendCsv(result);
+      const filename = `trends-${result.sport.toLowerCase()}-last20.csv`;
+      await interaction.editReply({
+        content: `**Trends-tool · private ${result.sport} research**\n` +
+          `${result.name}: ${result.side.replace('_', ' ')} ${result.line} ${result.stat.replaceAll('_', ' ')}\n` +
+          `Season: ${count(result.analysis.season)} · L5: ${count(result.analysis.l5)} · L10: ${count(result.analysis.l10)} · L20: ${count(result.analysis.l20)}\n` +
+          `Attached CSV contains each of the last ${result.analysis.l20.sample} completed games and its source. ` +
+          `Checked ${result.checkedAt}. [Data release](${result.sourceUrl}) (SportsDataverse CC BY 4.0).\n` +
+          `Research draft only. Historical counts are not next-game probabilities. Current line, odds, roster, injuries and source rights for paid publication have not been verified.`,
+        files: [{ attachment: Buffer.from(csv), name: filename }],
+        allowedMentions: { parse: [] }
+      });
+    } catch (error) {
+      console.warn('Trends-tool free-league research unavailable:', error);
+      await interaction.editReply('That research is unavailable. Check the exact source player name, league and stat, or try after the data release updates.');
     }
     return;
   }

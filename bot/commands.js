@@ -263,6 +263,26 @@ module.exports = [
     .addNumberOption(option => option.setName('alternate_1').setDescription('Optional second historical threshold; not a live sportsbook line').setMinValue(0).setMaxValue(1000))
     .addNumberOption(option => option.setName('alternate_2').setDescription('Optional third historical threshold; not a live sportsbook line').setMinValue(0).setMaxValue(1000)),
   new SlashCommandBuilder()
+    .setName('trends-research')
+    .setDescription('Privately research NBA, NHL or MLB game logs and download the last 20 as CSV')
+    .addStringOption(option => option.setName('sport').setDescription('League').setRequired(true).addChoices(
+      { name: 'NBA', value: 'NBA' }, { name: 'NHL', value: 'NHL' }, { name: 'MLB', value: 'MLB' }
+    ))
+    .addStringOption(option => option.setName('player').setDescription('Exact name shown by the source').setRequired(true).setMinLength(3).setMaxLength(100))
+    .addStringOption(option => option.setName('stat').setDescription('Choose a stat supported by the selected league').setRequired(true).addChoices(
+      { name: 'Points', value: 'points' }, { name: 'Rebounds', value: 'rebounds' },
+      { name: 'Assists', value: 'assists' }, { name: 'Threes', value: 'threes' },
+      { name: 'Points + assists', value: 'points_assists' }, { name: 'Goals', value: 'goals' },
+      { name: 'Shots on goal', value: 'shots_on_goal' }, { name: 'Hits', value: 'hits' },
+      { name: 'Blocked shots', value: 'blocked_shots' }, { name: 'Home runs', value: 'home_runs' },
+      { name: 'Runs batted in', value: 'runs_batted_in' }
+    ))
+    .addStringOption(option => option.setName('side').setDescription('Historical threshold comparison').setRequired(true).addChoices(
+      { name: 'Over', value: 'over' }, { name: 'Under', value: 'under' }, { name: 'At least', value: 'at_least' }
+    ))
+    .addNumberOption(option => option.setName('line').setDescription('Your research threshold, not a sportsbook quote').setRequired(true).setMinValue(0).setMaxValue(1000))
+    .addStringOption(option => option.setName('team').setDescription('NHL or NBA team abbreviation to resolve identical names').setMaxLength(4)),
+  new SlashCommandBuilder()
     .setName('pick-audit')
     .setDescription('Privately inspect the database timeline for one pick or X post')
     .addStringOption((option) => option

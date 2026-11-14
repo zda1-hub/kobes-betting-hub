@@ -1,5 +1,12 @@
 # Trends-tool integration status — November 14, 2026
 
+## November 14 free-league research addition
+
+- Added private, administrator-only `/trends-research` in `🔎・prop-search-engine` for NBA, NHL and MLB. It reads the current SportsDataverse season releases, counts only completed, participated games with an observed stat, returns season/L5/L10/L20 counts, and attaches a sourced CSV of the last 20 games. The user enters a historical threshold; the command does not discover a current sportsbook line. It does not create or publish a pick.
+- Added `scripts/trends-export.mjs` to write the same sourced game-log CSV and JSON summary under ignored `data/trends/private/`. Those files are transparent research artifacts. The source release remains the input of record, and code calculates hit rates from its rows. OpenAI is not used to remember game logs or count outcomes.
+- Local real-release checks covered NBA player game logs, NHL skater box scores and MLB final regular-season play-by-play joined to schedules. MLB is parsed incrementally to avoid holding a season of row objects in memory. The search does not establish game-day roster, injury status, live odds, or commercial redistribution rights.
+- NBA/NHL/MLB trend channels and the automatic midnight publisher remain empty and disabled. Do not describe this addition as a member-facing multi-sport Trends-tool until source rights and the publication checks below are resolved.
+
 ## Live Discord setup and free NFL research
 
 - Created a private trends category in the KBH guild (`1215407647155683358`). Discord currently displays its name as `📊・TREND ANALYTICS`. Its six private channels are `popular-trends` (`1571283801592827945`), `🏀・nba-high-hit-rates` (`1571285528882450623`), `🏈・nfl-high-hit-rates` (`1571285640409256056`), `⚾・mlb-high-hit-rates` (`1571285735867424931`), `🏒・nhl-high-hit-rates` (`1571285798827851887`), and `🔎・prop-search-engine` (`1571285899717771365`). Each was created with the existing VIP and Website VIP roles. The new channels contain no trend posts.
