@@ -16,12 +16,13 @@ const packet = {
   }] } },
 };
 
-test('the original X pick and one complete reply contain every approved breakdown point once', () => {
+test('one complete reply contains every approved breakdown point', () => {
   const original = buildFreePickXPost(packet);
   const parts = breakdownParts(packet);
   assert.equal(parts.length, 1);
   assert.match(parts[0], /^Full breakdown:/);
-  for (const claim of claims) assert.equal([original, ...parts].join('\n').split(claim).length - 1, 1);
+  assert.match(original, /Arizona Diamondbacks ML/);
+  for (const claim of claims) assert.equal(parts[0].split(claim).length - 1, 1);
 });
 
 test('breakdown replies use stable IDs and never queue a duplicate on retry', async () => {
