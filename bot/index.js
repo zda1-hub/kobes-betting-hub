@@ -10,6 +10,7 @@ const { research: researchFreeLeagueTrend, toCsv: freeLeagueTrendCsv } = require
 const { recordSearch: recordTrendSearch } = require('./trends/search-ledger');
 const { recordCombo: recordTrendCombo } = require('./trends/combo-ledger');
 const { currentMarket: researchCurrentMarket } = require('./trends/current-market');
+const { scanDaily: scanDailyTrends } = require('./trends/daily-scan');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { buildCapperRecap } = require('./lib/capper-recap');
@@ -1562,6 +1563,21 @@ async function publishScheduledTrends() {
 }
 
 function startTrendsSchedule() {
+  // The inventory uses only the quota-free events endpoint. It is a durable
+  // research receipt; it never sends a member-facing trend or charges credits.
+  if (process.env.ODDS_API_KEY) {
+    const runInventory = () => scanDailyTrends({ root: reviewQueueRoot,
+      apiKey: process.env.ODDS_API_KEY }).then(report => {
+      if (!report.existing) console.log('Trends daily inventory:', JSON.stringify({
+        date: report.serviceDate, events: Object.fromEntries(Object.entries(report.leagues)
+          .map(([sport, league]) => [sport, league.events.length])),
+        eligibleCombos: report.popularity.eligibleCombos, publication: report.publication
+      }));
+    }).catch(error => console.error('Trends daily inventory failed:', error.message));
+    void runInventory();
+    const inventoryTimer = setInterval(() => void runInventory(), 10 * 60 * 1000);
+    inventoryTimer.unref();
+  } else console.warn('Trends daily inventory held: ODDS_API_KEY is missing.');
   // Trend sheets now require the same Kobe approval as every other member-
   // facing post. This intentionally replaces the old direct auto-publish path.
   if (process.env.TRENDS_AUTO_PUBLISH_ENABLED === 'true') {

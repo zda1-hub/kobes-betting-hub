@@ -1,5 +1,10 @@
 # Trends-tool integration status — November 14, 2026
 
+## Automatic daily inventory
+
+- The worker now writes one durable, quota-free event inventory per Pacific day under `trends-daily/YYYY-MM-DD.json`. It records the provider's upcoming events in NBA, NFL, MLB and NHL and the count/IDs of exact combinations with at least five distinct member requests. A provider error is recorded for that league without inventing games. The scan catches up after a restart and runs every ten minutes until that day's receipt exists; it does not spend odds credits.
+- This inventory is **not** an automatic trend post or a current-prop verification. The existing auto publisher remains held. Prices, game-day availability, historical sample and source rights must be checked close to any publication. A schedule alone cannot pass those checks.
+
 ## Exact-combination interest
 
 - VIP members can use `/trends-combo` in the private search channel to register an exact 2–4-leg combination using `SPORT|TEAM|PLAYER|STAT|OVER/UNDER|LINE` per leg. The ledger counts each member once for that exact set per Pacific day; it stores a daily salted digest instead of a raw Discord ID. Five distinct requests make a combination eligible for a **popularity review**, not automatic publication.
