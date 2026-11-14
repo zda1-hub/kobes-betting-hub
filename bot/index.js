@@ -3891,6 +3891,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         stat: interaction.options.getString('stat', true),
         side: interaction.options.getString('side', true),
         line: interaction.options.getNumber('line', true),
+        alternateLines: [interaction.options.getNumber('alternate_1'), interaction.options.getNumber('alternate_2')]
+          .filter(value => value !== null),
         season: month >= 7 ? year : year - 1
       });
       await interaction.editReply({ content: formatNflTrend(result), allowedMentions: { parse: [] } });
