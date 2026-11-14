@@ -1,13 +1,13 @@
 # Trends-tool integration status — November 14, 2026
 
-## Live Discord setup and next release candidate
+## Live Discord setup and free NFL research
 
-- Created the private `📊・LINEMATE ANALYTICS` category in the KBH guild (`1215407647155683358`). Its six private channels are `popular-trends` (`1571283801592827945`), `🏀・nba-high-hit-rates` (`1571285528882450623`), `🏈・nfl-high-hit-rates` (`1571285640409256056`), `⚾・mlb-high-hit-rates` (`1571285735867424931`), `🏒・nhl-high-hit-rates` (`1571285798827851887`), and `🔎・prop-search-engine` (`1571285899717771365`). Each was created with the existing VIP and Website VIP roles. The new channels contain no trend posts.
+- Created a private trends category in the KBH guild (`1215407647155683358`). Discord currently displays its name as `📊・TREND ANALYTICS`. Its six private channels are `popular-trends` (`1571283801592827945`), `🏀・nba-high-hit-rates` (`1571285528882450623`), `🏈・nfl-high-hit-rates` (`1571285640409256056`), `⚾・mlb-high-hit-rates` (`1571285735867424931`), `🏒・nhl-high-hit-rates` (`1571285798827851887`), and `🔎・prop-search-engine` (`1571285899717771365`). Each was created with the existing VIP and Website VIP roles. The new channels contain no trend posts.
 - `/trends-nfl` is live in `🔎・prop-search-engine`. It requires a VIP role or administrator access and privately returns completed-game season/L5/L10/L20 counts with source attribution. The user-entered threshold is not represented as a live sportsbook line, recommendation or probability. Render deploy `dep-dbsdptm7bikc73f08qpg` reached live and a Discord command run returned the sourced Josh Allen result privately on November 14.
-- This branch adds free nflverse current-roster and injury-report context, two optional alternate threshold comparisons, and recent game-by-game values. The new code is not yet deployed. A missing or stale injury report remains unknown; no game-day availability is inferred. No NBA/MLB/NHL search or automatic trends publisher is exposed.
+- Free nflverse current-roster and injury-report context, two optional alternate threshold comparisons, and recent game-by-game values are live in `/trends-nfl`. Render deploy `dep-dbsduju417fc73feu9k0` reached `live` on November 14. A second private Discord command returned Josh Allen under 225.5 passing yards at 2/8 completed games, under 200.5 at 0/8, the last five game values, BUF/QB/ACT roster context, and explicitly unconfirmed injury status. A missing or stale injury report remains unknown; no game-day availability is inferred. No NBA/MLB/NHL search or automatic trends publisher is exposed.
 - The NFL sample minimum was corrected from 20 to 8, because a 20-game current NFL season sample would exclude all regular-season players. This only affects the draft qualification calculation; it does not turn on automated posts.
 - The 2026 nflverse stats, schedule, roster and injury releases were fetched read-only on November 14. A local end-to-end check of Josh Allen over a *user-entered* 225.5 passing-yard threshold yielded 6/8 completed-game hits; the roster feed showed BUF/QB/ACT from week 10, while his current injury status remained unknown because no matching report row was present. The price and game-day availability were not verified and this sample was not posted as a recommendation.
-- `node --test bot/trends/*.test.js`: 27 pass on this branch. The prior full `npm test` run had 1,113 pass and 8 failures in untouched ESPN/source recovery and public-site tests; review before release. A local Node network fetch failed TLS in the workstation environment; the live Render command successfully fetched nflverse stats and schedules.
+- `node --test bot/trends/*.test.js`: 27 pass for this release. The full `npm test` run had 1,116 pass and 8 failures in untouched ESPN/source recovery and public-site tests. A local Node network fetch failed TLS in the workstation environment; the live Render command successfully fetched nflverse stats, schedules, roster, and injury report.
 
 ## What is in this checkout
 
@@ -22,7 +22,7 @@
 
 - The initial foundation had 21 passing tests (including Dot's original 14). The live slice had 24; this branch has 27.
 - A read-only fetch of the 2026 nflverse release and schedules returned 137 completed regular-season games and eight completed rows for an example player on November 14. This confirms a current file exists; it does not verify game results or a current player roster independently.
-- The local Node `fetch` attempt failed with `ERR_SSL_WRONG_VERSION_NUMBER`, while the Python read-only source check succeeded. The deployed Render runtime returned the historical NFL search result; roster and injury fetches must be verified after this branch is deployed.
+- The local Node `fetch` attempt failed with `ERR_SSL_WRONG_VERSION_NUMBER`, while the Python read-only source check succeeded. The deployed Render runtime returned both the historical NFL search and roster/injury context in a private Discord result.
 - Only the newly requested private Discord category/channels have been created in the server. No existing channel, production data, database migration, or automated post has been changed.
 
 ## Free-source and rights findings
@@ -35,10 +35,9 @@
 
 ## Remaining before release
 
-1. Deploy this branch and verify the new roster/injury context and alternate threshold output in the existing private search command. Existing channels, roles and permissions remain untouched.
-2. Confirm provider redistribution rights for the paid Trends-tool use case. Select licensed current player-game-log sources for NBA, MLB and NHL; BALLDONTLIE free NBA does not include player stats. Keep the existing Odds API quota reserved for arbitrage until a Trends-tool budget and consumption gate are in place.
-3. Add a durable database for normalized data, observed KBH searches, source timestamps, per-market publication receipts, and daily idempotency. Never synthesize popularity or use test fixtures in production.
-4. Add verified game-day participation and current odds to NFL, plus player/team matchup analysis. The new comparisons are historical threshold comparisons only. Add durable search telemetry before calling any combination popular. Build bet-builder views only for verified coverage. The popular card formatter is not a live search tracker or publisher.
-5. Add the midnight Pacific worker with a database lease, retries and late-market checks. Recheck current market, participation, roster and injuries just before every post or edit; retract unavailable or started props. Do not enable automatic posts before these checks work end to end.
+1. Confirm provider redistribution rights for the paid Trends-tool use case. Select licensed current player-game-log sources for NBA, MLB and NHL; BALLDONTLIE free NBA does not include player stats. Keep the existing Odds API quota reserved for arbitrage until a Trends-tool budget and consumption gate are in place.
+2. Add a durable database for normalized data, observed KBH searches, source timestamps, per-market publication receipts, and daily idempotency. Never synthesize popularity or use test fixtures in production.
+3. Add verified game-day participation and current odds to NFL, plus player/team matchup analysis. The new comparisons are historical threshold comparisons only. Add durable search telemetry before calling any combination popular. Build bet-builder views only for verified coverage. The popular card formatter is not a live search tracker or publisher.
+4. Add the midnight Pacific worker with a database lease, retries and late-market checks. Recheck current market, participation, roster and injuries just before every post or edit; retract unavailable or started props. Do not enable automatic posts before these checks work end to end.
 
 This is a private Discord shell and a live NFL historical research command, not a completed multi-sport Trends-tool. The automated publisher remains off.
