@@ -16,11 +16,11 @@ const packet = {
   }] } },
 };
 
-test('the original X pick and its replies contain every approved breakdown point once', () => {
+test('the original X pick and one complete reply contain every approved breakdown point once', () => {
   const original = buildFreePickXPost(packet);
   const parts = breakdownParts(packet);
-  assert.ok(parts.length > 0);
-  assert.ok(parts.every(part => safeXPostLength(part) <= 280));
+  assert.equal(parts.length, 1);
+  assert.match(parts[0], /^Full breakdown:/);
   for (const claim of claims) assert.equal([original, ...parts].join('\n').split(claim).length - 1, 1);
 });
 
@@ -36,6 +36,14 @@ test('breakdown replies use stable IDs and never queue a duplicate on retry', as
     },
   });
   assert.equal(result.status, 'published');
-  assert.equal(requests.length, result.replies);
-  assert.ok(requests.every((request, index) => request.id.match(/^breakdown-x-123456789-[a-f0-9]{20}-\d{2}$/) && request.body === breakdownParts(packet)[index]));
+  assert.equal(result.replies, 1);
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].id, /^breakdown-x-123456789-[a-f0-9]{20}-00$/);
+  assert.equal(requests[0].body, breakdownParts(packet)[0]);
+});
+
+test('a breakdown too long for one reply is held rather than split', () => {
+  const oversized = structuredClone(packet);
+  oversized.analysis.extraction.plays[0].source_claims = Array.from({ length: 8 }, (_, i) => `Verified claim ${i}: ${'long '.repeat(120)}`);
+  assert.throws(() => breakdownParts(oversized), /exceeds one X reply/);
 });

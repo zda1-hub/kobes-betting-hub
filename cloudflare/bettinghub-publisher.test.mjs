@@ -465,6 +465,20 @@ test('result cutover blocks new standalone results and duplicate legacy grades',
   DB.close();
 });
 
+test('one complete breakdown reply may exceed 280 characters, but old thread IDs may not', async () => {
+  const DB = memoryD1();
+  await DB.prepare('CREATE TABLE approved_posts (id TEXT PRIMARY KEY, channel TEXT, body TEXT, scheduled_at TEXT, status TEXT, created_at TEXT, x_post_id TEXT, last_error TEXT)').run();
+  const env = { DB, FREE_PICK_X_QUEUE_SECRET: 'test-key' };
+  const submit = (id, body) => worker.fetch(new Request('https://publisher.test/api/queue/x', {
+    method: 'POST', headers: { authorization: 'Bearer test-key', 'content-type': 'application/json' },
+    body: JSON.stringify({ id, body, scheduledAt: '2026-11-14T12:00:00Z' }),
+  }), env);
+  const body = `Full breakdown:\n${'Verified evidence. '.repeat(22)}`;
+  assert.equal((await submit('breakdown-x-123456789-aaaaaaaaaaaaaaaaaaaa-01', body)).status, 400);
+  assert.equal((await submit('breakdown-x-123456789-aaaaaaaaaaaaaaaaaaaa-00', body)).status, 201);
+  DB.close();
+});
+
 test('Free Pick reports the active kobebettinghub Story connection and delivery receipt', async () => {
   const queries = [];
   const env = {

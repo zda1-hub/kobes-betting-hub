@@ -806,16 +806,21 @@ async function enqueueXPost(request, env) {
   const body = typeof input.body === "string" ? input.body.trim() : "";
   const scheduleTime = Date.parse(typeof input.scheduledAt === "string" ? input.scheduledAt : "");
   const publishNow = input.publishNow === true;
-  if (!body || body.length > MAX_POST_LENGTH) return json({ error: `body must contain 1–${MAX_POST_LENGTH} characters` }, 400);
-  if (!Number.isFinite(scheduleTime)) return json({ error: "scheduledAt must be an ISO-8601 date" }, 400);
-
   const id = typeof input.id === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(input.id) ? input.id : crypto.randomUUID();
+  const limit = /^breakdown-x-\d{1,25}-[a-f0-9]{20}-00$/.test(id) ? 4000 : MAX_POST_LENGTH;
+  if (!body || body.length > limit) return json({ error: `body must contain 1–${limit} characters` }, 400);
+  if (!Number.isFinite(scheduleTime)) return json({ error: "scheduledAt must be an ISO-8601 date" }, 400);
   if (id.startsWith('result-x-') && !/^result-x-\d{1,25}-[a-f0-9]{20}$/.test(id)) return json({ error: 'Invalid result post id' }, 400);
   if (id.startsWith('breakdown-x-') && !/^breakdown-x-\d{1,25}-[a-f0-9]{20}-\d{2}$/.test(id)) return json({ error: 'Invalid breakdown reply id' }, 400);
   const replyMatch = /^result-x-(\d{1,25})-([a-f0-9]{20})$/.exec(id);
   const breakdownMatch = /^breakdown-x-(\d{1,25})-[a-f0-9]{20}-\d{2}$/.exec(id);
   if (replyMatch?.[1] === '0') return json({ error: 'A free-pick result requires the original X post ID for a reply' }, 422);
   if (breakdownMatch?.[1] === '0') return json({ error: 'A breakdown requires the original X post ID for a reply' }, 422);
+  if (id.endsWith('-00') && breakdownMatch) {
+    const legacy = await env.DB.prepare('SELECT id FROM approved_posts WHERE id = ? LIMIT 1')
+      .bind(`${id.slice(0, -2)}01`).first();
+    if (legacy) return json({ error: 'An earlier breakdown thread exists for this pick; review it before retrying', status: 'failed' }, 409);
+  }
   if (replyMatch) {
     // The previous publisher used result-x-0 IDs for standalone results. Never
     // create a second post for one of those picks during the reply cutover.
