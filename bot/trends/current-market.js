@@ -40,12 +40,18 @@ async function currentMarket({ root, apiKey, sport, team, player, stat, side, li
   const odds = await withOddsBudget({ root, apiKey, fetchImpl, now, operation: () =>
     eventAlternateOdds(sport, event.id, { ...options, market }) });
   const needle = playerNameKey(player);
-  const offers = odds.selections.filter(row => playerNameKey(row.player) === needle &&
-    row.side === side && row.line === line && row.odds >= -400 &&
+  const playerOffers = odds.selections.filter(row => playerNameKey(row.player) === needle &&
+    row.side === side && row.odds >= -400 &&
     Date.parse(row.updatedAt) <= now.valueOf() && now.valueOf() - Date.parse(row.updatedAt) <= 5 * 60_000)
     .sort((a, b) => b.odds - a.odds);
+  const offers = playerOffers.filter(row => row.line === line);
+  const bestOtherLines = new Map();
+  for (const row of playerOffers) if (row.line !== line && !bestOtherLines.has(row.line))
+    bestOtherLines.set(row.line, row);
+  const otherLines = [...bestOtherLines.values()].slice(0, 5);
   return { sport, player, stat, side, line, market, event,
-    fetchedAt: odds.fetchedAt, remainingCredits: odds.remainingCredits, offers: offers.slice(0, 5) };
+    fetchedAt: odds.fetchedAt, remainingCredits: odds.remainingCredits,
+    offers: offers.slice(0, 5), otherLines };
 }
 
 module.exports = { MARKET_BY_STAT, selectEvent, currentMarket };
