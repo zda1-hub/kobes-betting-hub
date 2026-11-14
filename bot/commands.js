@@ -245,6 +245,22 @@ module.exports = [
     .setName('hub-status')
     .setDescription('Privately check pick monitoring, logging, grading, and recap readiness'),
   new SlashCommandBuilder()
+    .setName('trends-nfl')
+    .setDescription('Research completed NFL player games in the VIP Trends-tool channel')
+    .addStringOption(option => option.setName('player').setDescription('Full player name').setRequired(true).setMinLength(3).setMaxLength(100))
+    .addStringOption(option => option.setName('stat').setDescription('Historical player statistic').setRequired(true).addChoices(
+      { name: 'Receptions', value: 'receptions' },
+      { name: 'Receiving yards', value: 'receiving_yards' },
+      { name: 'Rushing yards', value: 'rushing_yards' },
+      { name: 'Rushing attempts', value: 'rushing_attempts' },
+      { name: 'Passing yards', value: 'passing_yards' },
+      { name: 'Passing touchdowns', value: 'passing_touchdowns' }
+    ))
+    .addStringOption(option => option.setName('side').setDescription('How to compare the stat with the line').setRequired(true).addChoices(
+      { name: 'Over', value: 'over' }, { name: 'Under', value: 'under' }, { name: 'At least', value: 'at_least' }
+    ))
+    .addNumberOption(option => option.setName('line').setDescription('Stat threshold; this is your research input, not a live sportsbook quote').setRequired(true).setMinValue(0).setMaxValue(1000)),
+  new SlashCommandBuilder()
     .setName('pick-audit')
     .setDescription('Privately inspect the database timeline for one pick or X post')
     .addStringOption((option) => option

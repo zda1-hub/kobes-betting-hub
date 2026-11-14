@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const commands = require('./commands');
+const { research: researchNflTrend, formatResearch: formatNflTrend } = require('./trends/nfl-search');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { buildCapperRecap } = require('./lib/capper-recap');
@@ -3872,6 +3873,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'trends-nfl') {
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||
+        interaction.channelId !== '1571285899717771365' ||
+        (!isAdministrator(interaction) &&
+         ![...vipRoleIds()].some(id => interaction.member?.roles?.cache?.has(id) || interaction.member?.roles?.includes?.(id)))) {
+      await interaction.reply({ ephemeral: true, content: 'Use this command as a VIP member in the private Trends-tool search channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const year = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric' }).format(new Date()));
+      const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'numeric' }).format(new Date()));
+      const result = await researchNflTrend({
+        player: interaction.options.getString('player', true),
+        stat: interaction.options.getString('stat', true),
+        side: interaction.options.getString('side', true),
+        line: interaction.options.getNumber('line', true),
+        season: month >= 7 ? year : year - 1
+      });
+      await interaction.editReply({ content: formatNflTrend(result), allowedMentions: { parse: [] } });
+    } catch (error) {
+      console.warn('Trends-tool NFL search unavailable:', error);
+      await interaction.editReply('That NFL research is unavailable right now. Check the full player name or try again after the source feed recovers.');
+    }
+    return;
+  }
 
   if (interaction.commandName === 'hub-help') {
     await interaction.reply({
