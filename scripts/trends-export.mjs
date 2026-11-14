@@ -22,7 +22,8 @@ async function main() {
   if (!name || !Number.isFinite(line)) throw new Error('Player and numeric line required');
   const fetchImpl = o['source-file'] ? async url => ({
     ok: true,
-    arrayBuffer: async () => readFile(url.includes('/mlb_schedules/') ? o['schedule-file'] : o['source-file'])
+    arrayBuffer: async () => readFile(url.includes('/mlb_schedules/') ? o['schedule-file'] :
+      (o['previous-source-file'] && url.includes(`_${Number(o.season) - 1}.csv`)) ? o['previous-source-file'] : o['source-file'])
   }) : fetch;
   if (o['source-file'] && sport === 'MLB' && !o['schedule-file']) throw new Error('MLB local export needs --schedule-file');
   const result = await freeLeagues.research({ sport, name, team: o.team, stat: o.stat,
@@ -39,7 +40,8 @@ async function main() {
     sourceUrl: result.sourceUrl, scheduleUrl: result.scheduleUrl,
     seasonCount: result.analysis.season, last5: result.analysis.l5,
     last10: result.analysis.l10, last20: result.analysis.l20,
-    note: 'Historical participated games only. Not a prediction or verified current sportsbook market.'
+    previousSeasonUnavailable: result.previousSeasonUnavailable,
+    note: 'Historical participated games only. Recent windows may span seasons; season rate is current season only. Not a prediction or verified current sportsbook market.'
   }, null, 2) + '\n', { mode: 0o600 });
   process.stdout.write(JSON.stringify({ csvPath, summaryPath, last20: result.analysis.l20 }) + '\n');
 }
