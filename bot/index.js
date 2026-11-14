@@ -8,6 +8,7 @@ const commands = require('./commands');
 const { research: researchNflTrend, formatResearch: formatNflTrend } = require('./trends/nfl-search');
 const { research: researchFreeLeagueTrend, toCsv: freeLeagueTrendCsv } = require('./trends/free-leagues');
 const { recordSearch: recordTrendSearch } = require('./trends/search-ledger');
+const { recordCombo: recordTrendCombo } = require('./trends/combo-ledger');
 const { currentMarket: researchCurrentMarket } = require('./trends/current-market');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
@@ -3997,6 +3998,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } catch (error) {
       console.warn('Trends-tool current-market research unavailable:', error.message);
       await interaction.editReply(`Current-market research could not complete: ${error.message}. No pick or member post was made.`);
+    }
+    return;
+  }
+
+  if (interaction.commandName === 'trends-combo') {
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||
+        interaction.channelId !== '1571285899717771365' ||
+        (!isAdministrator(interaction) &&
+         ![...vipRoleIds()].some(id => interaction.member?.roles?.cache?.has(id) || interaction.member?.roles?.includes?.(id)))) {
+      await interaction.reply({ ephemeral: true, content: 'Use this command as a VIP member in the private Trends-tool search channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const rawLegs = ['leg_1', 'leg_2', 'leg_3', 'leg_4']
+        .map(key => interaction.options.getString(key)).filter(Boolean);
+      const result = await recordTrendCombo({ root: reviewQueueRoot,
+        userId: interaction.user.id, rawLegs });
+      await interaction.editReply({ content:
+        `Your exact ${rawLegs.length}-leg combination was ${result.recorded ? 'recorded' : 'already counted'} for ${result.serviceDate} Pacific. ` +
+        `${result.distinctSearchers} distinct member(s) requested this combination today. ` +
+        `This is interest tracking, not a bet builder or a published parlay. ` +
+        `Lines, player availability, same-book pricing and historical results must be checked independently before any card can be published. ` +
+        `Historical hit rates do not predict a combination's chance. 21+.`,
+        allowedMentions: { parse: [] } });
+    } catch (error) {
+      await interaction.editReply(`Could not record the combination: ${error.message}. Use SPORT|TEAM|PLAYER|STAT|OVER/UNDER|LINE for each leg. No parlay was posted.`);
     }
     return;
   }

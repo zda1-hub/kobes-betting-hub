@@ -1,5 +1,10 @@
 # Trends-tool integration status — November 14, 2026
 
+## Exact-combination interest
+
+- VIP members can use `/trends-combo` in the private search channel to register an exact 2–4-leg combination using `SPORT|TEAM|PLAYER|STAT|OVER/UNDER|LINE` per leg. The ledger counts each member once for that exact set per Pacific day; it stores a daily salted digest instead of a raw Discord ID. Five distinct requests make a combination eligible for a **popularity review**, not automatic publication.
+- This is a real first-party measure of expressed combination interest. It is not sportsbook bet volume, a verified parlay, a calculated payout, or evidence that any leg will hit. No popular card posts until all legs have fresh same-book odds, verified history, and game-day availability.
+
 ## VIP historical search release
 
 - `/trends-research` now accepts VIP and Website VIP members in the private prop-search channel for NBA, NHL and MLB. The response is ephemeral and shows derived season/L5/L10/L20 counts plus five recent completed-game values with source attribution. Only administrators receive the last-20 CSV export. The user supplies the threshold; the command does not claim a current sportsbook line or recommend a pick.
