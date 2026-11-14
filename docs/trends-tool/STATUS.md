@@ -1,8 +1,13 @@
 # Trends-tool integration status — November 14, 2026
 
+## VIP historical search release
+
+- `/trends-research` now accepts VIP and Website VIP members in the private prop-search channel for NBA, NHL and MLB. The response is ephemeral and shows derived season/L5/L10/L20 counts plus five recent completed-game values with source attribution. Only administrators receive the last-20 CSV export. The user supplies the threshold; the command does not claim a current sportsbook line or recommend a pick.
+- The automatic sport-channel publisher remains disabled. Member access to historical search does not verify a player's current team or game-day availability, current odds, or whether the source license settles every upstream right. These checks still gate automated recommendations.
+
 ## November 14 free-league research addition
 
-- Added private, administrator-only `/trends-research` in `🔎・prop-search-engine` for NBA, NHL and MLB. It reads the current SportsDataverse season releases, counts only completed, participated games with an observed stat, returns season/L5/L10/L20 counts, and attaches a sourced CSV of the last 20 games. The user enters a historical threshold; the command does not discover a current sportsbook line. It does not create or publish a pick.
+- Added private `/trends-research` in `🔎・prop-search-engine` for NBA, NHL and MLB. It reads the current SportsDataverse season releases and counts only completed, participated games with an observed stat. VIP members receive season/L5/L10/L20 counts; administrators also receive a sourced CSV of the last 20 games. The user enters a historical threshold; the command does not discover a current sportsbook line. It does not create or publish a pick.
 - Added `scripts/trends-export.mjs` to write the same sourced game-log CSV and JSON summary under ignored `data/trends/private/`. Those files are transparent research artifacts. The source release remains the input of record, and code calculates hit rates from its rows. OpenAI is not used to remember game logs or count outcomes.
 - Local real-release checks covered NBA player game logs, NHL skater box scores and MLB final regular-season play-by-play joined to schedules. MLB is parsed incrementally to avoid holding a season of row objects in memory. The search does not establish game-day roster, injury status, live odds, or commercial redistribution rights.
 - NBA/NHL/MLB trend channels and the automatic midnight publisher remain empty and disabled. Do not describe this addition as a member-facing multi-sport Trends-tool until source rights and the publication checks below are resolved.

@@ -3912,8 +3912,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (interaction.commandName === 'trends-research') {
     if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||
-        interaction.channelId !== '1571285899717771365' || !isAdministrator(interaction)) {
-      await interaction.reply({ ephemeral: true, content: 'This source-rights review command is available to KBH administrators in the private Trends-tool search channel.' });
+        interaction.channelId !== '1571285899717771365' ||
+        (!isAdministrator(interaction) &&
+         ![...vipRoleIds()].some(id => interaction.member?.roles?.cache?.has(id) || interaction.member?.roles?.includes?.(id)))) {
+      await interaction.reply({ ephemeral: true, content: 'Use this command as a VIP member in the private Trends-tool search channel.' });
       return;
     }
     await interaction.deferReply({ ephemeral: true });
@@ -3927,18 +3929,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
         line: interaction.options.getNumber('line', true)
       });
       const count = window => `${window.hits}/${window.sample} hits${window.pushes ? `, ${window.pushes} pushes` : ''}`;
-      const csv = freeLeagueTrendCsv(result);
-      const filename = `trends-${result.sport.toLowerCase()}-last20.csv`;
+      const isAdmin = isAdministrator(interaction);
       await interaction.editReply({
-        content: `**Trends-tool · private ${result.sport} research**\n` +
+        content: `**Trends-tool · ${result.sport} historical research**\n` +
           `${result.name}: ${result.side.replace('_', ' ')} ${result.line} ${result.stat.replaceAll('_', ' ')}\n` +
           `Season: ${count(result.analysis.season)} · L5: ${count(result.analysis.l5)} · L10: ${count(result.analysis.l10)} · L20: ${count(result.analysis.l20)}\n` +
-          `Attached CSV contains each of the last ${result.analysis.l20.sample} completed games and its source. ` +
+          `Recent completed games: ${result.analysis.l20.games.slice(0, 5).map(game => `${game.date} ${game.value}`).join(' · ')}. ` +
           `Recent windows may include the prior season when fewer than 20 current-season games are available. ` +
           (result.previousSeasonUnavailable ? `Prior-season file was unavailable, so the recent sample is shorter. ` : '') +
           `Checked ${result.checkedAt}. [Data release](${result.sourceUrl}) (SportsDataverse CC BY 4.0).\n` +
-          `Research draft only. Historical counts are not next-game probabilities. Current line, odds, roster, injuries and source rights for paid publication have not been verified.`,
-        files: [{ attachment: Buffer.from(csv), name: filename }],
+          `Historical research only. This threshold is user-entered, not a verified sportsbook offer. Counts are not next-game probabilities. Current line, odds, roster and injuries have not been verified. No pick is being recommended. 21+.`,
+        // Keep the per-game export with administrators. The member view is a
+        // derived research summary, not a downloadable source-data feed.
+        files: isAdmin ? [{ attachment: Buffer.from(freeLeagueTrendCsv(result)),
+          name: `trends-${result.sport.toLowerCase()}-last20.csv` }] : [],
         allowedMentions: { parse: [] }
       });
       try {
