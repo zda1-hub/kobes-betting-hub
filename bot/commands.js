@@ -264,7 +264,7 @@ module.exports = [
     .addNumberOption(option => option.setName('alternate_2').setDescription('Optional third historical threshold; not a live sportsbook line').setMinValue(0).setMaxValue(1000)),
   new SlashCommandBuilder()
     .setName('trends-research')
-    .setDescription('Privately research NBA, NHL or MLB game logs and download the last 20 as CSV')
+    .setDescription('Privately research NBA, NHL or MLB historical player stats')
     .addStringOption(option => option.setName('sport').setDescription('League').setRequired(true).addChoices(
       { name: 'NBA', value: 'NBA' }, { name: 'NHL', value: 'NHL' }, { name: 'MLB', value: 'MLB' }
     ))
