@@ -2,6 +2,7 @@
 
 const { events, eventAlternateOdds } = require('./odds-api');
 const { withOddsBudget } = require('./odds-budget');
+const { playerNameKey } = require('./player-name');
 
 const MARKET_BY_STAT = Object.freeze({
   NBA: { points: 'player_points_alternate', rebounds: 'player_rebounds_alternate', assists: 'player_assists_alternate' },
@@ -38,8 +39,8 @@ async function currentMarket({ root, apiKey, sport, team, player, stat, side, li
   const event = selectEvent(schedule.data, team, now.valueOf());
   const odds = await withOddsBudget({ root, apiKey, fetchImpl, now, operation: () =>
     eventAlternateOdds(sport, event.id, { ...options, market }) });
-  const needle = player.trim().toLocaleLowerCase('en-US');
-  const offers = odds.selections.filter(row => row.player.toLocaleLowerCase('en-US') === needle &&
+  const needle = playerNameKey(player);
+  const offers = odds.selections.filter(row => playerNameKey(row.player) === needle &&
     row.side === side && row.line === line && row.odds >= -400 &&
     Date.parse(row.updatedAt) <= now.valueOf() && now.valueOf() - Date.parse(row.updatedAt) <= 5 * 60_000)
     .sort((a, b) => b.odds - a.odds);

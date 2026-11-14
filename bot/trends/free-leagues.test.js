@@ -25,6 +25,14 @@ test('NBA excludes zero-minute and future games and computes combined stats', ()
   assert.equal(logs.length, 1); assert.equal(logs[0].stats.points_assists, 27);
 });
 
+test('full player names match across accent and spacing differences', () => {
+  const rows = [{ player_id: '1', player_name: 'Nikola Jokić', team_abbreviation: 'DEN',
+    season_type: 'regular-season', game_id: '1', game_date: '2026-11-10', wl: 'W', min: '30', pts: '25' }];
+  const logs = nbaLogs(rows, { name: '  Nikola   Jokic  ', stat: 'points', season: 2027, today: '2026-11-14' });
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].stats.points, 25);
+});
+
 test('NHL excludes preseason and zero-ice-time rows', () => {
   const rows = [
     { player_id: '1', player_name: 'A. Skater', team_abbrev: 'FLA', game_id: '2026020001', game_date: '2026-11-10', toi: '14:20', shots_on_goal: '3' },

@@ -5,6 +5,7 @@
 const { gunzipSync } = require('node:zlib');
 const { parseCsv } = require('./nflverse');
 const { analyze } = require('./analytics');
+const { playerNameKey } = require('./player-name');
 
 const BASE = 'https://github.com/sportsdataverse/sportsdataverse-data/releases/download';
 const DEFINITIONS = Object.freeze({
@@ -71,9 +72,9 @@ async function readMlbRows(url, { fetchImpl = fetch } = {}) {
 
 function numeric(value) { return value !== '' && value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null; }
 function pickPlayer(rows, name, team) {
-  const needle = String(name || '').trim().toLocaleLowerCase('en-US');
+  const needle = playerNameKey(name);
   if (needle.length < 3) throw new Error('Enter at least three characters of a player name');
-  const found = rows.filter(row => row.player_name?.toLocaleLowerCase('en-US') === needle &&
+  const found = rows.filter(row => playerNameKey(row.player_name) === needle &&
     (!team || (row.team_abbreviation || row.team_abbrev || '').toUpperCase() === team.toUpperCase()));
   const ids = new Set(found.map(row => row.player_id));
   if (!ids.size) throw new Error('Player not found in completed games for this season; use the source display name');
@@ -105,14 +106,14 @@ function nhlLogs(rows, { name, team, playerId, stat, season, today }) {
 
 const HIT_EVENTS = new Set(['single', 'double', 'triple', 'home_run']);
 function mlbLogs(rows, schedule, { name, stat, season, today }) {
-  const needle = String(name || '').trim().toLocaleLowerCase('en-US');
+  const needle = playerNameKey(name);
   if (needle.length < 3) throw new Error('Enter a full MLB batter name');
   const final = new Map(schedule.filter(g => g.game_type === 'R' && g.abstract_state === 'Final' &&
     g.game_date < today).map(g => [g.game_pk, g]));
   const iterate = typeof rows === 'function' ? rows : () => rows;
   const ids = new Set();
   for (const r of iterate()) if (final.has(r.game_pk) &&
-    r.description?.toLocaleLowerCase('en-US').startsWith(`${needle} `)) ids.add(r.batter_id);
+    playerNameKey(r.description).startsWith(`${needle} `)) ids.add(r.batter_id);
   if (!ids.size) throw new Error('MLB batter not found in final regular-season play-by-play');
   if (ids.size > 1) throw new Error('Ambiguous MLB batter name; use the exact full name');
   const id = [...ids][0], games = new Map();
