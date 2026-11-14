@@ -1,6 +1,6 @@
 const { createHash } = require('node:crypto');
 const { sourceEvidence } = require('./source-review');
-const { buildFreePickXPost, freePickXPostId, safeXPostLength } = require('./free-pick-x');
+const { buildFreePickXPost, freePickXPostId } = require('./free-pick-x');
 const { auditedFetch } = require('../../pipeline/api-client');
 
 function remainingEvidence(packet) {
@@ -11,29 +11,19 @@ function remainingEvidence(packet) {
 }
 
 function breakdownParts(packet) {
-  const chunks = [];
-  for (const claim of remainingEvidence(packet)) {
-    const words = claim.split(/\s+/).filter(Boolean);
-    let current = '';
-    for (const word of words) {
-      const next = current ? `${current} ${word}` : word;
-      if (safeXPostLength(`More on this pick (20/20):\n${next}`) > 280 && current) {
-        chunks.push(current);
-        current = word;
-      } else current = next;
-      if (safeXPostLength(`More on this pick (20/20):\n${current}`) > 280)
-        throw new Error('An approved breakdown word is too long for an X reply.');
-    }
-    if (current) chunks.push(current);
-  }
-  if (chunks.length > 20) throw new Error('The approved breakdown needs more than 20 X replies.');
-  return chunks.map((text, index) => `More on this pick (${index + 1}/${chunks.length}):\n${text}`);
+  const claims = remainingEvidence(packet);
+  if (!claims.length) return [];
+  const body = `Full breakdown:\n${claims.map(claim => `• ${claim}`).join('\n')}`;
+  if (body.length > 4000)
+    throw new Error('The complete breakdown exceeds one X reply. Shorten the approved copy before publishing; do not split it into a thread.');
+  return [body];
 }
 
-function breakdownReplyId(pickId, parentId, index) {
+function breakdownReplyId(pickId, parentId) {
   if (!/^\d{1,25}$/.test(parentId)) throw new Error('A confirmed original X post ID is required.');
   const hash = createHash('sha256').update(pickId).digest('hex').slice(0, 20);
-  return `breakdown-x-${parentId}-${hash}-${String(index + 1).padStart(2, '0')}`;
+  // 00 is reserved for one complete reply; historical 01+ receipts remain untouched.
+  return `breakdown-x-${parentId}-${hash}-00`;
 }
 
 async function syncApprovedFreePickBreakdown(packet, { environment = process.env, fetchImpl = fetch, operatingDate = packet.operating_date } = {}) {
@@ -51,21 +41,15 @@ async function syncApprovedFreePickBreakdown(packet, { environment = process.env
   if (!parentResponse.ok) throw new Error(`Original X post lookup failed (${parentResponse.status}).`);
   const parentId = String((await parentResponse.json()).xPostId || '');
   if (!/^\d{1,25}$/.test(parentId)) throw new Error('Original X post has no confirmed ID.');
-  let published = 0;
-  for (const [index, body] of parts.entries()) {
-    const id = breakdownReplyId(packet.pick_id, parentId, index);
-    const response = await auditedFetch(`${origin}/api/queue/x`, {
-      method: 'POST', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ id, body, scheduledAt: new Date().toISOString(), publishNow: true }),
-    }, { service: 'cloudflare-worker', endpointClass: '/api/queue/x', callerComponent: 'bot/lib/free-pick-breakdown', triggerType: 'approved_pick_breakdown', pickId: packet.pick_id }, fetchImpl);
-    if (![201, 202, 409].includes(response.status)) throw new Error(`X breakdown reply ${index + 1} failed to queue (${response.status}).`);
-    const receipt = await response.json().catch(() => ({}));
-    if (['failed', 'publishing', 'cancelled'].includes(receipt.status))
-      throw new Error(`X breakdown reply ${index + 1} needs review (${receipt.status}).`);
-    if (receipt.status === 'published') published++;
-    else break; // Keep the approved points in order across publisher retries.
-  }
-  return { status: published === parts.length ? 'published' : 'pending', replies: parts.length, published };
+  const response = await auditedFetch(`${origin}/api/queue/x`, {
+    method: 'POST', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ id: breakdownReplyId(packet.pick_id, parentId), body: parts[0], scheduledAt: new Date().toISOString(), publishNow: true }),
+  }, { service: 'cloudflare-worker', endpointClass: '/api/queue/x', callerComponent: 'bot/lib/free-pick-breakdown', triggerType: 'approved_pick_breakdown', pickId: packet.pick_id }, fetchImpl);
+  if (![201, 202, 409].includes(response.status)) throw new Error(`X breakdown reply failed to queue (${response.status}).`);
+  const receipt = await response.json().catch(() => ({}));
+  if (['failed', 'publishing', 'cancelled'].includes(receipt.status))
+    throw new Error(`X breakdown reply needs review (${receipt.status}).`);
+  return { status: receipt.status === 'published' ? 'published' : 'pending', replies: 1, published: receipt.status === 'published' ? 1 : 0 };
 }
 
 module.exports = { remainingEvidence, breakdownParts, breakdownReplyId, syncApprovedFreePickBreakdown };

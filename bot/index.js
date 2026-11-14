@@ -2638,7 +2638,14 @@ async function handleSourceReviewButtonUnlocked(interaction) {
     if (packet.source?.publish_mode === 'terms_only' && !exclusiveSourceIsCurrent(packet))
       throw new Error('This exclusive is not from today. Use a current card.');
     if (packet.approval?.free_prepared) {
-      await interaction.editReply('The Free Pick breakdown is already prepared on this card. Review it and choose a destination.');
+      const preview = preparedFreePick(packet);
+      const embed = buildSourcePickApprovalEmbed(preview, 'FREE PICK');
+      embed.footer = { text: 'Free: independently researched writeup · VIP: original exclusive terms only' };
+      await interaction.message.edit({ embeds: [embed], components: reviewButtons(pickId, {
+        showEdit: false, freeLabel: 'Post full writeup to Free Picks',
+        paidLabel: 'Post terms to #expert-picks'
+      }), allowedMentions: { parse: [] } });
+      await interaction.editReply('The prepared Free Pick preview is restored above. Review its exact facts, then choose a destination. Nothing was posted to members.');
       return;
     }
     await interaction.editReply('Checking the event and researching a full Free Pick breakdown. Nothing has been posted yet.');
@@ -2661,6 +2668,7 @@ async function handleSourceReviewButtonUnlocked(interaction) {
       showEdit: false, freeLabel: 'Post full writeup to Free Picks',
       paidLabel: 'Post terms to #expert-picks'
     }), allowedMentions: { parse: [] } });
+    trace('Free Pick preview updated');
     await interaction.editReply('The independently researched Free Pick is ready above. Review its exact facts, then choose Free Pick or VIP. Nothing was posted to members.');
     return;
   }
