@@ -70,6 +70,8 @@ async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = 
       readOdds('NBA', event.id, { apiKey, fetchImpl, market: MARKET }) });
     const offers = candidateOffers(odds.selections, now);
     const bdlEvent = await readBdlEvent({ event, now, apiKey: bdlKey, fetchImpl });
+    if (Date.parse(bdlEvent.datetime) - now.valueOf() < 15 * 60_000)
+      throw new Error('NBA league tipoff is too close for a verified pregame post');
     const holds = [];
     let sendAttempted = false;
     for (const offer of offers) {
@@ -99,7 +101,7 @@ async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = 
           rights: { history: 'commercial-use-confirmed', availability: 'commercial-use-confirmed',
             termsUrl: bdl.TERMS_URL },
           prop: { ...offer, sport: 'NBA', stat: 'points', side: 'over',
-            startsAt: event.commence_time, eventId: event.id,
+            startsAt: bdlEvent.datetime, eventId: event.id,
             teamId: teamName, opponentId: opponent, available: true, source: 'The Odds API',
             rosterVerified: true, rosterVerifiedAt: now.toISOString(),
             participationVerified: false, preGameAvailabilityChecked: true } };

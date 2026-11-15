@@ -31,6 +31,13 @@ test('game lookup requires both exact teams and a matching scheduled tipoff', as
     home_team: 'Denver Nuggets', away_team: 'New Orleans Pelicans' }, now,
     apiKey: 'fixture', fetchImpl });
   assert.equal(found.id, 123);
+  const oddsTenMinutesLater = await exactEvent({ event: {
+    commence_time: '2026-11-15T20:10:00Z', home_team: 'Denver Nuggets',
+    away_team: 'New Orleans Pelicans' }, now, apiKey: 'fixture', fetchImpl });
+  assert.equal(oddsTenMinutesLater.id, 123);
+  await assert.rejects(exactEvent({ event: {
+    commence_time: '2026-11-15T20:20:00Z', home_team: 'Denver Nuggets',
+    away_team: 'New Orleans Pelicans' }, now, apiKey: 'fixture', fetchImpl }), /did not match/);
 });
 
 test('history ignores unfinished games and zero-minute records; injury entries block availability', async () => {

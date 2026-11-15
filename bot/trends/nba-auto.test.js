@@ -27,7 +27,7 @@ test('qualified NBA candidate receives one durable daily publication receipt', a
     reserveOdds: async ({ operation }) => operation(),
     readOdds: async () => { marketCalls++; return { selections: [{ market: 'player_points_alternate', side: 'over',
       player: 'Yves Missi', line: 10.5, odds: -110, sportsbook: 'Book', sportsbookKey: 'book', updatedAt: now.toISOString() }] }; },
-    readBdlEvent: async () => ({ id: 123, home_team: { id: 7, full_name: event.home_team },
+    readBdlEvent: async () => ({ id: 123, datetime: event.commence_time, home_team: { id: 7, full_name: event.home_team },
       visitor_team: { id: 18, full_name: event.away_team } }),
     readPlayer: async () => ({ id: 1, team: { id: 18, full_name: event.away_team } }),
     readHistory: async () => ({ analysis: { season: count(9, 10), l5: count(5, 5),
@@ -54,7 +54,7 @@ test('unconfirmed NBA status holds the entire scan without posting', async t => 
     readEvents: async () => ({ data: [event] }), reserveOdds: async ({ operation }) => operation(),
     readOdds: async () => ({ selections: [{ market: 'player_points_alternate', side: 'over', player: 'Yves Missi',
       line: 10.5, odds: -110, sportsbook: 'Book', sportsbookKey: 'book', updatedAt: now.toISOString() }] }),
-    readBdlEvent: async () => ({ id: 123, home_team: { id: 7, full_name: event.home_team },
+    readBdlEvent: async () => ({ id: 123, datetime: event.commence_time, home_team: { id: 7, full_name: event.home_team },
       visitor_team: { id: 18, full_name: event.away_team } }),
     readPlayer: async () => ({ id: 1, team: { id: 18, full_name: event.away_team } }),
     readHistory: async () => ({ analysis: { season: { sample: 10, hitRate: 0.9 }, l20: { sample: 20 } },
@@ -74,7 +74,7 @@ test('a held first game does not block a later same-day game', async t => {
     readEvents: async () => ({ data: [event, later] }),
     reserveOdds: async ({ operation }) => operation(),
     readOdds: async (_sport, id) => { scanned.push(id); return { selections: [] }; },
-    readBdlEvent: async () => ({ id: 123, home_team: { id: 7 }, visitor_team: { id: 18 } }) };
+    readBdlEvent: async () => ({ id: 123, datetime: event.commence_time, home_team: { id: 7 }, visitor_team: { id: 18 } }) };
   assert.equal((await scanNbaAuto(args)).status, 'held');
   assert.equal((await scanNbaAuto(args)).status, 'held');
   assert.deepEqual(scanned, [event.id, later.id]);
