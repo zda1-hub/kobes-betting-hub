@@ -1583,7 +1583,7 @@ function startTrendsSchedule() {
   // private destination and current source checks are all required.
   if (process.env.TRENDS_NBA_AUTO_ENABLED === 'true') {
     const channelId = process.env.TRENDS_NBA_CHANNEL_ID || trendsChannelMap.get('nba');
-    const categoryId = process.env.TRENDS_PRIVATE_CATEGORY_ID || '1215407647155683358';
+    const categoryId = process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036';
     if (!process.env.ODDS_API_KEY || !process.env.BDL_NBA_API_KEY || !channelId) {
       console.error('NBA Trends auto publisher held: Odds API key, NBA data key or private channel is missing.');
     } else {
