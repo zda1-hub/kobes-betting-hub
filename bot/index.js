@@ -12,8 +12,13 @@ const { recordCombo: recordTrendCombo } = require('./trends/combo-ledger');
 const { currentMarket: researchCurrentMarket } = require('./trends/current-market');
 const { scanDaily: scanDailyTrends } = require('./trends/daily-scan');
 const { scanNbaAuto } = require('./trends/nba-auto');
+const { refreshPublishedNbaTrends } = require('./trends/nba-refresh');
 const { scanNbaPopular } = require('./trends/nba-popular-auto');
 const { researchNba, formatNbaResearch } = require('./trends/nba-search');
+const { researchNbaBoard, formatNbaBoard } = require('./trends/nba-board');
+const { playerProfile, teamProfile, formatPlayerProfile, formatTeamProfile } = require('./trends/nba-profiles');
+const { getNbaBuilder, addNbaBuilderLeg, removeNbaBuilderLeg,
+  clearNbaBuilder, reviewNbaBuilder, formatNbaBuilder } = require('./trends/nba-builder');
 const { researchNbaCombo, formatNbaCombo } = require('./trends/nba-combo-research');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
@@ -1599,12 +1604,23 @@ function startTrendsSchedule() {
           throw new Error('NBA Trends destination is not verified private and writable');
         return channel;
       };
-      const runNba = () => scanNbaAuto({ root: reviewQueueRoot,
-        apiKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
-        channelId, channelFor }).then(receipt => {
-        if (!receipt.existing && !['waiting', 'reserved_elsewhere'].includes(receipt.status))
-          console.log('NBA Trends automation receipt:', JSON.stringify(receipt));
-      }).catch(error => console.error('NBA Trends automation held:', error.message));
+      const runNba = async () => {
+        try {
+          const receipt = await scanNbaAuto({ root: reviewQueueRoot,
+            apiKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+            channelId, channelFor });
+          if (!receipt.existing && !['waiting', 'reserved_elsewhere'].includes(receipt.status))
+            console.log('NBA Trends automation receipt:', JSON.stringify(receipt));
+        } catch (error) { console.error('NBA Trends automation held:', error.message); }
+        try {
+          const receipts = await refreshPublishedNbaTrends({ root: reviewQueueRoot,
+            apiKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+            channelFor });
+          const changes = receipts?.filter(row => ['started', 'near_tip_checked',
+            'needs_reconciliation'].includes(row.status)) || [];
+          if (changes.length) console.log('NBA Trends refresh receipts:', JSON.stringify(changes));
+        } catch (error) { console.error('NBA Trends refresh held:', error.message); }
+      };
       void runNba();
       const nbaTimer = setInterval(() => void runNba(), 5 * 60 * 1000);
       nbaTimer.unref();
@@ -3564,6 +3580,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
     interaction.channelId === '1571285899717771365' &&
     (isAdministrator(interaction) || [...vipRoleIds()].some(id =>
       interaction.member?.roles?.cache?.has(id) || interaction.member?.roles?.includes?.(id)));
+  const builderControls = () => [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('trends-ui:builder-add').setLabel('Add exact NBA prop')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('trends-ui:builder-view').setLabel('View my builder')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('trends-ui:builder-review').setLabel('Recheck all legs')
+      .setStyle(ButtonStyle.Secondary)),
+  new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('trends-ui:builder-remove').setLabel('Remove a leg')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('trends-ui:builder-clear').setLabel('Clear builder')
+      .setStyle(ButtonStyle.Danger))];
   if (interaction.isButton() && interaction.customId.startsWith('trends-ui:')) {
     if (!trendsMember()) {
       await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
@@ -3579,6 +3607,58 @@ client.on(Events.InteractionCreate, async (interaction) => {
           field('stat', 'Stat', 'points, rebounds, or assists'),
           field('line', 'Exact line (optional)', 'Leave blank to browse available lines', false));
       await interaction.showModal(modal);
+      return;
+    }
+    if (interaction.customId === 'trends-ui:board') {
+      const field = (id, label, hint, required = true) => new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId(id).setLabel(label).setPlaceholder(hint)
+          .setStyle(TextInputStyle.Short).setRequired(required));
+      const modal = new ModalBuilder().setCustomId('trends-ui-board').setTitle('Browse NBA matchup board')
+        .addComponents(field('team', 'Team in upcoming game', 'Pacers'),
+          field('stat', 'Stat (optional)', 'all, points, rebounds, or assists', false),
+          field('minimum', 'Minimum hit rate % (optional)', '80, 85, 90, or 95', false));
+      await interaction.showModal(modal);
+      return;
+    }
+    if (interaction.customId === 'trends-ui:builder-add') {
+      const field = (id, label, hint) => new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId(id).setLabel(label).setPlaceholder(hint)
+          .setStyle(TextInputStyle.Short).setRequired(true));
+      await interaction.showModal(new ModalBuilder().setCustomId('trends-ui-builder-add')
+        .setTitle('Add a verified NBA prop').addComponents(
+          field('team', 'Team in upcoming game', 'Pacers'),
+          field('player', 'Full player name', 'Pascal Siakam'),
+          field('stat', 'Statistic', 'points, rebounds, or assists'),
+          field('line', 'Exact currently quoted line', 'e.g. 18.5')));
+      return;
+    }
+    if (interaction.customId === 'trends-ui:builder-remove') {
+      await interaction.showModal(new ModalBuilder().setCustomId('trends-ui-builder-remove')
+        .setTitle('Remove NBA builder leg').addComponents(new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('number').setLabel('Leg number (1–4)')
+            .setPlaceholder('1').setStyle(TextInputStyle.Short).setRequired(true))));
+      return;
+    }
+    if (interaction.customId.startsWith('trends-ui:builder-')) {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const args = { root: reviewQueueRoot, userId: interaction.user.id };
+        let content;
+        if (interaction.customId === 'trends-ui:builder-review') {
+          const result = await reviewNbaBuilder({ ...args, oddsKey: process.env.ODDS_API_KEY,
+            bdlKey: process.env.BDL_NBA_API_KEY });
+          content = formatNbaCombo(result);
+        } else {
+          const result = interaction.customId === 'trends-ui:builder-clear' ?
+            await clearNbaBuilder(args) : await getNbaBuilder(args);
+          content = formatNbaBuilder(result);
+        }
+        if (content.length > 1900) throw new Error('Research view exceeds Discord message limit');
+        await interaction.editReply({ content, components: builderControls(), allowedMentions: { parse: [] } });
+      } catch (error) {
+        console.warn('NBA Trends-tool builder action held:', error.message);
+        await interaction.editReply(`NBA builder could not complete: ${error.message}. No bet was placed.`);
+      }
       return;
     }
     if (interaction.customId === 'trends-ui:recent') {
@@ -3602,6 +3682,58 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
       return;
     }
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('trends-ui-builder-')) {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const args = { root: reviewQueueRoot, userId: interaction.user.id };
+      const result = interaction.customId === 'trends-ui-builder-remove' ?
+        await removeNbaBuilderLeg({ ...args,
+          number: Number(interaction.fields.getTextInputValue('number').trim()) }) :
+        await addNbaBuilderLeg({ ...args, oddsKey: process.env.ODDS_API_KEY,
+          bdlKey: process.env.BDL_NBA_API_KEY,
+          query: { team: interaction.fields.getTextInputValue('team').trim(),
+            player: interaction.fields.getTextInputValue('player').trim(),
+            stat: interaction.fields.getTextInputValue('stat').trim().toLowerCase(),
+            side: 'over', line: Number(interaction.fields.getTextInputValue('line').trim()) } });
+      const content = formatNbaBuilder(result);
+      if (content.length > 1900) throw new Error('Research view exceeds Discord message limit');
+      await interaction.editReply({ content, components: builderControls(), allowedMentions: { parse: [] } });
+    } catch (error) {
+      console.warn('NBA Trends-tool builder entry held:', error.message);
+      await interaction.editReply(`NBA builder could not complete: ${error.message}. No bet was placed.`);
+    }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'trends-ui-board') {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
+      return;
+    }
+    const stat = interaction.fields.getTextInputValue('stat').trim().toLowerCase() || 'all';
+    const rawMinimum = interaction.fields.getTextInputValue('minimum').trim() || '80';
+    if (!['all', 'points', 'rebounds', 'assists'].includes(stat) ||
+        !['80', '85', '90', '95'].includes(rawMinimum)) {
+      await interaction.reply({ ephemeral: true,
+        content: 'Use all, points, rebounds, or assists and a minimum of 80, 85, 90, or 95 percent.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const board = await researchNbaBoard({ root: reviewQueueRoot,
+        oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+        team: interaction.fields.getTextInputValue('team').trim(), stat,
+        minHitRate: Number(rawMinimum) / 100 });
+      await interaction.editReply({ content: formatNbaBoard(board), allowedMentions: { parse: [] } });
+    } catch (error) {
+      console.warn('NBA Trends-tool board held:', error.message);
+      await interaction.editReply(`NBA board could not complete: ${error.message}. No pick was posted.`);
+    }
+    return;
   }
   if (interaction.isModalSubmit() && interaction.customId === 'trends-ui-search') {
     if (!trendsMember()) {
@@ -4036,10 +4168,73 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('trends-ui:search').setLabel('Search NBA player')
         .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('trends-ui:board').setLabel('Browse NBA board')
+        .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('trends-ui:recent').setLabel('Recent NBA trends')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('trends-ui:builder-view').setLabel('Build NBA combo')
         .setStyle(ButtonStyle.Secondary));
     await interaction.reply({ ephemeral: true, components: [row],
-      content: '**Trends-tool · NBA research**\nSearch a player for current alternate lines and completed-game hit counts, or browse recent verified posts. Quotes and status can change before tipoff. Historical hit rates are not next-game probabilities.' });
+      content: '**Trends-tool · NBA research**\nSearch a player, browse the current matchup board, or open recent posts. Quotes and status can change before tipoff. Historical hit rates are not next-game probabilities.' });
+    return;
+  }
+
+  if (interaction.commandName === 'trends-builder') {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Use this command as a VIP member in the private Trends-tool search channel.' });
+      return;
+    }
+    try {
+      const result = await getNbaBuilder({ root: reviewQueueRoot, userId: interaction.user.id });
+      await interaction.reply({ ephemeral: true, content: formatNbaBuilder(result),
+        components: builderControls(), allowedMentions: { parse: [] } });
+    } catch (error) {
+      console.warn('NBA Trends-tool builder unavailable:', error.message);
+      await interaction.reply({ ephemeral: true, content: 'The private NBA builder is unavailable right now.' });
+    }
+    return;
+  }
+
+  if (interaction.commandName === 'trends-player' || interaction.commandName === 'trends-team') {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Use this command as a VIP member in the private Trends-tool search channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const team = interaction.options.getString('team', true);
+      const player = interaction.commandName === 'trends-player' ?
+        interaction.options.getString('player', true) : null;
+      const result = player ? await playerProfile({ team, player,
+        apiKey: process.env.BDL_NBA_API_KEY }) : await teamProfile({ team,
+        apiKey: process.env.BDL_NBA_API_KEY });
+      const content = player ? formatPlayerProfile(result) : formatTeamProfile(result);
+      if (content.length > 1900) throw new Error('Profile exceeds Discord message limit');
+      await interaction.editReply({ content, allowedMentions: { parse: [] } });
+    } catch (error) {
+      console.warn('NBA Trends-tool profile held:', error.message);
+      await interaction.editReply(`NBA profile could not complete: ${error.message}. No pick was posted.`);
+    }
+    return;
+  }
+
+  if (interaction.commandName === 'trends-board') {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Use this command as a VIP member in the private Trends-tool search channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const board = await researchNbaBoard({ root: reviewQueueRoot,
+        oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+        team: interaction.options.getString('team', true),
+        stat: interaction.options.getString('stat') || 'all',
+        minHitRate: (interaction.options.getInteger('minimum') || 80) / 100 });
+      await interaction.editReply({ content: formatNbaBoard(board), allowedMentions: { parse: [] } });
+    } catch (error) {
+      console.warn('NBA Trends-tool board held:', error.message);
+      await interaction.editReply(`NBA board could not complete: ${error.message}. No pick was posted.`);
+    }
     return;
   }
 

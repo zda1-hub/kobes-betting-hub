@@ -119,7 +119,7 @@ async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = 
         const teamName = player.team.full_name;
         const opponent = player.team.id === bdlEvent.home_team.id ?
           bdlEvent.visitor_team.full_name : bdlEvent.home_team.full_name;
-        const candidate = { player: offer.player, analysis: history.analysis,
+        const candidate = { player: offer.player, playerId: player.id, analysis: history.analysis,
           analysisSource: history.sourceUrl, analysisCheckedAt: history.checkedAt, availability,
           rights: { history: 'commercial-use-confirmed', availability: 'commercial-use-confirmed',
             termsUrl: bdl.TERMS_URL },
