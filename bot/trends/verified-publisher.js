@@ -1,0 +1,123 @@
+'use strict';
+
+const crypto = require('node:crypto');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { qualify } = require('./analytics');
+const { belongsToServiceDate, localParts, TIME_ZONE } = require('./schedule');
+const { playerNameKey } = require('./player-name');
+
+const inFlight = new Map();
+const DISPLAY_STATS = Object.freeze({
+  points: 'points', rebounds: 'rebounds', assists: 'assists', receptions: 'receptions',
+  receiving_yards: 'receiving yards', rushing_yards: 'rushing yards',
+  shots_on_goal: 'shots on goal', hits: 'hits'
+});
+
+function assertEvidence(candidate, now) {
+  const { prop, analysis, player, availability } = candidate || {};
+  // Research availability is not publication permission. A source's own CC BY
+  // label does not necessarily settle its upstream league-data rights.
+  if (candidate?.rights?.history !== 'commercial-use-confirmed' ||
+      candidate?.rights?.availability !== 'commercial-use-confirmed')
+    throw new Error('Commercial source rights for history and availability are unconfirmed');
+  if (!prop || !analysis?.season || !analysis?.l5 || !analysis?.l10 || !analysis?.l20 ||
+      !player || !DISPLAY_STATS[prop.stat] || !['over', 'under'].includes(prop.side) ||
+      !Number.isFinite(prop.line) || !prop.eventId || !prop.teamId || !prop.opponentId ||
+      !availability || !['confirmed-active', 'active-roster-no-listed-injury'].includes(availability.status) ||
+      !/^https:\/\//.test(availability.sourceUrl || '') ||
+      (prop.sport === 'NBA' && ![
+        'https://ak-static.cms.nba.com/referee/injury/',
+        'https://api.balldontlie.io/v1/player_injuries'
+      ].some(prefix => availability.sourceUrl.startsWith(prefix))) ||
+      !Number.isFinite(Date.parse(availability.checkedAt)) ||
+      now - Date.parse(availability.checkedAt) > 30 * 60_000 ||
+      Date.parse(availability.checkedAt) > now ||
+      (availability.status === 'confirmed-active' &&
+        (!Number.isFinite(Date.parse(availability.sourceUpdatedAt)) ||
+         now - Date.parse(availability.sourceUpdatedAt) > 30 * 60_000 ||
+         Date.parse(availability.sourceUpdatedAt) > now)) ||
+      (availability.status === 'active-roster-no-listed-injury' &&
+        (!availability.sourceUrl.startsWith('https://api.balldontlie.io/v1/player_injuries') ||
+         availability.rightsUrl !== 'https://www.balldontlie.io/terms.html')) ||
+      !/^https:\/\//.test(candidate.analysisSource || '') ||
+      !Number.isFinite(Date.parse(candidate.analysisCheckedAt)) ||
+      now - Date.parse(candidate.analysisCheckedAt) > 24 * 60 * 60_000 ||
+      Date.parse(candidate.analysisCheckedAt) > now)
+    throw new Error('Verified market, history and confirmed game-day status are required');
+  const untilStart = Date.parse(prop.startsAt) - now;
+  if (!Number.isFinite(untilStart) || untilStart > 90 * 60_000 || untilStart < 15 * 60_000 ||
+      !belongsToServiceDate(prop.startsAt, localParts(now, TIME_ZONE).date))
+    throw new Error('Trend can post only 15–90 minutes before a same-day game');
+  if (analysis.l20.sample < 20) throw new Error('Twenty observed recent games are required');
+  const gate = qualify(prop, analysis, { now, minSample: 10,
+    allowPreGameAvailabilityCheck: availability.status === 'active-roster-no-listed-injury' });
+  if (!gate.qualifies) throw new Error(`Trend does not qualify: ${gate.reasons.join(', ')}`);
+  return gate;
+}
+
+function candidateId(candidate) {
+  const { prop } = candidate;
+  return crypto.createHash('sha256').update(JSON.stringify([
+    prop.sport, prop.eventId, playerNameKey(candidate.player),
+    prop.stat, prop.side, prop.line
+  ])).digest('hex').slice(0, 32);
+}
+
+function renderCandidate(candidate, date) {
+  const { prop, analysis, player, availability } = candidate;
+  const odds = prop.odds > 0 ? `+${prop.odds}` : String(prop.odds);
+  const count = row => `${row.hits}/${row.sample}${row.pushes ? ` (${row.pushes} pushes)` : ''}`;
+  return `**Trends-tool · ${prop.sport} · ${date}**\n` +
+    `**${player}: ${prop.side} ${prop.line} ${DISPLAY_STATS[prop.stat]}** · ${odds} at ${prop.sportsbook}\n` +
+    `Historical hits: season ${count(analysis.season)} · L5 ${count(analysis.l5)} · L10 ${count(analysis.l10)} · L20 ${count(analysis.l20)}.\n` +
+    `Market updated ${prop.updatedAt}. Active roster and injury list checked ${availability.checkedAt}; ` +
+    `${availability.status === 'active-roster-no-listed-injury' ? 'no injury entry found; game participation is not confirmed' : 'status listed Available'}. ` +
+    `[Game-log source](${candidate.analysisSource}).\n` +
+    `Historical hit rates describe past games, not the next game’s chance. Lines move; check the current book before acting. 21+.`;
+}
+
+async function publishVerifiedCandidate({ root, candidate, channelId, channelFor, now = new Date() }) {
+  if (!root || !/^\d{17,22}$/.test(String(channelId || '')) || typeof channelFor !== 'function')
+    throw new Error('Verified private destination required');
+  assertEvidence(candidate, now.valueOf());
+  const date = localParts(now, TIME_ZONE).date;
+  const id = candidateId(candidate);
+  const directory = path.join(root, 'trends-publications', date);
+  const file = path.join(directory, `${id}.json`);
+  if (inFlight.has(file)) return inFlight.get(file);
+  const run = (async () => {
+    await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+    let receipt;
+    try { receipt = JSON.parse(await fs.readFile(file, 'utf8')); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (receipt) {
+      if (receipt.channelId !== channelId) throw new Error('Trend destination changed; review prior receipt');
+      if (receipt.status === 'published' && receipt.messageId) return { ...receipt, existing: true };
+      throw new Error('Uncertain Trends send; reconcile the Discord message before retrying');
+    }
+    const channel = await channelFor(channelId);
+    if (!channel?.isTextBased?.() || channel.id !== channelId)
+      throw new Error('Trends destination is not the configured private text channel');
+    const content = renderCandidate(candidate, date);
+    if (content.length > 1900) throw new Error('Trend card exceeds Discord message limit');
+    receipt = { version: 1, id, date, channelId, status: 'reserved',
+      reservedAt: now.toISOString(), evidence: {
+        eventId: candidate.prop.eventId, marketUpdatedAt: candidate.prop.updatedAt,
+        statusCheckedAt: candidate.availability.checkedAt,
+        historyCheckedAt: candidate.analysisCheckedAt
+      } };
+    await fs.writeFile(file, JSON.stringify(receipt), { mode: 0o600, flag: 'wx' });
+    const message = await channel.send({ content, allowedMentions: { parse: [] },
+      nonce: id.slice(0, 24), enforceNonce: true });
+    if (!message?.id) throw new Error('Trend send returned no message ID; reconcile before retrying');
+    receipt = { ...receipt, status: 'published', messageId: message.id,
+      publishedAt: new Date().toISOString() };
+    await fs.writeFile(file, JSON.stringify(receipt), { mode: 0o600 });
+    return receipt;
+  })();
+  inFlight.set(file, run);
+  try { return await run; } finally { inFlight.delete(file); }
+}
+
+module.exports = { assertEvidence, candidateId, renderCandidate, publishVerifiedCandidate };

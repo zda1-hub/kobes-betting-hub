@@ -29,13 +29,13 @@ function fresh(timestamp, now, maxAge) {
   const time = Date.parse(timestamp);
   return Number.isFinite(time) && time <= now && now-time <= maxAge;
 }
-function qualify(prop, analysis, { now=Date.now(), maxOddsAgeMs=300000, maxRosterAgeMs=86400000, minSample=20, minHitRate=.8 }={}) {
+function qualify(prop, analysis, { now=Date.now(), maxOddsAgeMs=300000, maxRosterAgeMs=86400000, minSample=20, minHitRate=.8, allowPreGameAvailabilityCheck=false }={}) {
   const reasons=[];
   if (!SPORTS.includes(prop.sport)) reasons.push('unsupported sport');
   if (!prop.available || !prop.source || !prop.sportsbook) reasons.push('unverified market');
   if (!fresh(prop.updatedAt,now,maxOddsAgeMs)) reasons.push('stale odds');
   if (!prop.teamId || !prop.opponentId || prop.rosterVerified !== true || !fresh(prop.rosterVerifiedAt,now,maxRosterAgeMs)) reasons.push('unverified roster');
-  if (prop.participationVerified !== true) reasons.push('unverified participation');
+  if (prop.participationVerified !== true && !(allowPreGameAvailabilityCheck && prop.preGameAvailabilityChecked === true)) reasons.push('unverified participation');
   if (!Number.isFinite(Date.parse(prop.startsAt)) || Date.parse(prop.startsAt)<=now) reasons.push('game started or unknown');
   try { impliedProbability(prop.odds); if(prop.odds < -400) reasons.push('price worse than -400'); } catch { reasons.push('invalid odds'); }
   const sportMinimum = prop.sport === 'NFL' ? 8 : minSample;
