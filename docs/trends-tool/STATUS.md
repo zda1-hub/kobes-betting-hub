@@ -69,3 +69,11 @@
 4. Add the midnight Pacific worker with a database lease, retries and late-market checks. Recheck current market, participation, roster and injuries just before every post or edit; retract unavailable or started props. Do not enable automatic posts before these checks work end to end.
 
 This is a private Discord shell and a live NFL historical research command, not a completed multi-sport Trends-tool. The automated publisher remains off.
+
+## November 14 verified-publisher prototype (local branch only)
+
+- Added an NBA pregame scanner that selects one provider-listed game 30–90 minutes before tipoff, reserves at most one existing-plan alternate-points market call per Pacific date, verifies exact roster/schedule and explicit `Available` status, and refuses stale or missing evidence. It uses durable daily and per-candidate receipts so an uncertain Discord send is not blindly repeated.
+- Added a formatter for historical sample counts, exact book/price and source timestamps. It rejects unconfirmed commercial-use rights for both the historical source and availability source. The present SportsDataverse/ESPN/NBA-derived research feeds are **not** marked as commercially cleared, so this prototype cannot produce a member-facing post. It is not connected to the running bot scheduler.
+- The SportsDataverse NBA repository says its release is CC BY 4.0, but that does not establish downstream rights to use the NBA-origin statistics in a paid gambling-analysis service. [NBA.com Terms of Use, section 9](https://www.nba.com/termsofuse) restricts commercial and gambling-related use of its statistics. The official injury PDF is also used only for local verification pending a rights review.
+- A Linemate consumer subscription at the quoted ~$32 price is not a verified commercial API or redistribution license. OpenAI API can process licensed source data but cannot supply or license live odds, player stats or injury status. No subscription or plan was changed.
+- `node --test bot/trends/*.test.js` passed 49 tests for this local prototype. No live Discord trend post was sent.
