@@ -78,16 +78,14 @@ function candidateId(candidate) {
 }
 
 function renderCandidate(candidate, date) {
-  const { prop, analysis, player, availability } = candidate;
+  const { prop, analysis, player } = candidate;
   const odds = prop.odds > 0 ? `+${prop.odds}` : String(prop.odds);
   const count = row => `${row.hits}/${row.sample}${row.pushes ? ` (${row.pushes} pushes)` : ''}`;
-  return `**Trends-tool · ${prop.sport} · ${date}**\n` +
+  return `**Trends-tool · ${prop.sport} · ${date}** · 21+ · Lines move\n` +
     `**${player}: ${prop.side} ${prop.line} ${DISPLAY_STATS[prop.stat]}** · ${odds} at ${prop.sportsbook}\n` +
-    `Historical hits: season ${count(analysis.season)} · L5 ${count(analysis.l5)} · L10 ${count(analysis.l10)} · L20 ${count(analysis.l20)}.\n` +
-    `Market updated ${prop.updatedAt}. Active roster and injury list checked ${availability.checkedAt}; ` +
-    `${availability.status === 'active-roster-no-listed-injury' ? 'no injury entry found; game participation is not confirmed' : 'status listed Available'}. ` +
-    `[Game-log source](${candidate.analysisSource}).\n` +
-    `Historical hit rates describe past games, not the next game’s chance. Lines move; check the current book before acting. 21+.`;
+    `Historical hits: season ${count(analysis.season)} · L5 ${count(analysis.l5)} · ` +
+    `L10 ${count(analysis.l10)} · L20 ${count(analysis.l20)}. ` +
+    `[Game logs](${candidate.analysisSource}) · Not a guarantee.`;
 }
 
 async function publishVerifiedCandidate({ root, candidate, channelId, channelFor, now = new Date() }) {

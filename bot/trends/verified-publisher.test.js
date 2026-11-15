@@ -13,7 +13,7 @@ test('paid trend publication rejects research with unconfirmed upstream rights',
   }, Date.parse('2026-11-15T19:00:00Z')), /Commercial source rights/);
 });
 
-test('Jokić/Jokic share a receipt; verified NBA research sends once with uncertainty stated', async t => {
+test('Jokić/Jokic share a receipt; verified NBA research sends one compact source-linked card', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'trends-pub-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const now = new Date('2026-11-15T19:00:00Z');
@@ -40,7 +40,12 @@ test('Jokić/Jokic share a receipt; verified NBA research sends once with uncert
   assert.equal(first.status, 'published');
   assert.equal(second.existing, true);
   assert.equal(sent, 1);
-  assert.match(content, /game participation is not confirmed/);
+  assert.match(content, /\*\*Nikola Jokić: over 20\.5 points\*\* · -110 at DraftKings/);
+  assert.match(content, /Historical hits: season 9\/10 · L5 5\/5 · L10 9\/10 · L20 17\/20/);
+  assert.match(content, /\[Game logs\]\(https:\/\/api\.balldontlie\.io\/v1\/stats\)/);
+  assert.match(content, /21\+ · Lines move/);
+  assert.match(content, /Not a guarantee/);
+  assert.doesNotMatch(content, /Market updated|Active roster and injury list checked/);
 });
 
 test('NFL publication accepts fresh game-week nflverse evidence and rejects stale or mismatched releases', () => {
