@@ -14,6 +14,7 @@ const { scanDaily: scanDailyTrends } = require('./trends/daily-scan');
 const { scanNbaAuto } = require('./trends/nba-auto');
 const { scanNbaPopular } = require('./trends/nba-popular-auto');
 const { researchNba, formatNbaResearch } = require('./trends/nba-search');
+const { researchNbaCombo, formatNbaCombo } = require('./trends/nba-combo-research');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { buildCapperRecap } = require('./lib/capper-recap');
@@ -4121,13 +4122,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .map(key => interaction.options.getString(key)).filter(Boolean);
       const result = await recordTrendCombo({ root: reviewQueueRoot,
         userId: interaction.user.id, rawLegs });
-      await interaction.editReply({ content:
-        `Your exact ${rawLegs.length}-leg combination was ${result.recorded ? 'recorded' : 'already counted'} for ${result.serviceDate} Pacific. ` +
-        `${result.distinctSearchers} distinct member(s) requested this combination today. ` +
-        `This is interest tracking, not a bet builder or a published parlay. ` +
-        `Lines, player availability, same-book pricing and historical results must be checked independently before any card can be published. ` +
-        `Historical hit rates do not predict a combination's chance. 21+.`,
-        allowedMentions: { parse: [] } });
+      if (rawLegs.every(leg => String(leg).trim().toUpperCase().startsWith('NBA|')) &&
+          process.env.BDL_NBA_API_KEY && process.env.ODDS_API_KEY) {
+        try {
+          const researched = await researchNbaCombo({ rawLegs, root: reviewQueueRoot,
+            oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY });
+          const content = `${formatNbaCombo(researched)}\n` +
+            `${result.distinctSearchers} distinct member(s) requested this exact combination today (Pacific).`;
+          if (content.length > 1900) throw new Error('Combination report exceeds Discord message limit');
+          await interaction.editReply({ content, allowedMentions: { parse: [] } });
+        } catch (error) {
+          await interaction.editReply(`Your exact combination was ${result.recorded ? 'recorded' : 'already counted'}, ` +
+            `but current NBA research could not complete: ${error.message}. No combination was posted.`);
+        }
+      } else {
+        await interaction.editReply({ content:
+          `Your exact ${rawLegs.length}-leg combination was ${result.recorded ? 'recorded' : 'already counted'} for ${result.serviceDate} Pacific. ` +
+          `${result.distinctSearchers} distinct member(s) requested this combination today. ` +
+          `Current combined NBA research applies only to NBA legs. Other leagues remain interest tracking while their data is verified. ` +
+          `Historical hit rates do not predict a combination's chance. No parlay was posted. 21+.`,
+          allowedMentions: { parse: [] } });
+      }
     } catch (error) {
       await interaction.editReply(`Could not record the combination: ${error.message}. Use SPORT|TEAM|PLAYER|STAT|OVER/UNDER|LINE for each leg. No parlay was posted.`);
     }
