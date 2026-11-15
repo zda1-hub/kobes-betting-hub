@@ -55,7 +55,12 @@ async function currentMarket({ root, apiKey, sport, team, player, stat, side, li
   const bestOtherLines = new Map();
   for (const row of playerOffers) if (row.line !== selectedLine && !bestOtherLines.has(row.line))
     bestOtherLines.set(row.line, row);
-  const otherLines = [...bestOtherLines.values()].slice(0, 5);
+  // Compare neighboring thresholds. Sorting all books by payout first would
+  // otherwise fill the board with extreme long-shot lines far from the one
+  // the member is researching.
+  const otherLines = [...bestOtherLines.values()]
+    .sort((a, b) => Math.abs(a.line - selectedLine) - Math.abs(b.line - selectedLine) ||
+      a.line - b.line).slice(0, 5).sort((a, b) => a.line - b.line);
   return { sport, player, stat, side, line: selectedLine, market, event,
     fetchedAt: odds.fetchedAt, remainingCredits: odds.remainingCredits,
     offers: offers.slice(0, 5), otherLines };
