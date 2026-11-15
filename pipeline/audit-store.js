@@ -339,6 +339,15 @@ async function recordApprovalCardSuperseded(packet, canonicalPickId) {
     details: { canonical_pick_id: canonicalPickId, message_id: packet.discord_review_message_id } });
 }
 
+async function recordApprovalCardMissing(packet, { channelId, messageId }) {
+  if (!channelId || !messageId) return;
+  await query(`UPDATE approval_cards SET status='MISSING'
+    WHERE discord_channel_id=$1 AND discord_message_id=$2 AND status='PENDING'`, [channelId, messageId]);
+  await recordWorkflowEvent(packet, { eventType: 'APPROVAL_CARD_MISSING',
+    beforeState: 'PENDING_APPROVAL', afterState: 'HELD_NOT_READY',
+    details: { channel_id: channelId, message_id: messageId } });
+}
+
 async function recordApprovalAction(packet, { action, actorId, status }) {
   const candidateId = await candidateIdFor(packet);
   if (!candidateId) return !auditConfigured();
@@ -586,6 +595,7 @@ module.exports = {
   recordApiCall,
   recordApprovalCard,
   recordApprovalCardRevision,
+  recordApprovalCardMissing,
   recordApprovalCardSuperseded,
   recordGradeAttempt,
   recordPublicationAttempt,

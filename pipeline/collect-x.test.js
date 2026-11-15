@@ -75,6 +75,11 @@ test('recovers only today’s unsent terms-only X card before the event', () => 
   assert.equal(heldExpertTermsCandidate({ ...packet, discord_review_message_id: 'sent' }, '2026-10-22', now), false);
   assert.equal(heldExpertTermsCandidate({ ...packet, verification: { event_start: '2026-10-22T16:30:00.000Z' } }, '2026-10-22', now), false);
   assert.equal(heldExpertTermsCandidate({ ...packet, source: { ...packet.source, posted_at: '2026-10-21T16:00:00.000Z' } }, '2026-10-22', now), false);
+  const monitored = { ...packet, source: { ...packet.source, publish_mode: 'monitored_terms' } };
+  assert.equal(heldExpertTermsCandidate(monitored, '2026-10-22', now), false);
+  assert.equal(heldExpertTermsCandidate({ ...monitored, missing_approval_card_id: 'deleted-message' }, '2026-10-22', now), true);
+  assert.equal(heldExpertTermsCandidate({ ...monitored, missing_approval_card_id: 'deleted-message', approval: { decision: 'REJECTED' } }, '2026-10-22', now), false);
+  assert.equal(heldExpertTermsCandidate({ ...monitored, missing_approval_card_id: 'deleted-message', verification: { event_start: '2026-10-22T16:30:00.000Z' } }, '2026-10-22', now), false);
 });
 
 test('a complete monitored X wager uses the exact expert card and paid-only control', async () => {

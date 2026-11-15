@@ -117,6 +117,7 @@ const {
   closeAuditStore,
   recordApprovalAction,
   recordApprovalCardRevision,
+  recordApprovalCardMissing,
   recordApprovalCardSuperseded,
   recordGradeAttempt,
   recordPublicationAttempt,
@@ -3127,6 +3128,27 @@ async function refreshPendingTermsOnlyApprovals() {
       });
       refreshed += 1;
     } catch (error) {
+      if ((error.code === 10008 || error.rawError?.code === 10008 || error.status === 404)
+        && !packet.approval?.decision) {
+        // Discord definitively says the saved message is gone. Retire that
+        // receipt before the collector rechecks the event and recreates only
+        // a still-current private review card. Never retry an uncertain send.
+        const missingMessageId = packet.discord_review_message_id;
+        await recordApprovalCardMissing(packet, { channelId: approvalChannel.id,
+          messageId: missingMessageId });
+        packet.discord_review_message_id = null;
+        packet.missing_approval_card_id = missingMessageId;
+        packet.status = 'HELD_NOT_READY';
+        packet.approval_ready = false;
+        packet.approval ||= {};
+        packet.approval.free_prepared = false;
+        delete packet.approval.exact_final_copy;
+        delete packet.approval.exact_final_copy_sha256;
+        packet.hold_reason = 'The private approval card was deleted; awaiting a fresh event check.';
+        await fs.writeFile(path.join(directory, file), `${JSON.stringify(packet, null, 2)}\n`);
+        console.warn(`Missing expert-picks approval card ${packet.pick_id}; queued for current-event recovery.`);
+        continue;
+      }
       console.error(`Could not refresh expert-picks approval card ${packet.pick_id}:`, error);
     }
   }

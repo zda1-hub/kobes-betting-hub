@@ -1303,7 +1303,9 @@ function heldMonitoredXCandidate(packet, date, now = new Date()) {
 }
 
 function heldExpertTermsCandidate(packet, date, now = new Date()) {
-  if (packet?.source?.platform !== 'Twitter/X' || packet.source?.publish_mode !== 'terms_only'
+  if (packet?.source?.platform !== 'Twitter/X'
+    || !['terms_only', 'monitored_terms'].includes(packet.source?.publish_mode)
+    || (packet.source.publish_mode === 'monitored_terms' && !packet.missing_approval_card_id)
     || packet.status !== 'HELD_NOT_READY' || packet.discord_review_message_id || packet.approval?.decision
     || !packet.pick_id?.startsWith(date.replaceAll('-', ''))
     || !packet.source?.posted_at || pacificDate(new Date(packet.source.posted_at)) !== date) return false;
