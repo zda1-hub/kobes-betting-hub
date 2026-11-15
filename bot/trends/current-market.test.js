@@ -45,6 +45,9 @@ test('one-market live research honors monthly and shared credit limits', async t
   assert.equal(seen.some(url => url.includes('secret')), false);
   const ledger = JSON.parse(await fs.readFile(path.join(root, 'trends-odds-budget', '2026-11.json'), 'utf8'));
   assert.equal(ledger.reserved, 1);
+  const browsed = await currentMarket({ ...query, line: null });
+  assert.equal(browsed.line, 20.5);
+  assert.equal(browsed.offers[0].odds, -180);
   await assert.rejects(currentMarket({ ...query, fetchImpl: async url => ({
     ok: true, headers: { get: name => name === 'x-requests-remaining' ? '5000' : null },
     json: async () => url.endsWith('/events') ? [{ id: 'event1234', home_team: 'New York Knicks',

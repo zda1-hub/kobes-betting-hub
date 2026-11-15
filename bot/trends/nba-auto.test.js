@@ -21,7 +21,7 @@ test('only a same-day 30–90 minute event is eligible and stale offers are disc
   ['player_rebounds_alternate', 'player_assists_alternate']);
 });
 
-test('qualified NBA candidate receives one durable daily publication receipt', async t => {
+test('qualified NBA candidate receives one durable event publication receipt', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'trends-nba-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   let sent = 0, marketCalls = 0;
@@ -44,7 +44,7 @@ test('qualified NBA candidate receives one durable daily publication receipt', a
   const first = await scanNbaAuto(args);
   const second = await scanNbaAuto(args);
   assert.equal(first.status, 'published');
-  assert.equal(second.existing, true);
+  assert.equal(second.status, 'waiting');
   assert.equal(sent, 1);
   assert.equal(marketCalls, 1);
   assert.equal(JSON.parse(await fs.readFile(path.join(root, `trends-auto/nba-2026-11-15-${event.id}.json`), 'utf8')).messageId, 'message-1');
@@ -76,7 +76,7 @@ test('rebound and assist markets use their own completed-game statistic', async 
     publish: async ({ candidate }) => { seen.push(candidate.prop.stat); return { id: 'candidate', messageId: 'message-1' }; }
   });
   assert.equal(result.status, 'published');
-  assert.deepEqual(seen, ['rebounds', 'rebounds']);
+  assert.deepEqual(seen, ['rebounds', 'assists', 'rebounds']);
 });
 
 test('unconfirmed NBA status holds the entire scan without posting', async t => {
@@ -111,4 +111,43 @@ test('a held first game does not block a later same-day game', async t => {
   assert.equal((await scanNbaAuto(args)).status, 'held');
   assert.equal((await scanNbaAuto(args)).status, 'held');
   assert.deepEqual(scanned, [event.id, later.id]);
+});
+
+test('one market scan publishes two distinct qualified players without extra odds calls', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'trends-nba-multi-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  let marketCalls = 0;
+  const sent = [];
+  const count = (hits, sample) => ({ hits, sample, pushes: 0, hitRate: hits / sample });
+  const args = { root, apiKey: 'fixture', bdlKey: 'fixture',
+    channelId: '1571285528882450623', channelFor: async () => ({}), now,
+    readEvents: async () => ({ data: [event] }),
+    reserveOdds: async ({ cost, operation }) => { assert.equal(cost, 3); return operation(); },
+    readOdds: async () => {
+      marketCalls++;
+      return { selections: ['Player One', 'Player Two', 'Player Three'].map(player => ({
+        market: 'player_points_alternate', side: 'over', player, line: 10.5,
+        odds: -200, sportsbook: 'Book', sportsbookKey: 'book', updatedAt: now.toISOString()
+      })) };
+    },
+    readBdlEvent: async () => ({ datetime: event.commence_time,
+      home_team: { id: 7, full_name: event.home_team },
+      visitor_team: { id: 18, full_name: event.away_team } }),
+    readPlayer: async ({ name }) => ({ id: name, team: { id: 18, full_name: event.away_team } }),
+    readHistory: async ({ playerId }) => ({ analysis: { season: count(playerId === 'Player Three' ? 10 : 9, 10), l5: count(5, 5),
+      l10: count(9, 10), l20: count(17, 20) }, checkedAt: now.toISOString(),
+      sourceUrl: 'https://example.com/records', rightsUrl: 'https://www.balldontlie.io/terms.html' }),
+    readAvailability: async () => ({ status: 'active-roster-no-listed-injury',
+      sourceUrl: 'https://api.balldontlie.io/v1/player_injuries', checkedAt: now.toISOString(),
+      rightsUrl: 'https://www.balldontlie.io/terms.html' }),
+    publish: async ({ candidate }) => { sent.push(candidate.player);
+      return { id: candidate.player, messageId: `message-${sent.length}` }; }
+  };
+  const first = await scanNbaAuto(args);
+  const second = await scanNbaAuto(args);
+  assert.equal(first.status, 'published');
+  assert.deepEqual(first.messageIds, ['message-1', 'message-2']);
+  assert.equal(second.status, 'waiting');
+  assert.deepEqual(sent, ['Player Three', 'Player One']);
+  assert.equal(marketCalls, 1);
 });

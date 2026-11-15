@@ -1,5 +1,11 @@
 # Trends-tool integration status — November 14, 2026
 
+## November 14 late follow-up: NBA member browsing and multiple qualifying posts
+
+- The previous one-post-per-day NBA feed was too sparse for the requested Discord analytics experience. The NBA scanner now ranks qualified candidates by consistency across season/L5/L10/L20, season rate, sample and price, and can publish up to two distinct players from each of two budgeted NBA games (four posts per Pacific day maximum). It reuses each game's three-market odds response, so this change does not add Odds API market requests to the existing two-event daily cap. Each post still passes exact quote, roster, injury-feed, game-log, source-rights and pregame checks; the cap is not a posting target. A day with no qualifying lines can remain empty.
+- Added `/trends-dashboard` in the VIP prop-search channel with private buttons to search a player or browse recent NBA posts. The modal accepts team, player and stat; an exact line is optional. `/trends-nba` likewise lets members omit the side and line, defaulting to Over and selecting a real available alternate quote close to -200 for browsing. Its response compares up to five other currently quoted lines using the same completed-game logs, with season/L5/L10/L20 counts for each. This is a Discord search interface, not an automatic pick approval or a parlay probability model.
+- The current NBA pilot still lacks the full Linemate-style scope: broad player/team profiles, imagery with verified display rights, live post edits/retractions, full sport coverage, and a priced combination builder. Do not describe it as a complete replica. NFL, MLB and NHL member research has narrower data/rights coverage and their high-hit-rate channels are not automatically publishing.
+
 ## Automatic daily inventory
 
 - The worker now writes one durable, quota-free event inventory per Pacific day under `trends-daily/YYYY-MM-DD.json`. It records the provider's upcoming events in NBA, NFL, MLB and NHL and the count/IDs of exact combinations with at least five distinct member requests. A provider error is recorded for that league without inventing games. The scan catches up after a restart and runs every ten minutes until that day's receipt exists; it does not spend odds credits.

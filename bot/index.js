@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const commands = require('./commands');
 const { research: researchNflTrend, formatResearch: formatNflTrend } = require('./trends/nfl-search');
 const { research: researchFreeLeagueTrend, toCsv: freeLeagueTrendCsv } = require('./trends/free-leagues');
@@ -3560,6 +3560,82 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  const trendsMember = () => interaction.guildId === process.env.DISCORD_GUILD_ID &&
+    interaction.channelId === '1571285899717771365' &&
+    (isAdministrator(interaction) || [...vipRoleIds()].some(id =>
+      interaction.member?.roles?.cache?.has(id) || interaction.member?.roles?.includes?.(id)));
+  if (interaction.isButton() && interaction.customId.startsWith('trends-ui:')) {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
+      return;
+    }
+    if (interaction.customId === 'trends-ui:search') {
+      const field = (id, label, hint, required = true) => new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId(id).setLabel(label).setPlaceholder(hint)
+          .setStyle(TextInputStyle.Short).setRequired(required));
+      const modal = new ModalBuilder().setCustomId('trends-ui-search').setTitle('Search NBA alternate lines')
+        .addComponents(field('team', 'Team in upcoming game', 'Pacers'),
+          field('player', 'Player name', 'Pascal Siakam'),
+          field('stat', 'Stat', 'points, rebounds, or assists'),
+          field('line', 'Exact line (optional)', 'Leave blank to browse available lines', false));
+      await interaction.showModal(modal);
+      return;
+    }
+    if (interaction.customId === 'trends-ui:recent') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const channel = await client.channels.fetch(process.env.TRENDS_NBA_CHANNEL_ID || '1571285528882450623');
+        if (channel?.parentId !== (process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036'))
+          throw new Error('Private NBA channel could not be verified');
+        const messages = await channel.messages.fetch({ limit: 50 });
+        const rows = [...messages.values()].filter(message => message.author?.id === client.user.id &&
+          message.content?.startsWith('**Trends-tool · NBA')).slice(0, 5);
+        await interaction.editReply({ content: rows.length ?
+          `**Recent NBA research posts** (open each for its quote and check time)\n` +
+          rows.map(message => `• ${message.createdAt.toISOString().slice(0, 16)} UTC · ` +
+            `https://discord.com/channels/${interaction.guildId}/${channel.id}/${message.id}`).join('\n') +
+          '\nHistorical posts may contain expired lines. Recheck the current market before acting.' :
+          'No NBA trend posts are available yet. The bot only publishes when the current evidence passes its checks.' });
+      } catch (error) {
+        console.warn('Trends-tool recent browser unavailable:', error.message);
+        await interaction.editReply('Recent NBA posts are unavailable right now. Try again shortly.');
+      }
+      return;
+    }
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'trends-ui-search') {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
+      return;
+    }
+    const stat = interaction.fields.getTextInputValue('stat').trim().toLowerCase();
+    const rawLine = interaction.fields.getTextInputValue('line').trim();
+    const line = rawLine ? Number(rawLine) : null;
+    if (!['points', 'rebounds', 'assists'].includes(stat) ||
+        (rawLine && (!Number.isFinite(line) || line < 0 || line > 1000))) {
+      await interaction.reply({ ephemeral: true,
+        content: 'Use points, rebounds, or assists. The optional line must be a number from 0 to 1000.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const result = await researchNba({ root: reviewQueueRoot,
+        oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+        team: interaction.fields.getTextInputValue('team').trim(),
+        player: interaction.fields.getTextInputValue('player').trim(),
+        stat, side: 'over', line });
+      const content = formatNbaResearch(result);
+      if (content.length > 1900) throw new Error('The research card is too long; choose an exact line');
+      await interaction.editReply({ content, allowedMentions: { parse: [] } });
+      try { await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
+        query: { sport: 'NBA', player: result.player, stat, side: 'over', line: result.line } }); }
+      catch (error) { console.warn('NBA Trends-tool search ledger unavailable:', error.message); }
+    } catch (error) {
+      console.warn('NBA Trends-tool modal search held:', error.message);
+      await interaction.editReply(`NBA search could not complete: ${error.message}. No pick was posted.`);
+    }
+    return;
+  }
   if (interaction.isButton() && interaction.customId.startsWith('calendar-editorial:')) {
     let lockedMessageId;
     try {
@@ -3952,6 +4028,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (!interaction.isChatInputCommand()) return;
 
+  if (interaction.commandName === 'trends-dashboard') {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
+      return;
+    }
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('trends-ui:search').setLabel('Search NBA player')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('trends-ui:recent').setLabel('Recent NBA trends')
+        .setStyle(ButtonStyle.Secondary));
+    await interaction.reply({ ephemeral: true, components: [row],
+      content: '**Trends-tool · NBA research**\nSearch a player for current alternate lines and completed-game hit counts, or browse recent verified posts. Quotes and status can change before tipoff. Historical hit rates are not next-game probabilities.' });
+    return;
+  }
+
   if (interaction.commandName === 'trends-nba') {
     if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||
         interaction.channelId !== '1571285899717771365' ||
@@ -3966,8 +4057,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         team: interaction.options.getString('team', true),
         player: interaction.options.getString('player', true),
         stat: interaction.options.getString('stat', true),
-        side: interaction.options.getString('side', true),
-        line: interaction.options.getNumber('line', true)
+        side: interaction.options.getString('side') || 'over',
+        line: interaction.options.getNumber('line')
       };
       const result = await researchNba({ root: reviewQueueRoot,
         oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY, ...query });
