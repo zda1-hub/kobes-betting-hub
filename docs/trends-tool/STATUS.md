@@ -1,5 +1,12 @@
 # Trends-tool integration status — November 14, 2026
 
+## Live verification — November 14 at 11:50 PM Arizona
+
+- PR #445 merged at `a57567a7`; Render worker deploy `dep-dbslbonf3r2c73ehoung` reached `live`. Startup logs showed guild commands registered and Kobe Bot logged in.
+- The signed-in Discord client opened `/trends-dashboard` in the private VIP prop-search channel and showed the new Search, Browse NBA board, Recent posts and Build NBA combo buttons. The on-demand Pacers points board returned two fresh source-backed rows with exact alternate quotes, completed-game season/L5/L10/L20 counts and injury-list caveats. The private builder opened with add/view/recheck/remove/clear controls and no invented combined payout. This checks the live interface, not that tomorrow's automatic post will qualify.
+- The category was renamed in Discord to the requested `📊・LINEMATE ANALYTICS` and its existing six channels stayed in place. Kobe Bot's existing pinned launcher (`1571413885947482226`) was edited in place to show the four current buttons; the Discord API confirmed its ID, content, button IDs and pinned state.
+- Automatic NBA trend publication remains enabled but conditional on game-day checks; near-tip monitoring applies to **new** published NBA cards. NFL, MLB and NHL automatic current-prop feeds remain disabled with the present NBA-only subscription and source coverage.
+
 ## November 14 NBA Discord analytics expansion (current release candidate)
 
 - Added a VIP-only `/trends-board` matchup view and dashboard button. It reads the existing Odds API alternate markets, joins the exact upcoming NBA game and active roster to BALLDONTLIE, filters to fresh Over offers, current-season sample/rate, last-20 sample and no listed injury, then shows up to six sourced rows. Members can select points, rebounds, assists or all three and an 80/85/90/95% *historical* minimum. An empty result says no qualifying rows; it does not fill the board with guesses. The board is private research, not an approved pick.
