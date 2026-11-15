@@ -1,5 +1,13 @@
 # Trends-tool integration status — November 14, 2026
 
+## November 15, 2026 — no-extra-subscription expansion
+
+- Added a conditional NFL automatic scanner using the existing Odds API allowance and attributed nflverse player stats, schedule, roster and injury releases. It requires one exact upcoming event, an exact player/team match, a fresh current alternate quote, an active current-week roster row, a current-week injury release with no entry for that player, at least eight current-season completed games, 20 recent completed games and an 80% current-season historical hit rate. It can publish at most one candidate from each of two scanned games per Pacific day, only 30–90 minutes before kickoff. Missing or uncertain evidence means no post; an absence from the injury file is explicitly not called confirmed participation. `TRENDS_NFL_AUTO_ENABLED` is the separate rollout gate.
+- Added private `/trends-live` current-prop research for NFL, NHL and MLB and `/trends-board-other` matchup boards. The dashboard has browse buttons for all three additional leagues. These views use real event-scoped odds and completed-game counts, with alternate quoted lines where available. They label participation unverified and never publish a pick. MLB may have no upcoming regular-season market during the offseason.
+- NHL and MLB automatic posts remain disabled. The present free sources do not verify game-day participation for those leagues. MLB.com and NHL.com terms do not grant an automated commercial collection feed just because their pages are publicly viewable. An existing member research view is not a production availability source.
+- Verified the public nflverse 2026 releases on November 15: the schedule listed November 15 games in week 10, and the roster and injury releases both contained week 10 rows. This checks source presence and week alignment, not an individual player or future post.
+- No new provider plan, cost, or billing change was made. The existing Trends monthly odds cap and shared arbitrage reserve still apply. New Discord commands and the NFL rollout flag require deployment before they are live.
+
 ## Live verification — November 14 at 11:50 PM Arizona
 
 - PR #445 merged at `a57567a7`; Render worker deploy `dep-dbslbonf3r2c73ehoung` reached `live`. Startup logs showed guild commands registered and Kobe Bot logged in.

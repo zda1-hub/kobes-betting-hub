@@ -38,8 +38,21 @@ function assertEvidence(candidate, now) {
          now - Date.parse(availability.sourceUpdatedAt) > 30 * 60_000 ||
          Date.parse(availability.sourceUpdatedAt) > now)) ||
       (availability.status === 'active-roster-no-listed-injury' &&
-        (!availability.sourceUrl.startsWith('https://api.balldontlie.io/v1/player_injuries') ||
-         availability.rightsUrl !== 'https://www.balldontlie.io/terms.html')) ||
+        !((prop.sport === 'NBA' &&
+           availability.sourceUrl.startsWith('https://api.balldontlie.io/v1/player_injuries') &&
+           availability.rightsUrl === 'https://www.balldontlie.io/terms.html') ||
+          (prop.sport === 'NFL' &&
+           availability.sourceUrl.startsWith('https://github.com/nflverse/nflverse-data/releases/download/injuries/') &&
+           availability.rosterSourceUrl?.startsWith('https://github.com/nflverse/nflverse-data/releases/download/rosters/') &&
+           availability.rightsUrl === 'https://github.com/nflverse/nflverse-data/blob/main/LICENSE.md' &&
+           availability.gameWeek === availability.rosterWeek &&
+           availability.gameWeek === availability.injuryFeedWeek &&
+           Number.isFinite(Date.parse(availability.sourceUpdatedAt)) &&
+           Date.parse(availability.sourceUpdatedAt) <= now &&
+           now - Date.parse(availability.sourceUpdatedAt) <= 36 * 60 * 60_000 &&
+           Number.isFinite(Date.parse(availability.rosterUpdatedAt)) &&
+           Date.parse(availability.rosterUpdatedAt) <= now &&
+           now - Date.parse(availability.rosterUpdatedAt) <= 36 * 60 * 60_000))) ||
       !/^https:\/\//.test(candidate.analysisSource || '') ||
       !Number.isFinite(Date.parse(candidate.analysisCheckedAt)) ||
       now - Date.parse(candidate.analysisCheckedAt) > 24 * 60 * 60_000 ||
