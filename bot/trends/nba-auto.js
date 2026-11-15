@@ -1,26 +1,24 @@
 'use strict';
 
-// One budgeted NBA points market per Pacific day. The bot never manufactures
-// a daily post: no exact quote, historical sample, roster match, or explicit
-// Available entry in the official NBA report means no member-facing send.
+// One budgeted NBA points market per Pacific day. No exact quote, completed
+// history, active team roster, or clean injury check means no member-facing send.
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { events, eventAlternateOdds } = require('./odds-api');
 const { withOddsBudget } = require('./odds-budget');
-const { research } = require('./free-leagues');
-const { nbaAvailability } = require('./nba-availability');
+const bdl = require('./bdl-nba');
 const { publishVerifiedCandidate } = require('./verified-publisher');
 const { belongsToServiceDate, localParts, TIME_ZONE } = require('./schedule');
 const { playerNameKey } = require('./player-name');
-const { upcomingEventStatus } = require('../lib/event-timing');
 
 const MARKET = 'player_points_alternate';
 const MIN_BEFORE_MS = 30 * 60_000;
 const MAX_BEFORE_MS = 90 * 60_000;
 
-function featuredEvent(rows, now) {
+function featuredEvent(rows, now, skipped = new Set()) {
   const date = localParts(now, TIME_ZONE).date;
-  return (rows || []).filter(row => row?.id &&
+  return (rows || []).filter(row => /^[a-zA-Z0-9_-]{8,80}$/.test(row?.id || '') &&
+    !skipped.has(row.id) && Number.isFinite(Date.parse(row.commence_time)) &&
     belongsToServiceDate(row.commence_time, date) &&
     Date.parse(row.commence_time) - now.valueOf() >= MIN_BEFORE_MS &&
     Date.parse(row.commence_time) - now.valueOf() <= MAX_BEFORE_MS)
@@ -37,35 +35,31 @@ function candidateOffers(rows, now) {
     const key = `${playerNameKey(row.player)}:${row.line}`;
     if (!best.has(key) || best.get(key).odds < row.odds) best.set(key, row);
   }
-  return [...best.values()].sort((a, b) => b.odds - a.odds).slice(0, 12);
+  return [...best.values()].sort((a, b) => b.odds - a.odds).slice(0, 6);
 }
 
-function rosterPacket(offer, event) {
-  return { pick_id: `trends-nba-${event.id}`, source: { text: 'NBA' }, analysis: { extraction: {
-    sport: 'NBA', event: `${event.away_team} at ${event.home_team}`,
-    player_name: offer.player, selection: `${offer.player} over ${offer.line} points`,
-    plays: [{ player_name: offer.player, event: `${event.away_team} at ${event.home_team}`,
-      selection: `${offer.player} over ${offer.line} points` }]
-  } } };
-}
-
-async function scanNbaAuto({ root, apiKey, channelId, channelFor, now = new Date(),
+async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = new Date(),
   fetchImpl = fetch, readEvents = events, readOdds = eventAlternateOdds,
-  readHistory = research, readAvailability = nbaAvailability,
-  verifyRoster = upcomingEventStatus, publish = publishVerifiedCandidate,
+  readBdlEvent = bdl.exactEvent, readPlayer = bdl.exactActivePlayer,
+  readHistory = bdl.history, readAvailability = bdl.availability,
+  publish = publishVerifiedCandidate,
   reserveOdds = withOddsBudget } = {}) {
-  if (!root || !apiKey || !channelId || typeof channelFor !== 'function')
-    throw new Error('NBA trend automation requires persistent storage, Odds API and private channel');
+  if (!root || !apiKey || !bdlKey || !channelId || typeof channelFor !== 'function')
+    throw new Error('NBA trend automation requires storage, Odds API, NBA data key and private channel');
   const date = localParts(now, TIME_ZONE).date;
-  const file = path.join(root, 'trends-auto', `nba-${date}.json`);
-  let existing;
-  try { existing = JSON.parse(await fs.readFile(file, 'utf8')); }
+  const directory = path.join(root, 'trends-auto');
+  let files = [];
+  try { files = (await fs.readdir(directory)).filter(name => name.startsWith(`nba-${date}-`) && name.endsWith('.json')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
-  if (existing) return { ...existing, existing: true };
+  const attempts = await Promise.all(files.map(async name => JSON.parse(await fs.readFile(path.join(directory, name), 'utf8'))));
+  const terminal = attempts.find(row => ['published', 'reserved', 'needs_reconciliation'].includes(row.status));
+  if (terminal) return { ...terminal, existing: true };
+  if (attempts.length >= 3) return { status: 'held', date, reason: 'Three-event daily market cap reached', existing: true };
   const schedule = await readEvents('NBA', { apiKey, fetchImpl });
-  const event = featuredEvent(schedule.data, now);
+  const event = featuredEvent(schedule.data, now, new Set(attempts.map(row => row.eventId)));
   if (!event) return { status: 'waiting', date, reason: 'No provider-listed NBA game is 30–90 minutes from tipoff' };
-  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+  const file = path.join(directory, `nba-${date}-${event.id}.json`);
+  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   const reserved = { status: 'reserved', date, eventId: event.id, market: MARKET,
     at: now.toISOString() };
   try { await fs.writeFile(file, JSON.stringify(reserved), { mode: 0o600, flag: 'wx' }); }
@@ -75,34 +69,40 @@ async function scanNbaAuto({ root, apiKey, channelId, channelFor, now = new Date
     const odds = await reserveOdds({ root, apiKey, fetchImpl, now, operation: () =>
       readOdds('NBA', event.id, { apiKey, fetchImpl, market: MARKET }) });
     const offers = candidateOffers(odds.selections, now);
+    const bdlEvent = await readBdlEvent({ event, now, apiKey: bdlKey, fetchImpl });
     const holds = [];
     let sendAttempted = false;
     for (const offer of offers) {
       try {
-        const history = await readHistory({ sport: 'NBA', name: offer.player,
-          stat: 'points', line: offer.line, side: 'over', now: now.valueOf(), fetchImpl });
+        const player = await readPlayer({ name: offer.player, game: bdlEvent,
+          apiKey: bdlKey, fetchImpl });
+        const history = await readHistory({ playerId: player.id, stat: 'points',
+          line: offer.line, now, apiKey: bdlKey, fetchImpl });
+        if (history.rightsUrl !== bdl.TERMS_URL) {
+          holds.push('NBA history source rights unverified'); continue;
+        }
         if (history.analysis.season.sample < 10 || history.analysis.l20.sample < 20 ||
             history.analysis.season.hitRate < 0.8) {
           holds.push('insufficient or below-threshold history'); continue;
         }
-        const roster = await verifyRoster(rosterPacket(offer, event), { now, fetchImpl });
-        if (roster.status !== 'UPCOMING' || !roster.athlete ||
-            Math.abs(Date.parse(roster.eventStart) - Date.parse(event.commence_time)) > 5 * 60_000 ||
-            ![event.home_team, event.away_team].some(team => playerNameKey(team) === playerNameKey(roster.playerTeam))) {
-          holds.push('event roster or start time unverified'); continue;
+        const availability = await readAvailability({ playerId: player.id,
+          now, apiKey: bdlKey, fetchImpl });
+        if (availability.status !== 'active-roster-no-listed-injury' ||
+            availability.rightsUrl !== bdl.TERMS_URL) {
+          holds.push('NBA injury status is uncertain'); continue;
         }
-        const availability = await readAvailability({ player: offer.player, now, fetchImpl });
-        if (availability.status !== 'confirmed-active') {
-          holds.push('player not explicitly Available on official NBA report'); continue;
-        }
-        const teamName = roster.playerTeam;
-        const opponent = playerNameKey(teamName) === playerNameKey(event.home_team) ? event.away_team : event.home_team;
+        const teamName = player.team.full_name;
+        const opponent = player.team.id === bdlEvent.home_team.id ?
+          bdlEvent.visitor_team.full_name : bdlEvent.home_team.full_name;
         const candidate = { player: offer.player, analysis: history.analysis,
           analysisSource: history.sourceUrl, analysisCheckedAt: history.checkedAt, availability,
+          rights: { history: 'commercial-use-confirmed', availability: 'commercial-use-confirmed',
+            termsUrl: bdl.TERMS_URL },
           prop: { ...offer, sport: 'NBA', stat: 'points', side: 'over',
             startsAt: event.commence_time, eventId: event.id,
             teamId: teamName, opponentId: opponent, available: true, source: 'The Odds API',
-            rosterVerified: true, rosterVerifiedAt: now.toISOString(), participationVerified: true } };
+            rosterVerified: true, rosterVerifiedAt: now.toISOString(),
+            participationVerified: false, preGameAvailabilityChecked: true } };
         sendAttempted = true;
         const receipt = await publish({ root, candidate, channelId, channelFor, now });
         outcome = { status: 'published', date, eventId: event.id,
@@ -128,4 +128,4 @@ async function scanNbaAuto({ root, apiKey, channelId, channelFor, now = new Date
   return outcome;
 }
 
-module.exports = { MARKET, featuredEvent, candidateOffers, rosterPacket, scanNbaAuto };
+module.exports = { MARKET, featuredEvent, candidateOffers, scanNbaAuto };

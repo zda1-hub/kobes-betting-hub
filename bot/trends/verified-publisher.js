@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { qualify } = require('./analytics');
 const { belongsToServiceDate, localParts, TIME_ZONE } = require('./schedule');
+const { playerNameKey } = require('./player-name');
 
 const inFlight = new Map();
 const DISPLAY_STATS = Object.freeze({
@@ -23,15 +24,22 @@ function assertEvidence(candidate, now) {
   if (!prop || !analysis?.season || !analysis?.l5 || !analysis?.l10 || !analysis?.l20 ||
       !player || !DISPLAY_STATS[prop.stat] || !['over', 'under'].includes(prop.side) ||
       !Number.isFinite(prop.line) || !prop.eventId || !prop.teamId || !prop.opponentId ||
-      !availability || availability.status !== 'confirmed-active' ||
+      !availability || !['confirmed-active', 'active-roster-no-listed-injury'].includes(availability.status) ||
       !/^https:\/\//.test(availability.sourceUrl || '') ||
-      (prop.sport === 'NBA' && !availability.sourceUrl.startsWith('https://ak-static.cms.nba.com/referee/injury/')) ||
+      (prop.sport === 'NBA' && ![
+        'https://ak-static.cms.nba.com/referee/injury/',
+        'https://api.balldontlie.io/v1/player_injuries'
+      ].some(prefix => availability.sourceUrl.startsWith(prefix))) ||
       !Number.isFinite(Date.parse(availability.checkedAt)) ||
       now - Date.parse(availability.checkedAt) > 30 * 60_000 ||
       Date.parse(availability.checkedAt) > now ||
-      !Number.isFinite(Date.parse(availability.sourceUpdatedAt)) ||
-      now - Date.parse(availability.sourceUpdatedAt) > 30 * 60_000 ||
-      Date.parse(availability.sourceUpdatedAt) > now ||
+      (availability.status === 'confirmed-active' &&
+        (!Number.isFinite(Date.parse(availability.sourceUpdatedAt)) ||
+         now - Date.parse(availability.sourceUpdatedAt) > 30 * 60_000 ||
+         Date.parse(availability.sourceUpdatedAt) > now)) ||
+      (availability.status === 'active-roster-no-listed-injury' &&
+        (!availability.sourceUrl.startsWith('https://api.balldontlie.io/v1/player_injuries') ||
+         availability.rightsUrl !== 'https://www.balldontlie.io/terms.html')) ||
       !/^https:\/\//.test(candidate.analysisSource || '') ||
       !Number.isFinite(Date.parse(candidate.analysisCheckedAt)) ||
       now - Date.parse(candidate.analysisCheckedAt) > 24 * 60 * 60_000 ||
@@ -42,7 +50,8 @@ function assertEvidence(candidate, now) {
       !belongsToServiceDate(prop.startsAt, localParts(now, TIME_ZONE).date))
     throw new Error('Trend can post only 15–90 minutes before a same-day game');
   if (analysis.l20.sample < 20) throw new Error('Twenty observed recent games are required');
-  const gate = qualify(prop, analysis, { now, minSample: 10 });
+  const gate = qualify(prop, analysis, { now, minSample: 10,
+    allowPreGameAvailabilityCheck: availability.status === 'active-roster-no-listed-injury' });
   if (!gate.qualifies) throw new Error(`Trend does not qualify: ${gate.reasons.join(', ')}`);
   return gate;
 }
@@ -50,7 +59,7 @@ function assertEvidence(candidate, now) {
 function candidateId(candidate) {
   const { prop } = candidate;
   return crypto.createHash('sha256').update(JSON.stringify([
-    prop.sport, prop.eventId, candidate.player.toLocaleLowerCase('en-US'),
+    prop.sport, prop.eventId, playerNameKey(candidate.player),
     prop.stat, prop.side, prop.line
   ])).digest('hex').slice(0, 32);
 }
@@ -62,7 +71,8 @@ function renderCandidate(candidate, date) {
   return `**Trends-tool · ${prop.sport} · ${date}**\n` +
     `**${player}: ${prop.side} ${prop.line} ${DISPLAY_STATS[prop.stat]}** · ${odds} at ${prop.sportsbook}\n` +
     `Historical hits: season ${count(analysis.season)} · L5 ${count(analysis.l5)} · L10 ${count(analysis.l10)} · L20 ${count(analysis.l20)}.\n` +
-    `Market updated ${prop.updatedAt}. [Game-day status](${availability.sourceUrl}) checked ${availability.checkedAt}. ` +
+    `Market updated ${prop.updatedAt}. Active roster and injury list checked ${availability.checkedAt}; ` +
+    `${availability.status === 'active-roster-no-listed-injury' ? 'no injury entry found; game participation is not confirmed' : 'status listed Available'}. ` +
     `[Game-log source](${candidate.analysisSource}).\n` +
     `Historical hit rates describe past games, not the next game’s chance. Lines move; check the current book before acting. 21+.`;
 }

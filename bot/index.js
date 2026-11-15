@@ -11,6 +11,7 @@ const { recordSearch: recordTrendSearch } = require('./trends/search-ledger');
 const { recordCombo: recordTrendCombo } = require('./trends/combo-ledger');
 const { currentMarket: researchCurrentMarket } = require('./trends/current-market');
 const { scanDaily: scanDailyTrends } = require('./trends/daily-scan');
+const { scanNbaAuto } = require('./trends/nba-auto');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { buildCapperRecap } = require('./lib/capper-recap');
@@ -1578,6 +1579,34 @@ function startTrendsSchedule() {
     const inventoryTimer = setInterval(() => void runInventory(), 10 * 60 * 1000);
     inventoryTimer.unref();
   } else console.warn('Trends daily inventory held: ODDS_API_KEY is missing.');
+  // Separate opt-in from the retired ESPN publisher. A paid data key, exact
+  // private destination and current source checks are all required.
+  if (process.env.TRENDS_NBA_AUTO_ENABLED === 'true') {
+    const channelId = process.env.TRENDS_NBA_CHANNEL_ID || trendsChannelMap.get('nba');
+    const categoryId = process.env.TRENDS_PRIVATE_CATEGORY_ID || '1215407647155683358';
+    if (!process.env.ODDS_API_KEY || !process.env.BDL_NBA_API_KEY || !channelId) {
+      console.error('NBA Trends auto publisher held: Odds API key, NBA data key or private channel is missing.');
+    } else {
+      const channelFor = async id => {
+        const channel = await client.channels.fetch(id);
+        if (channel?.id !== channelId || channel.guildId !== process.env.DISCORD_GUILD_ID ||
+            channel.parentId !== categoryId || !channel.isTextBased() ||
+            channel.permissionsFor(channel.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) !== false ||
+            channel.permissionsFor(client.user)?.has(PermissionFlagsBits.SendMessages) !== true)
+          throw new Error('NBA Trends destination is not verified private and writable');
+        return channel;
+      };
+      const runNba = () => scanNbaAuto({ root: reviewQueueRoot,
+        apiKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+        channelId, channelFor }).then(receipt => {
+        if (!receipt.existing && !['waiting', 'reserved_elsewhere'].includes(receipt.status))
+          console.log('NBA Trends automation receipt:', JSON.stringify(receipt));
+      }).catch(error => console.error('NBA Trends automation held:', error.message));
+      void runNba();
+      const nbaTimer = setInterval(() => void runNba(), 5 * 60 * 1000);
+      nbaTimer.unref();
+    }
+  }
   // Trend sheets now require the same Kobe approval as every other member-
   // facing post. This intentionally replaces the old direct auto-publish path.
   if (process.env.TRENDS_AUTO_PUBLISH_ENABLED === 'true') {
