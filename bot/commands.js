@@ -258,6 +258,15 @@ module.exports = [
       { name: '80%', value: 80 }, { name: '85%', value: 85 },
       { name: '90%', value: 90 }, { name: '95%', value: 95 })),
   new SlashCommandBuilder()
+    .setName('trends-board-other')
+    .setDescription('Browse current NFL, NHL or MLB prop research by matchup')
+    .addStringOption(option => option.setName('sport').setDescription('League').setRequired(true).addChoices(
+      { name: 'NFL', value: 'NFL' }, { name: 'NHL', value: 'NHL' }, { name: 'MLB', value: 'MLB' }))
+    .addStringOption(option => option.setName('team').setDescription('Team in the upcoming matchup').setRequired(true).setMinLength(3).setMaxLength(80))
+    .addIntegerOption(option => option.setName('minimum').setDescription('Minimum current-season historical hit rate').addChoices(
+      { name: '80%', value: 80 }, { name: '85%', value: 85 },
+      { name: '90%', value: 90 }, { name: '95%', value: 95 })),
+  new SlashCommandBuilder()
     .setName('trends-builder')
     .setDescription('Open your private NBA research combination builder'),
   new SlashCommandBuilder()
@@ -278,6 +287,21 @@ module.exports = [
       { name: 'Points', value: 'points' }, { name: 'Rebounds', value: 'rebounds' }, { name: 'Assists', value: 'assists' }))
     .addStringOption(option => option.setName('side').setDescription('Market side; defaults to Over').addChoices(
       { name: 'Over', value: 'over' }, { name: 'Under', value: 'under' }))
+    .addNumberOption(option => option.setName('line').setDescription('Optional exact line; omit to browse available lines').setMinValue(0).setMaxValue(1000)),
+  new SlashCommandBuilder()
+    .setName('trends-live')
+    .setDescription('Research a current NFL, NHL or MLB prop in the private Trends-tool')
+    .addStringOption(option => option.setName('sport').setDescription('League').setRequired(true).addChoices(
+      { name: 'NFL', value: 'NFL' }, { name: 'NHL', value: 'NHL' }, { name: 'MLB', value: 'MLB' }))
+    .addStringOption(option => option.setName('team').setDescription('Team in the upcoming matchup').setRequired(true).setMinLength(3).setMaxLength(80))
+    .addStringOption(option => option.setName('player').setDescription('Full player name').setRequired(true).setMinLength(3).setMaxLength(100))
+    .addStringOption(option => option.setName('stat').setDescription('Stat supported for this league').setRequired(true).addChoices(
+      { name: 'NFL receptions', value: 'receptions' },
+      { name: 'NFL receiving yards', value: 'receiving_yards' },
+      { name: 'NFL rushing yards', value: 'rushing_yards' },
+      { name: 'NHL shots on goal', value: 'shots_on_goal' },
+      { name: 'NHL points', value: 'points' },
+      { name: 'MLB hits', value: 'hits' }))
     .addNumberOption(option => option.setName('line').setDescription('Optional exact line; omit to browse available lines').setMinValue(0).setMaxValue(1000)),
   new SlashCommandBuilder()
     .setName('trends-nfl')

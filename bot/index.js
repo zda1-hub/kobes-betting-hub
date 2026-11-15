@@ -10,12 +10,16 @@ const { research: researchFreeLeagueTrend, toCsv: freeLeagueTrendCsv } = require
 const { recordSearch: recordTrendSearch } = require('./trends/search-ledger');
 const { recordCombo: recordTrendCombo } = require('./trends/combo-ledger');
 const { currentMarket: researchCurrentMarket } = require('./trends/current-market');
+const { researchFreeMarket, formatFreeMarket } = require('./trends/free-market-research');
+const { formatContext: formatNflContext } = require('./trends/nfl-context');
 const { scanDaily: scanDailyTrends } = require('./trends/daily-scan');
 const { scanNbaAuto } = require('./trends/nba-auto');
+const { scanNflAuto } = require('./trends/nfl-auto');
 const { refreshPublishedNbaTrends } = require('./trends/nba-refresh');
 const { scanNbaPopular } = require('./trends/nba-popular-auto');
 const { researchNba, formatNbaResearch } = require('./trends/nba-search');
 const { researchNbaBoard, formatNbaBoard } = require('./trends/nba-board');
+const { researchMultiSportBoard, formatMultiSportBoard } = require('./trends/multi-sport-board');
 const { playerProfile, teamProfile, formatPlayerProfile, formatTeamProfile } = require('./trends/nba-profiles');
 const { getNbaBuilder, addNbaBuilderLeg, removeNbaBuilderLeg,
   clearNbaBuilder, reviewNbaBuilder, formatNbaBuilder } = require('./trends/nba-builder');
@@ -1624,6 +1628,31 @@ function startTrendsSchedule() {
       void runNba();
       const nbaTimer = setInterval(() => void runNba(), 5 * 60 * 1000);
       nbaTimer.unref();
+    }
+  }
+  if (process.env.TRENDS_NFL_AUTO_ENABLED === 'true') {
+    const channelId = process.env.TRENDS_NFL_CHANNEL_ID || trendsChannelMap.get('nfl') || '1571285640409256056';
+    const categoryId = process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036';
+    if (!process.env.ODDS_API_KEY || !channelId) {
+      console.error('NFL Trends auto publisher held: Odds API key or private channel is missing.');
+    } else {
+      const channelFor = async id => {
+        const channel = await client.channels.fetch(id);
+        if (channel?.id !== channelId || channel.guildId !== process.env.DISCORD_GUILD_ID ||
+            channel.parentId !== categoryId || !channel.isTextBased() ||
+            channel.permissionsFor(channel.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) !== false ||
+            channel.permissionsFor(client.user)?.has(PermissionFlagsBits.SendMessages) !== true)
+          throw new Error('NFL Trends destination is not verified private and writable');
+        return channel;
+      };
+      const runNfl = () => scanNflAuto({ root: reviewQueueRoot,
+        apiKey: process.env.ODDS_API_KEY, channelId, channelFor }).then(receipt => {
+        if (!receipt.existing && !['waiting', 'reserved_elsewhere'].includes(receipt.status))
+          console.log('NFL Trends automation receipt:', JSON.stringify(receipt));
+      }).catch(error => console.error('NFL Trends automation held:', error.message));
+      void runNfl();
+      const nflTimer = setInterval(() => void runNfl(), 10 * 60 * 1000);
+      nflTimer.unref();
     }
   }
   if (process.env.TRENDS_NBA_POPULAR_ENABLED === 'true') {
@@ -3620,6 +3649,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.showModal(modal);
       return;
     }
+    if (['NFL', 'NHL', 'MLB'].some(sport => interaction.customId === `trends-ui:board-${sport}`)) {
+      const sport = interaction.customId.slice('trends-ui:board-'.length);
+      await interaction.showModal(new ModalBuilder().setCustomId(`trends-ui-board-other:${sport}`)
+        .setTitle(`Browse ${sport} current prop board`).addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder()
+            .setCustomId('team').setLabel('Team in upcoming game')
+            .setPlaceholder('Enter a team name').setStyle(TextInputStyle.Short).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder()
+            .setCustomId('minimum').setLabel('Minimum season hit rate %')
+            .setPlaceholder('80, 85, 90, or 95').setStyle(TextInputStyle.Short).setRequired(false))));
+      return;
+    }
     if (interaction.customId === 'trends-ui:builder-add') {
       const field = (id, label, hint) => new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId(id).setLabel(label).setPlaceholder(hint)
@@ -3732,6 +3773,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } catch (error) {
       console.warn('NBA Trends-tool board held:', error.message);
       await interaction.editReply(`NBA board could not complete: ${error.message}. No pick was posted.`);
+    }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('trends-ui-board-other:')) {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
+      return;
+    }
+    const sport = interaction.customId.split(':')[1];
+    const rawMinimum = interaction.fields.getTextInputValue('minimum').trim() || '80';
+    if (!['NFL', 'NHL', 'MLB'].includes(sport) || !['80', '85', '90', '95'].includes(rawMinimum)) {
+      await interaction.reply({ ephemeral: true, content: 'Choose a minimum of 80, 85, 90, or 95 percent.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const board = await researchMultiSportBoard({ root: reviewQueueRoot,
+        oddsKey: process.env.ODDS_API_KEY, sport,
+        team: interaction.fields.getTextInputValue('team').trim(),
+        minHitRate: Number(rawMinimum) / 100 });
+      await interaction.editReply({ content: formatMultiSportBoard(board), allowedMentions: { parse: [] } });
+    } catch (error) {
+      console.warn('Multi-sport Trends-tool modal board held:', error.message);
+      await interaction.editReply(`Current matchup board could not complete: ${error.message}. No pick was posted.`);
     }
     return;
   }
@@ -4174,8 +4239,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('trends-ui:builder-view').setLabel('Build NBA combo')
         .setStyle(ButtonStyle.Secondary));
-    await interaction.reply({ ephemeral: true, components: [row],
-      content: '**Trends-tool · NBA research**\nSearch a player, browse the current matchup board, or open recent posts. Quotes and status can change before tipoff. Historical hit rates are not next-game probabilities.' });
+    const otherSports = new ActionRowBuilder().addComponents(
+      ...['NFL', 'NHL', 'MLB'].map(sport => new ButtonBuilder()
+        .setCustomId(`trends-ui:board-${sport}`).setLabel(`Browse ${sport} board`)
+        .setStyle(ButtonStyle.Secondary)));
+    await interaction.reply({ ephemeral: true, components: [row, otherSports],
+      content: '**Trends-tool · current prop research**\nSearch or browse quoted lines and completed-game history. Use `/trends-live` for an NFL, NHL or MLB player. Quotes and status can change before game time. Historical hit rates are not next-game probabilities; research does not confirm participation.' });
     return;
   }
 
@@ -4238,6 +4307,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (interaction.commandName === 'trends-board-other') {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Use this command as a VIP member in the private Trends-tool search channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const board = await researchMultiSportBoard({ root: reviewQueueRoot,
+        oddsKey: process.env.ODDS_API_KEY,
+        sport: interaction.options.getString('sport', true),
+        team: interaction.options.getString('team', true),
+        minHitRate: (interaction.options.getInteger('minimum') || 80) / 100 });
+      await interaction.editReply({ content: formatMultiSportBoard(board),
+        allowedMentions: { parse: [] } });
+    } catch (error) {
+      console.warn('Multi-sport Trends-tool board held:', error.message);
+      await interaction.editReply(`Current matchup board could not complete: ${error.message}. No pick was posted.`);
+    }
+    return;
+  }
+
   if (interaction.commandName === 'trends-nba') {
     if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||
         interaction.channelId !== '1571285899717771365' ||
@@ -4266,6 +4356,67 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } catch (error) {
       console.warn('NBA Trends-tool member search held:', error.message);
       await interaction.editReply(`NBA search could not complete: ${error.message}. No pick was posted.`);
+    }
+    return;
+  }
+
+  if (interaction.commandName === 'trends-live') {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Use this command as a VIP member in the private Trends-tool search channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const query = {
+        root: reviewQueueRoot, apiKey: process.env.ODDS_API_KEY,
+        sport: interaction.options.getString('sport', true),
+        team: interaction.options.getString('team', true),
+        player: interaction.options.getString('player', true),
+        stat: interaction.options.getString('stat', true),
+        side: 'over', line: interaction.options.getNumber('line')
+      };
+      let content;
+      let selectedLine;
+      if (query.sport === 'NFL') {
+        if (!['receptions', 'receiving_yards', 'rushing_yards'].includes(query.stat))
+          throw new Error('That statistic is not supported for NFL current props');
+        const market = await researchCurrentMarket(query);
+        selectedLine = market.line;
+        const today = new Date();
+        const year = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric' }).format(today));
+        const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'numeric' }).format(today));
+        const history = await researchNflTrend({ player: query.player, stat: query.stat,
+          side: 'over', line: market.line, season: month >= 7 ? year : year - 1 });
+        const counts = row => `${row.hits}/${row.sample}`;
+        const offers = market.offers.slice(0, 4).map(row =>
+          `${row.sportsbook}: ${row.odds > 0 ? '+' : ''}${row.odds} (updated ${row.updatedAt})`).join('\n');
+        const otherLines = market.otherLines.slice(0, 4).map(row =>
+          `${row.line} ${row.odds > 0 ? '+' : ''}${row.odds} at ${row.sportsbook}`).join(' · ');
+        content = `**Trends-tool · NFL current prop research**\n` +
+          `${market.event.away_team} at ${market.event.home_team} · ${market.event.commence_time}\n` +
+          `**${history.player}: over ${market.line} ${query.stat.replaceAll('_', ' ')}**\n${offers}\n` +
+          `Season ${counts(history.analysis.season)} · L5 ${counts(history.analysis.l5)} · ` +
+          `L10 ${counts(history.analysis.l10)} · L20 ${counts(history.analysis.l20)} historical hits.\n` +
+          (otherLines ? `Other quoted lines: ${otherLines}\n` : '') +
+          `${formatNflContext(history.context)}\n` +
+          `[Completed-game source](${history.sourceUrl}); odds checked ${market.fetchedAt}. ` +
+          `Game-day participation is not confirmed. Research only; no pick is recommended. ` +
+          `Historical counts are not next-game probabilities. 21+.`;
+      } else {
+        const result = await researchFreeMarket(query);
+        selectedLine = result.line;
+        content = formatFreeMarket(result);
+      }
+      if (content.length > 1900) throw new Error('Research view exceeds Discord message limit');
+      await interaction.editReply({ content, allowedMentions: { parse: [] } });
+      try {
+        await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
+          query: { sport: query.sport, player: query.player, stat: query.stat,
+            side: 'over', line: selectedLine } });
+      } catch (error) { console.warn('Trends-tool live-search evidence unavailable:', error.message); }
+    } catch (error) {
+      console.warn('Trends-tool live search held:', error.message);
+      await interaction.editReply(`Current prop research could not complete: ${error.message}. No pick was posted.`);
     }
     return;
   }

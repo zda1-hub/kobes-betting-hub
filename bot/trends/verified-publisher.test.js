@@ -42,3 +42,29 @@ test('Jokić/Jokic share a receipt; verified NBA research sends once with uncert
   assert.equal(sent, 1);
   assert.match(content, /game participation is not confirmed/);
 });
+
+test('NFL publication accepts fresh game-week nflverse evidence and rejects stale or mismatched releases', () => {
+  const now = new Date('2026-11-15T17:00:00Z');
+  const count = (hits, sample) => ({ hits, sample, hitRate: hits / sample, pushes: 0 });
+  const candidate = { player: 'Sample Receiver', rights: { history: 'commercial-use-confirmed',
+    availability: 'commercial-use-confirmed' },
+  analysis: { season: count(8, 8), l5: count(5, 5), l10: count(10, 10), l20: count(20, 20) },
+  analysisSource: 'https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_2026.csv',
+  analysisCheckedAt: now.toISOString(),
+  availability: { status: 'active-roster-no-listed-injury', checkedAt: now.toISOString(),
+    sourceUrl: 'https://github.com/nflverse/nflverse-data/releases/download/injuries/injuries_2026.csv',
+    rosterSourceUrl: 'https://github.com/nflverse/nflverse-data/releases/download/rosters/roster_2026.csv',
+    sourceUpdatedAt: '2026-11-15T12:00:00Z', rosterUpdatedAt: '2026-11-15T12:00:00Z',
+    rightsUrl: 'https://github.com/nflverse/nflverse-data/blob/main/LICENSE.md',
+    gameWeek: 10, rosterWeek: 10, injuryFeedWeek: 10 },
+  prop: { sport: 'NFL', stat: 'receptions', side: 'over', line: 3.5, odds: -150,
+    eventId: 'event-12345678', teamId: 'Green Bay Packers', opponentId: 'New York Giants',
+    startsAt: '2026-11-15T18:00:00Z', updatedAt: now.toISOString(), sportsbook: 'DraftKings',
+    source: 'The Odds API', available: true, rosterVerified: true, rosterVerifiedAt: now.toISOString(),
+    participationVerified: false, preGameAvailabilityChecked: true } };
+  assert.equal(assertEvidence(candidate, now.valueOf()).qualifies, true);
+  assert.throws(() => assertEvidence({ ...candidate,
+    availability: { ...candidate.availability, injuryFeedWeek: 9 } }, now.valueOf()), /Verified market/);
+  assert.throws(() => assertEvidence({ ...candidate,
+    availability: { ...candidate.availability, sourceUpdatedAt: '2026-11-13T00:00:00Z' } }, now.valueOf()), /Verified market/);
+});
