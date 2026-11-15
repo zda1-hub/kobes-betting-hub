@@ -12,6 +12,8 @@ const { recordCombo: recordTrendCombo } = require('./trends/combo-ledger');
 const { currentMarket: researchCurrentMarket } = require('./trends/current-market');
 const { scanDaily: scanDailyTrends } = require('./trends/daily-scan');
 const { scanNbaAuto } = require('./trends/nba-auto');
+const { scanNbaPopular } = require('./trends/nba-popular-auto');
+const { researchNba, formatNbaResearch } = require('./trends/nba-search');
 const { buildPickEmbed, listFromEnv } = require('./lib/pick');
 const { buildLogRecapEmbeds, isPublishedRow, recapRows } = require('./lib/recap');
 const { buildCapperRecap } = require('./lib/capper-recap');
@@ -1605,6 +1607,32 @@ function startTrendsSchedule() {
       void runNba();
       const nbaTimer = setInterval(() => void runNba(), 5 * 60 * 1000);
       nbaTimer.unref();
+    }
+  }
+  if (process.env.TRENDS_NBA_POPULAR_ENABLED === 'true') {
+    const channelId = process.env.TRENDS_POPULAR_CHANNEL_ID;
+    const categoryId = process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036';
+    if (!process.env.ODDS_API_KEY || !process.env.BDL_NBA_API_KEY || !channelId) {
+      console.error('NBA popular-trends held: odds key, NBA data key or private channel is missing.');
+    } else {
+      const channelFor = async id => {
+        const channel = await client.channels.fetch(id);
+        if (channel?.id !== channelId || channel.guildId !== process.env.DISCORD_GUILD_ID ||
+            channel.parentId !== categoryId || !channel.isTextBased() ||
+            channel.permissionsFor(channel.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) !== false ||
+            channel.permissionsFor(client.user)?.has(PermissionFlagsBits.SendMessages) !== true)
+          throw new Error('Popular-trends destination is not verified private and writable');
+        return channel;
+      };
+      const runPopular = () => scanNbaPopular({ root: reviewQueueRoot,
+        oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+        channelId, channelFor }).then(receipt => {
+        if (!receipt.existing && !['waiting', 'reserved_elsewhere'].includes(receipt.status))
+          console.log('NBA popular-trends receipt:', JSON.stringify(receipt));
+      }).catch(error => console.error('NBA popular-trends held:', error.message));
+      void runPopular();
+      const popularTimer = setInterval(() => void runPopular(), 10 * 60 * 1000);
+      popularTimer.unref();
     }
   }
   // Trend sheets now require the same Kobe approval as every other member-
@@ -3922,6 +3950,38 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'trends-nba') {
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||
+        interaction.channelId !== '1571285899717771365' ||
+        (!isAdministrator(interaction) &&
+         ![...vipRoleIds()].some(id => interaction.member?.roles?.cache?.has(id) || interaction.member?.roles?.includes?.(id)))) {
+      await interaction.reply({ ephemeral: true, content: 'Use this command as a VIP member in the private Trends-tool search channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const query = {
+        team: interaction.options.getString('team', true),
+        player: interaction.options.getString('player', true),
+        stat: interaction.options.getString('stat', true),
+        side: interaction.options.getString('side', true),
+        line: interaction.options.getNumber('line', true)
+      };
+      const result = await researchNba({ root: reviewQueueRoot,
+        oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY, ...query });
+      await interaction.editReply({ content: formatNbaResearch(result), allowedMentions: { parse: [] } });
+      try {
+        await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
+          query: { sport: 'NBA', player: result.player, stat: result.stat,
+            side: result.side, line: result.line } });
+      } catch (error) { console.warn('NBA Trends-tool search evidence unavailable:', error); }
+    } catch (error) {
+      console.warn('NBA Trends-tool member search held:', error.message);
+      await interaction.editReply(`NBA search could not complete: ${error.message}. No pick was posted.`);
+    }
+    return;
+  }
 
   if (interaction.commandName === 'trends-nfl') {
     if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||

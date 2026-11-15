@@ -22,7 +22,7 @@ function buildPopularCard({ legs, searchEvidence, serviceDate, now = Date.now() 
         leg.recentSample < 2 || leg.recentHits < 0 || leg.recentHits > leg.recentSample ||
         !leg.analysisSource || !Number.isFinite(Date.parse(leg.analysisCheckedAt)) ||
         Date.parse(leg.analysisCheckedAt) > now ||
-        !Number.isInteger(leg.seasonHits) || !Number.isInteger(leg.seasonSample) || leg.seasonSample < 20 ||
+        !Number.isInteger(leg.seasonHits) || !Number.isInteger(leg.seasonSample) || leg.seasonSample < 10 ||
         leg.seasonHits < 0 || leg.seasonHits > leg.seasonSample ||
         !leg.availabilityVerified || !Number.isFinite(Date.parse(leg.availabilityCheckedAt)) ||
         Date.parse(leg.availabilityCheckedAt) > now ||

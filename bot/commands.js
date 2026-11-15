@@ -245,6 +245,16 @@ module.exports = [
     .setName('hub-status')
     .setDescription('Privately check pick monitoring, logging, grading, and recap readiness'),
   new SlashCommandBuilder()
+    .setName('trends-nba')
+    .setDescription('Search current NBA alternate props and verified historical counts')
+    .addStringOption(option => option.setName('team').setDescription('Team in the upcoming matchup').setRequired(true).setMinLength(3).setMaxLength(80))
+    .addStringOption(option => option.setName('player').setDescription('Full player name; accents optional').setRequired(true).setMinLength(3).setMaxLength(100))
+    .addStringOption(option => option.setName('stat').setDescription('Player statistic').setRequired(true).addChoices(
+      { name: 'Points', value: 'points' }, { name: 'Rebounds', value: 'rebounds' }, { name: 'Assists', value: 'assists' }))
+    .addStringOption(option => option.setName('side').setDescription('Market side').setRequired(true).addChoices(
+      { name: 'Over', value: 'over' }, { name: 'Under', value: 'under' }))
+    .addNumberOption(option => option.setName('line').setDescription('Exact alternate line to compare').setRequired(true).setMinValue(0).setMaxValue(1000)),
+  new SlashCommandBuilder()
     .setName('trends-nfl')
     .setDescription('Research completed NFL player games in the VIP Trends-tool channel')
     .addStringOption(option => option.setName('player').setDescription('Full player name').setRequired(true).setMinLength(3).setMaxLength(100))

@@ -54,7 +54,10 @@ async function exactEvent({ event, now, apiKey, fetchImpl }) {
   const matches = rows.filter(game => game.status_state === 'scheduled' &&
     teamKey(game.home_team?.full_name) === teamKey(event.home_team) &&
     teamKey(game.visitor_team?.full_name) === teamKey(event.away_team) &&
-    Math.abs(Date.parse(game.datetime) - Date.parse(event.commence_time)) <= 5 * 60_000 &&
+    // The Odds API currently lists NBA tips about ten minutes after the
+    // league schedule. Accept that bounded offset, then use the earlier
+    // BALLDONTLIE tipoff for the actual publication cutoff.
+    Math.abs(Date.parse(game.datetime) - Date.parse(event.commence_time)) <= 15 * 60_000 &&
     Date.parse(game.datetime) > now.valueOf());
   if (matches.length !== 1) throw new Error('NBA game and start time did not match across providers');
   return matches[0];
@@ -85,7 +88,8 @@ function finalizedLogs(rows, { playerId, season, today, stat }) {
       stats: { [stat]: row[field] } }));
 }
 
-async function history({ playerId, stat, line, now = new Date(), apiKey, fetchImpl }) {
+async function history({ playerId, stat, line, side = 'over', now = new Date(), apiKey, fetchImpl }) {
+  if (!['over', 'under'].includes(side)) throw new Error('Unsupported NBA comparison side');
   const season = seasonStart(now);
   const today = now.toISOString().slice(0, 10);
   const load = async year => finalizedLogs(await pages(
@@ -98,8 +102,8 @@ async function history({ playerId, stat, line, now = new Date(), apiKey, fetchIm
     if (ids.has(row.gameId)) return false;
     ids.add(row.gameId); return true;
   });
-  const recent = analyze(logs, { stat, line, side: 'over' });
-  const currentAnalysis = analyze(current, { stat, line, side: 'over', season: String(season) });
+  const recent = analyze(logs, { stat, line, side });
+  const currentAnalysis = analyze(current, { stat, line, side, season: String(season) });
   return { analysis: { ...recent, season: currentAnalysis.season },
     sourceUrl: `${ORIGIN}/v1/stats?player_ids%5B%5D=${playerId}`,
     checkedAt: now.toISOString(), rightsUrl: TERMS_URL };
