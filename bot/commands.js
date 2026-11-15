@@ -248,6 +248,28 @@ module.exports = [
     .setName('trends-dashboard')
     .setDescription('Open the VIP Trends-tool search and published NBA trend browser'),
   new SlashCommandBuilder()
+    .setName('trends-board')
+    .setDescription('Browse a private NBA matchup board with current alternate props')
+    .addStringOption(option => option.setName('team').setDescription('Team in the upcoming matchup').setRequired(true).setMinLength(3).setMaxLength(80))
+    .addStringOption(option => option.setName('stat').setDescription('Filter the statistic').addChoices(
+      { name: 'All three', value: 'all' }, { name: 'Points', value: 'points' },
+      { name: 'Rebounds', value: 'rebounds' }, { name: 'Assists', value: 'assists' }))
+    .addIntegerOption(option => option.setName('minimum').setDescription('Minimum current-season historical hit rate').addChoices(
+      { name: '80%', value: 80 }, { name: '85%', value: 85 },
+      { name: '90%', value: 90 }, { name: '95%', value: 95 })),
+  new SlashCommandBuilder()
+    .setName('trends-builder')
+    .setDescription('Open your private NBA research combination builder'),
+  new SlashCommandBuilder()
+    .setName('trends-player')
+    .setDescription('Open a verified NBA player profile in the VIP channel')
+    .addStringOption(option => option.setName('team').setDescription('Current NBA team').setRequired(true).setMinLength(3).setMaxLength(80))
+    .addStringOption(option => option.setName('player').setDescription('Full player name; accents optional').setRequired(true).setMinLength(3).setMaxLength(100)),
+  new SlashCommandBuilder()
+    .setName('trends-team')
+    .setDescription('Open an NBA team roster, injury and recent-results profile')
+    .addStringOption(option => option.setName('team').setDescription('Full team name or abbreviation').setRequired(true).setMinLength(2).setMaxLength(80)),
+  new SlashCommandBuilder()
     .setName('trends-nba')
     .setDescription('Browse current NBA alternate lines and verified historical counts')
     .addStringOption(option => option.setName('team').setDescription('Team in the upcoming matchup').setRequired(true).setMinLength(3).setMaxLength(80))

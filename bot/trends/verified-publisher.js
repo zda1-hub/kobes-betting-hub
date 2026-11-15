@@ -101,12 +101,18 @@ async function publishVerifiedCandidate({ root, candidate, channelId, channelFor
       throw new Error('Trends destination is not the configured private text channel');
     const content = renderCandidate(candidate, date);
     if (content.length > 1900) throw new Error('Trend card exceeds Discord message limit');
-    receipt = { version: 1, id, date, channelId, status: 'reserved',
+    receipt = { version: 2, id, date, channelId, status: 'reserved',
       reservedAt: now.toISOString(), evidence: {
         eventId: candidate.prop.eventId, marketUpdatedAt: candidate.prop.updatedAt,
         statusCheckedAt: candidate.availability.checkedAt,
         historyCheckedAt: candidate.analysisCheckedAt
-      } };
+      }, monitorSource: {
+        sport: candidate.prop.sport, eventId: candidate.prop.eventId,
+        startsAt: candidate.prop.startsAt, player: candidate.player,
+        playerId: candidate.playerId, market: candidate.prop.market,
+        side: candidate.prop.side, line: candidate.prop.line,
+        odds: candidate.prop.odds, sportsbookKey: candidate.prop.sportsbookKey
+      }, originalContent: content };
     await fs.writeFile(file, JSON.stringify(receipt), { mode: 0o600, flag: 'wx' });
     const message = await channel.send({ content, allowedMentions: { parse: [] },
       nonce: id.slice(0, 24), enforceNonce: true });
