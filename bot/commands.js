@@ -246,7 +246,7 @@ module.exports = [
     .setDescription('Privately check pick monitoring, logging, grading, and recap readiness'),
   new SlashCommandBuilder()
     .setName('trends-dashboard')
-    .setDescription('Open the VIP Trends-tool search and published NBA trend browser'),
+    .setDescription('Open the private VIP Trends-tool search and matchup boards'),
   new SlashCommandBuilder()
     .setName('trends-board')
     .setDescription('Browse a private NBA matchup board with current alternate props')

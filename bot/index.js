@@ -3399,8 +3399,43 @@ async function holdGenericExclusiveApprovalCards() {
   console.log('Non-capper approval hold receipt:', JSON.stringify({ held }));
 }
 
+function trendsDashboardPayload() {
+  const nba = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('trends-ui:search').setLabel('Search NBA player').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('trends-ui:board').setLabel('Browse NBA board').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('trends-ui:recent').setLabel('Recent NBA trends').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('trends-ui:builder-view').setLabel('Build NBA combo').setStyle(ButtonStyle.Secondary));
+  const otherSports = new ActionRowBuilder().addComponents(
+    ...['NFL', 'NHL', 'MLB'].map(sport => new ButtonBuilder()
+      .setCustomId(`trends-ui:board-${sport}`).setLabel(`Browse ${sport} board`)
+      .setStyle(ButtonStyle.Secondary)));
+  return { components: [nba, otherSports], allowedMentions: { parse: [] },
+    content: '**Trends-tool · current prop research**\nSearch or browse quoted lines and completed-game history. Use `/trends-live` for an NFL, NHL or MLB player. Quotes and status can change before game time. Historical hit rates are not next-game probabilities; research does not confirm participation.' };
+}
+
+async function refreshTrendsLauncher(readyClient) {
+  const channel = await readyClient.channels.fetch('1571285899717771365');
+  if (channel?.guildId !== process.env.DISCORD_GUILD_ID ||
+      channel.parentId !== (process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036') ||
+      !channel.isTextBased() ||
+      channel.permissionsFor(channel.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) !== false)
+    throw new Error('VIP Trends launcher channel is not verified private');
+  const message = await channel.messages.fetch('1571413885947482226');
+  if (message.author.id !== readyClient.user.id || !message.pinned)
+    throw new Error('Existing Trends launcher is not bot-owned and pinned');
+  const payload = trendsDashboardPayload();
+  const currentButtons = message.components.flatMap(row => row.components.map(button => button.customId));
+  const desiredButtons = payload.components.flatMap(row => row.components.map(button => button.data.custom_id));
+  if (message.content !== payload.content || JSON.stringify(currentButtons) !== JSON.stringify(desiredButtons)) {
+    await message.edit(payload);
+    console.log('Updated existing pinned VIP Trends launcher:', message.id);
+  }
+}
+
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  void refreshTrendsLauncher(readyClient)
+    .catch(error => console.error('Pinned VIP Trends launcher needs attention:', error.message));
   try { await ensureWriteupRecapReviewChannel(); }
   catch (error) { console.error('Private writeup recap review channel needs attention:', error.message); }
   void Promise.all([prepareCalendarEducationCards(), prepareCalendarEditorialCards()])
@@ -4230,21 +4265,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
       return;
     }
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('trends-ui:search').setLabel('Search NBA player')
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('trends-ui:board').setLabel('Browse NBA board')
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('trends-ui:recent').setLabel('Recent NBA trends')
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('trends-ui:builder-view').setLabel('Build NBA combo')
-        .setStyle(ButtonStyle.Secondary));
-    const otherSports = new ActionRowBuilder().addComponents(
-      ...['NFL', 'NHL', 'MLB'].map(sport => new ButtonBuilder()
-        .setCustomId(`trends-ui:board-${sport}`).setLabel(`Browse ${sport} board`)
-        .setStyle(ButtonStyle.Secondary)));
-    await interaction.reply({ ephemeral: true, components: [row, otherSports],
-      content: '**Trends-tool · current prop research**\nSearch or browse quoted lines and completed-game history. Use `/trends-live` for an NFL, NHL or MLB player. Quotes and status can change before game time. Historical hit rates are not next-game probabilities; research does not confirm participation.' });
+    await interaction.reply({ ephemeral: true, ...trendsDashboardPayload() });
     return;
   }
 
