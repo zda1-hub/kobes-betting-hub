@@ -1,6 +1,6 @@
 'use strict';
 
-// One budgeted NBA points market per Pacific day. No exact quote, completed
+// Two budgeted NBA event scans per Pacific day. No exact quote, completed
 // history, active team roster, or clean injury check means no member-facing send.
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -11,7 +11,13 @@ const { publishVerifiedCandidate } = require('./verified-publisher');
 const { belongsToServiceDate, localParts, TIME_ZONE } = require('./schedule');
 const { playerNameKey } = require('./player-name');
 
-const MARKET = 'player_points_alternate';
+const MARKET_STATS = Object.freeze({
+  player_points_alternate: 'points',
+  player_rebounds_alternate: 'rebounds',
+  player_assists_alternate: 'assists'
+});
+const MARKETS = Object.keys(MARKET_STATS);
+const MAX_EVENTS_PER_DAY = 2;
 const MIN_BEFORE_MS = 30 * 60_000;
 const MAX_BEFORE_MS = 90 * 60_000;
 
@@ -28,14 +34,24 @@ function featuredEvent(rows, now, skipped = new Set()) {
 function candidateOffers(rows, now) {
   const best = new Map();
   for (const row of rows || []) {
-    if (row.market !== MARKET || row.side !== 'over' || !row.player ||
+    if (!MARKET_STATS[row.market] || row.side !== 'over' || !row.player ||
         !Number.isFinite(row.line) || !Number.isInteger(row.odds) || row.odds < -400 ||
         !row.sportsbook || !row.sportsbookKey || !Number.isFinite(Date.parse(row.updatedAt)) ||
         Date.parse(row.updatedAt) > now.valueOf() || now.valueOf() - Date.parse(row.updatedAt) > 5 * 60_000) continue;
-    const key = `${playerNameKey(row.player)}:${row.line}`;
+    const key = `${row.market}:${playerNameKey(row.player)}:${row.line}`;
     if (!best.has(key) || best.get(key).odds < row.odds) best.set(key, row);
   }
-  return [...best.values()].sort((a, b) => b.odds - a.odds).slice(0, 6);
+  // Give each covered stat a bounded share of the candidate checks. A single
+  // player's many alternate lines must not crowd every other player out.
+  return MARKETS.flatMap(market => {
+    const players = new Set();
+    return [...best.values()].filter(row => row.market === market)
+      .sort((a, b) => a.odds - b.odds).filter(row => {
+        const key = playerNameKey(row.player);
+        if (players.has(key)) return false;
+        players.add(key); return true;
+      }).slice(0, 4);
+  });
 }
 
 async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = new Date(),
@@ -54,20 +70,21 @@ async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = 
   const attempts = await Promise.all(files.map(async name => JSON.parse(await fs.readFile(path.join(directory, name), 'utf8'))));
   const terminal = attempts.find(row => ['published', 'reserved', 'needs_reconciliation'].includes(row.status));
   if (terminal) return { ...terminal, existing: true };
-  if (attempts.length >= 3) return { status: 'held', date, reason: 'Three-event daily market cap reached', existing: true };
+  if (attempts.length >= MAX_EVENTS_PER_DAY) return { status: 'held', date,
+    reason: 'Two-event daily market cap reached', existing: true };
   const schedule = await readEvents('NBA', { apiKey, fetchImpl });
   const event = featuredEvent(schedule.data, now, new Set(attempts.map(row => row.eventId)));
   if (!event) return { status: 'waiting', date, reason: 'No provider-listed NBA game is 30–90 minutes from tipoff' };
   const file = path.join(directory, `nba-${date}-${event.id}.json`);
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
-  const reserved = { status: 'reserved', date, eventId: event.id, market: MARKET,
+  const reserved = { status: 'reserved', date, eventId: event.id, markets: MARKETS,
     at: now.toISOString() };
   try { await fs.writeFile(file, JSON.stringify(reserved), { mode: 0o600, flag: 'wx' }); }
   catch (error) { if (error.code === 'EEXIST') return { status: 'reserved_elsewhere', date }; throw error; }
   let outcome = reserved;
   try {
-    const odds = await reserveOdds({ root, apiKey, fetchImpl, now, operation: () =>
-      readOdds('NBA', event.id, { apiKey, fetchImpl, market: MARKET }) });
+    const odds = await reserveOdds({ root, apiKey, fetchImpl, now, cost: MARKETS.length,
+      operation: () => readOdds('NBA', event.id, { apiKey, fetchImpl }) });
     const offers = candidateOffers(odds.selections, now);
     const bdlEvent = await readBdlEvent({ event, now, apiKey: bdlKey, fetchImpl });
     if (Date.parse(bdlEvent.datetime) - now.valueOf() < 15 * 60_000)
@@ -78,7 +95,8 @@ async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = 
       try {
         const player = await readPlayer({ name: offer.player, game: bdlEvent,
           apiKey: bdlKey, fetchImpl });
-        const history = await readHistory({ playerId: player.id, stat: 'points',
+        const stat = MARKET_STATS[offer.market];
+        const history = await readHistory({ playerId: player.id, stat,
           line: offer.line, now, apiKey: bdlKey, fetchImpl });
         if (history.rightsUrl !== bdl.TERMS_URL) {
           holds.push('NBA history source rights unverified'); continue;
@@ -100,7 +118,7 @@ async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = 
           analysisSource: history.sourceUrl, analysisCheckedAt: history.checkedAt, availability,
           rights: { history: 'commercial-use-confirmed', availability: 'commercial-use-confirmed',
             termsUrl: bdl.TERMS_URL },
-          prop: { ...offer, sport: 'NBA', stat: 'points', side: 'over',
+          prop: { ...offer, sport: 'NBA', stat, side: 'over',
             startsAt: bdlEvent.datetime, eventId: event.id,
             teamId: teamName, opponentId: opponent, available: true, source: 'The Odds API',
             rosterVerified: true, rosterVerifiedAt: now.toISOString(),
@@ -130,4 +148,5 @@ async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = 
   return outcome;
 }
 
-module.exports = { MARKET, featuredEvent, candidateOffers, scanNbaAuto };
+module.exports = { MARKETS, MARKET_STATS, MAX_EVENTS_PER_DAY,
+  featuredEvent, candidateOffers, scanNbaAuto };
