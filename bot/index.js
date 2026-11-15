@@ -3406,11 +3406,59 @@ function trendsDashboardPayload() {
     new ButtonBuilder().setCustomId('trends-ui:recent').setLabel('Recent NBA trends').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('trends-ui:builder-view').setLabel('Build NBA combo').setStyle(ButtonStyle.Secondary));
   const otherSports = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('trends-ui:search-other').setLabel('Search NFL/NHL/MLB').setStyle(ButtonStyle.Primary),
     ...['NFL', 'NHL', 'MLB'].map(sport => new ButtonBuilder()
       .setCustomId(`trends-ui:board-${sport}`).setLabel(`Browse ${sport} board`)
       .setStyle(ButtonStyle.Secondary)));
   return { components: [nba, otherSports], allowedMentions: { parse: [] },
-    content: '**Trends-tool · current prop research**\nSearch or browse quoted lines and completed-game history. Use `/trends-live` for an NFL, NHL or MLB player. Quotes and status can change before game time. Historical hit rates are not next-game probabilities; research does not confirm participation.' };
+    content: '**Trends-tool · current prop research**\nSearch a player or browse quoted lines and completed-game history across four leagues. Quotes and status can change before game time. Historical hit rates are not next-game probabilities; research does not confirm participation.' };
+}
+
+async function replyToLiveTrendSearch(interaction, query) {
+  try {
+    let content;
+    let selectedLine;
+    if (query.sport === 'NFL') {
+      if (!['receptions', 'receiving_yards', 'rushing_yards'].includes(query.stat))
+        throw new Error('That statistic is not supported for NFL current props');
+      const market = await researchCurrentMarket(query);
+      selectedLine = market.line;
+      const today = new Date();
+      const year = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric' }).format(today));
+      const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'numeric' }).format(today));
+      const history = await researchNflTrend({ player: query.player, stat: query.stat,
+        side: 'over', line: market.line, season: month >= 7 ? year : year - 1 });
+      const counts = row => `${row.hits}/${row.sample}`;
+      const offers = market.offers.slice(0, 4).map(row =>
+        `${row.sportsbook}: ${row.odds > 0 ? '+' : ''}${row.odds} (updated ${row.updatedAt})`).join('\n');
+      const otherLines = market.otherLines.slice(0, 4).map(row =>
+        `${row.line} ${row.odds > 0 ? '+' : ''}${row.odds} at ${row.sportsbook}`).join(' · ');
+      content = `**Trends-tool · NFL current prop research**\n` +
+        `${market.event.away_team} at ${market.event.home_team} · ${market.event.commence_time}\n` +
+        `**${history.player}: over ${market.line} ${query.stat.replaceAll('_', ' ')}**\n${offers}\n` +
+        `Season ${counts(history.analysis.season)} · L5 ${counts(history.analysis.l5)} · ` +
+        `L10 ${counts(history.analysis.l10)} · L20 ${counts(history.analysis.l20)} historical hits.\n` +
+        (otherLines ? `Other quoted lines: ${otherLines}\n` : '') +
+        `${formatNflContext(history.context)}\n` +
+        `[Completed-game source](${history.sourceUrl}); odds checked ${market.fetchedAt}. ` +
+        `Game-day participation is not confirmed. Research only; no pick is recommended. ` +
+        `Historical counts are not next-game probabilities. 21+.`;
+    } else {
+      const result = await researchFreeMarket(query);
+      selectedLine = result.line;
+      content = formatFreeMarket(result);
+    }
+    if (content.length > 1900) throw new Error('Research view exceeds Discord message limit');
+    await interaction.editReply({ content, allowedMentions: { parse: [] } });
+    try {
+      await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
+        query: { sport: query.sport, player: query.player, stat: query.stat,
+          side: 'over', line: selectedLine } });
+    } catch (error) { console.warn('Trends-tool live-search evidence unavailable:', error.message); }
+  } catch (error) {
+    console.warn('Trends-tool live search held:', error.message);
+    await interaction.editReply(`Current prop research could not complete: ${error.message}. No pick was posted.`);
+  }
 }
 
 async function refreshTrendsLauncher(readyClient) {
@@ -3673,6 +3721,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.showModal(modal);
       return;
     }
+    if (interaction.customId === 'trends-ui:search-other') {
+      const field = (id, label, hint, required = true) => new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId(id).setLabel(label).setPlaceholder(hint)
+          .setStyle(TextInputStyle.Short).setRequired(required));
+      await interaction.showModal(new ModalBuilder().setCustomId('trends-ui-search-other')
+        .setTitle('Search current NFL/NHL/MLB props').addComponents(
+          field('sport', 'League', 'NFL, NHL, or MLB'),
+          field('team', 'Team in upcoming game', 'Buffalo Bills'),
+          field('player', 'Full player name', 'Josh Allen'),
+          field('stat', 'Stat', 'NFL: receptions, receiving_yards, rushing_yards'),
+          field('line', 'Exact line (optional)', 'Leave blank to browse quoted lines', false)));
+      return;
+    }
     if (interaction.customId === 'trends-ui:board') {
       const field = (id, label, hint, required = true) => new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId(id).setLabel(label).setPlaceholder(hint)
@@ -3809,6 +3870,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
       console.warn('NBA Trends-tool board held:', error.message);
       await interaction.editReply(`NBA board could not complete: ${error.message}. No pick was posted.`);
     }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'trends-ui-search-other') {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
+      return;
+    }
+    const sport = interaction.fields.getTextInputValue('sport').trim().toUpperCase();
+    const team = interaction.fields.getTextInputValue('team').trim();
+    const player = interaction.fields.getTextInputValue('player').trim();
+    const stat = interaction.fields.getTextInputValue('stat').trim().toLowerCase().replaceAll(' ', '_');
+    const rawLine = interaction.fields.getTextInputValue('line').trim();
+    const line = rawLine ? Number(rawLine) : null;
+    const allowed = { NFL: ['receptions', 'receiving_yards', 'rushing_yards'],
+      NHL: ['shots_on_goal', 'points'], MLB: ['hits'] };
+    if (!allowed[sport]?.includes(stat) || team.length < 3 || team.length > 80 ||
+        player.length < 3 || player.length > 100 ||
+        (rawLine && (!Number.isFinite(line) || line < 0 || line > 1000))) {
+      await interaction.reply({ ephemeral: true,
+        content: 'Enter NFL (receptions, receiving_yards, rushing_yards), NHL (shots_on_goal, points), or MLB (hits), plus a team and full player name. Optional line: 0–1000.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    await replyToLiveTrendSearch(interaction, { root: reviewQueueRoot,
+      apiKey: process.env.ODDS_API_KEY, sport, team, player, stat, side: 'over', line });
     return;
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('trends-ui-board-other:')) {
@@ -4387,58 +4473,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
     await interaction.deferReply({ ephemeral: true });
-    try {
-      const query = {
-        root: reviewQueueRoot, apiKey: process.env.ODDS_API_KEY,
-        sport: interaction.options.getString('sport', true),
-        team: interaction.options.getString('team', true),
-        player: interaction.options.getString('player', true),
-        stat: interaction.options.getString('stat', true),
-        side: 'over', line: interaction.options.getNumber('line')
-      };
-      let content;
-      let selectedLine;
-      if (query.sport === 'NFL') {
-        if (!['receptions', 'receiving_yards', 'rushing_yards'].includes(query.stat))
-          throw new Error('That statistic is not supported for NFL current props');
-        const market = await researchCurrentMarket(query);
-        selectedLine = market.line;
-        const today = new Date();
-        const year = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric' }).format(today));
-        const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'numeric' }).format(today));
-        const history = await researchNflTrend({ player: query.player, stat: query.stat,
-          side: 'over', line: market.line, season: month >= 7 ? year : year - 1 });
-        const counts = row => `${row.hits}/${row.sample}`;
-        const offers = market.offers.slice(0, 4).map(row =>
-          `${row.sportsbook}: ${row.odds > 0 ? '+' : ''}${row.odds} (updated ${row.updatedAt})`).join('\n');
-        const otherLines = market.otherLines.slice(0, 4).map(row =>
-          `${row.line} ${row.odds > 0 ? '+' : ''}${row.odds} at ${row.sportsbook}`).join(' · ');
-        content = `**Trends-tool · NFL current prop research**\n` +
-          `${market.event.away_team} at ${market.event.home_team} · ${market.event.commence_time}\n` +
-          `**${history.player}: over ${market.line} ${query.stat.replaceAll('_', ' ')}**\n${offers}\n` +
-          `Season ${counts(history.analysis.season)} · L5 ${counts(history.analysis.l5)} · ` +
-          `L10 ${counts(history.analysis.l10)} · L20 ${counts(history.analysis.l20)} historical hits.\n` +
-          (otherLines ? `Other quoted lines: ${otherLines}\n` : '') +
-          `${formatNflContext(history.context)}\n` +
-          `[Completed-game source](${history.sourceUrl}); odds checked ${market.fetchedAt}. ` +
-          `Game-day participation is not confirmed. Research only; no pick is recommended. ` +
-          `Historical counts are not next-game probabilities. 21+.`;
-      } else {
-        const result = await researchFreeMarket(query);
-        selectedLine = result.line;
-        content = formatFreeMarket(result);
-      }
-      if (content.length > 1900) throw new Error('Research view exceeds Discord message limit');
-      await interaction.editReply({ content, allowedMentions: { parse: [] } });
-      try {
-        await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
-          query: { sport: query.sport, player: query.player, stat: query.stat,
-            side: 'over', line: selectedLine } });
-      } catch (error) { console.warn('Trends-tool live-search evidence unavailable:', error.message); }
-    } catch (error) {
-      console.warn('Trends-tool live search held:', error.message);
-      await interaction.editReply(`Current prop research could not complete: ${error.message}. No pick was posted.`);
-    }
+    await replyToLiveTrendSearch(interaction, {
+      root: reviewQueueRoot, apiKey: process.env.ODDS_API_KEY,
+      sport: interaction.options.getString('sport', true),
+      team: interaction.options.getString('team', true),
+      player: interaction.options.getString('player', true),
+      stat: interaction.options.getString('stat', true),
+      side: 'over', line: interaction.options.getNumber('line')
+    });
     return;
   }
 
