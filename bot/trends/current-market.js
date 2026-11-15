@@ -32,7 +32,8 @@ async function currentMarket({ root, apiKey, sport, team, player, stat, side, li
   fetchImpl = fetch, now = new Date() }) {
   sport = String(sport || '').toUpperCase();
   const market = MARKET_BY_STAT[sport]?.[stat];
-  if (!market || !['over', 'under'].includes(side) || !Number.isFinite(line) || line < 0 ||
+  if (!market || !['over', 'under'].includes(side) ||
+      (line !== null && line !== undefined && (!Number.isFinite(line) || line < 0)) ||
       String(player || '').trim().length < 3) throw new Error('Unsupported market query');
   const options = { apiKey, fetchImpl };
   const schedule = await events(sport, options); // provider says this endpoint is quota-free
@@ -44,12 +45,18 @@ async function currentMarket({ root, apiKey, sport, team, player, stat, side, li
     row.side === side && row.odds >= -400 &&
     Date.parse(row.updatedAt) <= now.valueOf() && now.valueOf() - Date.parse(row.updatedAt) <= 5 * 60_000)
     .sort((a, b) => b.odds - a.odds);
-  const offers = playerOffers.filter(row => row.line === line);
+  // An omitted line opens a player board instead of forcing members to know
+  // an exact alternate quote before they can browse. Keep a real quoted line.
+  const selectedLine = line ?? playerOffers
+    .slice().sort((a, b) => Math.abs(a.odds + 200) - Math.abs(b.odds + 200) ||
+      a.line - b.line)[0]?.line;
+  if (selectedLine === undefined) throw new Error('No fresh alternate offers for this player and side');
+  const offers = playerOffers.filter(row => row.line === selectedLine);
   const bestOtherLines = new Map();
-  for (const row of playerOffers) if (row.line !== line && !bestOtherLines.has(row.line))
+  for (const row of playerOffers) if (row.line !== selectedLine && !bestOtherLines.has(row.line))
     bestOtherLines.set(row.line, row);
   const otherLines = [...bestOtherLines.values()].slice(0, 5);
-  return { sport, player, stat, side, line, market, event,
+  return { sport, player, stat, side, line: selectedLine, market, event,
     fetchedAt: odds.fetchedAt, remainingCredits: odds.remainingCredits,
     offers: offers.slice(0, 5), otherLines };
 }

@@ -1,13 +1,13 @@
 'use strict';
 
-// Two budgeted NBA event scans per Pacific day. No exact quote, completed
-// history, active team roster, or clean injury check means no member-facing send.
+// Two budgeted NBA event scans per Pacific day. Each market response may yield
+// multiple distinct verified trends without another odds request.
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { events, eventAlternateOdds } = require('./odds-api');
 const { withOddsBudget } = require('./odds-budget');
 const bdl = require('./bdl-nba');
-const { publishVerifiedCandidate } = require('./verified-publisher');
+const { assertEvidence, publishVerifiedCandidate } = require('./verified-publisher');
 const { belongsToServiceDate, localParts, TIME_ZONE } = require('./schedule');
 const { playerNameKey } = require('./player-name');
 
@@ -18,6 +18,8 @@ const MARKET_STATS = Object.freeze({
 });
 const MARKETS = Object.keys(MARKET_STATS);
 const MAX_EVENTS_PER_DAY = 2;
+const MAX_POSTS_PER_EVENT = 2;
+const MAX_POSTS_PER_DAY = MAX_EVENTS_PER_DAY * MAX_POSTS_PER_EVENT;
 const MIN_BEFORE_MS = 30 * 60_000;
 const MAX_BEFORE_MS = 90 * 60_000;
 
@@ -68,8 +70,11 @@ async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = 
   try { files = (await fs.readdir(directory)).filter(name => name.startsWith(`nba-${date}-`) && name.endsWith('.json')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   const attempts = await Promise.all(files.map(async name => JSON.parse(await fs.readFile(path.join(directory, name), 'utf8'))));
-  const terminal = attempts.find(row => ['published', 'reserved', 'needs_reconciliation'].includes(row.status));
+  const terminal = attempts.find(row => ['reserved', 'needs_reconciliation'].includes(row.status));
   if (terminal) return { ...terminal, existing: true };
+  const posted = attempts.reduce((sum, row) => sum + (row.messageIds?.length || (row.messageId ? 1 : 0)), 0);
+  if (posted >= MAX_POSTS_PER_DAY) return { status: 'complete', date,
+    reason: 'Daily verified trends limit reached', existing: true };
   if (attempts.length >= MAX_EVENTS_PER_DAY) return { status: 'held', date,
     reason: 'Two-event daily market cap reached', existing: true };
   const schedule = await readEvents('NBA', { apiKey, fetchImpl });
@@ -90,7 +95,7 @@ async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = 
     if (Date.parse(bdlEvent.datetime) - now.valueOf() < 15 * 60_000)
       throw new Error('NBA league tipoff is too close for a verified pregame post');
     const holds = [];
-    let sendAttempted = false;
+    const qualified = [];
     for (const offer of offers) {
       try {
         const player = await readPlayer({ name: offer.player, game: bdlEvent,
@@ -123,22 +128,44 @@ async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = 
             teamId: teamName, opponentId: opponent, available: true, source: 'The Odds API',
             rosterVerified: true, rosterVerifiedAt: now.toISOString(),
             participationVerified: false, preGameAvailabilityChecked: true } };
-        sendAttempted = true;
-        const receipt = await publish({ root, candidate, channelId, channelFor, now });
-        outcome = { status: 'published', date, eventId: event.id,
-          messageId: receipt.messageId, candidateId: receipt.id, checkedOffers: offers.length };
-        break;
+        const gate = assertEvidence(candidate, now.valueOf());
+        qualified.push({ candidate, score: gate.consistencyScore });
       } catch (error) {
         holds.push(error.message);
-        if (sendAttempted) {
-          outcome = { status: 'needs_reconciliation', date, eventId: event.id,
-            error: error.message };
-          break;
-        }
       }
     }
+    qualified.sort((a, b) => b.score - a.score ||
+      b.candidate.analysis.season.hitRate - a.candidate.analysis.season.hitRate ||
+      b.candidate.analysis.season.sample - a.candidate.analysis.season.sample ||
+      b.candidate.prop.odds - a.candidate.prop.odds);
+    const selected = [];
+    const players = new Set();
+    for (const row of qualified) {
+      const key = playerNameKey(row.candidate.player);
+      if (players.has(key)) continue;
+      players.add(key);
+      selected.push(row.candidate);
+      if (selected.length >= Math.min(MAX_POSTS_PER_EVENT, MAX_POSTS_PER_DAY - posted)) break;
+    }
+    const receipts = [];
+    for (const candidate of selected) {
+      try {
+        const receipt = await publish({ root, candidate, channelId, channelFor, now });
+        receipts.push(receipt);
+      } catch (error) {
+        outcome = { status: 'needs_reconciliation', date, eventId: event.id,
+          messageIds: receipts.map(row => row.messageId), error: error.message };
+        break;
+      }
+    }
+    if (outcome.status === 'reserved' && receipts.length) outcome = {
+      status: 'published', date, eventId: event.id,
+      messageId: receipts[0].messageId, messageIds: receipts.map(row => row.messageId),
+      candidateIds: receipts.map(row => row.id), checkedOffers: offers.length,
+      qualifiedOffers: qualified.length };
     if (outcome.status === 'reserved') outcome = { status: 'held', date, eventId: event.id,
-      checkedOffers: offers.length, reasons: [...new Set(holds)].slice(0, 8) };
+      checkedOffers: offers.length, qualifiedOffers: qualified.length,
+      reasons: [...new Set(holds)].slice(0, 8) };
   } catch (error) {
     outcome = { status: 'held', date, eventId: event.id, error: error.message };
   }
@@ -148,5 +175,5 @@ async function scanNbaAuto({ root, apiKey, bdlKey, channelId, channelFor, now = 
   return outcome;
 }
 
-module.exports = { MARKETS, MARKET_STATS, MAX_EVENTS_PER_DAY,
+module.exports = { MARKETS, MARKET_STATS, MAX_EVENTS_PER_DAY, MAX_POSTS_PER_EVENT, MAX_POSTS_PER_DAY,
   featuredEvent, candidateOffers, scanNbaAuto };
