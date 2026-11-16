@@ -14,9 +14,9 @@ const { localParts, TIME_ZONE, belongsToServiceDate } = require('./schedule');
 const MIN_BEFORE_MS = 15 * 60_000;
 const MAX_BEFORE_MS = 90 * 60_000;
 
-function selectEligibleCombo(combos, schedule, now, serviceDate) {
+function selectEligibleCombo(combos, schedule, now, serviceDate, sport = 'NBA') {
   for (const combo of combos || []) {
-    if (!combo.legs.every(leg => leg.sport === 'NBA')) continue;
+    if (!combo.legs.every(leg => leg.sport === sport)) continue;
     try {
       const games = combo.legs.map(leg => selectEvent(schedule, leg.team, now.valueOf()));
       if (games.every(game => {

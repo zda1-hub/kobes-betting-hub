@@ -248,6 +248,51 @@ module.exports = [
     .setName('trends-dashboard')
     .setDescription('Open the private VIP Trends-tool search and matchup boards'),
   new SlashCommandBuilder()
+    .setName('prop').setDescription('Research a cached college player threshold')
+    .addStringOption(option => option.setName('sport').setDescription('College sport').setRequired(true).addChoices(
+      { name: 'NCAA Football', value: 'cfb' }, { name: 'NCAA Basketball', value: 'cbb' }))
+    .addStringOption(option => option.setName('player').setDescription('Exact player name or source ID').setRequired(true))
+    .addStringOption(option => option.setName('stat').setDescription('Statistic').setRequired(true).addChoices(
+      { name: 'Passing yards', value: 'passing_yards' }, { name: 'Rushing yards', value: 'rushing_yards' },
+      { name: 'Receiving yards', value: 'receiving_yards' }, { name: 'Receptions', value: 'receptions' },
+      { name: 'Rushing + receiving yards', value: 'rush_receiving_yards' },
+      { name: 'Anytime touchdown', value: 'anytime_touchdown' },
+      { name: 'Points', value: 'points' }, { name: 'Rebounds', value: 'rebounds' },
+      { name: 'Assists', value: 'assists' }, { name: '3PM', value: 'threes' },
+      { name: 'PRA', value: 'pra' }))
+    .addNumberOption(option => option.setName('line').setDescription('Historical threshold; not a live quote').setRequired(true).setMinValue(0)),
+  new SlashCommandBuilder()
+    .setName('player').setDescription('View a college player’s cached completed games')
+    .addStringOption(option => option.setName('sport').setDescription('College sport').setRequired(true).addChoices(
+      { name: 'NCAA Football', value: 'cfb' }, { name: 'NCAA Basketball', value: 'cbb' }))
+    .addStringOption(option => option.setName('player').setDescription('Exact player name or source ID').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('matchup').setDescription('Compare cached college team game-log coverage')
+    .addStringOption(option => option.setName('sport').setDescription('College sport').setRequired(true).addChoices(
+      { name: 'NCAA Football', value: 'cfb' }, { name: 'NCAA Basketball', value: 'cbb' }))
+    .addStringOption(option => option.setName('team').setDescription('First exact team name').setRequired(true))
+    .addStringOption(option => option.setName('opponent').setDescription('Second exact team name').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('ladder').setDescription('Compare college historical thresholds')
+    .addStringOption(option => option.setName('sport').setDescription('College sport').setRequired(true).addChoices(
+      { name: 'NCAA Football', value: 'cfb' }, { name: 'NCAA Basketball', value: 'cbb' }))
+    .addStringOption(option => option.setName('player').setDescription('Exact player name or source ID').setRequired(true))
+    .addStringOption(option => option.setName('stat').setDescription('Statistic').setRequired(true).addChoices(
+      { name: 'Passing yards', value: 'passing_yards' }, { name: 'Rushing yards', value: 'rushing_yards' },
+      { name: 'Receiving yards', value: 'receiving_yards' }, { name: 'Receptions', value: 'receptions' },
+      { name: 'Rushing + receiving yards', value: 'rush_receiving_yards' },
+      { name: 'Anytime touchdown', value: 'anytime_touchdown' },
+      { name: 'Points', value: 'points' }, { name: 'Rebounds', value: 'rebounds' },
+      { name: 'Assists', value: 'assists' }, { name: '3PM', value: 'threes' },
+      { name: 'PRA', value: 'pra' }))
+    .addNumberOption(option => option.setName('line_1').setDescription('First historical threshold').setRequired(true).setMinValue(0))
+    .addNumberOption(option => option.setName('line_2').setDescription('Second historical threshold').setRequired(true).setMinValue(0))
+    .addNumberOption(option => option.setName('line_3').setDescription('Optional third threshold').setMinValue(0)),
+  new SlashCommandBuilder()
+    .setName('trends-test-nfl')
+    .setDescription('Admin only: post, verify and delete one real NFL test card')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+  new SlashCommandBuilder()
     .setName('trends-board')
     .setDescription('Browse a private NBA matchup board with current alternate props')
     .addStringOption(option => option.setName('team').setDescription('Team in the upcoming matchup').setRequired(true).setMinLength(3).setMaxLength(80))
