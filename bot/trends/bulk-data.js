@@ -67,8 +67,6 @@ async function fetchNbaStats({ playerIds, apiKey, root, now = new Date(), fetchI
         if (next === null || next === undefined) break;
         if (String(next) === String(cursor)) throw new Error('NBA bulk stats cursor did not advance');
         cursor = next;
-        // ALL-STAR's request ceiling is shared with other KBH NBA features.
-        await new Promise(resolve => setTimeout(resolve, 1100));
         if (page === 99) throw new Error('NBA bulk stats exceeded bounded pagination');
       }
     }
