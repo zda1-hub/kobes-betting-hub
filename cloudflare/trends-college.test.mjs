@@ -3,7 +3,23 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./trends-college.js', import.meta.url), 'utf8');
-const { normalizeCfb, normalizeCbb, reserveCollegeCall } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+const { normalizeCfb, normalizeCbb, reserveCollegeCall, dueCollegeRefresh,
+  refreshDueCollege } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+
+test('college refresh waits until 8 AM Pacific and skips off-season sports', () => {
+  assert.equal(dueCollegeRefresh(new Date('2026-11-16T15:55:00Z')), null);
+  assert.deepEqual(dueCollegeRefresh(new Date('2026-11-16T16:05:00Z')),
+    { date: '2026-11-15', sports: ['cfb', 'cbb'] });
+  assert.deepEqual(dueCollegeRefresh(new Date('2026-06-16T15:05:00Z')),
+    { date: '2026-06-15', sports: [] });
+});
+
+test('missing college key never opens D1 or makes upstream calls', async () => {
+  const result = await refreshDueCollege({ DB: { batch() { throw new Error('must not open DB'); } } },
+    new Date('2026-11-16T16:05:00Z'),
+    { fetchImpl: () => { throw new Error('must not fetch'); } });
+  assert.equal(result.status, 'key_missing');
+});
 
 test('college football final box scores keep observed values and team context', () => {
   const game = { id: 101, completed: true, home_team: 'A', away_team: 'B' };

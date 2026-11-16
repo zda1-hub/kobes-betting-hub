@@ -1,5 +1,5 @@
 import { enqueueSocialEmail, dispatchSocialEmails } from './free-pick-social-email.js';
-import { collegeLogs, collegeStatus, refreshCollegeDay } from './trends-college.js';
+import { collegeLogs, collegeStatus, refreshCollegeDay, refreshDueCollege } from './trends-college.js';
 import resultMetadata from '../result-metadata.js';
 const CALLBACK_PATH = "/auth/x/callback";
 const START_PATH = "/auth/x/start";
@@ -139,6 +139,12 @@ export default {
 
   scheduled(controller, env, ctx) {
     ctx.waitUntil(Promise.all([dispatchDuePosts(controller.scheduledTime, env), dispatchCalendarX(controller.scheduledTime, env), deliverPendingLeadEmails(env), deliverPendingFreePickEmails(env), dispatchSocialEmails(env, socialEmailHelpers())]));
+    ctx.waitUntil(refreshDueCollege(env, new Date(controller.scheduledTime))
+      .then(receipt => {
+        if (!['key_missing', 'not_due'].includes(receipt.status) &&
+            receipt.refreshed.some(row => !row.cached || row.error))
+          console.log('College Trends refresh:', JSON.stringify(receipt));
+      }).catch(error => console.error('College Trends refresh held:', error.message)));
   },
 };
 
