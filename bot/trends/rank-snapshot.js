@@ -42,7 +42,6 @@ async function nbaRows({ apiKey, season, endDate, fetchImpl = fetch }) {
     if (next === undefined || next === null) return rows;
     if (String(next) === String(cursor)) throw new Error('NBA rank cursor did not advance');
     cursor = next;
-    await new Promise(resolve => setTimeout(resolve, 1100));
   }
   throw new Error('NBA rank season exceeded bounded pagination');
 }

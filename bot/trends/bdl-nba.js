@@ -10,6 +10,23 @@ const { localParts, TIME_ZONE } = require('./schedule');
 const ORIGIN = 'https://api.balldontlie.io';
 const TERMS_URL = 'https://www.balldontlie.io/terms.html';
 const MAX_PAGES = 3;
+const BDL_GAP_MS = 1200;
+let requestTurn = Promise.resolve();
+let nextRequestAt = 0;
+
+async function pace(fetchImpl) {
+  // Test fixtures do not touch the paid provider. Real calls share one lane
+  // across member search, private proof and Tuesday rank refresh.
+  if (fetchImpl !== fetch) return;
+  const previous = requestTurn;
+  let release;
+  requestTurn = new Promise(resolve => { release = resolve; });
+  await previous;
+  const wait = Math.max(0, nextRequestAt - Date.now());
+  if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+  nextRequestAt = Date.now() + BDL_GAP_MS;
+  release();
+}
 
 function teamKey(name) {
   return playerNameKey(name).replace(/^los angeles /, 'la ').replace(/^new york /, 'ny ');
@@ -23,10 +40,21 @@ function seasonStart(now) {
 async function request(route, { apiKey, fetchImpl = fetch } = {}) {
   if (!apiKey) throw new Error('BALLDONTLIE API key is required');
   if (!route.startsWith('/v1/')) throw new Error('Unsupported BALLDONTLIE route');
-  const response = await fetchImpl(`${ORIGIN}${route}`, {
-    headers: { Authorization: apiKey, Accept: 'application/json' },
-    signal: AbortSignal.timeout(10000)
-  });
+  const send = async () => {
+    await pace(fetchImpl);
+    return fetchImpl(`${ORIGIN}${route}`, {
+      headers: { Authorization: apiKey, Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000)
+    });
+  };
+  let response = await send();
+  if (response.status === 429 && fetchImpl === fetch) {
+    const header = Number(response.headers?.get('retry-after'));
+    const wait = Number.isFinite(header) && header > 0 ?
+      Math.min(60_000, Math.max(1000, header * 1000)) : 60_000;
+    await new Promise(resolve => setTimeout(resolve, wait));
+    response = await send();
+  }
   if (!response.ok) throw new Error(`BALLDONTLIE NBA request failed (${response.status})`);
   const body = await response.json();
   if (!Array.isArray(body?.data) || (body.meta !== undefined &&
