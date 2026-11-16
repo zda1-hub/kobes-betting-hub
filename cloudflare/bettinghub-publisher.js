@@ -1,5 +1,6 @@
 import { enqueueSocialEmail, dispatchSocialEmails } from './free-pick-social-email.js';
 import { collegeLogs, collegeTeamLogs, collegeStatus, refreshCollegeDay, refreshDueCollege } from './trends-college.js';
+import { createOptionalBdlProvider } from './trends-bdl-optional.js';
 import resultMetadata from '../result-metadata.js';
 const CALLBACK_PATH = "/auth/x/callback";
 const START_PATH = "/auth/x/start";
@@ -183,6 +184,23 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname === "/api/queue/trends" && request.method === "POST") return enqueueTrendEmail(request, env);
   if (url.pathname === "/api/queue/trends" && request.method === "GET") return listTrendEmails(request, env);
   if (url.pathname === "/api/queue/trends/deliver" && request.method === "POST") return markTrendEmailDelivered(request, env);
+  const optionalBdl = /^\/api\/trends\/bdl\/(nhl|mlb|epl|mls|ucl)\/(status|schedule|players|gameStats|injuries)$/.exec(url.pathname);
+  if (optionalBdl && request.method === 'GET') {
+    if (!await hasBearer(request, env.TRENDS_QUEUE_SECRET)) return json({ error: 'Unauthorized' }, 401);
+    const [, sport, resource] = optionalBdl;
+    const provider = createOptionalBdlProvider(sport, { env });
+    if (resource === 'status') return json(provider.status());
+    if (!provider.status().enabled) return json({ error: 'Provider disabled' }, 503);
+    if (!provider.status().keyConfigured) return json({ error: 'Provider key missing' }, 503);
+    const query = {};
+    for (const [name, value] of url.searchParams) {
+      if (query[name] === undefined) query[name] = value;
+      else if (Array.isArray(query[name])) query[name].push(value);
+      else query[name] = [query[name], value];
+    }
+    try { return json(await provider.read(resource, query)); }
+    catch (error) { return json({ error: error.message }, 400); }
+  }
   if (url.pathname === "/api/trends/college/status" && request.method === "GET") {
     if (!await collegeReadAllowed(request, env)) return json({ error: 'Unauthorized' }, 401);
     return json(await collegeStatus(env));

@@ -33,7 +33,12 @@
   ],
   "vars": {
     "RECAP_NOTIFICATION_RECIPIENT": "kobedirwin@gmail.com",
-    "X_CLIENT_ID": "MHhtSGlFT2ZsazNOWmhIeWdqNVA6MTpjaQ"
+    "X_CLIENT_ID": "MHhtSGlFT2ZsazNOWmhIeWdqNVA6MTpjaQ",
+    "TRENDS_BDL_NHL_ENABLED": "false",
+    "TRENDS_BDL_MLB_ENABLED": "false",
+    "TRENDS_BDL_EPL_ENABLED": "false",
+    "TRENDS_BDL_MLS_ENABLED": "false",
+    "TRENDS_BDL_UCL_ENABLED": "false"
   },
   "env": {
     "staging": {
@@ -54,7 +59,12 @@
       },
       "vars": {
         "RECAP_NOTIFICATION_RECIPIENT": "",
-        "X_CLIENT_ID": ""
+        "X_CLIENT_ID": "",
+        "TRENDS_BDL_NHL_ENABLED": "false",
+        "TRENDS_BDL_MLB_ENABLED": "false",
+        "TRENDS_BDL_EPL_ENABLED": "false",
+        "TRENDS_BDL_MLS_ENABLED": "false",
+        "TRENDS_BDL_UCL_ENABLED": "false"
       },
       "d1_databases": [
         {
