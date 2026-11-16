@@ -24,7 +24,7 @@ function nbaFetch(url) {
     id: 'laterfixture1234', commence_time: '2026-11-30T01:00:00Z', home_team: 'Denver Nuggets' }]);
   if (url.includes('/v1/teams')) return json({ data: [
     { id: 2, abbreviation: 'BOS', full_name: 'Boston Celtics' },
-    { id: 20, abbreviation: 'NYK', full_name: 'New York Knicks' } ], meta: { next_cursor: null } });
+    { id: 20, abbreviation: 'NYK', full_name: 'New York Knicks' } ] });
   if (url.includes('/v1/players/active')) return json({ data: Array.from({ length: 28 }, (_, i) => ({
     id: i + 1, first_name: i === 0 ? 'Payton' : 'Player', last_name: i === 0 ? 'Pritchard' : String(i),
     team: { id: 2 } })), meta: { next_cursor: null } });
