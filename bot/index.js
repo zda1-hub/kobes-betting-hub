@@ -1598,10 +1598,18 @@ function startTrendsSchedule() {
           [sport, Object.fromEntries(Object.entries(sections).map(([section, channel]) =>
             [section, channel.id]))])))))
       .catch(error => console.error('VIP rank channel provision held:', error.message));
-    const refreshRanks = () => void updateTeamRanks({ client,
-      guildId: process.env.DISCORD_GUILD_ID, vipIds: [...vipRoleIds()],
-      root: reviewQueueRoot, bdlKey: process.env.BDL_NBA_API_KEY })
-      .catch(error => console.error('Tuesday team ranks held:', error.message));
+    let rankRefreshInFlight = false;
+    let lastRankAttemptAt = 0;
+    const refreshRanks = () => {
+      if (rankRefreshInFlight || Date.now() - lastRankAttemptAt < 10 * 60_000) return;
+      lastRankAttemptAt = Date.now();
+      rankRefreshInFlight = true;
+      void updateTeamRanks({ client,
+        guildId: process.env.DISCORD_GUILD_ID, vipIds: [...vipRoleIds()],
+        root: reviewQueueRoot, bdlKey: process.env.BDL_NBA_API_KEY })
+        .catch(error => console.error('Tuesday team ranks held:', error.message))
+        .finally(() => { rankRefreshInFlight = false; });
+    };
     refreshRanks();
     const rankTimer = setInterval(refreshRanks, 60_000);
     rankTimer.unref();
