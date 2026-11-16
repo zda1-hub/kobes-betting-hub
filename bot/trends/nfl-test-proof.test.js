@@ -38,7 +38,8 @@ test('cleanup receipt reconciles missing message without a second send', async (
   await fs.mkdir(directory);
   await fs.writeFile(path.join(directory, '2026-11-16.json'), JSON.stringify({
     status: 'needs_cleanup', channelId: '123456789012345678',
-    messageId: '987654321098765432', player: 'Real Player'
+    messageId: '987654321098765432', player: 'Real Player',
+    reason: 'Test message deletion was not verified'
   }));
   const result = await runNflTestProof({ root, apiKey: 'fixture',
     channelId: '123456789012345678', now,
@@ -47,5 +48,11 @@ test('cleanup receipt reconciles missing message without a second send', async (
     } } }), collect: async () => { throw new Error('must not select or send'); } });
   assert.equal(result.status, 'verified_deleted');
   assert.equal(result.reconciled, true);
+  assert.equal(result.reason, undefined);
+  const again = await runNflTestProof({ root, apiKey: 'fixture',
+    channelId: '123456789012345678', now,
+    channelFor: async () => { throw new Error('must not fetch again'); },
+    collect: async () => { throw new Error('must not select or send'); } });
+  assert.equal(again.reason, undefined);
   await fs.rm(root, { recursive: true, force: true });
 });
