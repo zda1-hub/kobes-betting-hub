@@ -1,4 +1,5 @@
 import { enqueueSocialEmail, dispatchSocialEmails } from './free-pick-social-email.js';
+import { collegeLogs, collegeStatus, refreshCollegeDay } from './trends-college.js';
 import resultMetadata from '../result-metadata.js';
 const CALLBACK_PATH = "/auth/x/callback";
 const START_PATH = "/auth/x/start";
@@ -176,6 +177,22 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname === "/api/queue/trends" && request.method === "POST") return enqueueTrendEmail(request, env);
   if (url.pathname === "/api/queue/trends" && request.method === "GET") return listTrendEmails(request, env);
   if (url.pathname === "/api/queue/trends/deliver" && request.method === "POST") return markTrendEmailDelivered(request, env);
+  if (url.pathname === "/api/trends/college/status" && request.method === "GET") {
+    if (!await hasBearer(request, env.TRENDS_QUEUE_SECRET)) return json({ error: 'Unauthorized' }, 401);
+    return json(await collegeStatus(env));
+  }
+  if (url.pathname === "/api/trends/college/logs" && request.method === "GET") {
+    if (!await hasBearer(request, env.TRENDS_QUEUE_SECRET)) return json({ error: 'Unauthorized' }, 401);
+    try { return json({ logs: await collegeLogs(env, url.searchParams.get('sport'), url.searchParams.get('player')) }); }
+    catch (error) { return json({ error: error.message }, 400); }
+  }
+  if (url.pathname === "/api/trends/college/refresh" && request.method === "POST") {
+    if (!await hasBearer(request, env.TRENDS_QUEUE_SECRET)) return json({ error: 'Unauthorized' }, 401);
+    try {
+      const input = await request.json();
+      return json(await refreshCollegeDay(env, input.sport, input.date));
+    } catch (error) { return json({ error: error.message }, 400); }
+  }
   if (url.pathname === "/api/queue/recap-notifications" && request.method === "POST") return enqueueRecapNotification(request, env);
   if (url.pathname === "/api/queue/recap-notifications" && request.method === "GET") return listRecapNotifications(request, env);
   if (url.pathname === "/api/queue/recap-notifications/deliver" && request.method === "POST") return markRecapNotificationDelivered(request, env);

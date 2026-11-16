@@ -11,6 +11,8 @@ const inFlight = new Map();
 const DISPLAY_STATS = Object.freeze({
   points: 'points', rebounds: 'rebounds', assists: 'assists', receptions: 'receptions',
   receiving_yards: 'receiving yards', rushing_yards: 'rushing yards',
+  passing_yards: 'passing yards', rush_receiving_yards: 'rush + receiving yards',
+  anytime_touchdown: 'anytime touchdowns',
   shots_on_goal: 'shots on goal', hits: 'hits'
 });
 
@@ -81,11 +83,12 @@ function renderCandidate(candidate, date) {
   const { prop, analysis, player } = candidate;
   const odds = prop.odds > 0 ? `+${prop.odds}` : String(prop.odds);
   const count = row => `${row.hits}/${row.sample}${row.pushes ? ` (${row.pushes} pushes)` : ''}`;
-  return `**Trends-tool · ${prop.sport} · ${date}** · 21+ · Lines move\n` +
+  const nfl = prop.sport === 'NFL';
+  return `**Trends-tool · ${prop.sport} · ${date}**${nfl ? '' : ' · 21+ · Lines move'}\n` +
     `**${player}: ${prop.side} ${prop.line} ${DISPLAY_STATS[prop.stat]}** · ${odds} at ${prop.sportsbook}\n` +
     `Historical hits: season ${count(analysis.season)} · L5 ${count(analysis.l5)} · ` +
     `L10 ${count(analysis.l10)} · L20 ${count(analysis.l20)}. ` +
-    `[Game logs](${candidate.analysisSource}) · Not a guarantee.`;
+    `[Game logs](${candidate.analysisSource})${nfl ? '\nData: nflverse (CC BY 4.0)\n21+ | Research only, not a guarantee' : ' · Not a guarantee.'}`;
 }
 
 async function publishVerifiedCandidate({ root, candidate, channelId, channelFor, now = new Date() }) {
