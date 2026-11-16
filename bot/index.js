@@ -23,7 +23,7 @@ const { researchNba, formatNbaResearch } = require('./trends/nba-search');
 const propFlow = require('./trends/prop-flow');
 const bulkPanel = require('./trends/bulk-panel');
 const { researchBulk } = require('./trends/bulk-data');
-const { updateTuesday: updateTeamRanks } = require('./trends/rank-publisher');
+const { updateTuesday: updateTeamRanks, ensureChannels: ensureRankChannels } = require('./trends/rank-publisher');
 const rankSnapshot = require('./trends/rank-snapshot');
 const { prepare: prepareDailyFeed, publish: publishDailyFeed } = require('./trends/daily-feed');
 const { hasVipAtSend, UPGRADE_COPY } = require('./trends/vip-access');
@@ -1592,6 +1592,12 @@ async function publishScheduledTrends() {
 function startTrendsSchedule() {
   if (process.env.TRENDS_TEAM_RANKS_ENABLED === 'true' &&
       process.env.DISCORD_GUILD_ID && process.env.BDL_NBA_API_KEY) {
+    void ensureRankChannels(client, process.env.DISCORD_GUILD_ID, [...vipRoleIds()])
+      .then(channels => console.log('VIP rank channels verified:', JSON.stringify(
+        Object.fromEntries(Object.entries(channels).map(([sport, sections]) =>
+          [sport, Object.fromEntries(Object.entries(sections).map(([section, channel]) =>
+            [section, channel.id]))])))))
+      .catch(error => console.error('VIP rank channel provision held:', error.message));
     const refreshRanks = () => void updateTeamRanks({ client,
       guildId: process.env.DISCORD_GUILD_ID, vipIds: [...vipRoleIds()],
       root: reviewQueueRoot, bdlKey: process.env.BDL_NBA_API_KEY })
