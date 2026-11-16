@@ -75,6 +75,17 @@ async function publishSection({ root, sheet, section, channel, updatedAt,
   const messages = [];
   try {
     const unavailable = [];
+    let batch = [];
+    let batchMetrics = [];
+    const flush = async () => {
+      if (!batch.length) return;
+      messages.push(await channel.send({ content:
+        `**${sheet.sport} ${section} rank sheets** · ${batchMetrics.join(', ')}` +
+        (sheet.sport === 'NFL' ? '\nData: nflverse (CC BY 4.0)' : '') +
+        '\n21+ | Research only, not a guarantee',
+      files: batch, allowedMentions: { parse: [] } }));
+      batch = []; batchMetrics = [];
+    };
     for (const item of rowsForSection(sheet, section)) {
       if (!item.rows.some(row => Number.isFinite(row.average))) {
         unavailable.push(item.label); continue;
@@ -84,10 +95,11 @@ async function publishSection({ root, sheet, section, channel, updatedAt,
         metric: item.label, rows: item.rows, updatedAt, dataDate: sheet.dataDate });
       const attachments = images.map((buffer, index) => new AttachmentBuilder(buffer,
         { name: `${sheet.sport.toLowerCase()}-${section}-${item.label.replace(/[^a-z0-9]+/gi, '-')}-${index + 1}.png` }));
-      messages.push(await channel.send({ content: `**${sheet.sport} ${item.label}** · real regular-season averages and ranks` +
-        (sheet.sport === 'NFL' ? '\nData: nflverse (CC BY 4.0)' : ''),
-        files: attachments, allowedMentions: { parse: [] } }));
+      if (batch.length + attachments.length > 10) await flush();
+      batch.push(...attachments);
+      batchMetrics.push(item.label);
     }
+    await flush();
     if (unavailable.length) messages.push(await channel.send({ content:
       `**${sheet.sport} ${section} · N/A from this source:** ${unavailable.join(', ')}. ` +
       'No position or statistic was inferred from a broader label.\n' +
@@ -98,6 +110,7 @@ async function publishSection({ root, sheet, section, channel, updatedAt,
     const receipt = { sport: sheet.sport, section, date, channelId: channel.id,
       guildId, messageIds: messages.map(row => row.id), dataDate: sheet.dataDate,
       updatedAt: sheet.updatedAt };
+    await fs.mkdir(path.dirname(receiptFile), { recursive: true, mode: 0o700 });
     const temp = `${receiptFile}.${process.pid}.tmp`;
     await fs.writeFile(temp, JSON.stringify(receipt), { mode: 0o600 });
     await fs.rename(temp, receiptFile);
