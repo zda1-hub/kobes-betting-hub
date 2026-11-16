@@ -23,6 +23,9 @@ export async function ensureCollegeTables(db) {
     db.prepare('CREATE INDEX IF NOT EXISTS idx_trends_college_player ON trends_college_logs (sport, player_name, game_date DESC)'),
     db.prepare(`CREATE TABLE IF NOT EXISTS trends_college_refresh (
       sport TEXT NOT NULL, game_date TEXT NOT NULL, checked_at TEXT NOT NULL,
+      PRIMARY KEY (sport, game_date))`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS trends_college_refresh_attempt (
+      sport TEXT NOT NULL, game_date TEXT NOT NULL, attempted_at TEXT NOT NULL,
       PRIMARY KEY (sport, game_date))`)
   ]);
 }
@@ -197,4 +200,47 @@ export async function collegeLogs(env, sport, player) {
     player: row.player_name, team: row.team, opponent: row.opponent, location: row.location,
     date: row.game_date, season: String(row.season), stats: JSON.parse(row.stats_json),
     status: 'final', participated: true, sourceUrl: row.source_url }));
+}
+
+export function dueCollegeRefresh(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles',
+    year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', hourCycle: 'h23'
+  }).formatToParts(now);
+  const part = name => Number(parts.find(row => row.type === name)?.value);
+  const month = part('month');
+  const hour = part('hour');
+  // The five-minute publisher cron may run many times. refreshCollegeDay's
+  // D1 receipt makes each finished date idempotent after the morning window.
+  if (hour < 8) return null;
+  const today = `${part('year')}-${String(month).padStart(2, '0')}-${String(part('day')).padStart(2, '0')}`;
+  const yesterday = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date(Date.parse(`${today}T12:00:00Z`) - 86400_000));
+  return { date: yesterday, sports: [
+    ...(month >= 8 || month <= 1 ? ['cfb'] : []),
+    ...(month >= 11 || month <= 4 ? ['cbb'] : [])
+  ] };
+}
+
+export async function refreshDueCollege(env, now = new Date(), { fetchImpl = fetch } = {}) {
+  if (!env.CFBD_API_KEY) return { status: 'key_missing', refreshed: [] };
+  const due = dueCollegeRefresh(now);
+  if (!due || !due.sports.length) return { status: 'not_due', refreshed: [] };
+  await ensureCollegeTables(env.DB);
+  const refreshed = [];
+  // Sequential requests preserve the shared monthly budget and avoid a burst
+  // of upstream calls when both college sports have just played.
+  for (const sport of due.sports) {
+    const prior = await env.DB.prepare('SELECT attempted_at FROM trends_college_refresh_attempt WHERE sport = ? AND game_date = ?')
+      .bind(sport, due.date).first();
+    if (prior && now.valueOf() - Date.parse(prior.attempted_at) < 4 * 3600_000) {
+      refreshed.push({ sport, date: due.date, cached: true, throttled: true });
+      continue;
+    }
+    await env.DB.prepare('INSERT OR REPLACE INTO trends_college_refresh_attempt (sport, game_date, attempted_at) VALUES (?, ?, ?)')
+      .bind(sport, due.date, now.toISOString()).run();
+    try { refreshed.push(await refreshCollegeDay(env, sport, due.date, { now, fetchImpl })); }
+    catch (error) { refreshed.push({ sport, date: due.date, error: error.message }); }
+  }
+  return { status: refreshed.some(row => row.error) ? 'held' : 'refreshed', refreshed };
 }
