@@ -84,10 +84,14 @@ function renderCandidate(candidate, date) {
   const odds = prop.odds > 0 ? `+${prop.odds}` : String(prop.odds);
   const count = row => `${row.hits}/${row.sample}${row.pushes ? ` (${row.pushes} pushes)` : ''}`;
   const nfl = prop.sport === 'NFL';
+  const splits = nfl ? [
+    analysis.opponent?.sample ? `vs opponent ${count(analysis.opponent)}` : null,
+    analysis.homeAway?.sample ? `${prop.location || 'home/away'} ${count(analysis.homeAway)}` : null
+  ].filter(Boolean).join(' · ') : '';
   return `**Trends-tool · ${prop.sport} · ${date}**${nfl ? '' : ' · 21+ · Lines move'}\n` +
     `**${player}: ${prop.side} ${prop.line} ${DISPLAY_STATS[prop.stat]}** · ${odds} at ${prop.sportsbook}\n` +
     `Historical hits: season ${count(analysis.season)} · L5 ${count(analysis.l5)} · ` +
-    `L10 ${count(analysis.l10)} · L20 ${count(analysis.l20)}. ` +
+    `L10 ${count(analysis.l10)} · L20 ${count(analysis.l20)}.${splits ? ` ${splits}.` : ''} ` +
     `[Game logs](${candidate.analysisSource})${nfl ? '\nData: nflverse (CC BY 4.0)\n21+ | Research only, not a guarantee' : ' · Not a guarantee.'}`;
 }
 

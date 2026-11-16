@@ -10,7 +10,7 @@ const { withOddsBudget } = require('./odds-budget');
 const { snapshot: nflSnapshot } = require('./nfl-search');
 const { snapshot: contextSnapshot, sourceFresh } = require('./nfl-context');
 const { parseCsv, weeklyLogs } = require('./nflverse');
-const { summarize } = require('./analytics');
+const { researchWindows } = require('./sport-provider');
 const { assertEvidence, publishVerifiedCandidate } = require('./verified-publisher');
 const { belongsToServiceDate, localParts, TIME_ZONE } = require('./schedule');
 const { playerNameKey } = require('./player-name');
@@ -100,14 +100,10 @@ function verifiedAvailability(context, { season, week, playerId, team, now }) {
     gameWeek: week, rosterWeek: week, injuryFeedWeek: week, rightsUrl: TERMS_URL };
 }
 
-function historicalAnalysis(currentCsv, priorCsv, schedulesCsv, { season, playerId, stat, line }) {
+function historicalAnalysis(currentCsv, priorCsv, schedulesCsv, { season, playerId, stat, line, opponent, location }) {
   const logs = weeklyLogs(currentCsv, schedulesCsv, { season, playerId, stat })
     .concat(weeklyLogs(priorCsv, schedulesCsv, { season: season - 1, playerId, stat }));
-  const query = { stat, line, side: 'over' };
-  return { season: summarize(logs, { ...query, season: String(season) }),
-    l5: summarize(logs, { ...query, limit: 5 }),
-    l10: summarize(logs, { ...query, limit: 10 }),
-    l20: summarize(logs, { ...query, limit: 20 }) };
+  return researchWindows(logs, { stat, line, side: 'over', season, opponent, location });
 }
 
 async function scanNflAuto({ root, apiKey, channelId, channelFor, now = new Date(), fetchImpl = fetch,
@@ -161,7 +157,9 @@ async function scanNflAuto({ root, apiKey, channelId, channelFor, now = new Date
           team, now });
         const stat = MARKET_STATS[offer.market];
         const analysis = historicalAnalysis(current.statsCsv, prior.statsCsv, current.scheduleCsv,
-          { season, playerId: player.id, stat, line: offer.line });
+          { season, playerId: player.id, stat, line: offer.line,
+            opponent: team === game.home_team ? game.away_team : game.home_team,
+            location: team === game.home_team ? 'home' : 'away' });
         if (analysis.season.sample < 8 || analysis.l20.sample < 20 || analysis.season.hitRate < 0.8)
           throw new Error('Insufficient or below-threshold NFL completed games');
         const candidate = { player: player.name, playerId: player.id, analysis,
@@ -170,6 +168,7 @@ async function scanNflAuto({ root, apiKey, channelId, channelFor, now = new Date
           rights: { history: 'commercial-use-confirmed', availability: 'commercial-use-confirmed', termsUrl: TERMS_URL },
           prop: { ...offer, sport: 'NFL', stat, side: 'over', startsAt: event.commence_time,
             eventId: event.id, teamId: TEAM_NAMES[team],
+            location: team === game.home_team ? 'home' : 'away',
             opponentId: TEAM_NAMES[team === game.home_team ? game.away_team : game.home_team],
             available: true, source: 'The Odds API', rosterVerified: true,
             rosterVerifiedAt: now.toISOString(), participationVerified: false,
