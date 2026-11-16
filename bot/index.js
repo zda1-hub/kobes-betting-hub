@@ -3662,11 +3662,8 @@ async function replyToLiveTrendSearch(interaction, query) {
 
 async function refreshTrendsLauncher(readyClient) {
   const channel = await readyClient.channels.fetch('1571285899717771365');
-  if (channel?.guildId !== process.env.DISCORD_GUILD_ID ||
-      channel.parentId !== (process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036') ||
-      !channel.isTextBased() ||
-      channel.permissionsFor(channel.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) !== false)
-    throw new Error('VIP Trends launcher channel is not verified private');
+  if (channel?.guildId !== process.env.DISCORD_GUILD_ID || !channel.isTextBased())
+    throw new Error('Trends launcher is not a KBH text channel');
   const message = await channel.messages.fetch('1571413885947482226');
   if (message.author.id !== readyClient.user.id || !message.pinned)
     throw new Error('Existing Trends launcher is not bot-owned and pinned');
@@ -3675,7 +3672,7 @@ async function refreshTrendsLauncher(readyClient) {
   const desiredButtons = payload.components.flatMap(row => row.components.map(button => button.data.custom_id));
   if (message.content !== payload.content || JSON.stringify(currentButtons) !== JSON.stringify(desiredButtons)) {
     await message.edit(payload);
-    console.log('Updated existing pinned VIP Trends launcher:', message.id);
+    console.log('Updated existing pinned Trends launcher:', message.id);
   }
 }
 
