@@ -30,3 +30,22 @@ test('NFL proof sends one labeled card, observes it, deletes it, and keeps recei
   assert.equal(sends, 1);
   await fs.rm(root, { recursive: true, force: true });
 });
+
+test('cleanup receipt reconciles missing message without a second send', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nfl-proof-cleanup-'));
+  const now = new Date('2026-11-16T20:00:00Z');
+  const directory = path.join(root, 'trends-test');
+  await fs.mkdir(directory);
+  await fs.writeFile(path.join(directory, '2026-11-16.json'), JSON.stringify({
+    status: 'needs_cleanup', channelId: '123456789012345678',
+    messageId: '987654321098765432', player: 'Real Player'
+  }));
+  const result = await runNflTestProof({ root, apiKey: 'fixture',
+    channelId: '123456789012345678', now,
+    channelFor: async () => ({ messages: { async fetch() {
+      throw Object.assign(new Error('Unknown Message'), { code: 10008 });
+    } } }), collect: async () => { throw new Error('must not select or send'); } });
+  assert.equal(result.status, 'verified_deleted');
+  assert.equal(result.reconciled, true);
+  await fs.rm(root, { recursive: true, force: true });
+});

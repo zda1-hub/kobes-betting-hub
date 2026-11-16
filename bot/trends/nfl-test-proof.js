@@ -74,8 +74,29 @@ async function runNflTestProof({ root, apiKey, channelId, channelFor,
   if (!root || !apiKey || !/^\d{17,22}$/.test(String(channelId || '')) ||
       typeof channelFor !== 'function') throw new Error('NFL test needs a private test channel');
   const file = path.join(root, 'trends-test', `${localParts(now, TIME_ZONE).date}.json`);
-  try { return { ...JSON.parse(await fs.readFile(file, 'utf8')), existing: true }; }
+  let existing;
+  try { existing = JSON.parse(await fs.readFile(file, 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (existing?.status === 'needs_cleanup' && existing.messageId) {
+    const channel = await channelFor(channelId);
+    let present;
+    try { present = await channel.messages.fetch({ message: existing.messageId,
+      force: true, cache: false }); }
+    catch (error) {
+      if (error.code !== 10008 && error.status !== 404) throw error;
+    }
+    if (present) await present.delete();
+    let deleted = false;
+    try { await channel.messages.fetch({ message: existing.messageId,
+      force: true, cache: false }); }
+    catch (error) { deleted = error.code === 10008 || error.status === 404; }
+    if (!deleted) return { ...existing, existing: true };
+    const outcome = { ...existing, status: 'verified_deleted',
+      deletedAt: new Date().toISOString(), reconciled: true };
+    await fs.writeFile(file, JSON.stringify(outcome, null, 2), { mode: 0o600 });
+    return outcome;
+  }
+  if (existing) return { ...existing, existing: true };
   const candidate = await collect({ root, apiKey, now });
   const channel = await channelFor(channelId);
   if (!channel?.isTextBased?.() || channel.id !== channelId)
@@ -98,7 +119,7 @@ async function runNflTestProof({ root, apiKey, channelId, channelFor,
     if (observed?.content !== content) throw new Error('Test message content could not be verified');
     await message.delete();
     let deleted = false;
-    try { await channel.messages.fetch(message.id); }
+    try { await channel.messages.fetch({ message: message.id, force: true, cache: false }); }
     catch (error) { deleted = error.code === 10008 || error.status === 404; }
     if (!deleted) throw new Error('Test message deletion was not verified');
     const outcome = { ...receipt, status: 'verified_deleted', messageId: message.id,
