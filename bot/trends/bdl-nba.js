@@ -29,8 +29,18 @@ async function request(route, { apiKey, fetchImpl = fetch } = {}) {
   });
   if (!response.ok) throw new Error(`BALLDONTLIE NBA request failed (${response.status})`);
   const body = await response.json();
-  if (!Array.isArray(body?.data) || !body.meta || typeof body.meta !== 'object')
-    throw new Error('BALLDONTLIE NBA response shape changed');
+  if (!Array.isArray(body?.data) || (body.meta !== undefined &&
+      (!body.meta || typeof body.meta !== 'object' || Array.isArray(body.meta))))
+    throw new Error(`BALLDONTLIE NBA response shape changed (${route.split('?')[0]})`);
+  // Some short collection responses omit pagination metadata. The requested
+  // page size is known, so only accept that omission when the page cannot be
+  // full. A full page without a cursor could silently truncate game logs.
+  if (body.meta === undefined) {
+    const perPage = Number(new URL(`${ORIGIN}${route}`).searchParams.get('per_page') || 25);
+    if (body.data.length >= perPage)
+      throw new Error(`BALLDONTLIE NBA pagination metadata missing (${route.split('?')[0]})`);
+    return { data: body.data, meta: { per_page: perPage } };
+  }
   return body;
 }
 
