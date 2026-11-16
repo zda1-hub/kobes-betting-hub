@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const bdl = require('./bdl-nba');
+const { readTeams } = require('./nba-profiles');
 const { events, eventAlternateOdds } = require('./odds-api');
 const { MARKET_BY_STAT } = require('./current-market');
 const { withOddsBudget } = require('./odds-budget');
@@ -67,7 +68,9 @@ async function loadTeams(state, { oddsKey, bdlKey, now = new Date(), fetchImpl =
   const names = [...new Set(upcoming.flatMap(row => [row.home_team, row.away_team]))];
   let teams;
   if (state.league === 'NBA') {
-    const rows = await bdl.pages('/v1/teams?per_page=100', { apiKey: bdlKey, fetchImpl });
+    // Unlike paginated player/game endpoints, BDL's teams endpoint returns
+    // {data: [...]} without meta. Reuse the dedicated shape-checked adapter.
+    const rows = await readTeams({ apiKey: bdlKey, fetchImpl });
     teams = names.map(name => rows.find(row => bdl.teamKey(row.full_name) === bdl.teamKey(name)))
       .filter(Boolean).map(row => ({ label: `${row.abbreviation} · ${row.full_name}`,
         value: row.abbreviation, name: row.full_name, teamId: row.id }));
