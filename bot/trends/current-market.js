@@ -5,8 +5,13 @@ const { withOddsBudget } = require('./odds-budget');
 const { playerNameKey } = require('./player-name');
 
 const MARKET_BY_STAT = Object.freeze({
-  NBA: { points: 'player_points_alternate', rebounds: 'player_rebounds_alternate', assists: 'player_assists_alternate' },
-  NFL: { receptions: 'player_receptions_alternate', receiving_yards: 'player_reception_yds_alternate', rushing_yards: 'player_rush_yds_alternate' },
+  NBA: { points: 'player_points_alternate', rebounds: 'player_rebounds_alternate',
+    assists: 'player_assists_alternate', threes: 'player_threes_alternate',
+    pra: 'player_points_rebounds_assists_alternate', points_rebounds: 'player_points_rebounds_alternate',
+    points_assists: 'player_points_assists_alternate', rebounds_assists: 'player_rebounds_assists_alternate' },
+  NFL: { receptions: 'player_receptions_alternate', receiving_yards: 'player_reception_yds_alternate',
+    rushing_yards: 'player_rush_yds_alternate', passing_yards: 'player_pass_yds_alternate',
+    rush_receiving_yards: 'player_rush_reception_yds_alternate', anytime_touchdown: 'player_anytime_td' },
   NHL: { shots_on_goal: 'player_shots_on_goal_alternate', points: 'player_points_alternate' },
   MLB: { hits: 'batter_hits_alternate' }
 });

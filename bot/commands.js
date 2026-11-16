@@ -248,19 +248,10 @@ module.exports = [
     .setName('trends-dashboard')
     .setDescription('Open the private VIP Trends-tool search and matchup boards'),
   new SlashCommandBuilder()
-    .setName('prop').setDescription('Research a cached college player threshold')
-    .addStringOption(option => option.setName('sport').setDescription('College sport').setRequired(true).addChoices(
-      { name: 'NCAA Football', value: 'cfb' }, { name: 'NCAA Basketball', value: 'cbb' }))
-    .addStringOption(option => option.setName('player').setDescription('Exact player name or source ID').setRequired(true))
-    .addStringOption(option => option.setName('stat').setDescription('Statistic').setRequired(true).addChoices(
-      { name: 'Passing yards', value: 'passing_yards' }, { name: 'Rushing yards', value: 'rushing_yards' },
-      { name: 'Receiving yards', value: 'receiving_yards' }, { name: 'Receptions', value: 'receptions' },
-      { name: 'Rushing + receiving yards', value: 'rush_receiving_yards' },
-      { name: 'Anytime touchdown', value: 'anytime_touchdown' },
-      { name: 'Points', value: 'points' }, { name: 'Rebounds', value: 'rebounds' },
-      { name: 'Assists', value: 'assists' }, { name: '3PM', value: 'threes' },
-      { name: 'PRA', value: 'pra' }))
-    .addNumberOption(option => option.setName('line').setDescription('Historical threshold; not a live quote').setRequired(true).setMinValue(0)),
+    .setName('prop').setDescription('Private step-by-step current prop search; result sent by DM'),
+  new SlashCommandBuilder()
+    .setName('sports').setDescription('Owner/admin: control Trends-tool sports privately')
+    .setDefaultMemberPermissions(0),
   new SlashCommandBuilder()
     .setName('player').setDescription('View a college player’s cached completed games')
     .addStringOption(option => option.setName('sport').setDescription('College sport').setRequired(true).addChoices(

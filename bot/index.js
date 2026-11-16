@@ -20,6 +20,9 @@ const { refreshPublishedNbaTrends } = require('./trends/nba-refresh');
 const { scanCrossSportPopular } = require('./trends/cross-popular-auto');
 const { runCollegeCommand } = require('./trends/college-commands');
 const { researchNba, formatNbaResearch } = require('./trends/nba-search');
+const propFlow = require('./trends/prop-flow');
+const sportsControl = require('./trends/sports-control');
+const { nbaResult, nflResult, formatMemberResult } = require('./trends/member-result');
 const { researchNbaBoard, formatNbaBoard } = require('./trends/nba-board');
 const { researchMultiSportBoard, formatMultiSportBoard } = require('./trends/multi-sport-board');
 const { playerProfile, teamProfile, formatPlayerProfile, formatTeamProfile } = require('./trends/nba-profiles');
@@ -1582,18 +1585,30 @@ function startTrendsSchedule() {
   // The inventory uses only the quota-free events endpoint. It is a durable
   // research receipt; it never sends a member-facing trend or charges credits.
   if (process.env.ODDS_API_KEY) {
-    const runInventory = () => scanDailyTrends({ root: reviewQueueRoot,
-      apiKey: process.env.ODDS_API_KEY }).then(report => {
+    const runInventory = async () => {
+      const state = await sportsControl.read(reviewQueueRoot);
+      const sports = sportsControl.enabledSports(state).map(id => id.toUpperCase())
+        .filter(id => ['NBA', 'NFL', 'MLB', 'NHL'].includes(id));
+      if (!sports.length) return;
+      return scanDailyTrends({ root: reviewQueueRoot,
+        apiKey: process.env.ODDS_API_KEY, sports }).then(report => {
       if (!report.existing) console.log('Trends daily inventory:', JSON.stringify({
         date: report.serviceDate, events: Object.fromEntries(Object.entries(report.leagues)
           .map(([sport, league]) => [sport, league.events.length])),
         eligibleCombos: report.popularity.eligibleCombos, publication: report.publication
       }));
-    }).catch(error => console.error('Trends daily inventory failed:', error.message));
-    void runInventory();
-    const inventoryTimer = setInterval(() => void runInventory(), 10 * 60 * 1000);
+      });
+    };
+    const inventory = () => void runInventory().catch(error =>
+      console.error('Trends daily inventory failed:', error.message));
+    inventory();
+    const inventoryTimer = setInterval(inventory, 10 * 60 * 1000);
     inventoryTimer.unref();
   } else console.warn('Trends daily inventory held: ODDS_API_KEY is missing.');
+  // Kobe switched Trends-tool to member-requested delivery only. Keep the
+  // quota-free inventory refresh above, but never start channel publishers.
+  console.log('Trends-tool channel auto-posts disabled; inventory refresh remains active.');
+  return;
   // Separate opt-in from the retired ESPN publisher. A paid data key, exact
   // private destination and current source checks are all required.
   if (process.env.TRENDS_NBA_AUTO_ENABLED === 'true') {
@@ -3425,17 +3440,99 @@ async function holdGenericExclusiveApprovalCards() {
 
 function trendsDashboardPayload() {
   const nba = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('trends-ui:search').setLabel('Search NBA player').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('trends-ui:board').setLabel('Browse NBA board').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('trends-ui:recent').setLabel('Recent NBA trends').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('trends-ui:builder-view').setLabel('Build NBA combo').setStyle(ButtonStyle.Secondary));
-  const otherSports = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('trends-ui:search-other').setLabel('Search NFL/NHL/MLB').setStyle(ButtonStyle.Primary),
-    ...['NFL', 'NHL', 'MLB'].map(sport => new ButtonBuilder()
-      .setCustomId(`trends-ui:board-${sport}`).setLabel(`Browse ${sport} board`)
-      .setStyle(ButtonStyle.Secondary)));
-  return { components: [nba, otherSports], allowedMentions: { parse: [] },
-    content: '**Trends-tool · current prop research**\nSearch a player or browse quoted lines and completed-game history across four leagues. Quotes and status can change before game time. Historical hit rates are not next-game probabilities; research does not confirm participation.' };
+    new ButtonBuilder().setCustomId('trends-ui:search').setLabel('Search a prop privately').setStyle(ButtonStyle.Primary));
+  return { components: [nba], allowedMentions: { parse: [] },
+    content: '**Trends-tool · private member research**\nChoose a league, team, player, stat and current quoted line. Results are sent to your DMs. Historical hit rates are not next-game probabilities.' };
+}
+
+let sportsKeysCache = { at: 0, keys: {} };
+async function sportsKeyOptions() {
+  if (Date.now() - sportsKeysCache.at < 60_000) return { env: process.env, remoteKeys: sportsKeysCache.keys };
+  const base = (process.env.FREE_PICK_SITE_PUBLISH_URL ||
+    'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
+  const lookups = [
+    ['CFBD_API_KEY', '/api/trends/college/status', process.env.FREE_PICK_SITE_PUBLISH_SECRET],
+    ...['nhl', 'mlb', 'epl', 'mls', 'ucl'].map(sport =>
+      [`BDL_${sport.toUpperCase()}_API_KEY`, `/api/trends/bdl/${sport}/status`, trendsInboxQueueSecret])
+  ];
+  const keys = {};
+  await Promise.all(lookups.map(async ([key, route, secret]) => {
+    if (!secret) return;
+    try {
+      const response = await fetch(`${base}${route}`, { headers: { Authorization: `Bearer ${secret}` },
+        signal: AbortSignal.timeout(5000) });
+      if (response.ok) keys[key] = (await response.json()).keyConfigured === true;
+    } catch (error) { console.warn(`Trends provider status unavailable: ${route}`, error.message); }
+  }));
+  sportsKeysCache = { at: Date.now(), keys };
+  return { env: process.env, remoteKeys: keys };
+}
+
+async function startPrivatePropFlow(interaction) {
+  const state = await sportsControl.read(reviewQueueRoot);
+  const leagues = sportsControl.enabledSports(state, { env: process.env })
+    .filter(sport => ['nba', 'nfl'].includes(sport)).map(sport => sport.toUpperCase());
+  if (!leagues.length) {
+    await interaction.reply({ flags: 64, content: 'No current prop search sport is enabled.' });
+    return;
+  }
+  const session = propFlow.start(interaction.user.id, interaction.channelId, Date.now(), leagues);
+  await interaction.reply({ flags: 64, ...propFlow.render(session) });
+}
+
+async function sendTrendDm(interaction, content) {
+  try {
+    await interaction.user.send({ content, allowedMentions: { parse: [] } });
+    await interaction.editReply({ content: 'Sent to your DMs', components: [] });
+    return true;
+  } catch (error) {
+    console.warn('Trends DM delivery unavailable:', error.code || error.message);
+    await interaction.editReply({ content: 'Your DMs are closed, open them to get results', components: [] });
+    return false;
+  }
+}
+
+function boardBlocks(board, sport) {
+  if (!board.rows?.length) return 'No qualifying current props are available right now.';
+  const blocks = board.rows.map(row => {
+    const abbr = sport === 'NBA' ? row.teamAbbr : row.roster?.team;
+    const full = sport === 'NBA' ? row.team : require('./trends/nfl-auto').TEAM_NAMES[abbr];
+    if (!abbr || !full) return null;
+    return formatMemberResult({ player: row.player, teamAbbr: abbr,
+      teamName: full.split(' ').at(-1), stat: row.stat.replaceAll('_', ' '),
+      line: row.line, odds: row.odds, oddsSource: 'The Odds API',
+      analysis: row.analysis || row });
+  }).filter(Boolean);
+  if (!blocks.length) return 'No verified team and current quote combination is available right now.';
+  let content = '';
+  for (const block of blocks) {
+    const next = content ? `${content}\n\n${block}` : block;
+    if (next.length > 1900) break;
+    content = next;
+  }
+  return content || 'The current results exceed the DM size limit.';
+}
+
+async function deliverPropFlowResult(interaction, state, line) {
+  if (!Number.isFinite(line) || line < 0 || !state.lines?.some(row => row.value === String(line)))
+    throw new Error('Custom line is not currently quoted for this player. Choose a listed line.');
+  let content;
+  if (state.league === 'NBA') {
+    const result = await researchNba({ root: reviewQueueRoot, oddsKey: process.env.ODDS_API_KEY,
+      bdlKey: process.env.BDL_NBA_API_KEY, team: state.team.name, player: state.player.label,
+      stat: state.stat, side: 'over', line });
+    content = nbaResult(result);
+  } else {
+    const market = await researchCurrentMarket({ root: reviewQueueRoot,
+      apiKey: process.env.ODDS_API_KEY, sport: 'NFL', team: state.team.name,
+      player: state.player.label, stat: state.stat, side: 'over', line });
+    const season = require('./trends/nfl-auto').seasonFor(new Date());
+    const history = await researchNflTrend({ player: state.player.label, stat: state.stat,
+      side: 'over', line: market.line, season });
+    content = nflResult({ history, market });
+  }
+  await sendTrendDm(interaction, content);
+  propFlow.sessions.delete(state.id);
 }
 
 async function replyToLiveTrendSearch(interaction, query) {
@@ -3443,8 +3540,6 @@ async function replyToLiveTrendSearch(interaction, query) {
     let content;
     let selectedLine;
     if (query.sport === 'NFL') {
-      if (!['receptions', 'receiving_yards', 'rushing_yards'].includes(query.stat))
-        throw new Error('That statistic is not supported for NFL current props');
       const market = await researchCurrentMarket(query);
       selectedLine = market.line;
       const today = new Date();
@@ -3452,28 +3547,12 @@ async function replyToLiveTrendSearch(interaction, query) {
       const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'numeric' }).format(today));
       const history = await researchNflTrend({ player: query.player, stat: query.stat,
         side: 'over', line: market.line, season: month >= 7 ? year : year - 1 });
-      const counts = row => `${row.hits}/${row.sample}`;
-      const offers = market.offers.slice(0, 4).map(row =>
-        `${row.sportsbook}: ${row.odds > 0 ? '+' : ''}${row.odds} (updated ${row.updatedAt})`).join('\n');
-      const otherLines = market.otherLines.slice(0, 4).map(row =>
-        `${row.line} ${row.odds > 0 ? '+' : ''}${row.odds} at ${row.sportsbook}`).join(' · ');
-      content = `**Trends-tool · NFL current prop research**\n` +
-        `${market.event.away_team} at ${market.event.home_team} · ${market.event.commence_time}\n` +
-        `**${history.player}: over ${market.line} ${query.stat.replaceAll('_', ' ')}**\n${offers}\n` +
-        `Season ${counts(history.analysis.season)} · L5 ${counts(history.analysis.l5)} · ` +
-        `L10 ${counts(history.analysis.l10)} · L20 ${counts(history.analysis.l20)} historical hits.\n` +
-        (otherLines ? `Other quoted lines: ${otherLines}\n` : '') +
-        `${formatNflContext(history.context)}\n` +
-        `[Completed-game source](${history.sourceUrl}); odds checked ${market.fetchedAt}. ` +
-        `Game-day participation is not confirmed. Research only; no pick is recommended. ` +
-        `Historical counts are not next-game probabilities. 21+.`;
+      content = nflResult({ history, market });
     } else {
-      const result = await researchFreeMarket(query);
-      selectedLine = result.line;
-      content = formatFreeMarket(result);
+      throw new Error('This sport is off in member search');
     }
     if (content.length > 1900) throw new Error('Research view exceeds Discord message limit');
-    await interaction.editReply({ content, allowedMentions: { parse: [] } });
+    await sendTrendDm(interaction, content);
     try {
       await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
         query: { sport: query.sport, player: query.player, stat: query.stat,
@@ -3728,34 +3807,187 @@ client.on(Events.InteractionCreate, async (interaction) => {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('trends-ui:builder-clear').setLabel('Clear builder')
       .setStyle(ButtonStyle.Danger))];
+  if (interaction.isChatInputCommand() && interaction.commandName === 'sports') {
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID) {
+      await interaction.reply({ flags: 64, content: 'Use this in the KBH server.' }); return;
+    }
+    const state = await sportsControl.read(reviewQueueRoot);
+    const roleIds = Array.isArray(interaction.member?.roles) ? interaction.member.roles :
+      [...(interaction.member?.roles?.cache?.keys?.() || [])];
+    if (!sportsControl.authorized({ userId: interaction.user.id,
+      guildOwnerId: interaction.guild.ownerId, roleIds, adminRoleId: state.adminRoleId })) {
+      await interaction.reply({ flags: 64, content: 'Only the server owner or chosen admin role can manage sports.' }); return;
+    }
+    await interaction.deferReply({ flags: 64 });
+    const { flags, ...payload } = sportsControl.render(state, await sportsKeyOptions());
+    await interaction.editReply(payload);
+    return;
+  }
+  if ((interaction.isButton() || interaction.isRoleSelectMenu()) &&
+      interaction.customId.startsWith('sports:')) {
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID) {
+      await interaction.reply({ flags: 64, content: 'KBH server only.' }); return;
+    }
+    await interaction.deferUpdate();
+    try {
+      let state;
+      if (interaction.customId === 'sports:admin-role') {
+        ({ state } = await sportsControl.chooseAdminRole({ root: reviewQueueRoot,
+          roleId: interaction.values?.[0], actorId: interaction.user.id,
+          guildOwnerId: interaction.guild.ownerId }));
+      } else {
+        const [, sport, direction] = interaction.customId.split(':');
+        const roleIds = Array.isArray(interaction.member?.roles) ? interaction.member.roles :
+          [...(interaction.member?.roles?.cache?.keys?.() || [])];
+        ({ state } = await sportsControl.changeSport({ root: reviewQueueRoot,
+          sport, on: direction === 'on', actorId: interaction.user.id,
+          guildOwnerId: interaction.guild.ownerId, roleIds,
+          keyOptions: await sportsKeyOptions() }));
+      }
+      const { flags, ...payload } = sportsControl.render(state, await sportsKeyOptions());
+      await interaction.editReply(payload);
+    } catch (error) {
+      await interaction.followUp({ flags: 64, content: error.message });
+    }
+    return;
+  }
+  // Legacy command and pinned-button paths obey the same runtime switches as
+  // the new dropdown. An off sport cannot make provider calls through an old UI.
+  let requestedTrendSport = null;
+  if (interaction.isChatInputCommand()) {
+    const name = interaction.commandName;
+    if (['trends-nba', 'trends-board', 'trends-player', 'trends-team',
+      'trends-builder', 'trends-combo'].includes(name)) requestedTrendSport = 'nba';
+    else if (name === 'trends-nfl') requestedTrendSport = 'nfl';
+    else if (['trends-live', 'trends-board-other', 'trends-research', 'trends-market',
+      'player', 'matchup', 'ladder'].includes(name))
+      requestedTrendSport = interaction.options.getString('sport')?.toLowerCase();
+  } else if (interaction.isButton()) {
+    if (/^trends-ui:board-(NFL|NHL|MLB)$/.test(interaction.customId))
+      requestedTrendSport = interaction.customId.split('-').at(-1).toLowerCase();
+    else if (/^trends-ui:(board|recent|builder-)/.test(interaction.customId)) requestedTrendSport = 'nba';
+  } else if (interaction.isModalSubmit()) {
+    if (interaction.customId === 'trends-ui-search-other')
+      requestedTrendSport = interaction.fields.getTextInputValue('sport').trim().toLowerCase();
+    else if (interaction.customId.startsWith('trends-ui-board-other:'))
+      requestedTrendSport = interaction.customId.split(':')[1].toLowerCase();
+    else if (/^trends-ui-(search|board|builder-)/.test(interaction.customId)) requestedTrendSport = 'nba';
+  }
+  if (requestedTrendSport && !sportsControl.isEnabled(requestedTrendSport,
+    await sportsControl.read(reviewQueueRoot), { env: process.env })) {
+    await interaction.reply({ flags: 64, content: 'That sport is off or its data provider is not ready.' });
+    return;
+  }
+  if ((interaction.isButton() || interaction.isStringSelectMenu()) &&
+      interaction.customId.startsWith('propflow:')) {
+    if (!trendsMember()) {
+      await interaction.reply({ flags: 64, content: 'Use Trends-tool as a VIP member in its private search channel.' });
+      return;
+    }
+    const [, id, action, arg] = interaction.customId.split(':');
+    let state;
+    try { state = propFlow.get(id, interaction.user.id); }
+    catch (error) { await interaction.reply({ flags: 64, content: error.message }); return; }
+    if (state.channelId !== interaction.channelId) {
+      await interaction.reply({ flags: 64, content: 'This search belongs in its original channel.' }); return;
+    }
+    if (state.league && !sportsControl.isEnabled(state.league.toLowerCase(),
+      await sportsControl.read(reviewQueueRoot), { env: process.env })) {
+      await interaction.reply({ flags: 64, content: 'This sport was turned off. Run /prop to start a new search.' });
+      return;
+    }
+    if (action === 'find' || (action === 'line' && interaction.values?.[0] === 'custom')) {
+      const custom = action === 'line';
+      await interaction.showModal(new ModalBuilder().setCustomId(`propflow:${id}:${custom ? 'custom' : 'find-modal'}`)
+        .setTitle(custom ? 'Enter quoted line' : 'Find active player')
+        .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder()
+          .setCustomId('value').setLabel(custom ? 'Exact quoted line' : 'Player name')
+          .setStyle(TextInputStyle.Short).setRequired(true))));
+      return;
+    }
+    if (action === 'page') {
+      state.page = Number(arg);
+      await interaction.update({ ...propFlow.render(state), allowedMentions: { parse: [] } });
+      return;
+    }
+    if (action !== state.stage) {
+      await interaction.reply({ flags: 64, content: 'This step is no longer active. Use the latest dropdown.' });
+      return;
+    }
+    const selected = interaction.values?.[0];
+    try {
+      if (action === 'line') {
+        await interaction.update({ content: 'Checking the current quote and completed games…', components: [] });
+        await deliverPropFlowResult(interaction, state, Number(selected));
+        return;
+      }
+      await interaction.update({ content: 'Loading the next step…', components: [] });
+      if (action === 'league') {
+        state.league = selected;
+        await propFlow.loadTeams(state, { oddsKey: process.env.ODDS_API_KEY,
+          bdlKey: process.env.BDL_NBA_API_KEY });
+        state.stage = 'team';
+      } else if (action === 'team') {
+        state.team = state.teams.find(row => row.value === selected);
+        if (!state.team) throw new Error('Selected team is no longer available.');
+        await propFlow.loadPlayers(state, { bdlKey: process.env.BDL_NBA_API_KEY });
+        state.stage = 'player';
+      } else if (action === 'player') {
+        state.player = state.players.find(row => row.value === selected);
+        if (!state.player) throw new Error('Selected player is no longer active.');
+        state.stage = 'stat';
+      } else if (action === 'stat') {
+        if (!propFlow.STATS[state.league]?.some(([value]) => value === selected))
+          throw new Error('This stat is unavailable for that league.');
+        state.stat = selected;
+        await propFlow.loadLines(state, { root: reviewQueueRoot, oddsKey: process.env.ODDS_API_KEY });
+        state.stage = 'line';
+      }
+      state.page = 0;
+      await interaction.editReply({ ...propFlow.render(state), allowedMentions: { parse: [] } });
+    } catch (error) {
+      console.warn('Private prop flow held:', error.message);
+      await interaction.editReply({ content: `Search unavailable: ${error.message}`, components: [] });
+    }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('propflow:')) {
+    if (!trendsMember()) { await interaction.reply({ flags: 64, content: 'VIP Trends-tool only.' }); return; }
+    const [, id, action] = interaction.customId.split(':');
+    let state;
+    try { state = propFlow.get(id, interaction.user.id); }
+    catch (error) { await interaction.reply({ flags: 64, content: error.message }); return; }
+    if (state.league && !sportsControl.isEnabled(state.league.toLowerCase(),
+      await sportsControl.read(reviewQueueRoot), { env: process.env })) {
+      await interaction.reply({ flags: 64, content: 'This sport was turned off.' }); return;
+    }
+    await interaction.deferReply({ flags: 64 });
+    try {
+      const value = interaction.fields.getTextInputValue('value').trim();
+      if (action === 'find-modal' && state.stage === 'player') {
+        const matches = state.players.filter(row => row.label.toLowerCase().includes(value.toLowerCase()));
+        if (!matches.length) throw new Error('No active roster player matches that name.');
+        state.players = matches; state.page = 0;
+        await interaction.editReply({ ...propFlow.render(state), allowedMentions: { parse: [] } });
+      } else if (action === 'custom' && state.stage === 'line') {
+        await deliverPropFlowResult(interaction, state, Number(value));
+      } else throw new Error('This search step expired. Run /prop again.');
+    } catch (error) {
+      await interaction.editReply({ content: `Search unavailable: ${error.message}`, components: [] });
+    }
+    return;
+  }
   if (interaction.isButton() && interaction.customId.startsWith('trends-ui:')) {
     if (!trendsMember()) {
       await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
       return;
     }
     if (interaction.customId === 'trends-ui:search') {
-      const field = (id, label, hint, required = true) => new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId(id).setLabel(label).setPlaceholder(hint)
-          .setStyle(TextInputStyle.Short).setRequired(required));
-      const modal = new ModalBuilder().setCustomId('trends-ui-search').setTitle('Search NBA alternate lines')
-        .addComponents(field('team', 'Team in upcoming game', 'Pacers'),
-          field('player', 'Player name', 'Pascal Siakam'),
-          field('stat', 'Stat', 'points, rebounds, or assists'),
-          field('line', 'Exact line (optional)', 'Leave blank to browse available lines', false));
-      await interaction.showModal(modal);
+      await startPrivatePropFlow(interaction);
       return;
     }
     if (interaction.customId === 'trends-ui:search-other') {
-      const field = (id, label, hint, required = true) => new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId(id).setLabel(label).setPlaceholder(hint)
-          .setStyle(TextInputStyle.Short).setRequired(required));
-      await interaction.showModal(new ModalBuilder().setCustomId('trends-ui-search-other')
-        .setTitle('Search current NFL/NHL/MLB props').addComponents(
-          field('sport', 'League', 'NFL, NHL, or MLB'),
-          field('team', 'Team in upcoming game', 'Buffalo Bills'),
-          field('player', 'Full player name', 'Josh Allen'),
-          field('stat', 'Stat', 'NFL: receptions, receiving_yards, rushing_yards'),
-          field('line', 'Exact line (optional)', 'Leave blank to browse quoted lines', false)));
+      await startPrivatePropFlow(interaction);
       return;
     }
     if (interaction.customId === 'trends-ui:board') {
@@ -3889,7 +4121,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
         team: interaction.fields.getTextInputValue('team').trim(), stat,
         minHitRate: Number(rawMinimum) / 100 });
-      await interaction.editReply({ content: formatNbaBoard(board), allowedMentions: { parse: [] } });
+      await sendTrendDm(interaction, boardBlocks(board, 'NBA'));
     } catch (error) {
       console.warn('NBA Trends-tool board held:', error.message);
       await interaction.editReply(`NBA board could not complete: ${error.message}. No pick was posted.`);
@@ -3938,7 +4170,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         oddsKey: process.env.ODDS_API_KEY, sport,
         team: interaction.fields.getTextInputValue('team').trim(),
         minHitRate: Number(rawMinimum) / 100 });
-      await interaction.editReply({ content: formatMultiSportBoard(board), allowedMentions: { parse: [] } });
+      await sendTrendDm(interaction, boardBlocks(board, sport));
     } catch (error) {
       console.warn('Multi-sport Trends-tool modal board held:', error.message);
       await interaction.editReply(`Current matchup board could not complete: ${error.message}. No pick was posted.`);
@@ -3966,9 +4198,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         team: interaction.fields.getTextInputValue('team').trim(),
         player: interaction.fields.getTextInputValue('player').trim(),
         stat, side: 'over', line });
-      const content = formatNbaResearch(result);
+      const content = nbaResult(result);
       if (content.length > 1900) throw new Error('The research card is too long; choose an exact line');
-      await interaction.editReply({ content, allowedMentions: { parse: [] } });
+      await sendTrendDm(interaction, content);
       try { await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
         query: { sport: 'NBA', player: result.player, stat, side: 'over', line: result.line } }); }
       catch (error) { console.warn('NBA Trends-tool search ledger unavailable:', error.message); }
@@ -4401,7 +4633,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
-  if (['prop', 'player', 'matchup', 'ladder'].includes(interaction.commandName)) {
+  if (interaction.commandName === 'prop') {
+    if (!trendsMember()) {
+      await interaction.reply({ flags: 64, content: 'Use this as a VIP member in the private Trends-tool search channel.' });
+      return;
+    }
+    await startPrivatePropFlow(interaction);
+    return;
+  }
+  if (['player', 'matchup', 'ladder'].includes(interaction.commandName)) {
     if (!trendsMember()) {
       await interaction.reply({ ephemeral: true,
         content: 'Use this as a VIP member in the private Trends-tool search channel.' });
@@ -4423,7 +4663,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           'https://bettinghub-publisher.kobedirwin.workers.dev',
         secret: process.env.FREE_PICK_SITE_PUBLISH_SECRET });
       if (content.length > 1900) throw new Error('College response exceeds Discord message limit');
-      await interaction.editReply({ content, allowedMentions: { parse: [] } });
+      await sendTrendDm(interaction, content);
     } catch (error) {
       console.warn('College Trends request held:', error.message);
       await interaction.editReply('College data coming soon');
@@ -4471,7 +4711,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         apiKey: process.env.BDL_NBA_API_KEY });
       const content = player ? formatPlayerProfile(result) : formatTeamProfile(result);
       if (content.length > 1900) throw new Error('Profile exceeds Discord message limit');
-      await interaction.editReply({ content, allowedMentions: { parse: [] } });
+      await sendTrendDm(interaction, content);
     } catch (error) {
       console.warn('NBA Trends-tool profile held:', error.message);
       await interaction.editReply(`NBA profile could not complete: ${error.message}. No pick was posted.`);
@@ -4491,7 +4731,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         team: interaction.options.getString('team', true),
         stat: interaction.options.getString('stat') || 'all',
         minHitRate: (interaction.options.getInteger('minimum') || 80) / 100 });
-      await interaction.editReply({ content: formatNbaBoard(board), allowedMentions: { parse: [] } });
+      await sendTrendDm(interaction, boardBlocks(board, 'NBA'));
     } catch (error) {
       console.warn('NBA Trends-tool board held:', error.message);
       await interaction.editReply(`NBA board could not complete: ${error.message}. No pick was posted.`);
@@ -4511,8 +4751,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         sport: interaction.options.getString('sport', true),
         team: interaction.options.getString('team', true),
         minHitRate: (interaction.options.getInteger('minimum') || 80) / 100 });
-      await interaction.editReply({ content: formatMultiSportBoard(board),
-        allowedMentions: { parse: [] } });
+      await sendTrendDm(interaction, boardBlocks(board, interaction.options.getString('sport', true)));
     } catch (error) {
       console.warn('Multi-sport Trends-tool board held:', error.message);
       await interaction.editReply(`Current matchup board could not complete: ${error.message}. No pick was posted.`);
@@ -4539,7 +4778,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       };
       const result = await researchNba({ root: reviewQueueRoot,
         oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY, ...query });
-      await interaction.editReply({ content: formatNbaResearch(result), allowedMentions: { parse: [] } });
+      await sendTrendDm(interaction, nbaResult(result));
       try {
         await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
           query: { sport: 'NBA', player: result.player, stat: result.stat,
@@ -4590,7 +4829,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .filter(value => value !== null),
         season: month >= 7 ? year : year - 1
       });
-      await interaction.editReply({ content: formatNflTrend(result), allowedMentions: { parse: [] } });
+      const teamAbbr = result.context?.roster?.team || result.lastRecordedTeam;
+      const teamName = require('./trends/nfl-auto').TEAM_NAMES[teamAbbr]?.split(' ').at(-1);
+      if (!teamName) throw new Error('Verified team unavailable');
+      await sendTrendDm(interaction, formatMemberResult({ player: result.player,
+        teamAbbr, teamName, stat: result.stat.replaceAll('_', ' '), line: result.line,
+        analysis: result.analysis }));
       try {
         await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
           query: { sport: 'NFL', player: result.player, stat: result.stat, side: result.side, line: result.line } });
@@ -4603,48 +4847,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.commandName === 'trends-research') {
-    if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||
-        interaction.channelId !== '1571285899717771365' ||
-        (!isAdministrator(interaction) &&
-         ![...vipRoleIds()].some(id => interaction.member?.roles?.cache?.has(id) || interaction.member?.roles?.includes?.(id)))) {
-      await interaction.reply({ ephemeral: true, content: 'Use this command as a VIP member in the private Trends-tool search channel.' });
+    if (!trendsMember()) {
+      await interaction.reply({ flags: 64, content: 'VIP Trends-tool only.' });
       return;
     }
-    await interaction.deferReply({ ephemeral: true });
-    try {
-      const result = await researchFreeLeagueTrend({
-        sport: interaction.options.getString('sport', true),
-        name: interaction.options.getString('player', true),
-        team: interaction.options.getString('team'),
-        stat: interaction.options.getString('stat', true),
-        side: interaction.options.getString('side', true),
-        line: interaction.options.getNumber('line', true)
-      });
-      const count = window => `${window.hits}/${window.sample} hits${window.pushes ? `, ${window.pushes} pushes` : ''}`;
-      const isAdmin = isAdministrator(interaction);
-      await interaction.editReply({
-        content: `**Trends-tool · ${result.sport} historical research**\n` +
-          `${result.name}: ${result.side.replace('_', ' ')} ${result.line} ${result.stat.replaceAll('_', ' ')}\n` +
-          `Season: ${count(result.analysis.season)} · L5: ${count(result.analysis.l5)} · L10: ${count(result.analysis.l10)} · L20: ${count(result.analysis.l20)}\n` +
-          `Recent completed games: ${result.analysis.l20.games.slice(0, 5).map(game => `${game.date} ${game.value}`).join(' · ')}. ` +
-          `Recent windows may include the prior season when fewer than 20 current-season games are available. ` +
-          (result.previousSeasonUnavailable ? `Prior-season file was unavailable, so the recent sample is shorter. ` : '') +
-          `Checked ${result.checkedAt}. [Data release](${result.sourceUrl}) (SportsDataverse CC BY 4.0).\n` +
-          `Historical research only. This threshold is user-entered, not a verified sportsbook offer. Counts are not next-game probabilities. Current line, odds, roster and injuries have not been verified. No pick is being recommended. 21+.`,
-        // Keep the per-game export with administrators. The member view is a
-        // derived research summary, not a downloadable source-data feed.
-        files: isAdmin ? [{ attachment: Buffer.from(freeLeagueTrendCsv(result)),
-          name: `trends-${result.sport.toLowerCase()}-last20.csv` }] : [],
-        allowedMentions: { parse: [] }
-      });
-      try {
-        await recordTrendSearch({ root: reviewQueueRoot, userId: interaction.user.id,
-          query: { sport: result.sport, player: result.name, stat: result.stat, side: result.side, line: result.line } });
-      } catch (error) { console.warn('Trends-tool search evidence unavailable:', error); }
-    } catch (error) {
-      console.warn('Trends-tool free-league research unavailable:', error);
-      await interaction.editReply('That research is unavailable. Check the exact source player name, league and stat, or try after the data release updates.');
-    }
+    await interaction.reply({ flags: 64,
+      content: 'Use /prop for current, roster-checked research sent to your DMs.' });
     return;
   }
 
@@ -4680,12 +4888,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         (result.otherLines.length ? ` Other fresh lines for this player/side (not the requested line): ` +
           result.otherLines.map(row => `${row.line} ${row.odds > 0 ? '+' : ''}${row.odds} at ${row.sportsbook}`).join('; ') + '.' :
           ' No fresh offers for this player and side were returned in that market.');
-      await interaction.editReply({ content:
+      await sendTrendDm(interaction,
         `**Trends-tool · private market research**\n${result.event.away_team} at ${result.event.home_team} · ${result.event.commence_time}\n` +
         `${query.player}: ${query.side} ${query.line} ${query.stat.replaceAll('_', ' ')}\n${offers}\n${history}\n` +
         `Checked ${result.fetchedAt}. Odds source: The Odds API. Historical counts are descriptive, not a probability. ` +
-        `Game-day player availability is unverified. Research only; no pick or member post was made. 21+.`,
-        allowedMentions: { parse: [] } });
+        `Game-day player availability is unverified. Research only; no pick or member post was made. 21+.`);
     } catch (error) {
       console.warn('Trends-tool current-market research unavailable:', error.message);
       await interaction.editReply(`Current-market research could not complete: ${error.message}. No pick or member post was made.`);

@@ -61,7 +61,8 @@ async function researchNbaBoard({ root, oddsKey, bdlKey, team, stat = 'all',
       const score = 0.55 * a.season.hitRate + 0.1 * a.l5.hitRate +
         0.15 * a.l10.hitRate + 0.2 * a.l20.hitRate;
       rows.push({ player: `${player.first_name} ${player.last_name}`,
-        team: player.team.full_name, stat: MARKET_STATS[offer.market], line: offer.line,
+        team: player.team.full_name, teamAbbr: player.team.abbreviation,
+        stat: MARKET_STATS[offer.market], line: offer.line,
         odds: offer.odds, sportsbook: offer.sportsbook, updatedAt: offer.updatedAt,
         season: { hits: a.season.hits, sample: a.season.sample },
         l5: { hits: a.l5.hits, sample: a.l5.sample },
