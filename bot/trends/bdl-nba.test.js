@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { exactActivePlayer, exactEvent, finalizedLogs, history, availability } = require('./bdl-nba');
+const { request, pages } = require('./bdl-nba');
 
 const now = new Date('2026-11-15T19:00:00Z');
 const game = { id: 123, datetime: '2026-11-15T20:00:00Z', status_state: 'scheduled',
@@ -22,6 +23,16 @@ test('accent-folded Jokić/Jokic lookup still requires exact active player and t
   await assert.rejects(exactActivePlayer({ name: 'Nikola Jovic', game: { ...game,
     home_team: { id: 99 }, visitor_team: { id: 18 } }, apiKey: 'fixture', fetchImpl }),
     /not verified/);
+});
+
+test('short NBA collection without meta is accepted without truncating a full page', async () => {
+  const short = async () => ({ ok: true, json: async () => ({ data: [{ id: 1 }] }) });
+  assert.deepEqual(await pages('/v1/players/active?per_page=100',
+    { apiKey: 'fixture', fetchImpl: short }), [{ id: 1 }]);
+  const full = async () => ({ ok: true, json: async () => ({ data: Array.from({ length: 2 },
+    (_, id) => ({ id })) }) });
+  await assert.rejects(request('/v1/stats?per_page=2',
+    { apiKey: 'fixture', fetchImpl: full }), /pagination metadata missing/);
 });
 
 test('game lookup requires both exact teams and a matching scheduled tipoff', async () => {
