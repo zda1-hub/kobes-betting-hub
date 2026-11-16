@@ -91,10 +91,16 @@ async function runNflTestProof({ root, apiKey, channelId, channelFor,
       force: true, cache: false }); }
     catch (error) { deleted = error.code === 10008 || error.status === 404; }
     if (!deleted) return { ...existing, existing: true };
-    const outcome = { ...existing, status: 'verified_deleted',
+    const { reason: _staleReason, ...clean } = existing;
+    const outcome = { ...clean, status: 'verified_deleted',
       deletedAt: new Date().toISOString(), reconciled: true };
     await fs.writeFile(file, JSON.stringify(outcome, null, 2), { mode: 0o600 });
     return outcome;
+  }
+  if (existing?.status === 'verified_deleted' && existing.reason) {
+    const { reason: _staleReason, ...clean } = existing;
+    await fs.writeFile(file, JSON.stringify(clean, null, 2), { mode: 0o600 });
+    return { ...clean, existing: true };
   }
   if (existing) return { ...existing, existing: true };
   const candidate = await collect({ root, apiKey, now });
