@@ -20,7 +20,8 @@ async function researchNba({ root, oddsKey, bdlKey, team, player, stat, side, li
   now = new Date(), fetchImpl = fetch, readMarket = currentMarket,
   readEvent = bdl.exactEvent, readPlayer = bdl.exactActivePlayer,
   readHistory = bdl.history, readAvailability = bdl.availability } = {}) {
-  if (!root || !oddsKey || !bdlKey || !['points', 'rebounds', 'assists'].includes(stat) ||
+  if (!root || !oddsKey || !bdlKey || !['points', 'rebounds', 'assists', 'threes', 'pra',
+    'points_rebounds', 'points_assists', 'rebounds_assists'].includes(stat) ||
       !['over', 'under'].includes(side) ||
       (line !== null && line !== undefined && (!Number.isFinite(line) || line < 0)))
     throw new Error('NBA search needs a supported stat, side, threshold and both data feeds');
@@ -44,7 +45,8 @@ async function researchNba({ root, oddsKey, bdlKey, team, player, stat, side, li
     l10: atLine(history.analysis.l10, row.line, side),
     l20: atLine(history.analysis.l20, row.line, side) }));
   return { player: `${activePlayer.first_name} ${activePlayer.last_name}`,
-    team: activePlayer.team.full_name, opponent: activePlayer.team.id === game.home_team.id ?
+    team: activePlayer.team.full_name, teamAbbr: activePlayer.team.abbreviation,
+    opponent: activePlayer.team.id === game.home_team.id ?
       game.visitor_team.full_name : game.home_team.full_name,
     startsAt: game.datetime, stat, side, line: market.line, offers, alternatives,
     eventId: market.event.id, market: market.market, leagueStartsAt: game.datetime,

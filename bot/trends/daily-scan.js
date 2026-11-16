@@ -29,8 +29,10 @@ function scanPath(root, serviceDate) {
 }
 
 async function scanDaily({ root, apiKey, now = new Date(), fetchImpl = fetch,
-  readEvents = events, readPopularCombos = popularCombos } = {}) {
+  readEvents = events, readPopularCombos = popularCombos, sports = SPORTS } = {}) {
   if (!apiKey) throw new Error('Odds API key required for Trends daily inventory');
+  if (!Array.isArray(sports) || sports.some(sport => !SPORTS.includes(sport)))
+    throw new Error('Invalid Trends inventory sports');
   const serviceDate = localParts(now, TIME_ZONE).date;
   const file = scanPath(root, serviceDate);
   if (inFlight.has(file)) return inFlight.get(file);
@@ -40,7 +42,7 @@ async function scanDaily({ root, apiKey, now = new Date(), fetchImpl = fetch,
     try { return { ...JSON.parse(await fs.readFile(file, 'utf8')), existing: true }; }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     const leagues = {};
-    for (const sport of SPORTS) {
+    for (const sport of sports) {
       try {
         const response = await readEvents(sport, { apiKey, fetchImpl });
         leagues[sport] = { events: eligibleEvents(response.data, serviceDate, now),

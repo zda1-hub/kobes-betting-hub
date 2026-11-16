@@ -77,15 +77,17 @@ async function exactActivePlayer({ name, game, apiKey, fetchImpl }) {
 }
 
 function finalizedLogs(rows, { playerId, season, today, stat }) {
-  const field = { points: 'pts', rebounds: 'reb', assists: 'ast' }[stat];
-  if (!field) throw new Error('Unsupported NBA stat');
+  const fields = { points: ['pts'], rebounds: ['reb'], assists: ['ast'], threes: ['fg3m'],
+    pra: ['pts', 'reb', 'ast'], points_rebounds: ['pts', 'reb'],
+    points_assists: ['pts', 'ast'], rebounds_assists: ['reb', 'ast'] }[stat];
+  if (!fields) throw new Error('Unsupported NBA stat');
   return rows.filter(row => row.player?.id === playerId &&
     row.game?.season === season && row.game?.status_state === 'final' &&
     row.game?.postseason === false && row.game?.date < today &&
-    Number.parseFloat(row.min) > 0 && Number.isFinite(row[field]))
+    Number.parseFloat(row.min) > 0 && fields.every(field => Number.isFinite(row[field])))
     .map(row => ({ gameId: String(row.game.id), date: row.game.date,
       season: String(season), status: 'final', participated: true,
-      stats: { [stat]: row[field] } }));
+      stats: { [stat]: fields.reduce((sum, field) => sum + row[field], 0) } }));
 }
 
 async function history({ playerId, stat, line, side = 'over', now = new Date(), apiKey, fetchImpl }) {
