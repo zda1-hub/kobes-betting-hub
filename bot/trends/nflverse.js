@@ -7,8 +7,20 @@ const SCHEDULE_URL = 'https://github.com/nflverse/nflverse-data/releases/downloa
 const STAT_COLUMNS = Object.freeze({
   receptions: 'receptions', receiving_yards: 'receiving_yards',
   rushing_yards: 'rushing_yards', rushing_attempts: 'carries',
-  passing_yards: 'passing_yards', passing_touchdowns: 'passing_tds'
+  passing_yards: 'passing_yards', passing_touchdowns: 'passing_tds',
+  rush_receiving_yards: ['rushing_yards', 'receiving_yards'],
+  anytime_touchdown: ['rushing_tds', 'receiving_tds', 'special_teams_tds']
 });
+
+function statValue(row, stat) {
+  const columns = STAT_COLUMNS[stat];
+  if (!columns) throw new Error('Unsupported nflverse statistic');
+  const names = Array.isArray(columns) ? columns : [columns];
+  if (names.some(name => !Object.hasOwn(row, name))) throw new Error('Unknown nflverse weekly stats schema');
+  const values = names.map(name => row[name] === '' ? null : Number(row[name]));
+  if (values.some(value => value === null || !Number.isFinite(value))) return null;
+  return values.reduce((sum, value) => sum + value, 0);
+}
 
 function parseCsv(csv) {
   const rows = []; let row = []; let value = ''; let quoted = false;
@@ -41,7 +53,7 @@ function weeklyLogs(csv, schedulesCsv, { season, playerId, stat }) {
       g.gameday && g.home_score !== '' && g.away_score !== '' &&
       Number.isFinite(Number(g.home_score)) && Number.isFinite(Number(g.away_score)))
     .map(g => [g.game_id, g]));
-  if (!rows.length || !Object.hasOwn(rows[0], 'game_id') || !Object.hasOwn(rows[0], STAT_COLUMNS[stat]))
+  if (!rows.length || !Object.hasOwn(rows[0], 'game_id'))
     throw new Error('Unknown nflverse weekly stats schema');
   return rows.filter(r => r.season === String(season) && r.player_id === playerId &&
       r.season_type === 'REG' && completedGames.has(r.game_id) && Number.isInteger(Number(r.week)))
@@ -50,7 +62,8 @@ function weeklyLogs(csv, schedulesCsv, { season, playerId, stat }) {
       status: 'final', participated: true,
       playerId: r.player_id, player: r.player_display_name,
       team: r.team, opponent: r.opponent_team,
-      stats: { [stat]: r[STAT_COLUMNS[stat]] === '' ? null : Number(r[STAT_COLUMNS[stat]]) },
+      location: completedGames.get(r.game_id).home_team === r.team ? 'home' : 'away',
+      stats: { [stat]: statValue(r, stat) },
       source: 'nflverse stats_player',
       sourceUrl: `${BASE}/stats_player_week_${season}.csv`
     }))
@@ -71,4 +84,4 @@ async function fetchWeeklyLogs({ season, playerId, stat, fetchImpl = fetch }) {
   return { logs: weeklyLogs(csv, schedulesCsv, { season, playerId, stat }), fetchedAt: new Date().toISOString(), url, scheduleUrl: SCHEDULE_URL };
 }
 
-module.exports = { STAT_COLUMNS, parseCsv, weeklyLogs, fetchWeeklyLogs };
+module.exports = { STAT_COLUMNS, statValue, parseCsv, weeklyLogs, fetchWeeklyLogs };

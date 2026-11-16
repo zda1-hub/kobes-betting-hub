@@ -1,5 +1,9 @@
 # Kobe's Betting Hub
 
+Trends-tool NFL historical research uses nflverse player statistics, schedules,
+rosters, and injuries. Data: nflverse (CC BY 4.0). Historical hit rates describe
+completed games; they do not guarantee a future result.
+
 Project workspace for the public website, paid membership, Discord access, pick operations, and publishing automations. Production checkout is live, while several audit, policy, and operational controls remain incomplete.
 
 The authoritative current-state document is [PROJECT_CONTROL.md](PROJECT_CONTROL.md). Read it before relying on older plans or checklists.
