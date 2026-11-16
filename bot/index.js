@@ -4047,7 +4047,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           content = formatNbaBuilder(result);
         }
         if (content.length > 1900) throw new Error('Research view exceeds Discord message limit');
-        await interaction.editReply({ content, components: builderControls(), allowedMentions: { parse: [] } });
+        if (interaction.customId === 'trends-ui:builder-review') await sendTrendDm(interaction, content);
+        else await interaction.editReply({ content, components: builderControls(), allowedMentions: { parse: [] } });
       } catch (error) {
         console.warn('NBA Trends-tool builder action held:', error.message);
         await interaction.editReply(`NBA builder could not complete: ${error.message}. No bet was placed.`);
@@ -4922,7 +4923,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const content = `${formatNbaCombo(researched)}\n` +
             `${result.distinctSearchers} distinct member(s) requested this exact combination today (Pacific).`;
           if (content.length > 1900) throw new Error('Combination report exceeds Discord message limit');
-          await interaction.editReply({ content, allowedMentions: { parse: [] } });
+          await sendTrendDm(interaction, content);
         } catch (error) {
           await interaction.editReply(`Your exact combination was ${result.recorded ? 'recorded' : 'already counted'}, ` +
             `but current NBA research could not complete: ${error.message}. No combination was posted.`);
