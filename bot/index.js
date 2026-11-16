@@ -24,6 +24,7 @@ const propFlow = require('./trends/prop-flow');
 const bulkPanel = require('./trends/bulk-panel');
 const { researchBulk } = require('./trends/bulk-data');
 const { updateTuesday: updateTeamRanks } = require('./trends/rank-publisher');
+const rankSnapshot = require('./trends/rank-snapshot');
 const { prepare: prepareDailyFeed, publish: publishDailyFeed } = require('./trends/daily-feed');
 const { hasVipAtSend, UPGRADE_COPY } = require('./trends/vip-access');
 const sportsControl = require('./trends/sports-control');
@@ -1782,6 +1783,22 @@ async function runPrivateTrendsV2TestOnStart() {
         throw new Error('TEST message was not visible with its label');
       console.log(`Trends v2 private ${sport} TEST visible: https://discord.com/channels/${channel.guildId}/${channel.id}/${observed.id}`);
     } catch (error) { console.warn(`Trends v2 private ${sport} TEST held:`, error.message); }
+  }
+}
+
+async function runRankPreflightOnStart() {
+  if (process.env.TRENDS_RANK_PREFLIGHT_ON_START !== 'true') return;
+  for (const sport of ['NBA', 'NFL']) {
+    try {
+      const { sheet } = await rankSnapshot.refresh({ root: reviewQueueRoot,
+        sport, bdlKey: process.env.BDL_NBA_API_KEY });
+      const positionMetrics = Object.values(sheet.position || {}).flatMap(metrics =>
+        Object.values(metrics).filter(rows => rows.filter(row => Number.isInteger(row.rank)).length ===
+          (sport === 'NBA' ? 30 : 32)));
+      console.log(`Trends ${sport} rank preflight: ${sheet.dataDate} data date; ` +
+        `${sheet.offense?.[sport === 'NBA' ? 'pts' : 'points']?.length || 0} teams; ` +
+        `${positionMetrics.length} complete position metrics. No channel post.`);
+    } catch (error) { console.warn(`Trends ${sport} rank preflight held:`, error.message); }
   }
 }
 
@@ -3680,6 +3697,8 @@ client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
   void runPrivateTrendsV2TestOnStart().catch(error =>
     console.error('Trends v2 private TEST held:', error.message));
+  void runRankPreflightOnStart().catch(error =>
+    console.error('Trends rank preflight held:', error.message));
   void refreshTrendsLauncher(readyClient)
     .catch(error => console.error('Pinned VIP Trends launcher needs attention:', error.message));
   try { await ensureWriteupRecapReviewChannel(); }
