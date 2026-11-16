@@ -1,5 +1,5 @@
 import { enqueueSocialEmail, dispatchSocialEmails } from './free-pick-social-email.js';
-import { collegeLogs, collegeStatus, refreshCollegeDay, refreshDueCollege } from './trends-college.js';
+import { collegeLogs, collegeTeamLogs, collegeStatus, refreshCollegeDay, refreshDueCollege } from './trends-college.js';
 import resultMetadata from '../result-metadata.js';
 const CALLBACK_PATH = "/auth/x/callback";
 const START_PATH = "/auth/x/start";
@@ -184,12 +184,19 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname === "/api/queue/trends" && request.method === "GET") return listTrendEmails(request, env);
   if (url.pathname === "/api/queue/trends/deliver" && request.method === "POST") return markTrendEmailDelivered(request, env);
   if (url.pathname === "/api/trends/college/status" && request.method === "GET") {
-    if (!await hasBearer(request, env.TRENDS_QUEUE_SECRET)) return json({ error: 'Unauthorized' }, 401);
+    if (!await collegeReadAllowed(request, env)) return json({ error: 'Unauthorized' }, 401);
     return json(await collegeStatus(env));
   }
   if (url.pathname === "/api/trends/college/logs" && request.method === "GET") {
-    if (!await hasBearer(request, env.TRENDS_QUEUE_SECRET)) return json({ error: 'Unauthorized' }, 401);
+    if (!await collegeReadAllowed(request, env)) return json({ error: 'Unauthorized' }, 401);
+    if (!env.CFBD_API_KEY) return json({ error: 'College data coming soon' }, 503);
     try { return json({ logs: await collegeLogs(env, url.searchParams.get('sport'), url.searchParams.get('player')) }); }
+    catch (error) { return json({ error: error.message }, 400); }
+  }
+  if (url.pathname === "/api/trends/college/team" && request.method === "GET") {
+    if (!await collegeReadAllowed(request, env)) return json({ error: 'Unauthorized' }, 401);
+    if (!env.CFBD_API_KEY) return json({ error: 'College data coming soon' }, 503);
+    try { return json({ logs: await collegeTeamLogs(env, url.searchParams.get('sport'), url.searchParams.get('team')) }); }
     catch (error) { return json({ error: error.message }, 400); }
   }
   if (url.pathname === "/api/trends/college/refresh" && request.method === "POST") {
@@ -1779,6 +1786,13 @@ async function hasXConnection(env) {
 async function hasBearer(request, expected) {
   const actual = request.headers.get("authorization");
   return Boolean(expected && actual) && constantTimeEqual(actual, `Bearer ${expected}`);
+}
+
+async function collegeReadAllowed(request, env) {
+  // The bot already holds the website publishing secret. It can read cached
+  // public-source stats; only the Trends queue secret can trigger a refresh.
+  return await hasBearer(request, env.TRENDS_QUEUE_SECRET) ||
+    await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET);
 }
 
 async function verifyState(state, env) {

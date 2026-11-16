@@ -15,8 +15,10 @@ const { formatContext: formatNflContext } = require('./trends/nfl-context');
 const { scanDaily: scanDailyTrends } = require('./trends/daily-scan');
 const { scanNbaAuto } = require('./trends/nba-auto');
 const { scanNflAuto } = require('./trends/nfl-auto');
+const { runNflTestProof } = require('./trends/nfl-test-proof');
 const { refreshPublishedNbaTrends } = require('./trends/nba-refresh');
-const { scanNbaPopular } = require('./trends/nba-popular-auto');
+const { scanCrossSportPopular } = require('./trends/cross-popular-auto');
+const { runCollegeCommand } = require('./trends/college-commands');
 const { researchNba, formatNbaResearch } = require('./trends/nba-search');
 const { researchNbaBoard, formatNbaBoard } = require('./trends/nba-board');
 const { researchMultiSportBoard, formatMultiSportBoard } = require('./trends/multi-sport-board');
@@ -1659,8 +1661,8 @@ function startTrendsSchedule() {
   if (process.env.TRENDS_NBA_POPULAR_ENABLED === 'true') {
     const channelId = process.env.TRENDS_POPULAR_CHANNEL_ID;
     const categoryId = process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036';
-    if (!process.env.ODDS_API_KEY || !process.env.BDL_NBA_API_KEY || !channelId) {
-      console.error('NBA popular-trends held: odds key, NBA data key or private channel is missing.');
+    if (!process.env.ODDS_API_KEY || !channelId) {
+      console.error('Cross-sport popular-trends held: odds key or private channel is missing.');
     } else {
       const channelFor = async id => {
         const channel = await client.channels.fetch(id);
@@ -1671,12 +1673,12 @@ function startTrendsSchedule() {
           throw new Error('Popular-trends destination is not verified private and writable');
         return channel;
       };
-      const runPopular = () => scanNbaPopular({ root: reviewQueueRoot,
+      const runPopular = () => scanCrossSportPopular({ root: reviewQueueRoot,
         oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
         channelId, channelFor }).then(receipt => {
         if (!receipt.existing && !['waiting', 'reserved_elsewhere'].includes(receipt.status))
-          console.log('NBA popular-trends receipt:', JSON.stringify(receipt));
-      }).catch(error => console.error('NBA popular-trends held:', error.message));
+          console.log('Cross-sport popular-trends receipt:', JSON.stringify(receipt));
+      }).catch(error => console.error('Cross-sport popular-trends held:', error.message));
       void runPopular();
       const popularTimer = setInterval(() => void runPopular(), 10 * 60 * 1000);
       popularTimer.unref();
@@ -4367,6 +4369,67 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'trends-test-nfl') {
+    const testChannelId = '1571966609881309375';
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||
+        interaction.channelId !== testChannelId ||
+        !interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels)) {
+      await interaction.reply({ ephemeral: true, content: 'Run this only as a channel manager in the private Trends test channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const categoryId = process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036';
+      const channelFor = async id => {
+        const channel = await client.channels.fetch(id);
+        if (channel?.id !== testChannelId || channel.parentId !== categoryId ||
+            channel.name !== '🧪・trends-test' || !channel.isTextBased() ||
+            channel.permissionsFor(channel.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) !== false ||
+            channel.permissionsFor(client.user)?.has(PermissionFlagsBits.SendMessages) !== true)
+          throw new Error('Private Trends test channel is not verified writable');
+        return channel;
+      };
+      const receipt = await runNflTestProof({ root: reviewQueueRoot,
+        apiKey: process.env.ODDS_API_KEY, channelId: testChannelId, channelFor });
+      await interaction.editReply(`NFL TEST: ${receipt.status}. ` +
+        `${receipt.player || ''} ${receipt.messageId || ''} ${receipt.reason || ''}`.trim());
+    } catch (error) {
+      console.warn('NFL test proof held:', error.message);
+      await interaction.editReply(`NFL TEST held: ${error.message}`);
+    }
+    return;
+  }
+
+  if (['prop', 'player', 'matchup', 'ladder'].includes(interaction.commandName)) {
+    if (!trendsMember()) {
+      await interaction.reply({ ephemeral: true,
+        content: 'Use this as a VIP member in the private Trends-tool search channel.' });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const options = { sport: interaction.options.getString('sport', true),
+        player: interaction.options.getString('player'),
+        stat: interaction.options.getString('stat'),
+        team: interaction.options.getString('team'),
+        opponent: interaction.options.getString('opponent'),
+        line: interaction.options.getNumber('line'),
+        lines: [interaction.options.getNumber('line_1'),
+          interaction.options.getNumber('line_2'), interaction.options.getNumber('line_3')]
+          .filter(value => value !== null) };
+      const content = await runCollegeCommand(interaction.commandName, options, {
+        baseUrl: process.env.FREE_PICK_SITE_PUBLISH_URL ||
+          'https://bettinghub-publisher.kobedirwin.workers.dev',
+        secret: process.env.FREE_PICK_SITE_PUBLISH_SECRET });
+      if (content.length > 1900) throw new Error('College response exceeds Discord message limit');
+      await interaction.editReply({ content, allowedMentions: { parse: [] } });
+    } catch (error) {
+      console.warn('College Trends request held:', error.message);
+      await interaction.editReply('College data coming soon');
+    }
+    return;
+  }
 
   if (interaction.commandName === 'trends-dashboard') {
     if (!trendsMember()) {

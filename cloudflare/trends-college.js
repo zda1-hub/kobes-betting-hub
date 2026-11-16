@@ -202,6 +202,21 @@ export async function collegeLogs(env, sport, player) {
     status: 'final', participated: true, sourceUrl: row.source_url }));
 }
 
+export async function collegeTeamLogs(env, sport, team) {
+  if (!ORIGINS[sport] || !team || String(team).length > 100)
+    throw new Error('Valid sport and team required');
+  await ensureCollegeTables(env.DB);
+  const { results } = await env.DB.prepare(`SELECT game_id, player_id, player_name, team, opponent,
+    location, game_date, season, stats_json, source_url FROM trends_college_logs
+    WHERE sport = ? AND lower(team) = lower(?) ORDER BY game_date DESC LIMIT 100`)
+    .bind(sport, String(team)).all();
+  return results.map(row => ({ gameId: row.game_id, playerId: row.player_id,
+    player: row.player_name, team: row.team, opponent: row.opponent,
+    location: row.location, date: row.game_date, season: String(row.season),
+    stats: JSON.parse(row.stats_json), status: 'final', participated: true,
+    sourceUrl: row.source_url }));
+}
+
 export function dueCollegeRefresh(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles',
     year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', hourCycle: 'h23'
