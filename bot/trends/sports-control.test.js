@@ -58,3 +58,14 @@ test('enabled sports require on, key and ready provider', () => {
     BDL_NBA_API_KEY: 'fixture', ODDS_API_KEY: 'fixture'
   }, remoteKeys: { CFBD_API_KEY: true }, providerReady: { cfb: true } }), ['nba', 'nfl', 'cfb']);
 });
+
+test('feed threshold defaults to 80 and only owner or chosen admin can change it', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'sports-threshold-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  assert.equal((await controls.read(root)).feedThreshold, 80);
+  await assert.rejects(controls.changeThreshold({ root, threshold: 70,
+    actorId: ADMIN, guildOwnerId: OWNER, roleIds: [] }), /Only the server owner/);
+  assert.equal((await controls.changeThreshold({ root, threshold: 70,
+    actorId: OWNER, guildOwnerId: OWNER })).state.feedThreshold, 70);
+  assert.match(controls.render(await controls.read(root)).content, /L10 ≥ 70%/);
+});

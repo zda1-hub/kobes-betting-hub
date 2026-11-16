@@ -248,7 +248,7 @@ module.exports = [
     .setName('trends-dashboard')
     .setDescription('Open the private VIP Trends-tool search and matchup boards'),
   new SlashCommandBuilder()
-    .setName('prop').setDescription('Private step-by-step current prop search; result sent by DM'),
+    .setName('prop').setDescription('Private bulk search for today’s games; VIP results by DM'),
   new SlashCommandBuilder()
     .setName('sports').setDescription('Owner/admin: control Trends-tool sports privately')
     .setDefaultMemberPermissions(0),
@@ -283,6 +283,12 @@ module.exports = [
     .setName('trends-test-nfl')
     .setDescription('Admin only: post, verify and delete one real NFL test card')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+  new SlashCommandBuilder()
+    .setName('trends-test-feed')
+    .setDescription('Admin only: post one private daily-feed TEST for review')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+    .addStringOption(option => option.setName('sport').setDescription('Current sport')
+      .setRequired(true).addChoices({ name: 'NBA', value: 'NBA' }, { name: 'NFL', value: 'NFL' })),
   new SlashCommandBuilder()
     .setName('trends-board')
     .setDescription('Browse a private NBA matchup board with current alternate props')
