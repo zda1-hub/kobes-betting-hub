@@ -31,9 +31,11 @@ async function read(root) {
     if (parsed?.version !== 1 || !parsed.sports || typeof parsed.sports !== 'object')
       throw new Error('Sports-control file has unexpected shape');
     return { version: 1, sports: { ...INITIAL, ...parsed.sports },
-      adminRoleId: parsed.adminRoleId || null };
+      adminRoleId: parsed.adminRoleId || null,
+      feedThreshold: [70, 80].includes(parsed.feedThreshold) ? parsed.feedThreshold : 80 };
   } catch (error) {
-    if (error.code === 'ENOENT') return { version: 1, sports: { ...INITIAL }, adminRoleId: null };
+    if (error.code === 'ENOENT') return { version: 1, sports: { ...INITIAL },
+      adminRoleId: null, feedThreshold: 80 };
     throw error;
   }
 }
@@ -95,11 +97,29 @@ function render(state, options = {}) {
   }
   buttons.push(new ActionRowBuilder().addComponents(
     new RoleSelectMenuBuilder().setCustomId('sports:admin-role').setPlaceholder('Owner: choose admin role')));
+  buttons.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('sports:threshold:70').setLabel('Feed L10 70%')
+      .setStyle(state.feedThreshold === 70 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('sports:threshold:80').setLabel('Feed L10 80%')
+      .setStyle(state.feedThreshold !== 70 ? ButtonStyle.Primary : ButtonStyle.Secondary)));
   return { flags: 64, allowedMentions: { parse: [] },
-    content: `**Trends-tool sports**\n${rows.map(row =>
+    content: `**Trends-tool sports** · Feed threshold: L10 ≥ ${state.feedThreshold || 80}%\n${rows.map(row =>
       `${row.name}: ${row.on ? 'ON' : 'OFF'} · ${row.plan} · ${row.keySet ? 'key set / no key needed' : 'key missing'}${row.ready ? '' : ' · provider not ready'}`)
       .join('\n')}\nAdmin role: ${state.adminRoleId ? `<@&${state.adminRoleId}>` : 'not chosen'}`,
     components: buttons };
+}
+
+async function changeThreshold({ root, threshold, actorId, guildOwnerId, roleIds }) {
+  const state = await read(root);
+  if (!authorized({ userId: actorId, guildOwnerId, roleIds, adminRoleId: state.adminRoleId }))
+    throw new Error('Only the server owner or chosen admin role can manage sports');
+  if (![70, 80].includes(threshold)) throw new Error('Feed threshold must be 70 or 80');
+  const before = state.feedThreshold;
+  if (before === threshold) return { state, changed: false };
+  state.feedThreshold = threshold;
+  await write(root, state);
+  await audit(root, { action: 'feed-threshold', actorId, before, after: threshold });
+  return { state, changed: true };
 }
 
 async function changeSport({ root, sport, on, actorId, guildOwnerId, roleIds, keyOptions }) {
@@ -136,4 +156,4 @@ async function isSportOn(root, sport) {
 }
 
 module.exports = { CATALOG, INITIAL, read, authorized, keySet, statuses, render,
-  changeSport, chooseAdminRole, isSportOn, isEnabled, enabledSports };
+  changeSport, changeThreshold, chooseAdminRole, isSportOn, isEnabled, enabledSports };

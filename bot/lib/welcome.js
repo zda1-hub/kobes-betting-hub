@@ -33,20 +33,27 @@ function buildWelcomeInvite(welcomeRoleId, env = process.env) {
 }
 
 function buildVipWelcome(env = process.env) {
-  const sections = [
-    `💰 Arbitrage: ${channel(env.ARBITRAGE_DESTINATION_CHANNEL_ID, '#arbitrage')}`,
-    `🔥 Expert Picks: ${channel(env.EXPERT_PICKS_CHANNEL_ID || env.PUBLISH_CHANNEL_ID, '#expert-picks')}`,
-    `📝 Write-Ups: ${channel(env.DAILY_WRITEUPS_CHANNEL_ID, '#all-writeups')}`,
-    `🏆 Results: ${channel(env.VIP_WINS_CHANNEL_ID, '#exclusive-wins')}`,
-    `💬 Community: ${channel(env.COMMUNITY_CHANNEL_ID, '#community-chat')}`
-  ];
   return {
-    content: `**Your VIP access is active. Welcome in!**\n\n${sections.join('\n')}\n\nOpen any channel above to see what is available now. No outcome is guaranteed. 21+ where permitted.`
+    content: [
+      '**Your VIP access is active. Welcome in!**',
+      '',
+      '🎯 New Trend Search Tool: https://discordapp.com/channels/1215407647155683358/1571285899717771365',
+      '💰 Arbitrage: https://discordapp.com/channels/1215407647155683358/1552408437999009983',
+      '🔥 Expert Picks: https://discordapp.com/channels/1215407647155683358/1539055850075852911',
+      '📝 Write-Ups: https://discordapp.com/channels/1215407647155683358/1562152923725701141 & https://discordapp.com/channels/1215407647155683358/1539055413633228881',
+      '💸 Get $20 per referral here: https://discordapp.com/channels/1215407647155683358/1550942922520928256',
+      '💬 Community: https://discordapp.com/channels/1215407647155683358/1276995106779693088',
+      'Open any channel above to see what is available now. No outcome is guaranteed. 21+ where permitted.'
+    ].join('\n')
   };
+}
+
+function buildNewMemberDm() {
+  return { content: "Hey I'm Kobe, I run the Betting Hub, the server you just joined. Please let me know if you have any questions or things you want to be added to the community. Other than that, enjoy the community" };
 }
 
 function vipRoleIds(env = process.env) {
   return new Set((env.VIP_ACCESS_ROLE_IDS || '1539063967878619218,1542668360985088070').split(',').map(x => x.trim()).filter(Boolean));
 }
 
-module.exports = { WELCOME_BUTTON_ID, JOIN_URL, buildWelcomeInvite, buildWelcomeDm, buildVipWelcome, vipRoleIds };
+module.exports = { WELCOME_BUTTON_ID, JOIN_URL, buildWelcomeInvite, buildWelcomeDm, buildVipWelcome, buildNewMemberDm, vipRoleIds };

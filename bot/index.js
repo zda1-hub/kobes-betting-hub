@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { Client, Events, GatewayIntentBits, PermissionFlagsBits, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, Events, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const commands = require('./commands');
 const { research: researchNflTrend, formatResearch: formatNflTrend } = require('./trends/nfl-search');
 const { research: researchFreeLeagueTrend, toCsv: freeLeagueTrendCsv } = require('./trends/free-leagues');
@@ -21,6 +21,11 @@ const { scanCrossSportPopular } = require('./trends/cross-popular-auto');
 const { runCollegeCommand } = require('./trends/college-commands');
 const { researchNba, formatNbaResearch } = require('./trends/nba-search');
 const propFlow = require('./trends/prop-flow');
+const bulkPanel = require('./trends/bulk-panel');
+const { researchBulk } = require('./trends/bulk-data');
+const { updateTuesday: updateTeamRanks } = require('./trends/rank-publisher');
+const { prepare: prepareDailyFeed, publish: publishDailyFeed } = require('./trends/daily-feed');
+const { hasVipAtSend, UPGRADE_COPY } = require('./trends/vip-access');
 const sportsControl = require('./trends/sports-control');
 const { nbaResult, nflResult, formatMemberResult } = require('./trends/member-result');
 const { researchNbaBoard, formatNbaBoard } = require('./trends/nba-board');
@@ -69,7 +74,8 @@ const { gradeWagerRows, sourcePacketPath } = require('./lib/wager-ledger');
 const { planPendingRecapNotice, queuedPendingRecapNotice } = require('./lib/pending-recap-notice');
 const { hydrateCanonicalPlayer } = require('./lib/canonical-pick-player');
 const { appendOfficialPick, appendOrRetryPermissionFailedPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
-const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm, buildVipWelcome, vipRoleIds } = require('./lib/welcome');
+const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm, buildVipWelcome, buildNewMemberDm, vipRoleIds } = require('./lib/welcome');
+const { relayMemberDm, relayKobeReply } = require('./lib/member-inbox');
 const {
   assertApprovalCopyMatches,
   assertCompleteWriteup,
@@ -443,8 +449,9 @@ const discordJoinAttributionEnabled = process.env.DISCORD_JOIN_ATTRIBUTION_ENABL
 const client = new Client({ intents: [
   GatewayIntentBits.Guilds,
   GatewayIntentBits.MessageContent,
-  GatewayIntentBits.GuildMembers
-] });
+  GatewayIntentBits.GuildMembers,
+  GatewayIntentBits.DirectMessages
+], partials: [Partials.Channel] });
 const discordJoinAttribution = discordJoinAttributionEnabled ? createDiscordJoinAttribution({
   campaigns: parseCampaigns(process.env.DISCORD_INVITE_CAMPAIGNS_JSON),
   supabaseUrl: process.env.SUPABASE_URL,
@@ -1582,6 +1589,53 @@ async function publishScheduledTrends() {
 }
 
 function startTrendsSchedule() {
+  if (process.env.TRENDS_TEAM_RANKS_ENABLED === 'true' &&
+      process.env.DISCORD_GUILD_ID && process.env.BDL_NBA_API_KEY) {
+    const refreshRanks = () => void updateTeamRanks({ client,
+      guildId: process.env.DISCORD_GUILD_ID, vipIds: [...vipRoleIds()],
+      root: reviewQueueRoot, bdlKey: process.env.BDL_NBA_API_KEY })
+      .catch(error => console.error('Tuesday team ranks held:', error.message));
+    refreshRanks();
+    const rankTimer = setInterval(refreshRanks, 60_000);
+    rankTimer.unref();
+  }
+  // Live publication is deliberately off until a private TEST has been seen
+  // and the owner approves enabling this explicit flag.
+  if (process.env.TRENDS_DAILY_FEED_ENABLED === 'true') {
+    const feedAttempts = new Map();
+    const runDailyFeed = async () => {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles',
+        hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+      if (Number(parts.find(part => part.type === 'hour')?.value) !== 8) return;
+      const controls = await sportsControl.read(reviewQueueRoot);
+      for (const sport of ['NBA', 'NFL']) {
+        const attemptKey = `${bulkPanel.serviceDate()}-${sport}`;
+        if (Date.now() - (feedAttempts.get(attemptKey) || 0) < 30 * 60_000) continue;
+        feedAttempts.set(attemptKey, Date.now());
+        try {
+        if (!sportsControl.isEnabled(sport.toLowerCase(), controls, { env: process.env })) continue;
+        const id = sport === 'NBA' ? process.env.TRENDS_NBA_CHANNEL_ID : process.env.TRENDS_NFL_CHANNEL_ID;
+        if (!id) continue;
+        const channel = await client.channels.fetch(id);
+        const categoryId = process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036';
+        if (channel?.guildId !== process.env.DISCORD_GUILD_ID || channel.parentId !== categoryId ||
+            channel.permissionsFor(channel.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) !== false ||
+            ![...vipRoleIds()].every(id => channel.permissionsFor(channel.guild.roles.cache.get(id))
+              ?.has(PermissionFlagsBits.ViewChannel) === true))
+          throw new Error(`${sport} feed destination is not verified VIP-only`);
+        const report = await prepareDailyFeed({ sport, root: reviewQueueRoot,
+          oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+          threshold: controls.feedThreshold || 80 });
+        await publishDailyFeed({ root: reviewQueueRoot, report, channel });
+        } catch (error) { console.error(`${sport} daily trend feed held:`, error.message); }
+      }
+    };
+    const feedTick = () => void runDailyFeed().catch(error =>
+      console.error('Trends daily feed held:', error.message));
+    feedTick();
+    const feedTimer = setInterval(feedTick, 60_000);
+    feedTimer.unref();
+  }
   // The inventory uses only the quota-free events endpoint. It is a durable
   // research receipt; it never sends a member-facing trend or charges credits.
   if (process.env.ODDS_API_KEY) {
@@ -1703,6 +1757,31 @@ function startTrendsSchedule() {
   // facing post. This intentionally replaces the old direct auto-publish path.
   if (process.env.TRENDS_AUTO_PUBLISH_ENABLED === 'true') {
     console.warn('Ignoring TRENDS_AUTO_PUBLISH_ENABLED: Trends must be approved in #pick-approvals before posting.');
+  }
+}
+
+async function runPrivateTrendsV2TestOnStart() {
+  if (process.env.TRENDS_V2_TEST_ON_START !== 'true') return;
+  const channel = await client.channels.fetch('1571966609881309375');
+  const categoryId = process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036';
+  if (channel?.guildId !== process.env.DISCORD_GUILD_ID ||
+      channel.parentId !== categoryId || channel.name !== '🧪・trends-test' ||
+      channel.permissionsFor(channel.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) !== false)
+    throw new Error('Trends v2 TEST destination is not verified private');
+  const controls = await sportsControl.read(reviewQueueRoot);
+  for (const sport of ['NBA', 'NFL']) {
+    try {
+      const report = await prepareDailyFeed({ sport, root: reviewQueueRoot,
+        oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+        threshold: controls.feedThreshold || 80 });
+      const receipt = await publishDailyFeed({ root: reviewQueueRoot, report,
+        channel, test: true });
+      if (!receipt.messageIds?.length) throw new Error('No qualifying current prop today');
+      const observed = await channel.messages.fetch(receipt.messageIds[0]);
+      if (!observed?.content?.startsWith('**TEST — NOT A PICK'))
+        throw new Error('TEST message was not visible with its label');
+      console.log(`Trends v2 private ${sport} TEST visible: https://discord.com/channels/${channel.guildId}/${channel.id}/${observed.id}`);
+    } catch (error) { console.warn(`Trends v2 private ${sport} TEST held:`, error.message); }
   }
 }
 
@@ -3442,7 +3521,7 @@ function trendsDashboardPayload() {
   const nba = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('trends-ui:search').setLabel('Search a prop privately').setStyle(ButtonStyle.Primary));
   return { components: [nba], allowedMentions: { parse: [] },
-    content: '**Trends-tool · private member research**\nChoose a league, team, player, stat and current quoted line. Results are sent to your DMs. Historical hit rates are not next-game probabilities.' };
+    content: '**Trends-tool · private member research**\nChoose today’s sport, teams, players and stats on one panel. VIP results are sent privately by DM. Historical hit rates are not next-game probabilities.' };
 }
 
 let sportsKeysCache = { at: 0, keys: {} };
@@ -3476,13 +3555,26 @@ async function startPrivatePropFlow(interaction) {
     await interaction.reply({ flags: 64, content: 'No current prop search sport is enabled.' });
     return;
   }
-  const session = propFlow.start(interaction.user.id, interaction.channelId, Date.now(), leagues);
-  await interaction.reply({ flags: 64, ...propFlow.render(session) });
+  const session = bulkPanel.start({ ownerId: interaction.user.id,
+    channelId: interaction.channelId, leagues });
+  await interaction.reply({ flags: 64, ...bulkPanel.render(session) });
 }
 
-async function sendTrendDm(interaction, content) {
+async function sendTrendDmReport(interaction, messages) {
+  // Recheck roles at delivery time. A panel opened before VIP expires must not
+  // turn into a paid-data DM after the role has been removed.
+  const hasVip = await hasVipAtSend({ interaction, client,
+    guildId: process.env.DISCORD_GUILD_ID, roleIds: vipRoleIds() });
+  if (!hasVip) {
+    await interaction.editReply({
+      content: UPGRADE_COPY,
+      components: [], allowedMentions: { parse: [] }
+    });
+    return false;
+  }
   try {
-    await interaction.user.send({ content, allowedMentions: { parse: [] } });
+    for (const content of messages)
+      await interaction.user.send({ content, allowedMentions: { parse: [] } });
     await interaction.editReply({ content: 'Sent to your DMs', components: [] });
     return true;
   } catch (error) {
@@ -3490,6 +3582,10 @@ async function sendTrendDm(interaction, content) {
     await interaction.editReply({ content: 'Your DMs are closed, open them to get results', components: [] });
     return false;
   }
+}
+
+async function sendTrendDm(interaction, content) {
+  return sendTrendDmReport(interaction, [content]);
 }
 
 function boardBlocks(board, sport) {
@@ -3585,6 +3681,8 @@ async function refreshTrendsLauncher(readyClient) {
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  void runPrivateTrendsV2TestOnStart().catch(error =>
+    console.error('Trends v2 private TEST held:', error.message));
   void refreshTrendsLauncher(readyClient)
     .catch(error => console.error('Pinned VIP Trends launcher needs attention:', error.message));
   try { await ensureWriteupRecapReviewChannel(); }
@@ -3753,7 +3851,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
   if (member.user.bot) return;
   try {
     const paid = [...vipRoleIds()].some(id => member.roles.cache.has(id));
-    await member.send(paid ? buildVipWelcome() : { embeds: [buildWelcomeDm()] });
+    await member.send(paid ? buildVipWelcome() : buildNewMemberDm());
   } catch (error) {
     console.warn(`Welcome DM blocked for ${member.id}: ${error.message}`);
   }
@@ -3766,6 +3864,16 @@ client.on(Events.GuildMemberUpdate, async (before, after) => {
   if (!gainedVip) return;
   try { await after.send(buildVipWelcome()); }
   catch (error) { console.warn(`VIP welcome DM blocked for ${after.id}: ${error.message}`); }
+});
+
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author?.bot) return;
+  try {
+    if (await relayMemberDm({ client, message, root: reviewQueueRoot })) return;
+    await relayKobeReply({ client, message, root: reviewQueueRoot });
+  } catch (error) {
+    console.warn('Member inbox relay held:', error.message);
+  }
 });
 
 async function registerCommandsOnStart() {
@@ -3791,6 +3899,7 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  const trendsGuild = () => interaction.guildId === process.env.DISCORD_GUILD_ID;
   const trendsMember = () => interaction.guildId === process.env.DISCORD_GUILD_ID &&
     interaction.channelId === '1571285899717771365' &&
     (isAdministrator(interaction) || [...vipRoleIds()].some(id =>
@@ -3835,6 +3944,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ({ state } = await sportsControl.chooseAdminRole({ root: reviewQueueRoot,
           roleId: interaction.values?.[0], actorId: interaction.user.id,
           guildOwnerId: interaction.guild.ownerId }));
+      } else if (interaction.customId.startsWith('sports:threshold:')) {
+        const roleIds = Array.isArray(interaction.member?.roles) ? interaction.member.roles :
+          [...(interaction.member?.roles?.cache?.keys?.() || [])];
+        ({ state } = await sportsControl.changeThreshold({ root: reviewQueueRoot,
+          threshold: Number(interaction.customId.split(':')[2]),
+          actorId: interaction.user.id, guildOwnerId: interaction.guild.ownerId, roleIds }));
       } else {
         const [, sport, direction] = interaction.customId.split(':');
         const roleIds = Array.isArray(interaction.member?.roles) ? interaction.member.roles :
@@ -3879,9 +3994,117 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
   if ((interaction.isButton() || interaction.isStringSelectMenu()) &&
+      interaction.customId.startsWith('bulk:')) {
+    if (!trendsGuild()) { await interaction.reply({ flags: 64, content: 'KBH server only.' }); return; }
+    const [, id, action] = interaction.customId.split(':');
+    let state;
+    try { state = bulkPanel.get(id, interaction.user.id); }
+    catch (error) { await interaction.reply({ flags: 64, content: error.message }); return; }
+    if (state.channelId !== interaction.channelId) {
+      await interaction.reply({ flags: 64, content: 'Open this search in its original channel.' }); return;
+    }
+    if (action === 'line') {
+      await interaction.update({ content: 'Checking available quoted alt lines…', components: [] });
+      await bulkPanel.loadLineChoices(state, { root: reviewQueueRoot,
+        oddsKey: process.env.ODDS_API_KEY });
+      state.controlMode = 'line';
+      await interaction.editReply(bulkPanel.render(state));
+      return;
+    }
+    if (action === 'line-choice') {
+      const selected = interaction.values?.[0];
+      if (selected === 'custom') {
+        await interaction.showModal(new ModalBuilder().setCustomId(`bulk:${id}:line-modal`)
+          .setTitle('Calculated research line')
+          .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder()
+            .setCustomId('line').setLabel('Custom number; blank for all 80%+')
+            .setStyle(TextInputStyle.Short).setRequired(false))));
+      } else {
+        if (selected === 'next') state.ladderPage =
+          (state.ladderPage + 1) % Math.max(1, Math.ceil(state.ladderOptions.length / 21));
+        else if (selected === 'all80') { state.line = null; state.controlMode = 'main'; }
+        else if (selected === 'back') state.controlMode = 'main';
+        else if (state.ladderOptions.some(row => row.value === selected)) {
+          state.line = Number(selected); state.controlMode = 'main';
+        } else { await interaction.reply({ flags: 64, content: 'That line is no longer available.' }); return; }
+        await interaction.update(bulkPanel.render(state));
+      }
+      return;
+    }
+    if (action === 'submit') {
+      await interaction.update({ content: 'Checking today’s completed-game logs…', components: [] });
+      try {
+        if (state.sport && !sportsControl.isEnabled(state.sport.toLowerCase(),
+          await sportsControl.read(reviewQueueRoot), { env: process.env }))
+          throw new Error('This sport was turned off. Start a new search.');
+        const report = await researchBulk(state, { root: reviewQueueRoot,
+          bdlKey: process.env.BDL_NBA_API_KEY, oddsKey: process.env.ODDS_API_KEY });
+        await sendTrendDmReport(interaction, report.messages);
+      } catch (error) {
+        console.warn('Bulk Trends search held:', error.message);
+        await interaction.editReply({ content: `Search unavailable: ${error.message}`, components: [] });
+      } finally { bulkPanel.sessions.delete(id); }
+      return;
+    }
+    try {
+      if (action === 'window') state.window = { L5: 'L10', L10: 'L20', L20: 'L5' }[state.window];
+      else if (action === 'team-page') state.teamPage =
+        (state.teamPage + 1) % Math.max(1, Math.ceil(state.teams.length / 24));
+      else if (action === 'player-page') state.playerPage =
+        (state.playerPage + 1) % Math.max(1, Math.ceil(state.players.length / 24));
+      else if (action === 'sport') {
+        const sport = interaction.values?.[0];
+        if (!state.leagues.includes(sport)) throw new Error('This sport is not enabled.');
+        state.sport = sport;
+        await interaction.update({ content: 'Loading today’s teams and rosters…', components: [] });
+        await bulkPanel.loadTodayTeams(state, { oddsKey: process.env.ODDS_API_KEY,
+          bdlKey: process.env.BDL_NBA_API_KEY });
+        await bulkPanel.loadPlayers(state, { bdlKey: process.env.BDL_NBA_API_KEY });
+        await interaction.editReply(bulkPanel.render(state));
+        return;
+      } else if (action === 'team') {
+        state.selectedTeams = bulkPanel.mergePageSelection(state.selectedTeams,
+          interaction.values, state.teams, state.teamPage);
+        await interaction.update({ content: 'Loading selected active rosters…', components: [] });
+        await bulkPanel.loadPlayers(state, { bdlKey: process.env.BDL_NBA_API_KEY });
+        await interaction.editReply(bulkPanel.render(state));
+        return;
+      } else if (action === 'player') {
+        state.selectedPlayers = bulkPanel.mergePageSelection(state.selectedPlayers,
+          interaction.values, state.players, state.playerPage);
+      } else if (action === 'stat') {
+        state.selectedStats = interaction.values;
+      } else throw new Error('Unknown search control.');
+      await interaction.update(bulkPanel.render(state));
+    } catch (error) {
+      console.warn('Bulk Trends panel held:', error.message);
+      if (interaction.replied || interaction.deferred)
+        await interaction.editReply({ content: `Search unavailable: ${error.message}`, components: [] });
+      else await interaction.reply({ flags: 64, content: `Search unavailable: ${error.message}` });
+    }
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('bulk:')) {
+    if (!trendsGuild()) { await interaction.reply({ flags: 64, content: 'KBH server only.' }); return; }
+    const [, id, action] = interaction.customId.split(':');
+    try {
+      const state = bulkPanel.get(id, interaction.user.id);
+      if (action !== 'line-modal' || state.channelId !== interaction.channelId)
+        throw new Error('This line control is no longer active.');
+      const raw = interaction.fields.getTextInputValue('line').trim();
+      const value = raw ? Number(raw) : null;
+      if (raw && (!Number.isFinite(value) || value < 0 || value > 1000))
+        throw new Error('Enter a valid nonnegative line up to 1000.');
+      state.line = value;
+      state.controlMode = 'main';
+      await interaction.update(bulkPanel.render(state));
+    } catch (error) { await interaction.reply({ flags: 64, content: error.message }); }
+    return;
+  }
+  if ((interaction.isButton() || interaction.isStringSelectMenu()) &&
       interaction.customId.startsWith('propflow:')) {
-    if (!trendsMember()) {
-      await interaction.reply({ flags: 64, content: 'Use Trends-tool as a VIP member in its private search channel.' });
+    if (!trendsGuild()) {
+      await interaction.reply({ flags: 64, content: 'Use Trends-tool in the KBH server.' });
       return;
     }
     const [, id, action, arg] = interaction.customId.split(':');
@@ -3952,7 +4175,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('propflow:')) {
-    if (!trendsMember()) { await interaction.reply({ flags: 64, content: 'VIP Trends-tool only.' }); return; }
+    if (!trendsGuild()) { await interaction.reply({ flags: 64, content: 'Use Trends-tool in the KBH server.' }); return; }
     const [, id, action] = interaction.customId.split(':');
     let state;
     try { state = propFlow.get(id, interaction.user.id); }
@@ -3978,16 +4201,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
   if (interaction.isButton() && interaction.customId.startsWith('trends-ui:')) {
+    if (['trends-ui:search', 'trends-ui:search-other'].includes(interaction.customId)) {
+      if (!trendsGuild()) {
+        await interaction.reply({ flags: 64, content: 'Use Trends-tool in the KBH server.' });
+        return;
+      }
+      await startPrivatePropFlow(interaction);
+      return;
+    }
     if (!trendsMember()) {
       await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
-      return;
-    }
-    if (interaction.customId === 'trends-ui:search') {
-      await startPrivatePropFlow(interaction);
-      return;
-    }
-    if (interaction.customId === 'trends-ui:search-other') {
-      await startPrivatePropFlow(interaction);
       return;
     }
     if (interaction.customId === 'trends-ui:board') {
@@ -4634,9 +4857,44 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (interaction.commandName === 'trends-test-feed') {
+    const testChannelId = '1571966609881309375';
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID ||
+        interaction.channelId !== testChannelId ||
+        !interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels)) {
+      await interaction.reply({ flags: 64,
+        content: 'Run this only as a channel manager in the private Trends test channel.' });
+      return;
+    }
+    await interaction.deferReply({ flags: 64 });
+    try {
+      const channel = await client.channels.fetch(testChannelId);
+      const categoryId = process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036';
+      if (channel?.parentId !== categoryId || channel.name !== '🧪・trends-test' ||
+          channel.permissionsFor(channel.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) !== false)
+        throw new Error('TEST channel is not verified private');
+      const sport = interaction.options.getString('sport', true);
+      const controls = await sportsControl.read(reviewQueueRoot);
+      const report = await prepareDailyFeed({ sport, root: reviewQueueRoot,
+        oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+        threshold: controls.feedThreshold || 80 });
+      const receipt = await publishDailyFeed({ root: reviewQueueRoot, report,
+        channel, test: true });
+      if (!receipt.messageIds?.length) throw new Error('No qualifying current prop for today’s private TEST');
+      const observed = await channel.messages.fetch(receipt.messageIds[0]);
+      if (!observed?.content?.startsWith('**TEST — NOT A PICK'))
+        throw new Error('TEST post was not visible with the required label');
+      await interaction.editReply(`Private TEST visible: https://discord.com/channels/${interaction.guildId}/${channel.id}/${observed.id}. Live feed remains off.`);
+    } catch (error) {
+      console.warn('Daily Trends TEST held:', error.message);
+      await interaction.editReply(`Daily Trends TEST held: ${error.message}`);
+    }
+    return;
+  }
+
   if (interaction.commandName === 'prop') {
-    if (!trendsMember()) {
-      await interaction.reply({ flags: 64, content: 'Use this as a VIP member in the private Trends-tool search channel.' });
+    if (!trendsGuild()) {
+      await interaction.reply({ flags: 64, content: 'Use Trends-tool in the KBH server.' });
       return;
     }
     await startPrivatePropFlow(interaction);
@@ -4673,8 +4931,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.commandName === 'trends-dashboard') {
-    if (!trendsMember()) {
-      await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the VIP prop search channel.' });
+    if (!trendsGuild()) {
+      await interaction.reply({ ephemeral: true, content: 'Open Trends-tool in the KBH server.' });
       return;
     }
     await interaction.reply({ ephemeral: true, ...trendsDashboardPayload() });
