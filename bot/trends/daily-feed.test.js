@@ -1,7 +1,12 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { feedMessages } = require('./daily-feed');
+const { feedMessages, fullL10Rows } = require('./daily-feed');
+
+test('daily feed excludes a 1/1 or 8/8 sample from the L10 8/10 rule', () => {
+  const rows = [1, 8, 10].map(sample => ({ analysis: { l10: { sample } } }));
+  assert.deepEqual(fullL10Rows(rows), [rows[2]]);
+});
 
 test('private TEST feed is visibly labeled and includes all ten observed game values', () => {
   const row = { player: 'Test Player', teamAbbr: 'KC', opponentAbbr: 'ATL', sport: 'NFL',

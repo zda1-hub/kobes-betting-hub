@@ -43,6 +43,9 @@ function latestByWeek(rows, id) {
   return rows.filter(row => row.gsis_id === id && Number.isInteger(Number(row.week)))
     .sort((a, b) => Number(b.week) - Number(a.week))[0] || null;
 }
+function fullL10Rows(rows) {
+  return rows.filter(row => row.analysis?.l10?.sample === 10);
+}
 async function filterAvailable(state, { bdlKey, now = new Date(), fetchImpl = fetch }) {
   if (state.sport === 'NBA') {
     const injuries = await bdl.pages('/v1/player_injuries?per_page=100',
@@ -75,8 +78,11 @@ async function prepare({ sport, root, oddsKey, bdlKey, threshold = 80,
     state.window = 'L10';
     const report = await researchBulk(state, { root, bdlKey, now, fetchImpl,
       minimumRate: threshold / 100, requireAny80: false });
+    // A 1/1 or 2/2 sample is not the configured L10 8/10+ feed threshold.
+    // Private searches still display and label their real smaller denominators.
+    const rows = fullL10Rows(report.rows);
     return { date: state.serviceDate, sport, threshold,
-      rows: report.rows, messages: feedMessages(report.rows) };
+      rows, messages: feedMessages(rows) };
   } finally { panel.sessions.delete(state.id); }
 }
 function receiptPath(root, sport, date) {
@@ -87,13 +93,24 @@ async function publish({ root, report, channel, test = false }) {
   const file = receiptPath(root, report.sport, test ? `${report.date}-test` : report.date);
   try {
     const existing = JSON.parse(await fs.readFile(file, 'utf8'));
-    return { ...existing, existing: true };
+    if (!test || existing.definitionVersion === 2) return { ...existing, existing: true };
+    // Replace the first private proof, which accepted a misleading 1/1 L10
+    // sample. Verify ownership and TEST label before deleting exact messages.
+    for (const id of existing.messageIds || []) {
+      const old = await channel.messages.fetch(id);
+      if (old.author?.id !== channel.client.user.id ||
+          !old.content?.startsWith('**TEST — NOT A PICK'))
+        throw new Error('Old TEST message cannot be safely replaced');
+      await old.delete();
+    }
+    await fs.unlink(file);
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (!report.messages.length) return { status: 'no_qualifiers', sport: report.sport, date: report.date };
   await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
   const reservation = { status: 'reserved', sport: report.sport,
     date: report.date, channelId: channel.id, count: report.rows.length,
-    messageIds: [], at: new Date().toISOString() };
+    messageIds: [], at: new Date().toISOString(),
+    ...(test ? { definitionVersion: 2 } : {}) };
   await fs.writeFile(file, JSON.stringify(reservation), { mode: 0o600, flag: 'wx' });
   const messages = test ? feedMessages(report.rows.slice(0, 1), { test: true }) : report.messages;
   for (const content of messages) {
@@ -107,5 +124,5 @@ async function publish({ root, report, channel, test = false }) {
   return reservation;
 }
 
-module.exports = { formatEntry, feedMessages, filterAvailable, prepare, publish,
+module.exports = { formatEntry, feedMessages, fullL10Rows, filterAvailable, prepare, publish,
   receiptPath };
