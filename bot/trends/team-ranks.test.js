@@ -17,6 +17,7 @@ test('NBA aggregates real participating box rows by opponent; broad G is not gue
   const sheet = computeNba(rows, { season: 2024 });
   assert.equal(sheet.offense.pts.find(row => row.team === 'BOS').average, 23);
   assert.equal(sheet.defense.pts.find(row => row.team === 'NYK').average, 23);
+  assert.equal(sheet.defense.pra.find(row => row.team === 'NYK').average, 31);
   assert.equal(lookupRank(sheet, { opponentAbbr: 'NYK', position: 'PG', stat: 'pts' }), null);
   assert.equal(sheet.position.C.reb.find(row => row.team === 'BOS').average, 9);
 });
@@ -31,7 +32,26 @@ test('NFL weekly player stats produce position averages from completed regular g
   assert.equal(sheet.offense.points.find(row => row.team === 'KC').average, 31);
   assert.equal(sheet.position.QB.passing_yards.find(row => row.team === 'ATL').average, 348);
   assert.equal(sheet.defense.passing_yards.find(row => row.team === 'ATL').average, 348);
+  assert.equal(sheet.defense.receiving_yards.find(row => row.team === 'ATL').average, 0);
   assert.equal(lookupRank(sheet, { opponentAbbr: 'ATL', position: 'QB',
     stat: 'passing_yards' }), null, 'two-team fixtures must not masquerade as a 32-team rank');
   assert.match(sheet.attribution, /nflverse \(CC BY 4\.0\)/);
+});
+
+test('matchup ranks use actual complete defense tables; higher DM number means more allowed', () => {
+  const teams = Array.from({ length: 30 }, (_, index) => `T${index + 1}`);
+  const descending = teams.map((team, index) => ({ team, rank: index + 1,
+    average: 30 - index, games: 10 }));
+  const sheet = { sport: 'NBA', dataDate: '2026-11-15',
+    defense: { pts: descending }, position: { PG: { pts: descending } } };
+  assert.deepEqual(lookupRank(sheet, { opponentAbbr: 'T1', position: 'PG', stat: 'points' }),
+    { rank: 1, overRank: 30, teamOverRank: 30, teams: 30, dataDate: '2026-11-15' });
+  assert.deepEqual(lookupRank(sheet, { opponentAbbr: 'T30', position: 'PG', stat: 'pts' }),
+    { rank: 30, overRank: 1, teamOverRank: 1, teams: 30, dataDate: '2026-11-15' });
+  const noPosition = { ...sheet, position: { PG: { pts: descending.slice(1) } } };
+  assert.deepEqual(lookupRank(noPosition, { opponentAbbr: 'T1', position: 'PG', stat: 'pts' }),
+    { rank: null, overRank: null, teamOverRank: 30, teams: 30, dataDate: '2026-11-15' });
+  assert.equal(lookupRank({ ...sheet, defense: { pts: descending.slice(1) },
+    position: { PG: { pts: descending.slice(1) } } },
+  { opponentAbbr: 'T1', position: 'PG', stat: 'pts' }), null);
 });

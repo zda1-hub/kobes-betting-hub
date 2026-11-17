@@ -16,8 +16,20 @@ test('calculated thresholds are labeled and window denominators reflect observed
     teamName: 'Celtics', opponentAbbr: 'NYK', stat: 'points', logs: games });
   assert.match(result.block, /Calc line \(no book line\)/);
   assert.match(result.block, /L5- 5\/5 ☘️  L10- 6\/6 ☘️  L20- 6\/6 ☘️/);
-  assert.match(result.block, /Opp rank vs position N\/A in Pts: N\/A/);
+  assert.match(result.block, /Opposing team Pts rank: N\/A/);
+  assert.match(result.block, /Opposing team rank vs position N\/A: N\/A/);
   assert.doesNotMatch(result.block, /-\d{3}/);
+});
+
+test('private report shows team and positional matchup ranks separately', () => {
+  const result = buildResult({ sport: 'NBA', player: 'Test Player', teamAbbr: 'BOS',
+    teamName: 'Celtics', opponentAbbr: 'NYK', position: 'PG', stat: 'points',
+    logs: logs([12, 12, 12, 13, 13, 14]), opponentRank: 3,
+    opponentOverRank: 28, opponentTeamRank: 30, rankTeams: 30,
+    dataDate: '2026-11-15' });
+  assert.match(result.block, /Opposing team Pts rank: #30 of 30 \(more allowed\)/);
+  assert.match(result.block, /Opposing team rank vs PG: #28 of 30 \(more allowed\) · data 2026-11-15/);
+  assert.equal(result.rank, 3, 'existing channel-feed rank stays in its original direction');
 });
 
 test('DNP rows never enter denominators and low-hit props are excluded', () => {

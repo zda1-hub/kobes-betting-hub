@@ -5,7 +5,14 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { PermissionFlagsBits } = require('discord.js');
-const { publishSection } = require('./rank-publisher');
+const { publishSection, rankWindowOpen } = require('./rank-publisher');
+
+test('Tuesday rank refresh catches up after 10 AM Pacific but not before', () => {
+  assert.equal(rankWindowOpen(new Date('2026-11-17T17:59:00Z')), false);
+  assert.equal(rankWindowOpen(new Date('2026-11-17T18:00:00Z')), true);
+  assert.equal(rankWindowOpen(new Date('2026-11-17T19:45:00Z')), true);
+  assert.equal(rankWindowOpen(new Date('2026-11-18T18:00:00Z')), false);
+});
 
 test('Tuesday sheets batch mobile images within Discord attachment limits', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-ranks-'));

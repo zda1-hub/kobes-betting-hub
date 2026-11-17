@@ -123,12 +123,17 @@ async function publishSection({ root, sheet, section, channel, updatedAt,
     throw error;
   }
 }
-async function updateTuesday({ client, guildId, vipIds, root, bdlKey, now = new Date() }) {
+function rankWindowOpen(now = new Date()) {
   const local = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles',
     weekday: 'short', hour: '2-digit', hourCycle: 'h23' }).formatToParts(now);
   const weekday = local.find(part => part.type === 'weekday')?.value;
   const hour = Number(local.find(part => part.type === 'hour')?.value);
-  if (weekday !== 'Tue' || hour !== 10) return { status: 'waiting' };
+  // If a permissions or provider failure blocks 10 AM, retry later Tuesday.
+  // Publication receipts still prevent duplicate sheets after a successful run.
+  return weekday === 'Tue' && hour >= 10;
+}
+async function updateTuesday({ client, guildId, vipIds, root, bdlKey, now = new Date() }) {
+  if (!rankWindowOpen(now)) return { status: 'waiting' };
   const channels = await ensureChannels(client, guildId, vipIds);
   const updatedAt = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles',
     dateStyle: 'medium', timeStyle: 'short' }).format(now) + ' PT';
@@ -143,4 +148,4 @@ async function updateTuesday({ client, guildId, vipIds, root, bdlKey, now = new 
 }
 
 module.exports = { CATEGORIES, SECTIONS, verifiedPrivate, ensureChannels,
-  rowsForSection, updateTuesday, publishSection };
+  rowsForSection, rankWindowOpen, updateTuesday, publishSection };
