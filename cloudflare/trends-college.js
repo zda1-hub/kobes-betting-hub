@@ -81,7 +81,9 @@ export function normalizeCbb(game, box) {
         number(player.minutes) === null || number(player.minutes) <= 0) return [];
     return [{ playerId: String(player.athleteId), playerName: player.name, team,
       opponent, location: team === home ? 'home' : 'away',
-      stats: { points: pts, rebounds: reb, assists: ast, threes, pra: pts + reb + ast } }];
+      stats: { points: pts, rebounds: reb, assists: ast, threes,
+        pra: pts + reb + ast, points_rebounds: pts + reb,
+        points_assists: pts + ast, rebounds_assists: reb + ast } }];
   });
 }
 
@@ -210,7 +212,7 @@ export async function collegeLogs(env, sport, player) {
     .bind(sport, String(player), String(player)).all();
   return results.map(row => ({ gameId: row.game_id, playerId: row.player_id,
     player: row.player_name, team: row.team, opponent: row.opponent, location: row.location,
-    date: row.game_date, season: String(row.season), stats: JSON.parse(row.stats_json),
+    date: row.game_date, season: String(row.season), stats: expandedStats(sport, row.stats_json),
     status: 'final', participated: true, sourceUrl: row.source_url }));
 }
 
@@ -220,13 +222,38 @@ export async function collegeTeamLogs(env, sport, team) {
   await ensureCollegeTables(env.DB);
   const { results } = await env.DB.prepare(`SELECT game_id, player_id, player_name, team, opponent,
     location, game_date, season, stats_json, source_url FROM trends_college_logs
-    WHERE sport = ? AND lower(team) = lower(?) ORDER BY game_date DESC LIMIT 100`)
-    .bind(sport, String(team)).all();
+    WHERE sport = ? AND lower(team) = lower(?)
+      AND season = (SELECT MAX(season) FROM trends_college_logs WHERE sport = ?)
+    ORDER BY game_date DESC LIMIT 2000`)
+    .bind(sport, String(team), sport).all();
   return results.map(row => ({ gameId: row.game_id, playerId: row.player_id,
     player: row.player_name, team: row.team, opponent: row.opponent,
     location: row.location, date: row.game_date, season: String(row.season),
-    stats: JSON.parse(row.stats_json), status: 'final', participated: true,
+    stats: expandedStats(sport, row.stats_json), status: 'final', participated: true,
     sourceUrl: row.source_url }));
+}
+
+function expandedStats(sport, raw) {
+  const stats = JSON.parse(raw);
+  if (sport === 'cbb') {
+    const { points: pts, rebounds: reb, assists: ast } = stats;
+    if ([pts, reb, ast].every(Number.isFinite)) {
+      stats.points_rebounds = pts + reb;
+      stats.points_assists = pts + ast;
+      stats.rebounds_assists = reb + ast;
+    }
+  }
+  return stats;
+}
+
+export async function collegeTeams(env, sport) {
+  if (!ORIGINS[sport]) throw new Error('Valid college sport required');
+  await ensureCollegeTables(env.DB);
+  const { results } = await env.DB.prepare(`SELECT team, COUNT(DISTINCT game_id) AS games,
+    MAX(game_date) AS last_game FROM trends_college_logs WHERE sport = ?
+      AND season = (SELECT MAX(season) FROM trends_college_logs WHERE sport = ?)
+    GROUP BY team ORDER BY team LIMIT 1000`).bind(sport, sport).all();
+  return results.map(row => ({ team: row.team, games: row.games, lastGame: row.last_game }));
 }
 
 export function dueCollegeRefresh(now = new Date()) {

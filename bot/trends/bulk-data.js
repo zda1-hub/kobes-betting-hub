@@ -110,12 +110,14 @@ function opponentFor(state, team) {
   if (!game) return null;
   const opponent = game.home_team === team.name ? game.away_team : game.home_team;
   const found = state.teams.find(row => row.name === opponent);
-  return found?.value || Object.entries(TEAM_NAMES).find(([, full]) => full === opponent)?.[0] || null;
+  return found?.value || Object.entries(TEAM_NAMES).find(([, full]) => full === opponent)?.[0] ||
+    (['CFB', 'CBB'].includes(state.sport) ? opponent : null);
 }
 async function researchBulk(state, { root, bdlKey, oddsKey, now = new Date(), fetchImpl = fetch,
   rankLookup = null, minimumRate = 0.8, requireAny80 = true } = {}) {
   if (serviceDate(now) !== state.serviceDate) throw new Error('Today’s slate reset at midnight PT');
-  if (!['NBA', 'NFL'].includes(state.sport)) throw new Error('This sport is not ready for bulk research');
+  if (!['NBA', 'NFL', 'CFB', 'CBB'].includes(state.sport))
+    throw new Error('This sport is not ready for bulk research');
   const teams = state.selectedTeams.includes('all') ? state.teams :
     state.teams.filter(row => state.selectedTeams.includes(row.value));
   const players = state.selectedPlayers.includes('all') ? state.players :
@@ -123,18 +125,25 @@ async function researchBulk(state, { root, bdlKey, oddsKey, now = new Date(), fe
   const stats = state.selectedStats;
   if (!teams.length || !players.length || !stats.length) throw new Error('Choose teams, players and stats');
   let logsByPlayer;
-  const sheet = rankLookup ? null : await rankSnapshot.load(root, state.sport,
+  const sheet = (rankLookup || ['CFB', 'CBB'].includes(state.sport)) ? null : await rankSnapshot.load(root, state.sport,
     rankSnapshot.previousSunday(now));
-  const findRank = rankLookup || (query => lookupRank(sheet, query));
+  const findRank = rankLookup || (query => sheet ? lookupRank(sheet, query) : null);
   if (state.sport === 'NBA') {
     const rows = await fetchNbaStats({ playerIds: players.map(row => row.value),
       apiKey: bdlKey, root, now, fetchImpl });
     logsByPlayer = nbaLogs(rows, { today: state.serviceDate, season: NBA_SEASON(now) });
-  } else {
+  } else if (state.sport === 'NFL') {
     const season = seasonFor(now);
     const snap = await nflSnapshot({ season, fetchImpl, now: now.valueOf() });
     logsByPlayer = nflLogs({ statsCsv: snap.statsCsv, scheduleCsv: snap.scheduleCsv,
       season, playerIds: players.map(row => row.value) });
+  } else {
+    logsByPlayer = new Map();
+    for (const team of teams) for (const log of state.collegeLogsByTeam?.get(team.value) || []) {
+      if (log.status !== 'final' || log.participated !== true) continue;
+      if (!logsByPlayer.has(log.playerId)) logsByPlayer.set(log.playerId, []);
+      logsByPlayer.get(log.playerId).push(log);
+    }
   }
   const rows = [];
   let oddsCredits = 0;
@@ -144,7 +153,8 @@ async function researchBulk(state, { root, bdlKey, oddsKey, now = new Date(), fe
     const opponentAbbr = opponentFor(state, team);
     for (const stat of stats) {
       let quote = null;
-      if (state.line !== null && oddsKey && players.length * stats.length <= 3) {
+      if (['NBA', 'NFL'].includes(state.sport) && state.line !== null && oddsKey &&
+          players.length * stats.length <= 3) {
         try {
           const market = await currentMarket({ root, apiKey: oddsKey, sport: state.sport,
             team: team.name, player: player.label, stat, side: 'over', line: state.line,
@@ -158,7 +168,8 @@ async function researchBulk(state, { root, bdlKey, oddsKey, now = new Date(), fe
       const rank = findRank({ sport: state.sport, opponentAbbr,
         position: player.position, stat });
       const result = buildResult({ sport: state.sport, player: player.label,
-        teamAbbr: team.value, teamName: team.name.split(' ').at(-1), opponentAbbr,
+        teamAbbr: team.value, teamName: ['CFB', 'CBB'].includes(state.sport) ? '' :
+          team.name.split(' ').at(-1), opponentAbbr,
         stat, logs: logsByPlayer.get(player.value) || [],
         selectedWindow: state.window, line: state.line,
         odds: quote?.odds ?? null, oddsSource: quote ? 'The Odds API' : null,

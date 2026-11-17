@@ -5,6 +5,7 @@
 const ORIGIN = 'https://api.the-odds-api.com';
 const SPORT_KEYS = Object.freeze({
   NBA: 'basketball_nba', NFL: 'americanfootball_nfl',
+  CFB: 'americanfootball_ncaaf', CBB: 'basketball_ncaab',
   MLB: 'baseball_mlb', NHL: 'icehockey_nhl'
 });
 const ALT_MARKETS = Object.freeze({

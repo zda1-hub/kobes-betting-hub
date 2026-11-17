@@ -5,7 +5,8 @@ const { researchWindows, altLineLadder } = require('./sport-provider');
 const STATS = Object.freeze({
   cfb: ['passing_yards', 'rushing_yards', 'receiving_yards', 'receptions',
     'rush_receiving_yards', 'anytime_touchdown'],
-  cbb: ['points', 'rebounds', 'assists', 'threes', 'pra']
+  cbb: ['points', 'rebounds', 'assists', 'threes', 'pra',
+    'points_rebounds', 'points_assists', 'rebounds_assists']
 });
 
 async function requestCached({ baseUrl, secret, path, body, fetchImpl = fetch }) {
@@ -49,6 +50,12 @@ function createCollegeProvider(sport, { baseUrl, secret, fetchImpl } = {}) {
         path: `/api/trends/college/team?${params}`, fetchImpl });
       if (!Array.isArray(data.logs)) throw new Error('College cache returned no team game-log array');
       return data.logs;
+    },
+    async teams() {
+      const data = await requestCached({ baseUrl, secret,
+        path: `/api/trends/college/teams?sport=${sport}`, fetchImpl });
+      if (!Array.isArray(data.teams)) throw new Error('College cache returned no team catalog');
+      return data.teams;
     },
     async research({ player, stat, line, side = 'over', season,
       opponent, location, alternateLines = [] }) {

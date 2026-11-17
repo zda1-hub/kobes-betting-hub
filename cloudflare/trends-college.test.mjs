@@ -48,7 +48,8 @@ test('college basketball final player rows compute PRA only from observed number
       assists: null, threePointFieldGoals: { made: 1 } }
   ] };
   assert.deepEqual(normalizeCbb(game, box).map(row => row.stats),
-    [{ points: 18, rebounds: 7, assists: 3, threes: 2, pra: 28 }]);
+    [{ points: 18, rebounds: 7, assists: 3, threes: 2, pra: 28,
+      points_rebounds: 25, points_assists: 21, rebounds_assists: 10 }]);
   assert.equal(normalizeCbb(game, box)[0].location, 'away');
 });
 

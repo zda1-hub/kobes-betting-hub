@@ -3558,7 +3558,12 @@ function trendsDashboardPayload() {
 
 let sportsKeysCache = { at: 0, keys: {} };
 async function sportsKeyOptions() {
-  if (Date.now() - sportsKeysCache.at < 60_000) return { env: process.env, remoteKeys: sportsKeysCache.keys };
+  if (Date.now() - sportsKeysCache.at < 60_000) return { env: process.env,
+    remoteKeys: sportsKeysCache.keys,
+    // A missing CFBD stat row does not prove a zero or a DNP. Until complete
+    // participation is verified, a CFB L10 feed could overstate hit rates.
+    providerReady: { cfb: false,
+      cbb: sportsKeysCache.keys.CFBD_API_KEY === true } };
   const base = (process.env.FREE_PICK_SITE_PUBLISH_URL ||
     'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
   const lookups = [
@@ -3576,13 +3581,16 @@ async function sportsKeyOptions() {
     } catch (error) { console.warn(`Trends provider status unavailable: ${route}`, error.message); }
   }));
   sportsKeysCache = { at: Date.now(), keys };
-  return { env: process.env, remoteKeys: keys };
+  return { env: process.env, remoteKeys: keys,
+    providerReady: { cfb: false, cbb: keys.CFBD_API_KEY === true } };
 }
 
 async function startPrivatePropFlow(interaction) {
   const state = await sportsControl.read(reviewQueueRoot);
-  const leagues = sportsControl.enabledSports(state, { env: process.env })
-    .filter(sport => ['nba', 'nfl'].includes(sport)).map(sport => sport.toUpperCase());
+  const keyOptions = await sportsKeyOptions();
+  const leagues = sportsControl.enabledSports(state, keyOptions)
+    .filter(sport => ['nba', 'nfl', 'cfb', 'cbb'].includes(sport))
+    .map(sport => sport.toUpperCase());
   if (!leagues.length) {
     await interaction.reply({ flags: 64, content: 'No current prop search sport is enabled.' });
     return;
@@ -4024,7 +4032,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     else if (/^trends-ui-(search|board|builder-)/.test(interaction.customId)) requestedTrendSport = 'nba';
   }
   if (requestedTrendSport && !sportsControl.isEnabled(requestedTrendSport,
-    await sportsControl.read(reviewQueueRoot), { env: process.env })) {
+    await sportsControl.read(reviewQueueRoot), await sportsKeyOptions())) {
     await interaction.reply({ flags: 64, content: 'That sport is off or its data provider is not ready.' });
     return;
   }
@@ -4070,7 +4078,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.update({ content: 'Checking today’s completed-game logs…', components: [] });
       try {
         if (state.sport && !sportsControl.isEnabled(state.sport.toLowerCase(),
-          await sportsControl.read(reviewQueueRoot), { env: process.env }))
+          await sportsControl.read(reviewQueueRoot), await sportsKeyOptions()))
           throw new Error('This sport was turned off. Start a new search.');
         const report = await researchBulk(state, { root: reviewQueueRoot,
           bdlKey: process.env.BDL_NBA_API_KEY, oddsKey: process.env.ODDS_API_KEY });
@@ -4093,15 +4101,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
         state.sport = sport;
         await interaction.update({ content: 'Loading today’s teams and rosters…', components: [] });
         await bulkPanel.loadTodayTeams(state, { oddsKey: process.env.ODDS_API_KEY,
-          bdlKey: process.env.BDL_NBA_API_KEY });
-        await bulkPanel.loadPlayers(state, { bdlKey: process.env.BDL_NBA_API_KEY });
+          bdlKey: process.env.BDL_NBA_API_KEY,
+          collegeBaseUrl: process.env.FREE_PICK_SITE_PUBLISH_URL ||
+            'https://bettinghub-publisher.kobedirwin.workers.dev',
+          collegeSecret: process.env.FREE_PICK_SITE_PUBLISH_SECRET });
+        await bulkPanel.loadPlayers(state, { bdlKey: process.env.BDL_NBA_API_KEY,
+          collegeBaseUrl: process.env.FREE_PICK_SITE_PUBLISH_URL ||
+            'https://bettinghub-publisher.kobedirwin.workers.dev',
+          collegeSecret: process.env.FREE_PICK_SITE_PUBLISH_SECRET });
         await interaction.editReply(bulkPanel.render(state));
         return;
       } else if (action === 'team') {
         state.selectedTeams = bulkPanel.mergePageSelection(state.selectedTeams,
           interaction.values, state.teams, state.teamPage);
         await interaction.update({ content: 'Loading selected active rosters…', components: [] });
-        await bulkPanel.loadPlayers(state, { bdlKey: process.env.BDL_NBA_API_KEY });
+        await bulkPanel.loadPlayers(state, { bdlKey: process.env.BDL_NBA_API_KEY,
+          collegeBaseUrl: process.env.FREE_PICK_SITE_PUBLISH_URL ||
+            'https://bettinghub-publisher.kobedirwin.workers.dev',
+          collegeSecret: process.env.FREE_PICK_SITE_PUBLISH_SECRET });
         await interaction.editReply(bulkPanel.render(state));
         return;
       } else if (action === 'player') {
@@ -4910,8 +4927,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
         throw new Error('TEST channel is not verified private');
       const sport = interaction.options.getString('sport', true);
       const controls = await sportsControl.read(reviewQueueRoot);
+      if (!sportsControl.isEnabled(sport.toLowerCase(), controls, await sportsKeyOptions()))
+        throw new Error('This sport is off or its data provider is not ready');
       const report = await prepareDailyFeed({ sport, root: reviewQueueRoot,
         oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+        collegeBaseUrl: process.env.FREE_PICK_SITE_PUBLISH_URL ||
+          'https://bettinghub-publisher.kobedirwin.workers.dev',
+        collegeSecret: process.env.FREE_PICK_SITE_PUBLISH_SECRET,
         threshold: controls.feedThreshold || 80 });
       const receipt = await publishDailyFeed({ root: reviewQueueRoot, report,
         channel, test: true });
