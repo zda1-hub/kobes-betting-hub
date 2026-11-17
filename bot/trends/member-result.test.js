@@ -1,7 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { FOOTER, windowText, formatMemberResult, nbaResult, nflResult } = require('./member-result');
+const { FOOTER, INSUFFICIENT_SAMPLE, windowText, formatMemberResult, nbaResult,
+  nflResult } = require('./member-result');
 
 const analysis = { l5: { hits: 5, sample: 5 }, l10: { hits: 8, sample: 10 },
   l20: { hits: 15, sample: 20 } };
@@ -33,4 +34,17 @@ test('NFL result uses roster team and only the actual quoted price', () => {
     fetchedAt: '2026-11-16T19:00:00Z' } });
   assert.match(text, /^Josh Allen - \*BUF Bills\*\nOver 199\.5 Pass yds \(\+120\)/);
   assert.ok(text.endsWith(FOOTER));
+});
+
+test('legacy direct DM search never displays a prop with five or fewer observed games', () => {
+  for (const sample of [0, 1, 5]) {
+    const short = { l5: { hits: sample, sample }, l10: { hits: sample, sample },
+      l20: { hits: sample, sample } };
+    assert.equal(formatMemberResult({ player: 'P', teamAbbr: 'BOS', teamName: 'Celtics',
+      stat: 'Assists', line: 2.5, analysis: short }), INSUFFICIENT_SAMPLE);
+  }
+  const six = { l5: { hits: 5, sample: 5 }, l10: { hits: 6, sample: 6 },
+    l20: { hits: 6, sample: 6 } };
+  assert.match(formatMemberResult({ player: 'P', teamAbbr: 'BOS', teamName: 'Celtics',
+    stat: 'Assists', line: 2.5, analysis: six }), /L20- 6\/6/);
 });
