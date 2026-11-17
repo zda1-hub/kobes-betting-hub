@@ -203,6 +203,22 @@ export async function collegeStatus(env, now = new Date()) {
   return { month, calls: row?.calls || 0, guard: LIMIT, keyConfigured: Boolean(env.CFBD_API_KEY) };
 }
 
+export async function collegeUpstreamStatus(env, now = new Date(), fetchImpl = fetch) {
+  if (!env.CFBD_API_KEY) throw new Error('CFBD_API_KEY is missing from Wrangler secrets');
+  await ensureCollegeTables(env.DB);
+  await reserveCollegeCall(env.DB, now);
+  const response = await fetchImpl(`${ORIGINS.cfb}/info`, {
+    headers: { authorization: `Bearer ${env.CFBD_API_KEY}`, accept: 'application/json' },
+    signal: AbortSignal.timeout(10000)
+  });
+  if (!response.ok) return { status: response.status };
+  const data = await response.json();
+  return { status: response.status, tierName: data.tierName,
+    monthlyLimit: data.monthlyLimit, usedCalls: data.usedCalls,
+    remainingCalls: data.remainingCalls, resetAt: data.resetAt,
+    sharedPool: data.sharedPool };
+}
+
 export async function collegeLogs(env, sport, player) {
   if (!ORIGINS[sport] || !player || String(player).length > 100) throw new Error('Valid sport and player required');
   await ensureCollegeTables(env.DB);
