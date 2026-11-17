@@ -40,23 +40,33 @@ export async function reserveCollegeCall(db, now = new Date()) {
   return { month, calls: row.calls, remainingBeforeGuard: LIMIT - row.calls };
 }
 
-async function collegeGet(env, sport, endpoint, now, fetchImpl = fetch) {
+export async function collegeGet(env, sport, endpoint, now, fetchImpl = fetch,
+  waitImpl = ms => new Promise(resolve => setTimeout(resolve, ms))) {
   if (!env.CFBD_API_KEY) throw new Error('CFBD_API_KEY is missing from Wrangler secrets');
-  await reserveCollegeCall(env.DB, now);
   const url = `${ORIGINS[sport]}${endpoint}`;
-  const response = await fetchImpl(url, {
-    headers: { authorization: `Bearer ${env.CFBD_API_KEY}`, accept: 'application/json' },
-    signal: AbortSignal.timeout(20000)
-  });
-  if (!response.ok) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // Each retry consumes the shared quota, including rejected requests.
+    await reserveCollegeCall(env.DB, now);
+    const response = await fetchImpl(url, {
+      headers: { authorization: `Bearer ${env.CFBD_API_KEY}`, accept: 'application/json' },
+      signal: AbortSignal.timeout(20000)
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (!Array.isArray(data)) throw new Error(`${sport.toUpperCase()} data endpoint returned an unexpected shape`);
+      return { data, url };
+    }
     const retryAfter = response.headers.get('retry-after');
+    const seconds = Number(retryAfter);
+    if (response.status === 429 && attempt < 2 && /^\d{1,2}$/.test(retryAfter || '') &&
+        seconds >= 1 && seconds <= 5) {
+      await waitImpl(seconds * 1000);
+      continue;
+    }
     const route = endpoint.split('?')[0];
     throw new Error(`${sport.toUpperCase()} ${route} returned ${response.status}` +
       (retryAfter && /^\d{1,5}$/.test(retryAfter) ? ` (retry after ${retryAfter}s)` : ''));
   }
-  const data = await response.json();
-  if (!Array.isArray(data)) throw new Error(`${sport.toUpperCase()} data endpoint returned an unexpected shape`);
-  return { data, url };
 }
 
 function number(value) { return value === '' || value == null ? null : Number.isFinite(Number(value)) ? Number(value) : null; }

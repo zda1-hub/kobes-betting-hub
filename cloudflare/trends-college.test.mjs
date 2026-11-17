@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./trends-college.js', import.meta.url), 'utf8');
-const { normalizeCfb, normalizeCbb, reserveCollegeCall, dueCollegeRefresh,
+const { normalizeCfb, normalizeCbb, reserveCollegeCall, collegeGet, dueCollegeRefresh,
   refreshDueCollege, refreshCollegeDay, refreshOneCbbBackfill, collegeUpstreamStatus } =
   await import(`data:text/javascript,${encodeURIComponent(source)}`);
 
@@ -67,6 +67,30 @@ test('shared college budget refuses request 901 before the network', async () =>
   } };
   assert.equal((await reserveCollegeCall(db, new Date('2026-11-16'))).calls, 900);
   await assert.rejects(reserveCollegeCall(db, new Date('2026-11-16')), /900/);
+});
+
+test('short provider 429 waits and counts each attempt; long limits are held', async () => {
+  let calls = 0;
+  let requests = 0;
+  const db = { prepare(sql) { return { bind() { return this; }, async run() {
+    if (sql.startsWith('UPDATE')) calls++;
+    return { meta: { changes: 1 } };
+  }, async first() { return { calls }; } }; } };
+  const waits = [];
+  const result = await collegeGet({ DB: db, CFBD_API_KEY: 'private-key' }, 'cbb',
+    '/games?season=2027', new Date('2026-11-16'), async () => {
+      requests++;
+      return requests === 1 ? new Response('', { status: 429,
+        headers: { 'retry-after': '2' } }) : new Response('[]');
+    }, async ms => { waits.push(ms); });
+  assert.deepEqual(result.data, []);
+  assert.deepEqual(waits, [2000]);
+  assert.equal(calls, 2);
+  await assert.rejects(collegeGet({ DB: db, CFBD_API_KEY: 'private-key' }, 'cbb',
+    '/games', new Date('2026-11-16'), async () => new Response('', { status: 429,
+      headers: { 'retry-after': '300' } }), async () => { throw new Error('must not wait'); }),
+  /retry after 300s/);
+  assert.equal(calls, 3);
 });
 
 test('upstream quota check reports only safe account usage fields', async () => {
