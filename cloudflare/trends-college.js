@@ -105,7 +105,11 @@ export function normalizeCfb(game, box) {
       if (!metric) continue;
       for (const athlete of type.athletes || []) {
         const value = number(athlete.stat);
-        if (!athlete.id || !athlete.name || value === null) continue;
+        // CFBD includes synthetic team-total athletes with negative IDs and
+        // names such as " Team". They are not searchable players.
+        if (!Number.isSafeInteger(Number(athlete.id)) || Number(athlete.id) <= 0 ||
+            !String(athlete.name || '').trim() ||
+            String(athlete.name).trim().toLowerCase() === 'team' || value === null) continue;
         const id = String(athlete.id);
         const row = players.get(id) || { playerId: id, playerName: athlete.name, team,
           opponent: team === home ? away : home, location: team === home ? 'home' : 'away', stats: {} };
