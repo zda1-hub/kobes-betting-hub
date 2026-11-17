@@ -12,6 +12,7 @@ const { buildResult, formatReport } = require('./bulk-report');
 const { currentMarket } = require('./current-market');
 const rankSnapshot = require('./rank-snapshot');
 const { lookupRank } = require('./team-ranks');
+const { completeCfbSample } = require('./college-coverage');
 
 const NBA_FIELDS = Object.freeze({ points: ['pts'], rebounds: ['reb'], assists: ['ast'],
   threes: ['fg3m'], pra: ['pts', 'reb', 'ast'], points_rebounds: ['pts', 'reb'],
@@ -152,6 +153,8 @@ async function researchBulk(state, { root, bdlKey, oddsKey, now = new Date(), fe
     if (!team) continue;
     const opponentAbbr = opponentFor(state, team);
     for (const stat of stats) {
+      if (state.sport === 'CFB' && !completeCfbSample(
+        state.collegeLogsByTeam?.get(team.value), player.value, stat)) continue;
       let quote = null;
       if (['NBA', 'NFL'].includes(state.sport) && state.line !== null && oddsKey &&
           players.length * stats.length <= 3) {

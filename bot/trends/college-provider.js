@@ -1,6 +1,7 @@
 'use strict';
 
 const { researchWindows, altLineLadder } = require('./sport-provider');
+const { completeCfbSample } = require('./college-coverage');
 
 const STATS = Object.freeze({
   cfb: ['passing_yards', 'rushing_yards', 'receiving_yards', 'receptions',
@@ -62,6 +63,9 @@ function createCollegeProvider(sport, { baseUrl, secret, fetchImpl } = {}) {
       if (!STATS[sport].includes(stat)) throw new Error('Unsupported college statistic');
       const logs = await this.logs(player);
       if (!logs.length) throw new Error('No cached final player games');
+      if (sport === 'cfb' && !completeCfbSample(
+        await this.teamLogs(logs[0].team), logs[0].playerId, stat))
+        throw new Error('CFB stat sample is incomplete; research held');
       return { sport, player: logs[0].player, playerId: logs[0].playerId,
         lastTeam: logs[0].team, lastPlayed: logs[0].date,
         sourceUrl: logs[0].sourceUrl,
