@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./trends-college.js', import.meta.url), 'utf8');
 const { normalizeCfb, normalizeCbb, reserveCollegeCall, dueCollegeRefresh,
-  refreshDueCollege, refreshCollegeDay, collegeUpstreamStatus } =
+  refreshDueCollege, refreshCollegeDay, refreshOneCbbBackfill, collegeUpstreamStatus } =
   await import(`data:text/javascript,${encodeURIComponent(source)}`);
 
 test('college refresh waits until 8 AM Pacific and skips off-season sports', () => {
@@ -84,6 +84,36 @@ test('upstream quota check reports only safe account usage fields', async () => 
     });
   assert.equal(result.remainingCalls, 0);
   assert.equal(result.credential, undefined);
+});
+
+test('CBB backfill selects one missing day and waits six hours before another', async () => {
+  let attemptedAt = null;
+  let calls = 0;
+  const db = { async batch() { return []; }, prepare(sql) { return {
+    bind(...args) { this.args = args; return this; },
+    async first() {
+      if (sql.includes('MAX(attempted_at)')) return { at: attemptedAt };
+      if (sql.includes('SELECT calls')) return { calls };
+      return null;
+    },
+    async all() { return { results: Array.from({ length: 6 }, (_, i) =>
+      ({ game_date: `2026-11-${String(14 - i).padStart(2, '0')}` })) }; },
+    async run() {
+      if (sql.includes("'cbb_backfill'")) attemptedAt = this.args[1];
+      if (sql.startsWith('UPDATE trends_college_usage')) calls++;
+      return { meta: { changes: 1 } };
+    }
+  }; } };
+  const now = new Date('2026-11-16T20:00:00Z');
+  const fetchImpl = async () => new Response('[]');
+  const first = await refreshOneCbbBackfill({ DB: db, CFBD_API_KEY: 'test-key' },
+    '2026-11-15', { now, fetchImpl });
+  assert.equal(first.date, '2026-11-08');
+  assert.equal(first.backfill, true);
+  assert.equal(calls, 2);
+  assert.equal(await refreshOneCbbBackfill({ DB: db, CFBD_API_KEY: 'test-key' },
+    '2026-11-15', { now: new Date(now.valueOf() + 3600_000), fetchImpl }), null);
+  assert.equal(calls, 2);
 });
 
 test('a full CBB slate writes in batches instead of exhausting D1 subrequests', async () => {
