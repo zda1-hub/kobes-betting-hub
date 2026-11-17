@@ -43,7 +43,8 @@ test('Jokić/Jokic share a receipt; verified NBA research sends one compact sour
   assert.match(content, /\*\*Nikola Jokić: over 20\.5 points\*\* · -110 at DraftKings/);
   assert.match(content, /Historical hits: season 9\/10 · L5 5\/5 · L10 9\/10 · L20 17\/20/);
   assert.match(content, /\[Game logs\]\(https:\/\/api\.balldontlie\.io\/v1\/stats\)/);
-  assert.match(content, /21\+ · Lines move/);
+  assert.match(content, /Lines move/);
+  assert.doesNotMatch(content, /21\+/);
   assert.match(content, /Not a guarantee/);
   assert.doesNotMatch(content, /Market updated|Active roster and injury list checked/);
 });

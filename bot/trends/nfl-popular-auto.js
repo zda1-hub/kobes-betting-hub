@@ -100,7 +100,7 @@ async function scanNflPopular({ root, oddsKey, channelId, channelFor,
     }, serviceDate, now: now.valueOf() });
     const content = `**${card.title} · NFL**\n${card.lines.map((line, i) => `${i + 1}. ${line}`).join('\n')}\n` +
       `${card.evidence}. Exact member requests, not sportsbook-wide popularity. No combined price or probability is claimed.\n` +
-      `Data: nflverse (CC BY 4.0)\n21+ | Research only, not a guarantee`;
+      `Data: nflverse (CC BY 4.0)\nResearch only, not a guarantee`;
     if (content.length > 1900) throw new Error('NFL popular card exceeds Discord limit');
     const channel = await channelFor(channelId);
     if (!channel?.isTextBased?.() || channel.id !== channelId)

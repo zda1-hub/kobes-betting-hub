@@ -47,5 +47,5 @@ test('one DM includes grouped results and footer; long reports split only at blo
   const chunks = formatReport([row]);
   assert.equal(chunks.length, 1);
   assert.match(chunks[0], /\*\*NBA\*\*[\s\S]*\*\*BOS\*\*/);
-  assert.match(chunks[0], /21\+ \| Research only, not a guarantee$/);
+  assert.match(chunks[0], /Research only, not a guarantee$/);
 });

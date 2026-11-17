@@ -127,7 +127,7 @@ function formatMultiSportBoard(board) {
     `${board.event.away} at ${board.event.home} · ${board.event.startsAt}\n` +
     `${lines.length ? lines.join('\n') : `No qualifying current alternate props among ${board.checkedOffers} bounded candidates.`}\n` +
     `Checked ${board.checkedAt}. Lines may move. Player participation is not confirmed by a historical trend or a sportsbook quote. ` +
-    `Historical rates are not next-game probabilities. Research only, not approved picks. 21+.`;
+    `Historical rates are not next-game probabilities. Research only, not approved picks.`;
   if (result.length > 1900) throw new Error('Multi-sport board exceeds Discord message limit');
   return result;
 }

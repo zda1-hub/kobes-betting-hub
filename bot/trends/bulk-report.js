@@ -3,7 +3,7 @@
 const { analyze } = require('./analytics');
 const { STATS } = require('./prop-flow');
 
-const FOOTER = '21+ | Research only, not a guarantee';
+const FOOTER = 'Research only, not a guarantee';
 const WINDOWS = { L5: 'l5', L10: 'l10', L20: 'l20' };
 const MIN_OBSERVED_GAMES = 6;
 

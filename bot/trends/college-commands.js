@@ -2,7 +2,7 @@
 
 const { createCollegeProvider } = require('./college-provider');
 
-const FOOTER = '21+ | Research only, not a guarantee';
+const FOOTER = 'Research only, not a guarantee';
 const count = row => `${row.hits}/${row.sample}`;
 const enoughGames = logs => new Set(logs.map(row => row.gameId)).size >= 6;
 const SYNCING = 'College data is syncing; at least six completed player games are required before showing trends.';

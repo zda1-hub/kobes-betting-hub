@@ -74,7 +74,7 @@ function formatResearch(result) {
     `${formatContext(result.context)}\n` +
     `Source: [nflverse weekly player stats](${sourceUrl})${result.context ? ` · [roster](${result.context.rosterUrl}) · [injury report](${result.context.injuryUrl})` : ''} (CC BY 4.0). Checked ${fetchedAt}. ` +
     `Final participated games with observed stats only; pushes remain in the denominator. ` +
-    `Historical frequency is not a next-game probability. Game-day availability, current sportsbook line and odds are not verified. 21+.`;
+    `Historical frequency is not a next-game probability. Game-day availability, current sportsbook line and odds are not verified.`;
 }
 
 module.exports = { snapshot, resolvePlayer, research, formatResearch };

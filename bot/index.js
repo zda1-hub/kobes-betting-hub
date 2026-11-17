@@ -5221,7 +5221,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         `**Trends-tool · private market research**\n${result.event.away_team} at ${result.event.home_team} · ${result.event.commence_time}\n` +
         `${query.player}: ${query.side} ${query.line} ${query.stat.replaceAll('_', ' ')}\n${offers}\n${history}\n` +
         `Checked ${result.fetchedAt}. Odds source: The Odds API. Historical counts are descriptive, not a probability. ` +
-        `Game-day player availability is unverified. Research only; no pick or member post was made. 21+.`);
+        `Game-day player availability is unverified. Research only; no pick or member post was made.`);
     } catch (error) {
       console.warn('Trends-tool current-market research unavailable:', error.message);
       await interaction.editReply(`Current-market research could not complete: ${error.message}. No pick or member post was made.`);
@@ -5261,7 +5261,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `Your exact ${rawLegs.length}-leg combination was ${result.recorded ? 'recorded' : 'already counted'} for ${result.serviceDate} Pacific. ` +
           `${result.distinctSearchers} distinct member(s) requested this combination today. ` +
           `Current combined NBA research applies only to NBA legs. Other leagues remain interest tracking while their data is verified. ` +
-          `Historical hit rates do not predict a combination's chance. No parlay was posted. 21+.`,
+          `Historical hit rates do not predict a combination's chance. No parlay was posted.`,
           allowedMentions: { parse: [] } });
       }
     } catch (error) {

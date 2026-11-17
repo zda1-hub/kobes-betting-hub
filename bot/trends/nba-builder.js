@@ -218,7 +218,7 @@ function formatNbaBuilder(builder) {
     `${rows.length ? rows.join('\n') : 'No legs yet. Search a current NBA prop to add one.'}\n` +
     `${builder.warnings.length ? `Caution: ${builder.warnings.map(safe).join('; ')}.\n` : ''}` +
     `Research only. No combined sportsbook quote or probability. Lines move; ` +
-    `injury checks do not confirm participation. Session expires ${builder.expiresAt}. 21+.`;
+    `injury checks do not confirm participation. Session expires ${builder.expiresAt}.`;
 }
 
 module.exports = { SESSION_MS, MAX_LEGS, getNbaBuilder, addNbaBuilderLeg,

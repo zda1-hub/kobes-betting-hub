@@ -20,7 +20,7 @@ test('private TEST feed is visibly labeled and includes all ten observed game va
   assert.match(messages[0], /L10 8\/10 · 80% · avg 280\.2/);
   assert.match(messages[0], /11-01 270[\s\S]*11-10 279/);
   assert.match(messages[0], /Data: nflverse \(CC BY 4\.0\)/);
-  assert.match(messages[0], /21\+ \| Research only, not a guarantee$/);
+  assert.match(messages[0], /Research only, not a guarantee$/);
 });
 
 test('college feed identifies unverified injuries and never invents book odds', () => {

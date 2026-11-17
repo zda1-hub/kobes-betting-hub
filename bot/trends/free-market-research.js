@@ -99,7 +99,7 @@ function formatFreeMarket(result) {
     (compare ? `Other current lines: ${compare}\n` : '') +
     `Odds checked ${result.oddsCheckedAt}; history checked ${result.historyCheckedAt}. ` +
     `[Completed-game source](${result.sourceUrl}).\n` +
-    `${result.note} Counts are historical, not next-game probabilities. 21+.`;
+    `${result.note} Counts are historical, not next-game probabilities.`;
 }
 
 module.exports = { researchFreeMarket, formatFreeMarket };

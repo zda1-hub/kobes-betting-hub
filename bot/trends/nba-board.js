@@ -94,7 +94,7 @@ function formatNbaBoard(board) {
     `${lines.length ? lines.join('\n') : `No qualifying current alternate props among ${board.checkedOffers} bounded candidates.`}\n` +
     `Checked ${board.checkedAt}. Active roster matched to this game; no injury entry was found for shown players. ` +
     `Participation is not confirmed. Historical rates are not next-game probabilities. ` +
-    `Research only, not approved picks. Lines move. 21+.`;
+    `Research only, not approved picks. Lines move.`;
   if (content.length > 1900) throw new Error('NBA board exceeds the private message limit');
   return content;
 }
