@@ -189,13 +189,17 @@ test('CFB fetches one weekly box-score batch for multiple final games', async ()
   const paths = [];
   const fetchImpl = async url => {
     paths.push(new URL(url).pathname + new URL(url).search);
-    return new Response(JSON.stringify(url.includes('/games/players?') ? boxes : games));
+    return new Response(JSON.stringify(url.includes('/calendar?') ? [{ season: 2026, week: 11,
+      seasonType: 'regular', startDate: '2026-11-12T00:00:00Z',
+      endDate: '2026-11-17T23:59:59Z' }] :
+      url.includes('/games/players?') ? boxes : games));
   };
   const result = await refreshCollegeDay({ DB: db, CFBD_API_KEY: 'test-key' }, 'cfb', '2026-11-15',
     { now: new Date('2026-11-16T20:00:00Z'), fetchImpl });
   assert.equal(result.playerRows, 2);
-  assert.equal(calls, 2);
-  assert.match(paths[0], /classification=fbs/);
+  assert.equal(calls, 3);
+  assert.match(paths[0], /^\/calendar\?year=2026/);
   assert.match(paths[1], /week=11/);
   assert.match(paths[1], /classification=fbs/);
+  assert.match(paths[2], /classification=fbs/);
 });

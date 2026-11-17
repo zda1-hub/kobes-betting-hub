@@ -160,23 +160,25 @@ export async function refreshCollegeDay(env, sport, date, { now = new Date(), fe
     schedules = await collegeGet(env, sport, `/games?${query}`, now, fetchImpl);
     boxes = await collegeGet(env, sport, `/games/players?${query}`, now, fetchImpl);
   } else {
-    // Fetch a whole week at a time. One request per game would exhaust the
-    // shared free quota on a full college-football Saturday.
-    // The Odds API college slate is FBS-focused. Asking CFBD for every
-    // classification loads many unrelated boxes and can exhaust Worker CPU.
-    schedules = await collegeGet(env, sport,
-      `/games?year=${date.slice(0, 4)}&classification=fbs`, now, fetchImpl);
+    // The small calendar maps a date to its week. A whole-season schedule
+    // sometimes exceeds the Worker's CPU limit before box scores are read.
+    const year = date.slice(0, 4);
+    const calendar = await collegeGet(env, sport, `/calendar?year=${year}`, now, fetchImpl);
+    const weeks = [...new Set(calendar.data.filter(row =>
+      String(row.seasonType).toLowerCase() === 'regular' &&
+      pacificDate(row.startDate) <= date && pacificDate(row.endDate) >= date)
+      .map(row => Number(row.week)))];
+    if (weeks.some(week => !Number.isInteger(week) || week < 0))
+      throw new Error('CFB calendar is missing week numbers');
+    schedules = { data: [] };
     boxes = { data: [], url: `${ORIGINS.cfb}/games/players` };
-    const targetGames = schedules.data.filter(g => finalGame(g) && gameDate(g) === date &&
-      String(g.seasonType || g.season_type || 'regular').toLowerCase() === 'regular');
-    const weeks = new Set(targetGames.map(g => Number(g.week)));
-    if (weeks.has(NaN) || [...weeks].some(week => !Number.isInteger(week) || week < 0))
-      throw new Error('CFB schedule is missing week numbers');
     for (const week of weeks) {
-      const query = new URLSearchParams({ year: date.slice(0, 4), week: String(week),
+      const query = new URLSearchParams({ year, week: String(week),
         seasonType: 'regular', classification: 'fbs' });
-      const one = await collegeGet(env, sport, `/games/players?${query}`, now, fetchImpl);
-      boxes.data.push(...one.data);
+      const games = await collegeGet(env, sport, `/games?${query}`, now, fetchImpl);
+      const players = await collegeGet(env, sport, `/games/players?${query}`, now, fetchImpl);
+      schedules.data.push(...games.data);
+      boxes.data.push(...players.data);
     }
   }
   const finalGames = schedules.data.filter(g => finalGame(g) && gameDate(g) === date &&
