@@ -10,6 +10,9 @@
  *   DISCORD_OAUTH_STATE_SECRET Random secret used to secure OAuth state
  *   SUPABASE_SECRET_KEY        Server-only sb_secret key; never expose it to the website
  *   MEMBERSHIP_OPERATIONS_SECRET Dedicated bearer secret for manual reconciliation
+ *   X_ADS_CONSUMER_KEY / X_ADS_CONSUMER_SECRET / X_ADS_ACCESS_TOKEN /
+ *   X_ADS_ACCESS_TOKEN_SECRET  Optional X Ads API OAuth 1.0a credentials for
+ *                            consented Stripe-confirmed conversions
  *
  * Required Worker variables:
  *   STRIPE_MONTHLY_PRICE_ID    $32.99/month recurring Stripe Price ID
@@ -24,6 +27,74 @@
  * Required Worker binding:
  *   CHECKOUT_RATE_LIMITER      Per-client create-checkout limiter (10 attempts/minute)
  */
+
+// X Ads Conversion API. This module never runs without a consented X click ID
+// and four Ads API OAuth secrets. No customer email, IP, or Discord ID is sent.
+const PIXEL_ID = 'rht3t';
+const EVENT_IDS = Object.freeze({ trial: 'rhuz5', purchase: 'rhuz6' });
+const ENDPOINT = `https://ads-api.x.com/12/measurement/conversions/${PIXEL_ID}`;
+const encoder = new TextEncoder();
+const percent = value => encodeURIComponent(String(value)).replace(/[!'()*]/g,
+  character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+
+function validTwclid(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9._~-]{1,512}$/.test(value);
+}
+
+function xConversionsConfigured(env) {
+  return Boolean(env.X_ADS_CONSUMER_KEY && env.X_ADS_CONSUMER_SECRET &&
+    env.X_ADS_ACCESS_TOKEN && env.X_ADS_ACCESS_TOKEN_SECRET);
+}
+
+function conversionPayload({ kind, conversionId, twclid, occurredAt, value, currency }) {
+  if (!EVENT_IDS[kind] || !/^\w+:[0-9a-f]{64}$/.test(conversionId || '') ||
+      !validTwclid(twclid) || !Number.isFinite(Date.parse(occurredAt))) return null;
+  const conversion = {
+    conversion_time: new Date(occurredAt).toISOString(),
+    event_id: EVENT_IDS[kind],
+    identifiers: [{ twclid }],
+    conversion_id: conversionId,
+  };
+  if (kind === 'purchase') {
+    if (!Number.isSafeInteger(value) || value <= 0 || !/^[A-Z]{3}$/.test(currency || '')) return null;
+    conversion.value = (value / 100).toFixed(2);
+    conversion.currency = currency;
+  }
+  return { conversions: [conversion] };
+}
+
+async function oauthHeader(env, url = ENDPOINT, now = Date.now(), nonce = crypto.randomUUID().replaceAll('-', '')) {
+  const parameters = {
+    oauth_consumer_key: env.X_ADS_CONSUMER_KEY,
+    oauth_nonce: nonce,
+    oauth_signature_method: 'HMAC-SHA1',
+    oauth_timestamp: String(Math.floor(now / 1000)),
+    oauth_token: env.X_ADS_ACCESS_TOKEN,
+    oauth_version: '1.0',
+  };
+  const sorted = Object.entries(parameters).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${percent(key)}=${percent(value)}`).join('&');
+  const base = ['POST', percent(url), percent(sorted)].join('&');
+  const secret = `${percent(env.X_ADS_CONSUMER_SECRET)}&${percent(env.X_ADS_ACCESS_TOKEN_SECRET)}`;
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(base)));
+  parameters.oauth_signature = btoa(String.fromCharCode(...bytes));
+  return 'OAuth ' + Object.entries(parameters).map(([key, value]) => `${percent(key)}="${percent(value)}"`).join(', ');
+}
+
+async function sendXConversion(env, input, fetchImpl = fetch) {
+  if (!xConversionsConfigured(env)) return { status: 'not_configured' };
+  const payload = conversionPayload(input);
+  if (!payload) return { status: 'not_eligible' };
+  const response = await fetchImpl(ENDPOINT, {
+    method: 'POST',
+    headers: { Authorization: await oauthHeader(env), 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`X Conversion API returned HTTP ${response.status}`);
+  return { status: 'sent' };
+}
 
 const SITE_ORIGIN = 'https://kobesbettinghub.com';
 const SITE_PATH = '';
@@ -744,11 +815,16 @@ function cleanAttribution(value = {}) {
     utm_source: text(value.utm_source), utm_medium: text(value.utm_medium),
     utm_campaign: text(value.utm_campaign), utm_content: text(value.utm_content), utm_term: text(value.utm_term),
     gclid: text(value.gclid, 160), fbclid: text(value.fbclid, 160), msclkid: text(value.msclkid, 160),
+    twclid: /^[A-Za-z0-9._~-]{1,512}$/.test(String(value.twclid || '')) ? String(value.twclid) : '',
     referral_identifier: text(value.referral_identifier, 64), document_referrer: text(value.document_referrer, 500),
     referrer_host: text(value.referrer_host), country: text(value.country, 2).toUpperCase(),
     device: text(value.device, 24), browser: text(value.browser, 40),
     landing_path: text(value.landing_path, 300),
   };
+}
+
+function consentedXClickId(data) {
+  return data?.tracking_consent === true ? cleanAttribution(data.attribution).twclid : '';
 }
 
 function attributionSourceForSession(session) {
@@ -1995,7 +2071,9 @@ async function prepareCheckout(request, env, origin) {
     body: {
       public_token_hash: await sha256Text(token), offer: data.offer,
       referral_code: referralOwner ? referralCode : null,
-      analytics_session_id: sessionId, attribution: { ...cleanAttribution(data.attribution), ...(first20 ? { promotion: 'first20' } : {}), ...(first5 ? { promotion: 'discord_first5' } : {}) },
+      analytics_session_id: sessionId, attribution: { ...cleanAttribution(data.attribution),
+        twclid: consentedXClickId(data),
+        ...(first20 ? { promotion: 'first20' } : {}), ...(first5 ? { promotion: 'discord_first5' } : {}) },
       expires_at: new Date(Date.now() + CHECKOUT_ASSOCIATION_TTL_MS).toISOString(),
     },
   });
@@ -2030,6 +2108,10 @@ async function createAssociatedCheckout(env, association, publicToken, discordUs
     'subscription_data[metadata][offer]': association.offer,
     'subscription_data[metadata][checkout_association_id]': association.id,
   };
+  if (association.attribution?.twclid) {
+    values['metadata[x_twclid]'] = association.attribution.twclid;
+    values['subscription_data[metadata][x_twclid]'] = association.attribution.twclid;
+  }
   if (first20 || first5) {
     values['metadata[promotion]'] = first5 ? 'discord_first5' : 'first20';
     values['subscription_data[metadata][promotion]'] = first5 ? 'discord_first5' : 'first20';
@@ -2113,6 +2195,11 @@ async function createCheckout(request, env, origin) {
     'metadata[offer]': data.offer,
     'subscription_data[metadata][offer]': data.offer,
   };
+  const xClickId = consentedXClickId(data);
+  if (xClickId) {
+    values['metadata[x_twclid]'] = xClickId;
+    values['subscription_data[metadata][x_twclid]'] = xClickId;
+  }
   if (first20) {
     values['metadata[promotion]'] = 'first20';
     values['subscription_data[metadata][promotion]'] = 'first20';
@@ -3925,7 +4012,18 @@ async function adminRetryVip(request, env, origin) {
   catch { return json({ error: 'Stripe entitlement was not eligible or Discord sync failed safely.' }, 409, origin); }
 }
 
-async function handleWebhook(request, env) {
+function scheduleXConversion(ctx, env, event, metadata, input) {
+  // A Stripe webhook may be retried. X uses the same opaque conversion_id as
+  // the browser pixel to deduplicate, while billing never waits on marketing.
+  if (event?.livemode !== true || !xConversionsConfigured(env) ||
+      !validTwclid(metadata?.x_twclid) || !ctx?.waitUntil) return false;
+  ctx.waitUntil(sendXConversion(env, { ...input, twclid: metadata.x_twclid,
+    occurredAt: stripeTimestamp(event.created) || new Date().toISOString() })
+    .catch(error => console.error('X Conversion API delivery needs attention:', error.message)));
+  return true;
+}
+
+async function handleWebhook(request, env, ctx) {
   let payload;
   try { payload = await readTextWithLimit(request, 1_000_000); }
   catch (error) {
@@ -3957,6 +4055,10 @@ async function handleWebhook(request, env) {
         else if (['paid', 'no_payment_required'].includes(session.payment_status) && session.amount_total === 0
             && ['monthly', 'trial_2_day', 'referral_trial'].includes(association.offer)) {
           await activateCheckoutAssociation(env, association, event.id);
+          const subscription = await stripeGet(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+          if (verifiedMonthlyTrial(session, subscription, association, env))
+            scheduleXConversion(ctx, env, event, session.metadata, {
+              kind: 'trial', conversionId: `trial:${await sha256Text(subscriptionId)}` });
           outcome = 'TRIAL_VIP_ACTIVATED';
         }
         else if (session.payment_status !== 'paid' || Number(session.amount_total || 0) <= 0) {
@@ -3971,6 +4073,12 @@ async function handleWebhook(request, env) {
           }, ['CHECKOUT_STARTED','PAYMENT_CONFIRMED','VIP_PENDING','VIP_FAILED']);
           const refreshed = { ...association, status: 'PAYMENT_CONFIRMED', stripe_customer_id: customerId, stripe_subscription_id: subscriptionId };
           await activateCheckoutAssociation(env, refreshed, event.id);
+          if (session.livemode === true && session.status === 'complete' &&
+              Number.isSafeInteger(session.amount_total) && session.amount_total > 0 &&
+              String(session.currency).toUpperCase() === 'USD')
+            scheduleXConversion(ctx, env, event, session.metadata, {
+              kind: 'purchase', conversionId: `purchase:${await sha256Text(session.id)}`,
+              value: session.amount_total, currency: 'USD' });
           outcome = 'PAYMENT_CONFIRMED_VIP_ACTIVATED';
         }
       }
@@ -3984,6 +4092,12 @@ async function handleWebhook(request, env) {
         });
         outcome = 'REFERRAL_CHECKOUT_RECORDED';
       } else if (!associationId) outcome = 'CHECKOUT_RECORDED';
+      if (!associationId && session?.livemode === true && session.status === 'complete' &&
+          session.payment_status === 'paid' && Number.isSafeInteger(session.amount_total) &&
+          session.amount_total > 0 && String(session.currency).toUpperCase() === 'USD')
+        scheduleXConversion(ctx, env, event, session.metadata, {
+          kind: 'purchase', conversionId: `purchase:${await sha256Text(session.id)}`,
+          value: session.amount_total, currency: 'USD' });
     } else if (['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
       const subscription = event.data?.object;
       await persistSubscription(env, subscription, event.id);
@@ -4000,6 +4114,23 @@ async function handleWebhook(request, env) {
           if (rows[0].status !== 'VIP_ACTIVE') await activateCheckoutAssociation(env, rows[0], event.id);
           await recordPaidAssociationInvoice(env, rows[0], invoice.id);
           await queuePaidAssociationWelcome(env, rows[0], event, invoice);
+          // Only the first positive invoice is a new paid membership. A paid
+          // Checkout and its invoice use the Checkout ID, matching the pixel;
+          // a trial's later first payment uses the invoice ID once.
+          const firstPaid = await supabase(env,
+            `membership_billing_events?stripe_subscription_id=eq.${encodeURIComponent(paidSubscriptionId)}` +
+            '&event_type=eq.invoice_paid&amount_cents=gt.0&select=stripe_invoice_id' +
+            '&order=occurred_at.asc,stripe_event_id.asc&limit=1');
+          if (firstPaid?.[0]?.stripe_invoice_id === invoice.id && invoice.livemode === true &&
+              String(invoice.currency).toLowerCase() === 'usd') {
+            const checkout = await stripeGet(env, `/checkout/sessions/${encodeURIComponent(rows[0].stripe_checkout_session_id)}`);
+            const paidAtCheckout = checkout.status === 'complete' && checkout.payment_status === 'paid' &&
+              Number(checkout.amount_total) > 0;
+            scheduleXConversion(ctx, env, event, checkout.metadata, {
+              kind: 'purchase',
+              conversionId: `purchase:${await sha256Text(paidAtCheckout ? checkout.id : invoice.id)}`,
+              value: Number(invoice.amount_paid), currency: 'USD' });
+          }
         }
       }
       outcome = await processReferralInvoicePaid(env, invoice, event.id);
@@ -4046,7 +4177,7 @@ async function handleWebhook(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin');
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: headers(origin) });
@@ -4128,7 +4259,7 @@ export default {
       return limited || createCheckout(request, env, origin);
     }
     if (request.method === 'POST' && ['/cancel/retain', '/cancel/confirm'].includes(url.pathname)) return json({ error: 'Use Discord login and Stripe Customer Portal.' }, 410, origin);
-    if (request.method === 'POST' && url.pathname === '/stripe-webhook') return handleWebhook(request, env);
+    if (request.method === 'POST' && url.pathname === '/stripe-webhook') return handleWebhook(request, env, ctx);
     return json({ error: 'Not found.' }, 404, origin);
   },
   scheduled(controller, env, ctx) {
@@ -4143,6 +4274,7 @@ export default {
 };
 
 export const __test = {
+  xConversionsConfigured, validTwclid, conversionPayload, oauthHeader, sendXConversion,
   supabaseAuthHeaders,
   discordSetupAlertExceptions,
   adminDiscordSetupAlert,
@@ -4174,6 +4306,7 @@ export const __test = {
   phoenixDayStart,
   recordSubscriptionCancellation,
   cleanAttribution,
+  consentedXClickId,
   attributionSourceForSession,
   attributionCampaignForSession,
   supabasePages,

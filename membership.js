@@ -165,6 +165,7 @@ document.querySelectorAll('[data-checkout]').forEach((button) => button.addEvent
         ...(offer === 'monthly' && referralCode ? { referral_code: referralCode } : {}),
         analytics_session_id: window.KBHConsent?.allowed() ? window.KBHAnalytics?.sessionId || null : null,
         attribution: window.KBHConsent?.allowed() ? window.KBHAnalytics?.attribution || {} : {},
+        tracking_consent: window.KBHConsent?.allowed() === true,
       }),
     });
     const result = await response.json();
