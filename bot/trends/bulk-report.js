@@ -5,6 +5,7 @@ const { STATS } = require('./prop-flow');
 
 const FOOTER = '21+ | Research only, not a guarantee';
 const WINDOWS = { L5: 'l5', L10: 'l10', L20: 'l20' };
+const MIN_OBSERVED_GAMES = 6;
 
 function calcLine(logs, stat) {
   const values = logs.filter(row => row.status === 'final' && row.participated === true &&
@@ -25,7 +26,8 @@ function windowLine(name, window) {
   return `${name}- ${window.hits}/${window.sample}${high ? ' ☘️' : ''}`;
 }
 function qualifies(analysis) {
-  return ['l5', 'l10', 'l20'].some(key => analysis[key]?.sample > 0 && analysis[key].hitRate >= 0.8);
+  return analysis.l20?.sample >= MIN_OBSERVED_GAMES &&
+    ['l5', 'l10', 'l20'].some(key => analysis[key]?.sample > 0 && analysis[key].hitRate >= 0.8);
 }
 function buildResult({ sport, player, teamAbbr, teamName, opponentAbbr, stat,
   logs, selectedWindow = 'L10', line = null, odds = null, oddsSource = null,
@@ -34,7 +36,10 @@ function buildResult({ sport, player, teamAbbr, teamName, opponentAbbr, stat,
   const threshold = line === null ? calcLine(logs, stat) : line;
   if (!Number.isFinite(threshold) || threshold < 0) return null;
   const analysis = analyze(logs, { stat, line: threshold, side: 'over' });
-  if ((requireAny80 && !qualifies(analysis)) ||
+  // L5 is a five-game display window. Eligibility uses the larger observed
+  // history so L5 remains usable while a player with only 1-5 games is omitted.
+  if (analysis.l20.sample < MIN_OBSERVED_GAMES ||
+    (requireAny80 && !qualifies(analysis)) ||
     !(analysis[WINDOWS[selectedWindow]]?.hitRate >= minimumRate)) return null;
   const hasRealOdds = Number.isInteger(odds) && Math.abs(odds) >= 100 && oddsSource === 'The Odds API';
   const rate = ['L5', 'L10', 'L20'].map(label => windowLine(label, analysis[WINDOWS[label]])).join('  ');
@@ -78,4 +83,5 @@ function formatReport(results) {
   return chunks;
 }
 
-module.exports = { FOOTER, calcLine, statLabel, windowLine, qualifies, buildResult, formatReport };
+module.exports = { FOOTER, MIN_OBSERVED_GAMES, calcLine, statLabel, windowLine,
+  qualifies, buildResult, formatReport };

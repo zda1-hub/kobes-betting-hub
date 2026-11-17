@@ -1,8 +1,10 @@
 'use strict';
 
 const { TEAM_NAMES } = require('./nfl-auto');
+const { MIN_OBSERVED_GAMES } = require('./bulk-report');
 
 const FOOTER = '21+ | Research only, not a guarantee';
+const INSUFFICIENT_SAMPLE = `No qualifying trend: fewer than ${MIN_OBSERVED_GAMES} observed games.\n${FOOTER}`;
 const STAT_LABELS = Object.freeze({
   points: 'Points', rebounds: 'Rebounds', assists: 'Assists', threes: '3PM',
   pra: 'PRA', points_rebounds: 'P+R', points_assists: 'P+A', rebounds_assists: 'R+A',
@@ -33,6 +35,8 @@ function verifiedPrice(offer, checkedAt) {
 function formatMemberResult({ player, teamAbbr, teamName, stat, line, odds, oddsSource, analysis }) {
   if (!player || !teamAbbr || !teamName || !stat || !Number.isFinite(line) || !analysis)
     throw new Error('Verified player, team, line and game logs are required');
+  if (!Number.isInteger(analysis.l20?.sample) ||
+      analysis.l20.sample < MIN_OBSERVED_GAMES) return INSUFFICIENT_SAMPLE;
   const safe = value => String(value).replaceAll('*', '').replaceAll('@', '');
   return `${safe(player)} - *${safe(teamAbbr)} ${safe(teamName)}*\n` +
     `Over ${line} ${safe(stat)}${oddsText(odds, oddsSource)}\n` +
@@ -61,4 +65,5 @@ function nflResult({ history, market }) {
     analysis: history.analysis });
 }
 
-module.exports = { FOOTER, STAT_LABELS, windowText, formatMemberResult, nbaResult, nflResult };
+module.exports = { FOOTER, INSUFFICIENT_SAMPLE, STAT_LABELS, windowText,
+  formatMemberResult, nbaResult, nflResult };

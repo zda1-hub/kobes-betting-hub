@@ -23,6 +23,7 @@ const { researchNba, formatNbaResearch } = require('./trends/nba-search');
 const propFlow = require('./trends/prop-flow');
 const bulkPanel = require('./trends/bulk-panel');
 const { researchBulk } = require('./trends/bulk-data');
+const { MIN_OBSERVED_GAMES } = require('./trends/bulk-report');
 const { updateTuesday: updateTeamRanks, ensureChannels: ensureRankChannels } = require('./trends/rank-publisher');
 const rankSnapshot = require('./trends/rank-snapshot');
 const { prepare: prepareDailyFeed, publish: publishDailyFeed } = require('./trends/daily-feed');
@@ -3622,6 +3623,10 @@ async function sendTrendDm(interaction, content) {
 function boardBlocks(board, sport) {
   if (!board.rows?.length) return 'No qualifying current props are available right now.';
   const blocks = board.rows.map(row => {
+    // Omit short histories entirely from a multi-player board. The direct
+    // search formatter returns a private no-result explanation instead.
+    if (!Number.isInteger((row.analysis || row).l20?.sample) ||
+        (row.analysis || row).l20.sample < MIN_OBSERVED_GAMES) return null;
     const abbr = sport === 'NBA' ? row.teamAbbr : row.roster?.team;
     const full = sport === 'NBA' ? row.team : require('./trends/nfl-auto').TEAM_NAMES[abbr];
     if (!abbr || !full) return null;
