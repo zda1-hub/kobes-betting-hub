@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./trends-college.js', import.meta.url), 'utf8');
 const { normalizeCfb, normalizeCbb, reserveCollegeCall, collegeGet, dueCollegeRefresh,
-  refreshDueCollege, refreshCollegeDay, refreshOneCbbBackfill, collegeUpstreamStatus } =
+  refreshDueCollege, refreshCollegeDay, refreshOneCbbBackfill, collegeUpstreamStatus,
+  cbbCooldown } =
   await import(`data:text/javascript,${encodeURIComponent(source)}`);
 
 test('college refresh waits until 8 AM Pacific and skips off-season sports', () => {
@@ -91,6 +92,44 @@ test('short provider 429 waits and counts each attempt; long limits are held', a
       headers: { 'retry-after': '300' } }), async () => { throw new Error('must not wait'); }),
   /retry after 300s/);
   assert.equal(calls, 3);
+});
+
+test('CBB 429 creates a 24-hour network hold while CFB stays available', async () => {
+  let calls = 0;
+  let until = null;
+  let consecutive = 0;
+  const db = { prepare(sql) { return {
+    bind(...args) { this.args = args; return this; },
+    async first() {
+      if (sql.includes('SELECT until_at')) return until ? { until_at: until } : null;
+      if (sql.includes('SELECT consecutive_429')) return { consecutive_429: consecutive };
+      return { calls };
+    },
+    async run() {
+      if (sql.startsWith('UPDATE trends_college_usage')) calls++;
+      if (sql.includes('INSERT OR REPLACE INTO trends_college_cooldown')) {
+        [until, consecutive] = this.args;
+      }
+      if (sql.includes('DELETE FROM trends_college_cooldown')) until = null;
+      return { meta: { changes: 1 } };
+    }
+  }; } };
+  const env = { DB: db, CFBD_API_KEY: 'private-key' };
+  const now = new Date('2026-11-17T12:00:00Z');
+  let requests = 0;
+  const limited = async () => { requests++; return new Response('', { status: 429,
+    headers: { 'retry-after': '0' } }); };
+  await assert.rejects(collegeGet(env, 'cbb', '/games', now, limited), /429/);
+  assert.equal(await cbbCooldown(db, new Date(now.valueOf() + 3600_000)), until);
+  await assert.rejects(collegeGet(env, 'cbb', '/games',
+    new Date(now.valueOf() + 3600_000), limited), /cooldown/);
+  assert.equal(requests, 1);
+  await collegeGet(env, 'cfb', '/games', now, async () => new Response('[]'));
+  assert.equal(calls, 2);
+  await collegeGet(env, 'cbb', '/games', new Date(now.valueOf() + 24 * 3600_000),
+    async () => { requests++; return new Response('[]'); });
+  assert.equal(requests, 2);
+  assert.equal(until, null);
 });
 
 test('upstream quota check reports only safe account usage fields', async () => {
