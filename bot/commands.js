@@ -288,7 +288,8 @@ module.exports = [
     .setDescription('Admin only: post one private daily-feed TEST for review')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addStringOption(option => option.setName('sport').setDescription('Current sport')
-      .setRequired(true).addChoices({ name: 'NBA', value: 'NBA' }, { name: 'NFL', value: 'NFL' })),
+      .setRequired(true).addChoices({ name: 'NBA', value: 'NBA' }, { name: 'NFL', value: 'NFL' },
+        { name: 'CFB', value: 'CFB' }, { name: 'CBB', value: 'CBB' })),
   new SlashCommandBuilder()
     .setName('trends-board')
     .setDescription('Browse a private NBA matchup board with current alternate props')

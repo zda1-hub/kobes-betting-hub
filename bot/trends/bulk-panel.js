@@ -9,6 +9,7 @@ const { TEAM_NAMES, seasonFor } = require('./nfl-auto');
 const { snapshot: nflContext, sourceFresh } = require('./nfl-context');
 const { STATS } = require('./prop-flow');
 const { loadLines } = require('./prop-flow');
+const { createCollegeProvider } = require('./college-provider');
 
 const sessions = new Map();
 const TTL_MS = 15 * 60_000;
@@ -106,6 +107,7 @@ function render(state) {
 }
 async function loadLineChoices(state, { root, oddsKey, now = new Date(), fetchImpl = fetch }) {
   state.ladderOptions = [];
+  if (['CFB', 'CBB'].includes(state.sport)) return;
   const players = state.selectedPlayers.includes('all') ? state.players :
     state.players.filter(row => state.selectedPlayers.includes(row.value));
   if (players.length !== 1 || state.selectedStats.length !== 1) return;
@@ -122,7 +124,22 @@ async function loadLineChoices(state, { root, oddsKey, now = new Date(), fetchIm
   }
   state.ladderPage = 0;
 }
-async function loadTodayTeams(state, { oddsKey, bdlKey, now = new Date(), fetchImpl = fetch }) {
+function collegeNameKey(value) {
+  return String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function matchCollegeTeam(eventName, catalog) {
+  const event = collegeNameKey(eventName);
+  const matches = catalog.filter(row => {
+    const source = collegeNameKey(row.team);
+    return source && (event === source || event.startsWith(`${source} `));
+  }).sort((a, b) => collegeNameKey(b.team).length - collegeNameKey(a.team).length);
+  if (!matches.length || (matches[1] && collegeNameKey(matches[0].team).length ===
+    collegeNameKey(matches[1].team).length)) return null;
+  return matches[0];
+}
+async function loadTodayTeams(state, { oddsKey, bdlKey, collegeBaseUrl, collegeSecret,
+  now = new Date(), fetchImpl = fetch }) {
   const response = await events(state.sport, { apiKey: oddsKey, fetchImpl });
   const games = response.data.filter(game => serviceDate(new Date(game.commence_time)) === state.serviceDate &&
     Date.parse(game.commence_time) > now.valueOf());
@@ -138,13 +155,23 @@ async function loadTodayTeams(state, { oddsKey, bdlKey, now = new Date(), fetchI
       const found = Object.entries(TEAM_NAMES).find(([, full]) => full === name);
       return found && { label: `${found[0]} · ${name}`, value: found[0], name };
     }).filter(Boolean);
+  } else if (['CFB', 'CBB'].includes(state.sport)) {
+    const provider = createCollegeProvider(state.sport.toLowerCase(),
+      { baseUrl: collegeBaseUrl, secret: collegeSecret, fetchImpl });
+    const catalog = await provider.teams();
+    state.teams = names.map(name => {
+      const match = matchCollegeTeam(name, catalog);
+      return match && { label: `${match.team} · ${name}`.slice(0, 100),
+        value: match.team, name, sourceName: match.team, gamesCached: match.games };
+    }).filter(Boolean);
   } else state.teams = [];
   state.teams.sort((a, b) => a.value.localeCompare(b.value));
   if (!state.teams.length) throw new Error('No verified unstarted games in this sport today.');
   state.selectedTeams = ['all']; state.selectedPlayers = ['all']; state.selectedStats = [];
   state.teamPage = 0; state.playerPage = 0;
 }
-async function loadPlayers(state, { bdlKey, now = new Date(), fetchImpl = fetch }) {
+async function loadPlayers(state, { bdlKey, collegeBaseUrl, collegeSecret,
+  now = new Date(), fetchImpl = fetch }) {
   const teams = state.selectedTeams.includes('all') ? state.teams :
     state.teams.filter(row => state.selectedTeams.includes(row.value));
   if (!teams.length) throw new Error('Choose a team playing today.');
@@ -157,6 +184,24 @@ async function loadPlayers(state, { bdlKey, now = new Date(), fetchImpl = fetch 
     state.players = rows.filter(row => teams.some(team => team.teamId === row.team?.id))
       .map(row => ({ label: `${row.first_name} ${row.last_name}`,
         value: String(row.id), team: row.team?.abbreviation, position: row.position }));
+  } else if (['CFB', 'CBB'].includes(state.sport)) {
+    const provider = createCollegeProvider(state.sport.toLowerCase(),
+      { baseUrl: collegeBaseUrl, secret: collegeSecret, fetchImpl });
+    const rows = [];
+    state.collegeLogsByTeam = new Map();
+    for (let offset = 0; offset < teams.length; offset += 4) {
+      const group = teams.slice(offset, offset + 4);
+      const results = await Promise.all(group.map(team => provider.teamLogs(team.sourceName)));
+      results.forEach((logs, index) => {
+        const team = group[index];
+        state.collegeLogsByTeam.set(team.value, logs);
+        const latest = logs[0]?.date;
+        for (const log of logs.filter(row => row.date === latest && row.team === team.sourceName))
+          rows.push({ label: log.player, value: log.playerId, team: team.value,
+            position: null });
+      });
+    }
+    state.players = [...new Map(rows.map(row => [row.value, row])).values()];
   } else {
     const data = await nflContext({ season: seasonFor(now), fetchImpl, now: now.valueOf() });
     if (!sourceFresh(data.rosterUpdatedAt, now.valueOf())) throw new Error('NFL active roster feed is stale');
@@ -173,4 +218,5 @@ async function loadPlayers(state, { bdlKey, now = new Date(), fetchImpl = fetch 
 }
 
 module.exports = { sessions, serviceDate, start, get, render, loadTodayTeams,
+  collegeNameKey, matchCollegeTeam,
   loadPlayers, loadLineChoices, mergePageSelection };

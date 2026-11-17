@@ -1,5 +1,5 @@
 import { enqueueSocialEmail, dispatchSocialEmails } from './free-pick-social-email.js';
-import { collegeLogs, collegeTeamLogs, collegeStatus, refreshCollegeDay, refreshDueCollege } from './trends-college.js';
+import { collegeLogs, collegeTeamLogs, collegeTeams, collegeStatus, refreshCollegeDay, refreshDueCollege } from './trends-college.js';
 import { createOptionalBdlProvider } from './trends-bdl-optional.js';
 import resultMetadata from '../result-metadata.js';
 const CALLBACK_PATH = "/auth/x/callback";
@@ -215,6 +215,12 @@ async function handleRequest(request, env, ctx) {
     if (!await collegeReadAllowed(request, env)) return json({ error: 'Unauthorized' }, 401);
     if (!env.CFBD_API_KEY) return json({ error: 'College data coming soon' }, 503);
     try { return json({ logs: await collegeTeamLogs(env, url.searchParams.get('sport'), url.searchParams.get('team')) }); }
+    catch (error) { return json({ error: error.message }, 400); }
+  }
+  if (url.pathname === "/api/trends/college/teams" && request.method === "GET") {
+    if (!await collegeReadAllowed(request, env)) return json({ error: 'Unauthorized' }, 401);
+    if (!env.CFBD_API_KEY) return json({ error: 'College data coming soon' }, 503);
+    try { return json({ teams: await collegeTeams(env, url.searchParams.get('sport')) }); }
     catch (error) { return json({ error: error.message }, 400); }
   }
   if (url.pathname === "/api/trends/college/refresh" && request.method === "POST") {

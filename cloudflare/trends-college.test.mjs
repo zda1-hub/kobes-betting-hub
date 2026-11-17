@@ -48,7 +48,8 @@ test('college basketball final player rows compute PRA only from observed number
       assists: null, threePointFieldGoals: { made: 1 } }
   ] };
   assert.deepEqual(normalizeCbb(game, box).map(row => row.stats),
-    [{ points: 18, rebounds: 7, assists: 3, threes: 2, pra: 28 }]);
+    [{ points: 18, rebounds: 7, assists: 3, threes: 2, pra: 28,
+      points_rebounds: 25, points_assists: 21, rebounds_assists: 10 }]);
   assert.equal(normalizeCbb(game, box)[0].location, 'away');
 });
 
@@ -90,4 +91,34 @@ test('a full CBB slate writes in batches instead of exhausting D1 subrequests', 
   assert.equal(result.playerRows, 150);
   assert.equal(calls, 2);
   assert.deepEqual(batches.slice(1).map(batch => batch.length), [100, 51]);
+});
+
+test('CFB fetches one weekly box-score batch for multiple final games', async () => {
+  let calls = 0;
+  const db = {
+    prepare(sql) { return {
+      sql, bind() { return this; },
+      async run() { if (sql.startsWith('UPDATE trends_college_usage')) calls++; return { meta: { changes: 1 } }; },
+      async first() { return sql.includes('SELECT calls') ? { calls } : null; }
+    }; },
+    async batch() { return []; }
+  };
+  const games = [1, 2].map(id => ({ id, completed: true, seasonType: 'regular',
+    startDate: '2026-11-15T20:00:00Z', homeTeam: `Home ${id}`,
+    awayTeam: `Away ${id}`, season: 2026, week: 11 }));
+  const boxes = [1, 2].map(id => ({ id, teams: [{ team: `Home ${id}`, categories: [
+    { name: 'receiving', types: [{ name: 'yds', athletes: [
+      { id: String(id), name: `Player ${id}`, stat: '56' }
+    ] }] }
+  ] }] }));
+  const paths = [];
+  const fetchImpl = async url => {
+    paths.push(new URL(url).pathname + new URL(url).search);
+    return new Response(JSON.stringify(url.includes('/games/players?') ? boxes : games));
+  };
+  const result = await refreshCollegeDay({ DB: db, CFBD_API_KEY: 'test-key' }, 'cfb', '2026-11-15',
+    { now: new Date('2026-11-16T20:00:00Z'), fetchImpl });
+  assert.equal(result.playerRows, 2);
+  assert.equal(calls, 2);
+  assert.match(paths[1], /week=11/);
 });

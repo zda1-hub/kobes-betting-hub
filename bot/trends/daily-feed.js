@@ -20,7 +20,8 @@ function formatEntry(row) {
     `Opp rank vs ${row.position || 'position N/A'}: ` +
     `${row.rank ? `#${row.rank} of ${row.rankTeams}` : 'N/A'}` +
     (row.dataDate ? ` · through ${row.dataDate}` : '') +
-    (row.sport === 'NFL' ? '\nData: nflverse (CC BY 4.0)' : '');
+    (row.sport === 'NFL' ? '\nData: nflverse (CC BY 4.0)' : '') +
+    (['CFB', 'CBB'].includes(row.sport) ? '\nInjury status not checked' : '');
 }
 function feedMessages(rows, { test = false } = {}) {
   if (!rows.length) return [];
@@ -64,15 +65,16 @@ async function filterAvailable(state, { bdlKey, now = new Date(), fetchImpl = fe
     });
   }
 }
-async function prepare({ sport, root, oddsKey, bdlKey, threshold = 80,
+async function prepare({ sport, root, oddsKey, bdlKey, collegeBaseUrl, collegeSecret, threshold = 80,
   now = new Date(), fetchImpl = fetch }) {
-  if (!['NBA', 'NFL'].includes(sport) || ![70, 80].includes(threshold))
+  if (!['NBA', 'NFL', 'CFB', 'CBB'].includes(sport) || ![70, 80].includes(threshold))
     throw new Error('Unsupported daily feed configuration');
   const state = panel.start({ ownerId: 'daily-feed', channelId: 'internal', leagues: [sport], now });
   try {
     state.sport = sport;
-    await panel.loadTodayTeams(state, { oddsKey, bdlKey, now, fetchImpl });
-    await panel.loadPlayers(state, { bdlKey, now, fetchImpl });
+    await panel.loadTodayTeams(state, { oddsKey, bdlKey, collegeBaseUrl, collegeSecret,
+      now, fetchImpl });
+    await panel.loadPlayers(state, { bdlKey, collegeBaseUrl, collegeSecret, now, fetchImpl });
     await filterAvailable(state, { bdlKey, now, fetchImpl });
     state.selectedStats = STATS[sport].map(([value]) => value);
     state.window = 'L10';

@@ -22,3 +22,15 @@ test('private TEST feed is visibly labeled and includes all ten observed game va
   assert.match(messages[0], /Data: nflverse \(CC BY 4\.0\)/);
   assert.match(messages[0], /21\+ \| Research only, not a guarantee$/);
 });
+
+test('college feed identifies unverified injuries and never invents book odds', () => {
+  const row = { player: 'Test Player', teamAbbr: 'TEST',
+    opponentAbbr: 'OTHER', sport: 'CBB', stat: 'points', threshold: 10.5,
+    analysis: { l10: { hits: 8, sample: 10, hitRate: 0.8, average: 12,
+      games: Array.from({ length: 10 }, (_, i) =>
+        ({ date: `2026-11-${String(i + 1).padStart(2, '0')}`, value: 12 })) } } };
+  const message = feedMessages([row], { test: true })[0];
+  assert.match(message, /Calc line \(no book line\)/);
+  assert.match(message, /Injury status not checked/);
+  assert.match(message, /L10 8\/10/);
+});

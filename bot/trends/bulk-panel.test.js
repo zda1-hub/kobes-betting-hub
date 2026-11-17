@@ -40,3 +40,10 @@ test('the quoted-line picker remains on one five-row panel with Discord-safe pag
   assert.ok(values.includes('next'));
   assert.ok(values.includes('back'));
 });
+
+test('college team matching accepts a unique school and rejects ambiguous names', () => {
+  const catalog = [{ team: 'Alabama' }, { team: 'Alabama State' }, { team: 'Mississippi' }];
+  assert.equal(panel.matchCollegeTeam('Alabama State Hornets', catalog)?.team, 'Alabama State');
+  assert.equal(panel.matchCollegeTeam('Alabama Crimson Tide', catalog)?.team, 'Alabama');
+  assert.equal(panel.matchCollegeTeam('Ole Miss Rebels', catalog), null);
+});

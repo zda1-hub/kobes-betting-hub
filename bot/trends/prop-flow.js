@@ -15,7 +15,11 @@ const STATS = Object.freeze({
   NBA: [['points', 'Pts'], ['rebounds', 'Reb'], ['assists', 'Ast'], ['threes', '3PM'],
     ['pra', 'PRA'], ['points_rebounds', 'P+R'], ['points_assists', 'P+A'], ['rebounds_assists', 'R+A']],
   NFL: [['passing_yards', 'Pass yds'], ['rushing_yards', 'Rush yds'], ['receiving_yards', 'Rec yds'],
-    ['receptions', 'Receptions'], ['rush_receiving_yards', 'Rush+rec'], ['anytime_touchdown', 'Anytime TD']]
+    ['receptions', 'Receptions'], ['rush_receiving_yards', 'Rush+rec'], ['anytime_touchdown', 'Anytime TD']],
+  CFB: [['passing_yards', 'Pass yds'], ['rushing_yards', 'Rush yds'], ['receiving_yards', 'Rec yds'],
+    ['receptions', 'Receptions'], ['rush_receiving_yards', 'Rush+rec'], ['anytime_touchdown', 'Anytime TD']],
+  CBB: [['points', 'Pts'], ['rebounds', 'Reb'], ['assists', 'Ast'], ['threes', '3PM'],
+    ['pra', 'PRA'], ['points_rebounds', 'P+R'], ['points_assists', 'P+A'], ['rebounds_assists', 'R+A']]
 });
 const sessions = new Map();
 const TTL = 15 * 60_000;
