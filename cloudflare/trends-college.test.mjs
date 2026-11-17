@@ -24,13 +24,17 @@ test('missing college key never opens D1 or makes upstream calls', async () => {
 test('college football final box scores keep observed values and team context', () => {
   const game = { id: 101, completed: true, home_team: 'A', away_team: 'B' };
   const box = { id: 101, teams: [{ team: 'A', categories: [
-    { name: 'passing', types: [{ name: 'YDS', athletes: [{ id: '7', name: 'Player', stat: '201' }] }] },
+    { name: 'passing', types: [{ name: 'YDS', athletes: [
+      { id: '7', name: 'Player', stat: '201' },
+      { id: '-7034', name: ' Team', stat: '0' }
+    ] }] },
     { name: 'rushing', types: [{ name: 'YDS', athletes: [{ id: '7', name: 'Player', stat: '40' }] }] },
     { name: 'receiving', types: [{ name: 'YDS', athletes: [{ id: '7', name: 'Player', stat: '12' }] }] }
   ] }] };
   assert.deepEqual(normalizeCfb(game, box)[0].stats, {
     passing_yards: 201, rushing_yards: 40, receiving_yards: 12, rush_receiving_yards: 52
   });
+  assert.equal(normalizeCfb(game, box).length, 1);
   assert.deepEqual(normalizeCfb({ ...game, completed: false }, box), []);
 });
 
