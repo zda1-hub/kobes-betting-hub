@@ -1633,8 +1633,12 @@ function startTrendsSchedule() {
         const id = sport === 'NBA' ? process.env.TRENDS_NBA_CHANNEL_ID : process.env.TRENDS_NFL_CHANNEL_ID;
         if (!id) continue;
         const channel = await client.channels.fetch(id);
-        const categoryId = process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036';
+        const categoryId = sport === 'NBA'
+          ? (process.env.TRENDS_NBA_CATEGORY_ID || '1562152752044580894')
+          : (process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036');
+        const channelName = sport === 'NBA' ? '🏀・nba-high-hit-rates' : '🏈・nfl-high-hit-rates';
         if (channel?.guildId !== process.env.DISCORD_GUILD_ID || channel.parentId !== categoryId ||
+            channel.name !== channelName ||
             channel.permissionsFor(channel.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) !== false ||
             ![...vipRoleIds()].every(id => channel.permissionsFor(channel.guild.roles.cache.get(id))
               ?.has(PermissionFlagsBits.ViewChannel) === true))
@@ -4334,7 +4338,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.deferReply({ ephemeral: true });
       try {
         const channel = await client.channels.fetch(process.env.TRENDS_NBA_CHANNEL_ID || '1571285528882450623');
-        if (channel?.parentId !== (process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036'))
+        if (channel?.parentId !== (process.env.TRENDS_NBA_CATEGORY_ID || '1562152752044580894'))
           throw new Error('Private NBA channel could not be verified');
         const messages = await channel.messages.fetch({ limit: 50 });
         const rows = [...messages.values()].filter(message => message.author?.id === client.user.id &&
