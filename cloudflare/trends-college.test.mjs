@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./trends-college.js', import.meta.url), 'utf8');
 const { normalizeCfb, normalizeCbb, reserveCollegeCall, dueCollegeRefresh,
-  refreshDueCollege, refreshCollegeDay } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+  refreshDueCollege, refreshCollegeDay, collegeUpstreamStatus } =
+  await import(`data:text/javascript,${encodeURIComponent(source)}`);
 
 test('college refresh waits until 8 AM Pacific and skips off-season sports', () => {
   assert.equal(dueCollegeRefresh(new Date('2026-11-16T15:55:00Z')), null);
@@ -66,6 +67,23 @@ test('shared college budget refuses request 901 before the network', async () =>
   } };
   assert.equal((await reserveCollegeCall(db, new Date('2026-11-16'))).calls, 900);
   await assert.rejects(reserveCollegeCall(db, new Date('2026-11-16')), /900/);
+});
+
+test('upstream quota check reports only safe account usage fields', async () => {
+  const db = { async batch() { return []; }, prepare() { return {
+    bind() { return this; }, async run() { return { meta: { changes: 1 } }; },
+    async first() { return { calls: 2 }; }
+  }; } };
+  const result = await collegeUpstreamStatus({ DB: db, CFBD_API_KEY: 'private-key' },
+    new Date('2026-11-16'), async (url, options) => {
+      assert.equal(url, 'https://api.collegefootballdata.com/info');
+      assert.equal(options.headers.authorization, 'Bearer private-key');
+      return new Response(JSON.stringify({ tierName: 'Free', monthlyLimit: 1000,
+        usedCalls: 1000, remainingCalls: 0, sharedPool: true,
+        resetAt: '2026-12-01T00:00:00Z', credential: 'must-not-return' }));
+    });
+  assert.equal(result.remainingCalls, 0);
+  assert.equal(result.credential, undefined);
 });
 
 test('a full CBB slate writes in batches instead of exhausting D1 subrequests', async () => {
