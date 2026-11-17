@@ -312,5 +312,36 @@ export async function refreshDueCollege(env, now = new Date(), { fetchImpl = fet
     try { refreshed.push(await refreshCollegeDay(env, sport, due.date, { now, fetchImpl })); }
     catch (error) { refreshed.push({ sport, date: due.date, error: error.message }); }
   }
+  // Recover one earlier CBB day at most every six hours. A provider error on
+  // today's scheduled refresh takes priority and prevents extra API traffic.
+  const currentCbbComplete = due.sports.includes('cbb') && await env.DB.prepare(
+    "SELECT 1 AS done FROM trends_college_refresh WHERE sport = 'cbb' AND game_date = ?")
+    .bind(due.date).first();
+  if (currentCbbComplete) {
+    const backfill = await refreshOneCbbBackfill(env, due.date, { now, fetchImpl });
+    if (backfill) refreshed.push(backfill);
+  }
   return { status: refreshed.some(row => row.error) ? 'held' : 'refreshed', refreshed };
+}
+
+export async function refreshOneCbbBackfill(env, latestDate, { now = new Date(), fetchImpl = fetch } = {}) {
+  const last = await env.DB.prepare(`SELECT MAX(attempted_at) AS at FROM trends_college_refresh_attempt
+    WHERE sport = 'cbb_backfill'`).first();
+  if (last?.at && now.valueOf() - Date.parse(last.at) < 6 * 3600_000) return null;
+  const { results } = await env.DB.prepare(`SELECT game_date FROM trends_college_refresh
+    WHERE sport = 'cbb' AND game_date < ?`).bind(latestDate).all();
+  const completed = new Set(results.map(row => row.game_date));
+  const latestMonth = Number(latestDate.slice(5, 7));
+  const seasonStartYear = Number(latestDate.slice(0, 4)) - (latestMonth < 11 ? 1 : 0);
+  for (let days = 1; days <= 14; days++) {
+    const date = new Date(Date.parse(`${latestDate}T12:00:00Z`) - days * 86400_000)
+      .toISOString().slice(0, 10);
+    if (completed.has(date) || date < `${seasonStartYear}-11-01`) continue;
+    await env.DB.prepare(`INSERT OR REPLACE INTO trends_college_refresh_attempt
+      (sport, game_date, attempted_at) VALUES ('cbb_backfill', ?, ?)`)
+      .bind(date, now.toISOString()).run();
+    try { return { backfill: true, ...await refreshCollegeDay(env, 'cbb', date, { now, fetchImpl }) }; }
+    catch (error) { return { backfill: true, sport: 'cbb', date, error: error.message }; }
+  }
+  return null;
 }
