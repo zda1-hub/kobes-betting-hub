@@ -29,9 +29,17 @@ function qualifies(analysis) {
   return analysis.l20?.sample >= MIN_OBSERVED_GAMES &&
     ['l5', 'l10', 'l20'].some(key => analysis[key]?.sample > 0 && analysis[key].hitRate >= 0.8);
 }
+function matchupRank(rank, total) {
+  if (!Number.isInteger(rank) || !Number.isInteger(total) || rank < 1 || rank > total)
+    return 'N/A';
+  const description = rank > Math.floor(total * 2 / 3) ? 'more allowed' :
+    rank <= Math.ceil(total / 3) ? 'less allowed' : 'middle';
+  return `#${rank} of ${total} (${description})`;
+}
 function buildResult({ sport, player, teamAbbr, teamName, opponentAbbr, stat,
   logs, selectedWindow = 'L10', line = null, odds = null, oddsSource = null,
-  opponentRank = null, position = null, rankTeams = null, dataDate = null,
+  opponentRank = null, opponentOverRank = null, opponentTeamRank = null,
+  position = null, rankTeams = null, dataDate = null,
   minimumRate = 0.8, requireAny80 = true }) {
   const threshold = line === null ? calcLine(logs, stat) : line;
   if (!Number.isFinite(threshold) || threshold < 0) return null;
@@ -43,12 +51,13 @@ function buildResult({ sport, player, teamAbbr, teamName, opponentAbbr, stat,
     !(analysis[WINDOWS[selectedWindow]]?.hitRate >= minimumRate)) return null;
   const hasRealOdds = Number.isInteger(odds) && Math.abs(odds) >= 100 && oddsSource === 'The Odds API';
   const rate = ['L5', 'L10', 'L20'].map(label => windowLine(label, analysis[WINDOWS[label]])).join('  ');
-  const rank = Number.isInteger(opponentRank) && Number.isInteger(rankTeams) && position ?
-    `#${opponentRank} of ${rankTeams}` : 'N/A';
+  const teamMatchup = matchupRank(opponentTeamRank, rankTeams);
+  const positionMatchup = matchupRank(opponentOverRank, rankTeams);
   const block = `${player} - *${teamAbbr}${teamName ? ` ${teamName}` : ''}* vs ${opponentAbbr || 'OPP N/A'}\n` +
     `Over ${threshold} ${statLabel(sport, stat)} ` +
     (hasRealOdds ? `(${odds > 0 ? '+' : ''}${odds})` : '(Calc line (no book line))') + '\n' +
-    `${rate}\nOpp rank vs ${position || 'position N/A'} in ${statLabel(sport, stat)}: ${rank}` +
+    `${rate}\nOpposing team ${statLabel(sport, stat)} rank: ${teamMatchup}\n` +
+    `Opposing team rank vs ${position || 'position N/A'}: ${positionMatchup}` +
     (dataDate ? ` · data ${dataDate}` : '') +
     (sport === 'NFL' ? '\nData: nflverse (CC BY 4.0)' : '');
   return { sport, teamAbbr, player, stat, threshold, analysis, block,
@@ -84,4 +93,4 @@ function formatReport(results) {
 }
 
 module.exports = { FOOTER, MIN_OBSERVED_GAMES, calcLine, statLabel, windowLine,
-  qualifies, buildResult, formatReport };
+  qualifies, matchupRank, buildResult, formatReport };

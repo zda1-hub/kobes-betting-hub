@@ -63,9 +63,9 @@ function computeNba(rows, { season, endDate = '9999-12-31' }) {
     if (!opponent) continue;
     teams.add(own); teams.add(opponent);
     if (!dataDate || game.date > dataDate) dataDate = game.date;
-    for (const metric of Object.keys(NBA_METRICS)) {
+    for (const metric of Object.keys(NBA_POSITION)) {
       const value = nbaStat(row, metric);
-      add(offense, own, metric, value, game.id);
+      if (Object.hasOwn(NBA_METRICS, metric)) add(offense, own, metric, value, game.id);
       add(defense, opponent, metric, value, game.id);
       if (metric === 'turnover') add(defense, opponent, 'turnovers_forced', value, game.id);
     }
@@ -80,7 +80,7 @@ function computeNba(rows, { season, endDate = '9999-12-31' }) {
   return { sport: 'NBA', season, dataDate,
     offense: Object.fromEntries(Object.keys(NBA_METRICS).map(metric =>
       [metric, rowsForMetric(offense, metric, list, { includeEmpty: true })])),
-    defense: Object.fromEntries([...Object.keys(NBA_METRICS), 'turnovers_forced'].map(metric => [metric,
+    defense: Object.fromEntries([...Object.keys(NBA_POSITION), 'turnovers_forced'].map(metric => [metric,
       rowsForMetric(defense, metric, list, { includeEmpty: true })])),
     position: Object.fromEntries(['PG', 'SG', 'SF', 'PF', 'C'].map(pos => [pos,
       Object.fromEntries(Object.keys(NBA_POSITION).map(metric => [metric,
@@ -113,6 +113,15 @@ function computeNfl(statsCsv, schedulesCsv, { season, endDate = '9999-12-31' }) 
       add(offense, own, metric, value, gameId);
       add(defense, opponent, metric, value, gameId);
     }
+    for (const metric of ['receiving_yards', 'rush_receiving_yards', 'anytime_touchdown']) {
+      const value = metric === 'rush_receiving_yards' ?
+        [numeric(row, 'rushing_yards'), numeric(row, 'receiving_yards')] :
+        metric === 'anytime_touchdown' ?
+          ['rushing_tds', 'receiving_tds', 'special_teams_tds'].map(key => numeric(row, key)) :
+          [numeric(row, metric)];
+      if (value.every(Number.isFinite)) add(defense, opponent, metric,
+        value.reduce((sum, item) => sum + item, 0), gameId);
+    }
     for (const metric of ['def_sacks', 'def_interceptions'])
       add(defense, own, metric, numeric(row, metric), gameId);
     const turnovers = [numeric(row, 'passing_interceptions'), numeric(row, 'fumbles_lost_total')];
@@ -140,19 +149,29 @@ function computeNfl(statsCsv, schedulesCsv, { season, endDate = '9999-12-31' }) 
   return { sport: 'NFL', season, dataDate: schedules.map(row => row.gameday).sort().at(-1) || null,
     offense: Object.fromEntries(Object.keys(NFL_OFFENSE).map(metric =>
       [metric, rowsForMetric(offense, metric, teams, { includeEmpty: true })])),
-    defense: Object.fromEntries(Object.keys(NFL_DEFENSE).map(metric =>
+    defense: Object.fromEntries([...new Set([...Object.keys(NFL_DEFENSE),
+      'receptions', 'receiving_yards', 'rush_receiving_yards', 'anytime_touchdown'])].map(metric =>
       [metric, rowsForMetric(defense, metric, teams, { includeEmpty: true })])),
     position: byPosition, attribution: 'Data: nflverse (CC BY 4.0)' };
 }
 
 function lookupRank(sheet, { opponentAbbr, position, stat }) {
-  if (!sheet || !opponentAbbr || !position || !stat) return null;
-  const values = sheet.position?.[position]?.[stat] || [];
+  if (!sheet || !opponentAbbr || !stat) return null;
+  const metric = sheet.sport === 'NBA' ?
+    ({ points: 'pts', rebounds: 'reb', assists: 'ast', threes: 'fg3m' })[stat] || stat : stat;
   const expected = sheet.sport === 'NBA' ? 30 : 32;
-  if (values.filter(item => item.rank).length !== expected) return null;
-  const row = values.find(item => item.team === opponentAbbr);
-  return row?.rank ? { rank: row.rank, teams: expected,
-    dataDate: sheet.dataDate } : null;
+  const completeRank = values => {
+    if (!Array.isArray(values) || values.filter(item => Number.isInteger(item.rank)).length !== expected)
+      return null;
+    const row = values.find(item => item.team === opponentAbbr);
+    return Number.isInteger(row?.rank) ? row.rank : null;
+  };
+  const teamRank = completeRank(sheet.defense?.[metric]);
+  const positionRank = position ? completeRank(sheet.position?.[position]?.[metric]) : null;
+  if (teamRank === null && positionRank === null) return null;
+  return { rank: positionRank, overRank: positionRank === null ? null : expected + 1 - positionRank,
+    teamOverRank: teamRank === null ? null : expected + 1 - teamRank,
+    teams: expected, dataDate: sheet.dataDate };
 }
 
 module.exports = { NBA_METRICS, NFL_OFFENSE, NFL_DEFENSE, NBA_POSITION, NFL_POSITION,

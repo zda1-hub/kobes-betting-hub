@@ -178,6 +178,8 @@ async function researchBulk(state, { root, bdlKey, oddsKey, now = new Date(), fe
         odds: quote?.odds ?? null, oddsSource: quote ? 'The Odds API' : null,
         minimumRate, requireAny80,
         position: player.position, opponentRank: rank?.rank ?? null,
+        opponentOverRank: rank?.overRank ?? null,
+        opponentTeamRank: rank?.teamOverRank ?? null,
         rankTeams: rank?.teams ?? null, dataDate: rank?.dataDate ?? null });
       if (result) rows.push(result);
     }
