@@ -17,7 +17,7 @@ test('college prop and ladder use cached completed-game analysis when available'
     stats: { points: 20 }, gameId: '1', opponent: 'Team B' };
   const row = { hits: 1, sample: 1 };
   const provider = { status: async () => ({ keyConfigured: true }),
-    logs: async () => [log], stats: ['points'],
+    logs: async () => Array.from({ length: 6 }, (_, i) => ({ ...log, gameId: String(i + 1) })), stats: ['points'],
     research: async () => ({ player: log.player, lastTeam: log.team,
       sourceUrl: log.sourceUrl, analysis: { season: row, l5: row, l10: row, l20: row },
       ladder: [{ line: 10, season: row, l5: row, l10: row, l20: row },
@@ -27,4 +27,8 @@ test('college prop and ladder use cached completed-game analysis when available'
     stat: 'points', line: 10 }, config), /season 1\/1/);
   assert.match(await runCollegeCommand('ladder', { sport: 'cbb', player: 'Real Player',
     stat: 'points', lines: [10, 15] }, config), /over 15/);
+  const short = { createProvider: () => ({ ...provider,
+    logs: async () => Array.from({ length: 5 }, (_, i) => ({ ...log, gameId: String(i + 1) })) }) };
+  assert.match(await runCollegeCommand('prop', { sport: 'cbb', player: 'Real Player',
+    stat: 'points', line: 10 }, short), /at least six completed player games/);
 });

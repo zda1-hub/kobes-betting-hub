@@ -4,6 +4,8 @@ const { createCollegeProvider } = require('./college-provider');
 
 const FOOTER = '21+ | Research only, not a guarantee';
 const count = row => `${row.hits}/${row.sample}`;
+const enoughGames = logs => new Set(logs.map(row => row.gameId)).size >= 6;
+const SYNCING = 'College data is syncing; at least six completed player games are required before showing trends.';
 
 async function runCollegeCommand(command, options, config = {}) {
   const { sport, player, stat, team, opponent } = options;
@@ -15,11 +17,12 @@ async function runCollegeCommand(command, options, config = {}) {
   if (!status.keyConfigured) return 'College data coming soon';
   if (command === 'player') {
     const logs = await provider.logs(player);
-    if (!logs.length) return 'College data is syncing; no completed games are cached for that player yet.';
+    if (!enoughGames(logs)) return SYNCING;
     const ids = new Set(logs.map(row => row.playerId));
     if (ids.size !== 1) throw new Error('Use a player ID to resolve this name');
     return `**Trends-tool · ${sport.toUpperCase()} player history**\n` +
       `${logs[0].player} · last recorded team ${logs[0].team}\n` +
+      `Completed games cached: ${new Set(logs.map(row => row.gameId)).size}\n` +
       `Recent completed games: ${logs.slice(0, 5).map(row =>
         `${row.date} vs ${row.opponent} (${Object.entries(row.stats).slice(0, 4)
           .map(([key, value]) => `${key.replaceAll('_', ' ')} ${value}`).join(', ')})`).join(' · ')}\n` +
@@ -41,7 +44,7 @@ async function runCollegeCommand(command, options, config = {}) {
   if (!Array.isArray(lines) || !lines.length || lines.some(line => !Number.isFinite(line) || line < 0))
     throw new Error('Choose a valid historical threshold');
   const logs = await provider.logs(player);
-  if (!logs.length) return 'College data is syncing; no completed games are cached for that player yet.';
+  if (!enoughGames(logs)) return SYNCING;
   const season = logs[0].season;
   const result = await provider.research({ player, stat, line: lines[0], season,
     alternateLines: lines });
