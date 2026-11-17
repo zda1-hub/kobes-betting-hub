@@ -48,7 +48,12 @@ async function collegeGet(env, sport, endpoint, now, fetchImpl = fetch) {
     headers: { authorization: `Bearer ${env.CFBD_API_KEY}`, accept: 'application/json' },
     signal: AbortSignal.timeout(20000)
   });
-  if (!response.ok) throw new Error(`${sport.toUpperCase()} data endpoint returned ${response.status}`);
+  if (!response.ok) {
+    const retryAfter = response.headers.get('retry-after');
+    const route = endpoint.split('?')[0];
+    throw new Error(`${sport.toUpperCase()} ${route} returned ${response.status}` +
+      (retryAfter && /^\d{1,5}$/.test(retryAfter) ? ` (retry after ${retryAfter}s)` : ''));
+  }
   const data = await response.json();
   if (!Array.isArray(data)) throw new Error(`${sport.toUpperCase()} data endpoint returned an unexpected shape`);
   return { data, url };
@@ -206,17 +211,21 @@ export async function collegeStatus(env, now = new Date()) {
 export async function collegeUpstreamStatus(env, now = new Date(), fetchImpl = fetch) {
   if (!env.CFBD_API_KEY) throw new Error('CFBD_API_KEY is missing from Wrangler secrets');
   await ensureCollegeTables(env.DB);
-  await reserveCollegeCall(env.DB, now);
-  const response = await fetchImpl(`${ORIGINS.cfb}/info`, {
-    headers: { authorization: `Bearer ${env.CFBD_API_KEY}`, accept: 'application/json' },
-    signal: AbortSignal.timeout(10000)
-  });
-  if (!response.ok) return { status: response.status };
-  const data = await response.json();
-  return { status: response.status, tierName: data.tierName,
-    monthlyLimit: data.monthlyLimit, usedCalls: data.usedCalls,
-    remainingCalls: data.remainingCalls, resetAt: data.resetAt,
-    sharedPool: data.sharedPool };
+  const result = {};
+  for (const sport of ['cfb', 'cbb']) {
+    await reserveCollegeCall(env.DB, now);
+    const response = await fetchImpl(`${ORIGINS[sport]}/info`, {
+      headers: { authorization: `Bearer ${env.CFBD_API_KEY}`, accept: 'application/json' },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) { result[sport] = { status: response.status }; continue; }
+    const data = await response.json();
+    result[sport] = { status: response.status, tierName: data.tierName,
+      monthlyLimit: data.monthlyLimit, usedCalls: data.usedCalls,
+      remainingCalls: data.remainingCalls, resetAt: data.resetAt,
+      sharedPool: data.sharedPool };
+  }
+  return { ...result.cfb, cbb: result.cbb };
 }
 
 export async function collegeLogs(env, sport, player) {

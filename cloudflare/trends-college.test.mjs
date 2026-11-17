@@ -76,7 +76,8 @@ test('upstream quota check reports only safe account usage fields', async () => 
   }; } };
   const result = await collegeUpstreamStatus({ DB: db, CFBD_API_KEY: 'private-key' },
     new Date('2026-11-16'), async (url, options) => {
-      assert.equal(url, 'https://api.collegefootballdata.com/info');
+      assert.ok(['https://api.collegefootballdata.com/info',
+        'https://api.collegebasketballdata.com/info'].includes(url));
       assert.equal(options.headers.authorization, 'Bearer private-key');
       return new Response(JSON.stringify({ tierName: 'Free', monthlyLimit: 1000,
         usedCalls: 1000, remainingCalls: 0, sharedPool: true,
@@ -84,6 +85,8 @@ test('upstream quota check reports only safe account usage fields', async () => 
     });
   assert.equal(result.remainingCalls, 0);
   assert.equal(result.credential, undefined);
+  assert.equal(result.cbb.status, 200);
+  assert.equal(result.cbb.credential, undefined);
 });
 
 test('CBB backfill selects one missing day and waits six hours before another', async () => {
