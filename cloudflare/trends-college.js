@@ -26,7 +26,10 @@ export async function ensureCollegeTables(db) {
       PRIMARY KEY (sport, game_date))`),
     db.prepare(`CREATE TABLE IF NOT EXISTS trends_college_refresh_attempt (
       sport TEXT NOT NULL, game_date TEXT NOT NULL, attempted_at TEXT NOT NULL,
-      PRIMARY KEY (sport, game_date))`)
+      PRIMARY KEY (sport, game_date))`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS trends_college_cooldown (
+      sport TEXT PRIMARY KEY, until_at TEXT NOT NULL,
+      consecutive_429 INTEGER NOT NULL, observed_at TEXT NOT NULL)`)
   ]);
 }
 
@@ -45,6 +48,10 @@ export async function collegeGet(env, sport, endpoint, now, fetchImpl = fetch,
   if (!env.CFBD_API_KEY) throw new Error('CFBD_API_KEY is missing from Wrangler secrets');
   const url = `${ORIGINS[sport]}${endpoint}`;
   for (let attempt = 0; attempt < 3; attempt++) {
+    if (sport === 'cbb') {
+      const cooldown = await cbbCooldown(env.DB, now);
+      if (cooldown) throw new Error(`CBB rate limit cooldown until ${cooldown}`);
+    }
     // Each retry consumes the shared quota, including rejected requests.
     await reserveCollegeCall(env.DB, now);
     const response = await fetchImpl(url, {
@@ -54,6 +61,7 @@ export async function collegeGet(env, sport, endpoint, now, fetchImpl = fetch,
     if (response.ok) {
       const data = await response.json();
       if (!Array.isArray(data)) throw new Error(`${sport.toUpperCase()} data endpoint returned an unexpected shape`);
+      if (sport === 'cbb') await env.DB.prepare("DELETE FROM trends_college_cooldown WHERE sport = 'cbb'").run();
       return { data, url };
     }
     const retryAfter = response.headers.get('retry-after');
@@ -63,10 +71,24 @@ export async function collegeGet(env, sport, endpoint, now, fetchImpl = fetch,
       await waitImpl(seconds * 1000);
       continue;
     }
+    if (sport === 'cbb' && response.status === 429) {
+      const prior = await env.DB.prepare("SELECT consecutive_429 FROM trends_college_cooldown WHERE sport = 'cbb'").first();
+      const consecutive = Math.min(7, Number(prior?.consecutive_429 || 0) + 1);
+      const delay = Math.max(24 * 3600_000 * Math.min(2 ** (consecutive - 1), 7),
+        Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0);
+      await env.DB.prepare(`INSERT OR REPLACE INTO trends_college_cooldown
+        (sport, until_at, consecutive_429, observed_at) VALUES ('cbb', ?, ?, ?)`)
+        .bind(new Date(now.valueOf() + delay).toISOString(), consecutive, now.toISOString()).run();
+    }
     const route = endpoint.split('?')[0];
     throw new Error(`${sport.toUpperCase()} ${route} returned ${response.status}` +
       (retryAfter && /^\d{1,5}$/.test(retryAfter) ? ` (retry after ${retryAfter}s)` : ''));
   }
+}
+
+export async function cbbCooldown(db, now = new Date()) {
+  const row = await db.prepare("SELECT until_at FROM trends_college_cooldown WHERE sport = 'cbb'").first();
+  return row?.until_at && Date.parse(row.until_at) > now.valueOf() ? row.until_at : null;
 }
 
 function number(value) { return value === '' || value == null ? null : Number.isFinite(Number(value)) ? Number(value) : null; }
@@ -326,6 +348,10 @@ export async function refreshDueCollege(env, now = new Date(), { fetchImpl = fet
   // Sequential requests preserve the shared monthly budget and avoid a burst
   // of upstream calls when both college sports have just played.
   for (const sport of due.sports) {
+    if (sport === 'cbb') {
+      const until = await cbbCooldown(env.DB, now);
+      if (until) { refreshed.push({ sport, date: due.date, throttled: true, cooldownUntil: until }); continue; }
+    }
     const prior = await env.DB.prepare('SELECT attempted_at FROM trends_college_refresh_attempt WHERE sport = ? AND game_date = ?')
       .bind(sport, due.date).first();
     if (prior && now.valueOf() - Date.parse(prior.attempted_at) < 4 * 3600_000) {
@@ -350,6 +376,7 @@ export async function refreshDueCollege(env, now = new Date(), { fetchImpl = fet
 }
 
 export async function refreshOneCbbBackfill(env, latestDate, { now = new Date(), fetchImpl = fetch } = {}) {
+  if (await cbbCooldown(env.DB, now)) return null;
   const last = await env.DB.prepare(`SELECT MAX(attempted_at) AS at FROM trends_college_refresh_attempt
     WHERE sport = 'cbb_backfill'`).first();
   if (last?.at && now.valueOf() - Date.parse(last.at) < 6 * 3600_000) return null;
