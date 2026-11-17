@@ -143,17 +143,19 @@ export async function refreshCollegeDay(env, sport, date, { now = new Date(), fe
     schedules = await collegeGet(env, sport, `/games?${query}`, now, fetchImpl);
     boxes = await collegeGet(env, sport, `/games/players?${query}`, now, fetchImpl);
   } else {
-    // CFB's player endpoint accepts a game ID. Fetch only final games from a
-    // yearly schedule, then cache each completed box score once.
+    // Fetch a whole week at a time. One request per game would exhaust the
+    // shared free quota on a full college-football Saturday.
     schedules = await collegeGet(env, sport, `/games?year=${date.slice(0, 4)}`, now, fetchImpl);
     boxes = { data: [], url: `${ORIGINS.cfb}/games/players` };
-    for (const game of schedules.data.filter(g => finalGame(g) && gameDate(g) === date)) {
-      const found = await env.DB.prepare('SELECT 1 FROM trends_college_games WHERE sport = ? AND game_id = ? AND status = ?')
-        .bind(sport, String(game.id), 'final').first();
-      if (!found) {
-        const one = await collegeGet(env, sport, `/games/players?id=${encodeURIComponent(game.id)}`, now, fetchImpl);
-        boxes.data.push(...one.data);
-      }
+    const targetGames = schedules.data.filter(g => finalGame(g) && gameDate(g) === date &&
+      String(g.seasonType || g.season_type || 'regular').toLowerCase() === 'regular');
+    const weeks = new Set(targetGames.map(g => Number(g.week)));
+    if (weeks.has(NaN) || [...weeks].some(week => !Number.isInteger(week) || week < 0))
+      throw new Error('CFB schedule is missing week numbers');
+    for (const week of weeks) {
+      const query = new URLSearchParams({ year: date.slice(0, 4), week: String(week), seasonType: 'regular' });
+      const one = await collegeGet(env, sport, `/games/players?${query}`, now, fetchImpl);
+      boxes.data.push(...one.data);
     }
   }
   const finalGames = schedules.data.filter(g => finalGame(g) && gameDate(g) === date &&
