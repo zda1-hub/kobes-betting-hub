@@ -68,18 +68,18 @@ function pacificDate(instant) {
 function gameDate(game) { return pacificDate(game.start_date || game.startDate); }
 
 export function normalizeCbb(game, box) {
-  if (!finalGame(game) || String(game.id) !== String(box.game_id)) return [];
+  if (!finalGame(game) || String(game.id) !== String(box.gameId)) return [];
   const team = String(box.team || '');
-  const home = String(game.home_team || game.homeTeam || '');
-  const away = String(game.away_team || game.awayTeam || '');
+  const home = String(game.homeTeam || '');
+  const away = String(game.awayTeam || '');
   if (team !== home && team !== away) return [];
   const opponent = team === home ? away : home;
   return (box.players || []).flatMap(player => {
     const pts = number(player.points), reb = number(player.rebounds?.total);
-    const ast = number(player.assists), threes = number(player.three_point_field_goals?.made);
-    if (!player.athlete_id || !player.name || [pts, reb, ast, threes].some(v => v === null) ||
+    const ast = number(player.assists), threes = number(player.threePointFieldGoals?.made);
+    if (!player.athleteId || !player.name || [pts, reb, ast, threes].some(v => v === null) ||
         number(player.minutes) === null || number(player.minutes) <= 0) return [];
-    return [{ playerId: String(player.athlete_id), playerName: player.name, team,
+    return [{ playerId: String(player.athleteId), playerName: player.name, team,
       opponent, location: team === home ? 'home' : 'away',
       stats: { points: pts, rebounds: reb, assists: ast, threes, pra: pts + reb + ast } }];
   });
@@ -152,31 +152,37 @@ export async function refreshCollegeDay(env, sport, date, { now = new Date(), fe
       }
     }
   }
-  const finalGames = schedules.data.filter(g => finalGame(g) && gameDate(g) === date);
+  const finalGames = schedules.data.filter(g => finalGame(g) && gameDate(g) === date &&
+    String(g.seasonType || g.season_type || 'regular').toLowerCase() === 'regular');
   const gameById = new Map(finalGames.map(g => [String(g.id), g]));
   let saved = 0;
+  const statements = [];
   for (const box of boxes.data) {
-    const game = gameById.get(String(sport === 'cfb' ? box.id : box.game_id));
+    const game = gameById.get(String(sport === 'cfb' ? box.id : box.gameId));
     if (!game) continue;
     const gameId = String(game.id);
     const rows = sport === 'cfb' ? normalizeCfb(game, box) : normalizeCbb(game, box);
     const sourceUrl = `${ORIGINS[sport]}/games/players`;
     for (const row of rows) {
-      await env.DB.prepare(`INSERT OR REPLACE INTO trends_college_logs
+      statements.push(env.DB.prepare(`INSERT OR REPLACE INTO trends_college_logs
         (sport, game_id, player_id, player_name, team, opponent, location, game_date, season, stats_json, source_url)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(sport, gameId, row.playerId, row.playerName, row.team, row.opponent,
-          row.location, date, Number(game.season || date.slice(0, 4)), JSON.stringify(row.stats), sourceUrl).run();
+          row.location, date, Number(game.season || date.slice(0, 4)), JSON.stringify(row.stats), sourceUrl));
       saved++;
     }
-    await env.DB.prepare(`INSERT OR REPLACE INTO trends_college_games
+    statements.push(env.DB.prepare(`INSERT OR REPLACE INTO trends_college_games
       (sport, game_id, game_date, season, home_team, away_team, status, checked_at)
       VALUES (?, ?, ?, ?, ?, ?, 'final', ?)`)
       .bind(sport, gameId, date, Number(game.season || date.slice(0, 4)),
-        String(game.home_team || game.homeTeam), String(game.away_team || game.awayTeam), now.toISOString()).run();
+        String(game.home_team || game.homeTeam), String(game.away_team || game.awayTeam), now.toISOString()));
   }
   // A day with final games but missing player rows must be retried, not marked complete.
   if (finalGames.length && !saved) throw new Error('Final college games returned no usable player rows');
+  // D1.batch keeps a full slate below the Worker subrequest limit. Individual
+  // row .run() calls exhausted that limit after only part of one CBB day.
+  for (let offset = 0; offset < statements.length; offset += 100)
+    await env.DB.batch(statements.slice(offset, offset + 100));
   await env.DB.prepare('INSERT INTO trends_college_refresh (sport, game_date, checked_at) VALUES (?, ?, ?)')
     .bind(sport, date, now.toISOString()).run();
   return { sport, date, games: finalGames.length, playerRows: saved, checkedAt: now.toISOString() };

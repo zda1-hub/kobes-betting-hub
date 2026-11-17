@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./trends-college.js', import.meta.url), 'utf8');
 const { normalizeCfb, normalizeCbb, reserveCollegeCall, dueCollegeRefresh,
-  refreshDueCollege } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+  refreshDueCollege, refreshCollegeDay } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
 
 test('college refresh waits until 8 AM Pacific and skips off-season sports', () => {
   assert.equal(dueCollegeRefresh(new Date('2026-11-16T15:55:00Z')), null);
@@ -35,12 +35,13 @@ test('college football final box scores keep observed values and team context', 
 });
 
 test('college basketball final player rows compute PRA only from observed numbers', () => {
-  const game = { id: 9, status: 'final', home_team: 'A', away_team: 'B' };
-  const box = { game_id: 9, team: 'B', players: [
-    { athlete_id: 4, name: 'Player', minutes: 28, points: 18, rebounds: { total: 7 },
-      assists: 3, three_point_field_goals: { made: 2 } },
-    { athlete_id: 5, name: 'Missing', minutes: 30, points: 10, rebounds: { total: 5 },
-      assists: null, three_point_field_goals: { made: 1 } }
+  // The official CBBD GamesBoxScorePlayers schema uses camelCase keys.
+  const game = { id: 9, status: 'final', seasonType: 'regular', homeTeam: 'A', awayTeam: 'B' };
+  const box = { gameId: 9, team: 'B', players: [
+    { athleteId: 4, name: 'Player', minutes: 28, points: 18, rebounds: { total: 7 },
+      assists: 3, threePointFieldGoals: { made: 2 } },
+    { athleteId: 5, name: 'Missing', minutes: 30, points: 10, rebounds: { total: 5 },
+      assists: null, threePointFieldGoals: { made: 1 } }
   ] };
   assert.deepEqual(normalizeCbb(game, box).map(row => row.stats),
     [{ points: 18, rebounds: 7, assists: 3, threes: 2, pra: 28 }]);
@@ -60,4 +61,29 @@ test('shared college budget refuses request 901 before the network', async () =>
   } };
   assert.equal((await reserveCollegeCall(db, new Date('2026-11-16'))).calls, 900);
   await assert.rejects(reserveCollegeCall(db, new Date('2026-11-16')), /900/);
+});
+
+test('a full CBB slate writes in batches instead of exhausting D1 subrequests', async () => {
+  const batches = [];
+  let calls = 0;
+  const db = {
+    prepare(sql) { return {
+      sql, bind(...args) { this.args = args; return this; },
+      async run() { if (sql.startsWith('UPDATE trends_college_usage')) calls++; return { meta: { changes: 1 } }; },
+      async first() { return sql.includes('SELECT calls') ? { calls } : null; }
+    }; },
+    async batch(statements) { batches.push(statements.map(statement => statement.sql)); return []; }
+  };
+  const game = { id: 9, status: 'final', seasonType: 'regular', startDate: '2026-11-15T20:00:00Z',
+    homeTeam: 'A', awayTeam: 'B', season: 2026 };
+  const players = Array.from({ length: 150 }, (_, i) => ({ athleteId: i + 1,
+    name: `Player ${i + 1}`, minutes: 20, points: 10, rebounds: { total: 4 },
+    assists: 2, threePointFieldGoals: { made: 1 } }));
+  const fetchImpl = async url => new Response(JSON.stringify(url.includes('/games/players?') ?
+    [{ gameId: 9, team: 'A', players }] : [game]));
+  const result = await refreshCollegeDay({ DB: db, CFBD_API_KEY: 'test-key' }, 'cbb', '2026-11-15',
+    { now: new Date('2026-11-16T20:00:00Z'), fetchImpl });
+  assert.equal(result.playerRows, 150);
+  assert.equal(calls, 2);
+  assert.deepEqual(batches.slice(1).map(batch => batch.length), [100, 51]);
 });
