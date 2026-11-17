@@ -1624,19 +1624,25 @@ function startTrendsSchedule() {
         hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
       if (Number(parts.find(part => part.type === 'hour')?.value) !== 8) return;
       const controls = await sportsControl.read(reviewQueueRoot);
-      for (const sport of ['NBA', 'NFL']) {
+      for (const sport of ['NBA', 'NFL', 'CFB', 'CBB']) {
         const attemptKey = `${bulkPanel.serviceDate()}-${sport}`;
         if (Date.now() - (feedAttempts.get(attemptKey) || 0) < 30 * 60_000) continue;
         feedAttempts.set(attemptKey, Date.now());
         try {
-        if (!sportsControl.isEnabled(sport.toLowerCase(), controls, { env: process.env })) continue;
-        const id = sport === 'NBA' ? process.env.TRENDS_NBA_CHANNEL_ID : process.env.TRENDS_NFL_CHANNEL_ID;
+        if (!sportsControl.isEnabled(sport.toLowerCase(), controls,
+          await sportsKeyOptions())) continue;
+        const destinations = {
+          NBA: [process.env.TRENDS_NBA_CHANNEL_ID, '🏀・nba-high-hit-rates'],
+          NFL: [process.env.TRENDS_NFL_CHANNEL_ID, '🏈・nfl-high-hit-rates'],
+          CFB: [process.env.TRENDS_CFB_CHANNEL_ID || '1571961347892183166', '🏈・cfb-high-hit-rates'],
+          CBB: [process.env.TRENDS_CBB_CHANNEL_ID || '1571961526397702324', '🏀・cbb-high-hit-rates']
+        };
+        const [id, channelName] = destinations[sport];
         if (!id) continue;
         const channel = await client.channels.fetch(id);
         const categoryId = sport === 'NBA'
           ? (process.env.TRENDS_NBA_CATEGORY_ID || '1562152752044580894')
           : (process.env.TRENDS_PRIVATE_CATEGORY_ID || '1571283598571475036');
-        const channelName = sport === 'NBA' ? '🏀・nba-high-hit-rates' : '🏈・nfl-high-hit-rates';
         if (channel?.guildId !== process.env.DISCORD_GUILD_ID || channel.parentId !== categoryId ||
             channel.name !== channelName ||
             channel.permissionsFor(channel.guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) !== false ||
@@ -1645,6 +1651,9 @@ function startTrendsSchedule() {
           throw new Error(`${sport} feed destination is not verified VIP-only`);
         const report = await prepareDailyFeed({ sport, root: reviewQueueRoot,
           oddsKey: process.env.ODDS_API_KEY, bdlKey: process.env.BDL_NBA_API_KEY,
+          collegeBaseUrl: process.env.FREE_PICK_SITE_PUBLISH_URL ||
+            'https://bettinghub-publisher.kobedirwin.workers.dev',
+          collegeSecret: process.env.FREE_PICK_SITE_PUBLISH_SECRET,
           threshold: controls.feedThreshold || 80 });
         await publishDailyFeed({ root: reviewQueueRoot, report, channel });
         } catch (error) { console.error(`${sport} daily trend feed held:`, error.message); }
@@ -3566,7 +3575,7 @@ async function sportsKeyOptions() {
     remoteKeys: sportsKeysCache.keys,
     // A missing CFBD stat row does not prove a zero or a DNP. Until complete
     // participation is verified, a CFB L10 feed could overstate hit rates.
-    providerReady: { cfb: false,
+    providerReady: { cfb: sportsKeysCache.keys.CFBD_API_KEY === true,
       cbb: sportsKeysCache.keys.CFBD_API_KEY === true } };
   const base = (process.env.FREE_PICK_SITE_PUBLISH_URL ||
     'https://bettinghub-publisher.kobedirwin.workers.dev').replace(/\/$/, '');
@@ -3586,7 +3595,7 @@ async function sportsKeyOptions() {
   }));
   sportsKeysCache = { at: Date.now(), keys };
   return { env: process.env, remoteKeys: keys,
-    providerReady: { cfb: false, cbb: keys.CFBD_API_KEY === true } };
+    providerReady: { cfb: keys.CFBD_API_KEY === true, cbb: keys.CFBD_API_KEY === true } };
 }
 
 async function startPrivatePropFlow(interaction) {
