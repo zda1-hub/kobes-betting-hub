@@ -87,6 +87,11 @@
     gclid: clean(query.get('gclid') || stored.gclid, 160),
     fbclid: clean(query.get('fbclid') || stored.fbclid, 160),
     msclkid: clean(query.get('msclkid') || stored.msclkid, 160),
+    // X's click ID is retained only in this consented analytics session so
+    // checkout can carry the same click through Discord OAuth to Stripe.
+    twclid: /^[A-Za-z0-9._~-]{1,512}$/.test(query.get('twclid') || '')
+      ? query.get('twclid') : /^[A-Za-z0-9._~-]{1,512}$/.test(stored.twclid || '')
+        ? stored.twclid : '',
     referral_identifier: referralIdentifier || clean(stored.referral_identifier, 64),
     document_referrer: rawReferrer || clean(stored.document_referrer, 500),
     referrer_host: (!isInternalReferrer && referrerHost) || clean(stored.referrer_host),

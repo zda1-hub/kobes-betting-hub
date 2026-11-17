@@ -178,9 +178,12 @@ test('fbclid only identifies Meta platform with unknown social medium', () => {
 test('twclid identifies X without falsely claiming a paid campaign', () => {
   const result = visit({ url: 'https://kobesbettinghub.com/join?twclid=example' });
   assert.equal(result.attribution.session_source, 'x');
+  assert.equal(result.attribution.twclid, 'example');
+  const returned = visit({ url: 'https://kobesbettinghub.com/welcome',
+    referrer: 'https://checkout.stripe.com/', storage: result.storage });
+  assert.equal(returned.attribution.twclid, 'example');
   assert.equal(result.attribution.session_medium, 'unknown_social');
   assert.equal(result.attribution.session_campaign, '');
-  assert.equal(result.attribution.twclid, undefined);
   assert.equal(visit({ url: 'https://kobesbettinghub.com/join?twclid=example&utm_source=ig' }).attribution.session_source, 'instagram');
 });
 
