@@ -195,5 +195,7 @@ test('CFB fetches one weekly box-score batch for multiple final games', async ()
     { now: new Date('2026-11-16T20:00:00Z'), fetchImpl });
   assert.equal(result.playerRows, 2);
   assert.equal(calls, 2);
+  assert.match(paths[0], /classification=fbs/);
   assert.match(paths[1], /week=11/);
+  assert.match(paths[1], /classification=fbs/);
 });

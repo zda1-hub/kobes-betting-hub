@@ -162,7 +162,10 @@ export async function refreshCollegeDay(env, sport, date, { now = new Date(), fe
   } else {
     // Fetch a whole week at a time. One request per game would exhaust the
     // shared free quota on a full college-football Saturday.
-    schedules = await collegeGet(env, sport, `/games?year=${date.slice(0, 4)}`, now, fetchImpl);
+    // The Odds API college slate is FBS-focused. Asking CFBD for every
+    // classification loads many unrelated boxes and can exhaust Worker CPU.
+    schedules = await collegeGet(env, sport,
+      `/games?year=${date.slice(0, 4)}&classification=fbs`, now, fetchImpl);
     boxes = { data: [], url: `${ORIGINS.cfb}/games/players` };
     const targetGames = schedules.data.filter(g => finalGame(g) && gameDate(g) === date &&
       String(g.seasonType || g.season_type || 'regular').toLowerCase() === 'regular');
@@ -170,7 +173,8 @@ export async function refreshCollegeDay(env, sport, date, { now = new Date(), fe
     if (weeks.has(NaN) || [...weeks].some(week => !Number.isInteger(week) || week < 0))
       throw new Error('CFB schedule is missing week numbers');
     for (const week of weeks) {
-      const query = new URLSearchParams({ year: date.slice(0, 4), week: String(week), seasonType: 'regular' });
+      const query = new URLSearchParams({ year: date.slice(0, 4), week: String(week),
+        seasonType: 'regular', classification: 'fbs' });
       const one = await collegeGet(env, sport, `/games/players?${query}`, now, fetchImpl);
       boxes.data.push(...one.data);
     }
