@@ -1593,7 +1593,7 @@ async function publishScheduledTrends() {
 function startTrendsSchedule() {
   if (process.env.TRENDS_TEAM_RANKS_ENABLED === 'true' &&
       process.env.DISCORD_GUILD_ID && process.env.BDL_NBA_API_KEY) {
-    void ensureRankChannels(client, process.env.DISCORD_GUILD_ID, [...vipRoleIds()])
+    void ensureRankChannels(client, process.env.DISCORD_GUILD_ID, [...vipRoleIds()], reviewQueueRoot)
       .then(channels => console.log('VIP rank channels verified:', JSON.stringify(
         Object.fromEntries(Object.entries(channels).map(([sport, sections]) =>
           [sport, Object.fromEntries(Object.entries(sections).map(([section, channel]) =>
