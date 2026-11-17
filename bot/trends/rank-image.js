@@ -36,7 +36,7 @@ function rankImage({ sport, section, metric, rows, updatedAt, dataDate,
   <text x="52" y="200" font-family="Arial, sans-serif" font-size="25" fill="#cbd5e1">Updated ${esc(updatedAt)} | Updated every Tuesday at 10 AM PT</text>
   <text x="52" y="240" font-family="Arial, sans-serif" font-size="24" fill="#cbd5e1">Through ${esc(dataDate || 'N/A')} · ${esc(direction)} · ${page}/${pages}</text>
   <g font-family="Arial, sans-serif">${parts}</g>
-  <text x="52" y="${footerY}" font-family="Arial, sans-serif" font-size="23" fill="#cbd5e1">${sport === 'NFL' ? 'Data: nflverse (CC BY 4.0) · ' : ''}21+ | Research only, not a guarantee</text>
+  <text x="52" y="${footerY}" font-family="Arial, sans-serif" font-size="23" fill="#cbd5e1">${sport === 'NFL' ? 'Data: nflverse (CC BY 4.0) · ' : ''}Research only, not a guarantee</text>
   </svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
 }

@@ -41,7 +41,7 @@ function formatNbaCombo(result) {
     `${result.warnings.length ? `Risk: ${result.warnings.join('; ')}. ` : ''}` +
     `Checked ${result.checkedAt}. Sources: ${source}; The Odds API current markets and BALLDONTLIE injuries.\n` +
     `No combined sportsbook quote or dependency-aware probability was returned. ` +
-    `Historical hits are not parlay probabilities. Research only; no pick or bet was placed. Lines move. 21+.`;
+    `Historical hits are not parlay probabilities. Research only; no pick or bet was placed. Lines move.`;
 }
 
 module.exports = { researchNbaCombo, formatNbaCombo };

@@ -82,7 +82,7 @@ async function publishSection({ root, sheet, section, channel, updatedAt,
       messages.push(await channel.send({ content:
         `**${sheet.sport} ${section} rank sheets** · ${batchMetrics.join(', ')}` +
         (sheet.sport === 'NFL' ? '\nData: nflverse (CC BY 4.0)' : '') +
-        '\n21+ | Research only, not a guarantee',
+        '\nResearch only, not a guarantee',
       files: batch, allowedMentions: { parse: [] } }));
       batch = []; batchMetrics = [];
     };
@@ -103,10 +103,10 @@ async function publishSection({ root, sheet, section, channel, updatedAt,
     if (unavailable.length) messages.push(await channel.send({ content:
       `**${sheet.sport} ${section} · N/A from this source:** ${unavailable.join(', ')}. ` +
       'No position or statistic was inferred from a broader label.\n' +
-      '21+ | Research only, not a guarantee', allowedMentions: { parse: [] } }));
+      'Research only, not a guarantee', allowedMentions: { parse: [] } }));
     if (!messages.length) messages.push(await channel.send({ content:
       `**${sheet.sport} ${section}** · N/A. The current source does not support reliable position-specific ranks.\n` +
-      '21+ | Research only, not a guarantee' }));
+      'Research only, not a guarantee' }));
     const receipt = { sport: sheet.sport, section, date, channelId: channel.id,
       guildId, messageIds: messages.map(row => row.id), dataDate: sheet.dataDate,
       updatedAt: sheet.updatedAt };

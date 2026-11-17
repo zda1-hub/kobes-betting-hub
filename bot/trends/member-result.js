@@ -3,7 +3,7 @@
 const { TEAM_NAMES } = require('./nfl-auto');
 const { MIN_OBSERVED_GAMES } = require('./bulk-report');
 
-const FOOTER = '21+ | Research only, not a guarantee';
+const FOOTER = 'Research only, not a guarantee';
 const INSUFFICIENT_SAMPLE = `No qualifying trend: fewer than ${MIN_OBSERVED_GAMES} observed games.\n${FOOTER}`;
 const STAT_LABELS = Object.freeze({
   points: 'Points', rebounds: 'Rebounds', assists: 'Assists', threes: '3PM',

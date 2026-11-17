@@ -75,7 +75,7 @@ function formatNbaResearch(result) {
     `**Other available lines (same completed game logs):**\n${alternatives}\n` +
     `Availability: ${injury}. Market checked ${result.marketCheckedAt}; injury feed checked ${result.availability.checkedAt || 'unavailable'}. ` +
     `[Game-log source](${result.historySource}).\n` +
-    `Historical rates are not next-game probabilities. Search results are research, not approved picks. Lines move; verify the current book. 21+.`;
+    `Historical rates are not next-game probabilities. Search results are research, not approved picks. Lines move; verify the current book.`;
 }
 
 module.exports = { researchNba, formatNbaResearch };

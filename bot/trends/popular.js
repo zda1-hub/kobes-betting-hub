@@ -35,7 +35,7 @@ function buildPopularCard({ legs, searchEvidence, serviceDate, now = Date.now() 
     title: `Popular trends among KBH searches · ${serviceDate}`,
     lines: items,
     evidence: `${searchEvidence.uniqueSearchers} distinct KBH searchers today`,
-    footer: 'Historical hit rates are descriptive, not next-game or parlay probabilities. Lines move. 21+.',
+    footer: 'Historical hit rates are descriptive, not next-game or parlay probabilities. Lines move.',
     combinedProbability: null,
     combinedPayout: null
   };
