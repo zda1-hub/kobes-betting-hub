@@ -1,4 +1,23 @@
 services:
+  - type: cron
+    name: kobes-betting-hub-weekly-x-audit
+    runtime: node
+    schedule: "0 14 * * 1"
+    buildCommand: npm ci
+    startCommand: npm run audit:x
+    envVars:
+      - key: KBH_X_HANDLE
+        value: kobesbettinghub
+      - key: X_BEARER_TOKEN
+        sync: false
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: AUDIT_CHANNEL_ID
+        sync: false
+      - key: X_AUDIT_STORE_URL
+        value: https://bettinghub-publisher.kobedirwin.workers.dev
+      - key: X_AUDIT_INGEST_SECRET
+        sync: false
   - type: worker
     name: kobes-betting-hub-bot
     runtime: node

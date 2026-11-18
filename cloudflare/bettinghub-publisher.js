@@ -1,6 +1,7 @@
 import { enqueueSocialEmail, dispatchSocialEmails } from './free-pick-social-email.js';
 import { collegeLogs, collegeTeamLogs, collegeTeams, collegeStatus, collegeUpstreamStatus, refreshCollegeDay, refreshDueCollege } from './trends-college.js';
 import { createOptionalBdlProvider } from './trends-bdl-optional.js';
+import { xAuditReports } from './x-audit-reports.js';
 import resultMetadata from '../result-metadata.js';
 const CALLBACK_PATH = "/auth/x/callback";
 const START_PATH = "/auth/x/start";
@@ -161,6 +162,10 @@ async function handleRequest(request, env, ctx) {
   }
   if (url.pathname === "/api/email/subscribe" && request.method === "POST") return subscribeEmail(request, env, ctx);
   if (url.pathname === "/api/admin/email-stats" && request.method === "GET") return emailStats(request, env);
+  if (url.pathname === "/api/admin/x-audit-reports" && ["GET", "POST"].includes(request.method)) {
+    if (!await hasBearer(request, env.X_AUDIT_INGEST_SECRET)) return json({ error: "Unauthorized" }, 401);
+    return xAuditReports(request, env);
+  }
   if (url.pathname === "/api/email/unsubscribe" && request.method === "GET") return unsubscribeEmail(url, env);
   if (url.pathname === "/api/free-pick/gate" && request.method === "GET") return getFreePickGate(request, env);
   if (url.pathname === "/api/free-pick/gate" && request.method === "PUT") return putFreePickGate(request, env);
