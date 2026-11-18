@@ -5,6 +5,8 @@ const { run } = require('./run-x-weekly-audit');
 
 test('tags free picks, results, media memes and own-thread replies', () => {
   assert.equal(formatTag({ text: 'KBH FREE CARD | NBA' }), 'free_pick');
+  assert.equal(formatTag({ text: 'Ayo over 3.5 assists. Join our free Discord for more approved plays like this.' }), 'free_pick');
+  assert.equal(formatTag({ text: 'Free picks yesterday: 3-3. Losses first.' }), 'record_recap');
   assert.equal(formatTag({ text: '❌ MISSED: final stat 3' }), 'result');
   assert.equal(formatTag({ text: 'Whatever makes her happy 😂', attachments: { media_keys: ['a'] } }), 'meme_hype');
   assert.equal(formatTag({ text: 'More context', referenced_tweets: [{ type: 'replied_to', id: '1' }] }, new Set(['1'])), 'thread');
@@ -16,6 +18,8 @@ test('flags policy terms, profit, sportsbook, parlay promotion, age and misplace
   assert.deepEqual(complianceFlags(post), ['lock_or_guaranteed', 'dollar_profit_claim', 'sportsbook_name', 'parlay_promo', 'missing_21_plus', 'discord_link_outside_first_reply']);
   const first = { id: '2', text: '21+ Free Discord: https://discord.gg/abc', created_at: '2026-11-17T12:01:00Z', referenced_tweets: [{ type: 'replied_to', id: '1' }] };
   assert.deepEqual(complianceFlags(first, { allPosts: [post, first] }), []);
+  const shortened = { id: '3', text: '21+ Free Discord: https://t.co/link', entities: { urls: [{ expanded_url: 'https://discord.gg/abc' }] } };
+  assert.deepEqual(complianceFlags(shortened), ['discord_link_outside_first_reply']);
 });
 
 test('converts UTC into fixed Phoenix MST and uses seven complete days', () => {

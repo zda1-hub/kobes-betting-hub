@@ -23,9 +23,10 @@ function kind(post) {
 function formatTag(post, ownIds = new Set()) {
   const text = post.text || '';
   const hasMedia = Boolean(post.attachments?.media_keys?.length);
+  if (/\b(?:record|recap|free picks? yesterday)\b/i.test(text) && /\b\d+\s*[-–]\s*\d+\b|\bweekly\b/i.test(text)) return 'record_recap';
   if (/\b(?:cashed|missed|graded|final stat|final score|result)\b/i.test(text)) return 'result';
-  if (/\b(?:free pick|free play|free card|today.s free)\b/i.test(text)) return 'free_pick';
-  if (/\b(?:record|recap)\b/i.test(text) && /\b\d+\s*[-–]\s*\d+\b|\bweekly\b/i.test(text)) return 'record_recap';
+  if (/\b(?:free pick|free play|free card|today.s free)\b/i.test(text) ||
+      (/\b(?:over|under)\s+\d+(?:\.\d+)?\b/i.test(text) && /\bapproved plays like this\b/i.test(text))) return 'free_pick';
   if (/\b(?:hit.?rate|historical hits|L5|L10|L20|\d+\/\d+ games)\b/i.test(text)) return 'hitrate_card';
   if (/\b(?:matchup|who wins|score prediction|vs\.?| at )\b/i.test(text) && /\?|\bwatch\b/i.test(text)) return 'matchup_watch';
   if (/(?:\b(?:meme|lol|let.s go|we going shopping|hype)\b|😂|🤣)/i.test(text) && (hasMedia || /😂|🤣/.test(text))) return 'meme_hype';
@@ -36,13 +37,14 @@ function formatTag(post, ownIds = new Set()) {
 
 function complianceFlags(post, { allPosts = [], bookNames = sportsbooks } = {}) {
   const text = post.text || '';
+  const expandedUrls = (post.entities?.urls || []).map(url => url.expanded_url || url.unwound_url || url.display_url || '').join(' ');
   const flags = [];
   if (/\b(?:lock|guaranteed)\b/i.test(text)) flags.push('lock_or_guaranteed');
   if (/(?:\$[\d,.]+\s*(?:k|thousand|million)?\s*(?:profit|won|made|up)|(?:profit|won|made|up)\s*\$[\d,.]+)/i.test(text)) flags.push('dollar_profit_claim');
   if (bookNames.some(name => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+')}\\b`, 'i').test(text))) flags.push('sportsbook_name');
   if (/\bparlay\b/i.test(text) && /\b(?:tail|bet|play|join|take|place|promo|boost)\b/i.test(text)) flags.push('parlay_promo');
   if (!/21\s*\+/i.test(text)) flags.push('missing_21_plus');
-  if (/discord\.gg\//i.test(text)) {
+  if (/discord\.gg\//i.test(`${text} ${expandedUrls}`)) {
     const parent = (post.referenced_tweets || []).find(ref => ref.type === 'replied_to')?.id;
     const siblings = allPosts.filter(p => (p.referenced_tweets || []).some(ref => ref.type === 'replied_to' && ref.id === parent))
       .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
@@ -143,7 +145,7 @@ async function fetchOwnPosts({ handle, token, range, fetchImpl = fetch, sleep, s
     url.searchParams.set('max_results', '100');
     url.searchParams.set('start_time', range.start);
     url.searchParams.set('end_time', range.end);
-    url.searchParams.set('tweet.fields', 'created_at,public_metrics,referenced_tweets,conversation_id,attachments');
+    url.searchParams.set('tweet.fields', 'created_at,public_metrics,referenced_tweets,conversation_id,attachments,entities');
     url.searchParams.set('expansions', 'attachments.media_keys');
     url.searchParams.set('media.fields', 'type');
     if (next) url.searchParams.set('pagination_token', next);
