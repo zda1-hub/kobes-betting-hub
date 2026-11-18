@@ -9,7 +9,7 @@ function fixture() {
   const role = { id: 'free', name: 'Free', position: 1 };
   const botRole = { id: 'bot-role', name: 'Kobe Bot', position: 4 };
   guild.roles = { cache: new Collection([['free', role], ['bot-role', botRole]]), fetch: async () => guild.roles.cache };
-  const channels = ['🆓・free-picks', 'results', '💬・community-chat'].map((name, i) => ({ id: String(i + 1), name, type: ChannelType.GuildText }));
+  const channels = ['🆓・free-picks', '💬・community-chat'].map((name, i) => ({ id: String(i + 1), name, type: ChannelType.GuildText }));
   let pin = null;
   const start = { id: 'start', name: 'start-here', type: ChannelType.GuildText, parentId: null, position: 0,
     permissionOverwrites: { set: async (...args) => events.push(['overwrites', ...args]) },
@@ -32,9 +32,11 @@ function fixture() {
 test('welcome copy uses real channel mentions and fails closed if one is missing', () => {
   const { guild } = fixture();
   const copy = resolveWelcomeMessage(guild);
-  assert.match(copy, /<#1>/); assert.match(copy, /<#2>/); assert.match(copy, /<#3>/);
-  guild.channels.cache.delete('2');
-  assert.throws(() => resolveWelcomeMessage(guild), /#results/);
+  assert.equal((copy.match(/<#1>/g) || []).length, 2);
+  assert.match(copy, /graded right in <#1>, wins AND losses\. 26-17 since sep 22/);
+  assert.match(copy, /<#2>/);
+  guild.channels.cache.delete('1');
+  assert.throws(() => resolveWelcomeMessage(guild), /#free-picks/);
 });
 
 test('Free-only overwrite denies everyone, allows Free reading, and blocks Free sending', () => {
@@ -68,11 +70,11 @@ test('dry run counts members and makes no mutations; setup edits existing pin on
   assert.equal(events.filter(event => event[0] === 'edit').length, 1);
 });
 
-test('missing results channel blocks apply before any role or channel change', async () => {
-  const { guild, events } = fixture(); guild.channels.cache.delete('2');
+test('missing free-picks channel blocks apply before any role or channel change', async () => {
+  const { guild, events } = fixture(); guild.channels.cache.delete('1');
   const plan = await inspectWelcome(guild, { vipIds: new Set(['vip']) });
-  assert.match(plan.planned.blocked, /#results/);
-  await assert.rejects(applyWelcome(plan), /#results/);
+  assert.match(plan.planned.blocked, /#free-picks/);
+  await assert.rejects(applyWelcome(plan), /#free-picks/);
   assert.equal(events.length, 0);
 });
 

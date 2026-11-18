@@ -4,8 +4,8 @@ const { vipRoleIds } = require('./welcome');
 
 const FREE_ROLE_NAME = 'Free';
 const START_CHANNEL_NAME = 'start-here';
-const MENTION_NAMES = ['free-picks', 'results', 'general'];
-const MENTION_CHANNEL_SUFFIX = { 'free-picks': 'free-picks', results: 'results', general: 'community-chat' };
+const MENTION_NAMES = ['free-picks', 'general'];
+const MENTION_CHANNEL_SUFFIX = { 'free-picks': 'free-picks', general: 'community-chat' };
 const BOT_ALLOW = [
   PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory,
   PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages,
