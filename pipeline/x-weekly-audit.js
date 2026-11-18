@@ -2,7 +2,7 @@ const { sportsbooks } = require('../data/x-audit-config.json');
 
 const X_API = 'https://api.x.com/2';
 const PHOENIX_OFFSET = 7 * 60 * 60 * 1000;
-const MAX_X_READS = 200;
+const MAX_X_READS = 199;
 
 function phoenixDate(value) { return new Date(new Date(value).getTime() - PHOENIX_OFFSET).toISOString().slice(0, 10); }
 function phoenixTime(value) { return new Date(new Date(value).getTime() - PHOENIX_OFFSET).toISOString().slice(11, 16) + ' MST'; }
@@ -120,7 +120,7 @@ function markdown(report) {
 async function readX(url, { token, fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), state = { reads: 0 } }) {
   if (!url.startsWith(X_API + '/')) throw new Error('Only X API v2 read endpoints are permitted.');
   for (let attempt = 0; attempt <= 2; attempt++) {
-    if (state.reads >= MAX_X_READS) throw new Error('X read cap of 200 reached.');
+    if (state.reads >= MAX_X_READS) throw new Error('X read cap of 199 reached.');
     state.reads++;
     const response = await fetchImpl(url, { method: 'GET', headers: { Authorization: `Bearer ${token}` } });
     if (response.status === 429 && attempt < 2) {
