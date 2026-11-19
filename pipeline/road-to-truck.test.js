@@ -8,11 +8,13 @@ const { queue, schedule, due, validateItem, forbidden, dayNumber, mstStamp } = r
 const { renderCard, renderDailyCard } = require('./road-to-truck-card');
 const { run, paidLeaderboard, enabled, processItem, postDaily } = require('./run-road-to-truck');
 const { buildDaily, dayFromLaunch } = require('./truck-daily');
+const { referralRewardLine } = require('../content/truck_config.json');
 
 test('active X templates fit after verified substitution; retired copy cannot pass', () => {
   for (const item of queue.filter(row => row.platform === 'x' && row.recurrence === 'referral_template')) {
     const text=item.text.replace('{X}','200');
     const rendered=validateItem({...item,text}, '26-17');
+    assert.ok(rendered.text.includes(referralRewardLine), item.id);
     assert.ok(rendered.text.length <= 280,item.id);
     assert.ok(rendered.first_reply.length <= 280,item.id);
   }
@@ -24,12 +26,18 @@ test('active X templates fit after verified substitution; retired copy cannot pa
     const text=item.text.replaceAll('{day}','1').replaceAll('{X}','200').replaceAll('{new_names}','A').replaceAll('{top_ref}','A');
     const rendered=validateItem({...item,text},'26-17');
     assert.ok(rendered.text.length <= 280,item.id);
+    assert.ok(rendered.first_reply.includes(referralRewardLine), item.id);
   }
+  for (const item of queue.filter(row => row.platform === 'x' && row.recurrence === 'daily_fallback'))
+    assert.ok(validateItem({...item,text:item.text.replaceAll('{day}','2').replaceAll('{X}','0')},'26-17').first_reply.includes(referralRewardLine),item.id);
 });
 test('compliance blocks risky terms and missing age notice', () => {
   for (const word of ['lock', 'guaranteed', 'profit', 'parlay', 'DraftKings']) assert.ok(forbidden(`21+ ${word}`), word);
   assert.equal(forbidden('free picks available'), 'missing 21+');
   assert.equal(forbidden('21+ | not a guarantee'), null);
+  assert.equal(forbidden(`${referralRewardLine} 21+ | not a guarantee`), null);
+  assert.ok(forbidden(`${referralRewardLine} $50 profit. 21+ | not a guarantee`));
+  assert.ok(forbidden('you also get $25 for every referral. 21+ | not a guarantee'));
 });
 test('MST times map to UTC without DST and day numbers include Nov 19, Nov 25, Dec 10', () => {
   assert.equal(new Date(mstStamp('2026-11-19', 18)).toISOString(), '2026-11-20T01:00:00.000Z');

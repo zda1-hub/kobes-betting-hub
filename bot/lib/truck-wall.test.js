@@ -4,6 +4,7 @@ const assert=require('node:assert/strict');
 const {PermissionFlagsBits,Collection}=require('discord.js');
 const {plan,setup,explainer,announcement,ROLES,CHANNELS}=require('./truck-wall');
 const {forbidden,validateItem}=require('../../pipeline/road-to-truck-schedule');
+const {referralRewardLine}=require('../../content/truck_config.json');
 const guild={id:'1215407647155683358',members:{me:{roles:{highest:{position:15}},permissions:{has(flag){return flag===PermissionFlagsBits.ManageRoles||flag===PermissionFlagsBits.ManageChannels||flag===PermissionFlagsBits.ManageMessages}}}},
   roles:{cache:new Collection()},channels:{cache:new Collection()}};
 test('dry-run plans four roles, category and four channels with no writes',async()=>{
@@ -29,11 +30,12 @@ test('an existing truck role at or above the bot is reported before writes',asyn
   assert.deepEqual(report.permissions.unmanageableTruckRoles,['Rider']);
   await assert.rejects(()=>setup(blocked,{dryRun:false,env:{NAME_WALL_ENABLED:'true'}}),/Existing roles at\/above bot: Rider/);
 });
-test('explainer previews exact zero progress, rules and no invented reward amount',()=>{
+test('explainer previews exact zero progress and the approved referral reward',()=>{
   const json=explainer(0).toJSON();
   assert.match(json.description,/spot 0 of 200/);assert.match(json.description,/US 21\+ only/);
-  assert.match(json.description,/month 2/);assert.doesNotMatch(json.description,/\$\d+/);
+  assert.match(json.description,/month 2/);assert.ok(json.description.includes(referralRewardLine));
   assert.match(announcement(null,0),/spot 0 of 200/);
+  assert.ok(announcement(null,0).includes(referralRewardLine));
 });
 test('attributed production copy and Road Crew perk pass truck compliance',()=>{
   const guide=explainer(0).toJSON().description;
