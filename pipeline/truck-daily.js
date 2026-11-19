@@ -2,6 +2,7 @@ const { queue, forbidden, dayNumber } = require('./road-to-truck-schedule');
 
 const templates = queue.filter(item => item.recurrence === 'daily_caption');
 const fallback = queue.find(item => item.id === 'truck-daily-no-names');
+const emptyWall = queue.find(item => item.id === 'truck-daily-empty-wall');
 const neutral = queue.find(item => item.id === 'truck-daily-neutral');
 function dayFromLaunch(startedAt, date) {
   if (!startedAt || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Verified launch date required');
@@ -17,11 +18,12 @@ function buildDaily(snapshot, date) {
   const day = dayFromLaunch(snapshot.startedAt, date);
   const names = (snapshot.newNames || []).slice(0, 3).map(name => String(name).slice(0, 20));
   const isDown = Number.isInteger(snapshot.previousSpot) && snapshot.spot < snapshot.previousSpot;
-  const source = isDown ? neutral : names.length ? templates[(day - 1) % templates.length] : fallback;
+  const source = isDown ? neutral : names.length ? templates[(day - 1) % templates.length]
+    : snapshot.spot === 0 ? emptyWall : fallback;
   if (!source) throw new Error('Daily caption template missing');
   const values = {
     day: String(day), X: String(snapshot.spot),
-    new_names: names.length ? names.join(', ') : "who's next on the wall?",
+    new_names: names.length ? names.join(', ') : snapshot.spot === 0 ? "who's first on the wall?" : "who's next on the wall?",
     top_ref: snapshot.topRef ? String(snapshot.topRef).slice(0, 20) : 'none yet',
   };
   const text = source.text.replace(/\{(day|X|new_names|top_ref)\}/g, (_, key) => values[key]);

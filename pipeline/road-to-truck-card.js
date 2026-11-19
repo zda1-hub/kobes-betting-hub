@@ -78,7 +78,8 @@ async function renderDailyCard({ day, spot, newNames = [], topRef = null,
   const logoUrl = `data:image/png;base64,${logo.toString('base64')}`;
   const names = newNames.slice(0, 3).map(name => String(name).slice(0, 20));
   while (names.length > 1 && names.join('  •  ').length > 50) names.pop();
-  const nameLine = names.length ? names.join('  •  ') : "who's next on the wall?";
+  const wallLine = names.length ? `new on the wall: ${names.join('  •  ')}`
+    : spot === 0 ? "who's first on the wall?" : "who's next on the wall?";
   const safeTop = topRef ? String(topRef).slice(0, 20) : 'none yet';
   const percent = Math.min(100, spot / 200 * 100);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
@@ -93,7 +94,7 @@ async function renderDailyCard({ day, spot, newNames = [], topRef = null,
     <text x="80" y="955" fill="#fff" font-size="77" font-weight="900">SPOT ${spot} OF 200</text>
     <rect x="80" y="1000" width="920" height="28" rx="14" fill="#3d4551"/>
     <rect x="80" y="1000" width="${Math.max(0, 920 * percent / 100)}" height="28" rx="14" fill="#ff7a1a"/>
-    <text x="80" y="1080" fill="#fff" font-size="25" font-weight="700">new on the wall: ${esc(nameLine)}</text>
+    <text x="80" y="1080" fill="#fff" font-size="25" font-weight="700">${esc(wallLine)}</text>
     <text x="80" y="1130" fill="#4da3ff" font-size="29" font-weight="700">this week's top referrer: ${esc(safeTop)}</text>
     <text x="540" y="1210" text-anchor="middle" fill="#fff" font-size="26" font-weight="700">21+ | not a guarantee</text>
     <text x="540" y="1245" text-anchor="middle" fill="#b5bcc7" font-size="19">Photo: Mr.choppers, CC BY-SA 3.0, Wikimedia Commons</text>
