@@ -55,7 +55,7 @@ async function renderCard({ date, record = FALLBACK_RECORD, photoPath = path.joi
     <rect x="${x0}" y="906" width="${x1 - x0}" height="20" rx="10" fill="#4d5667"/>
     <rect x="${x0}" y="906" width="${Math.max(0, progressEnd - x0)}" height="20" rx="10" fill="url(#progress)"/>
     ${marks}
-    <text x="540" y="1072" text-anchor="middle" class="small" fill="#4da3ff">elon says production ends mid 2027</text>
+    <text x="540" y="1072" text-anchor="middle" class="small" fill="#4da3ff">elon says production ends summer 2027</text>
     <line x1="112" x2="968" y1="1161" y2="1161" stroke="#ffffff" stroke-opacity=".25"/>
     <text x="540" y="1221" text-anchor="middle" class="footer" fill="#ffffff">21+ | not a guarantee</text>
     ${hasPhoto ? '<text x="540" y="1270" text-anchor="middle" class="photo-credit" fill="#d8dde5">photo: Mr.choppers / CC BY-SA 3.0</text>' : ''}
