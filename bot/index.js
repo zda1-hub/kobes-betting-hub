@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Client, Events, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const commands = require('./commands');
+const truckWall = require('./lib/truck-wall');
 const { research: researchNflTrend, formatResearch: formatNflTrend } = require('./trends/nfl-search');
 const { research: researchFreeLeagueTrend, toCsv: freeLeagueTrendCsv } = require('./trends/free-leagues');
 const { recordSearch: recordTrendSearch } = require('./trends/search-ledger');
@@ -3740,6 +3741,21 @@ async function refreshTrendsLauncher(readyClient) {
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  if (truckWall.live(process.env)) {
+    const guild=readyClient.guilds.cache.get(process.env.DISCORD_GUILD_ID);
+    if (guild) {
+      const permissions=truckWall.permissionReport(guild);
+      if (!permissions.manageRoles||!permissions.manageChannels||!permissions.manageMessages||!permissions.canPlaceFourRoles||permissions.unmanageableTruckRoles.length) {
+        console.error('Truck wall permission failure:',JSON.stringify(permissions));
+        const adminChannel=readyClient.channels.cache.get(process.env.AUDIT_CHANNEL_ID);
+        if(adminChannel) void adminChannel.send({content:`Truck wall setup held: Kobe Bot requires Manage Roles, Manage Channels, Manage Messages, and four role positions below bot/staff/VIP. Current permissions: ${JSON.stringify(permissions)}`,allowedMentions:{parse:[]}}).catch(console.error);
+      }
+      const poll=()=>truckWall.deliverPending(guild).then(()=>truckWall.refreshGuide(guild))
+        .catch(error=>console.error('Truck wall sync needs attention:',error.message));
+      void poll();
+      setInterval(()=>void poll(),5*60*1000);
+    }
+  }
   void runPrivateTrendsV2TestOnStart().catch(error =>
     console.error('Trends v2 private TEST held:', error.message));
   void runRankPreflightOnStart().catch(error =>
@@ -3960,6 +3976,30 @@ async function registerCommandsOnStart() {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isChatInputCommand() && ['mytier','wallname','wallhide','wallshow','wallremove','truck-setup'].includes(interaction.commandName)) {
+    await interaction.deferReply({flags:64});
+    try {
+      if (!truckWall.live(process.env)) throw new Error('The truck wall is not live yet.');
+      if (interaction.commandName === 'truck-setup') {
+        if (!isAdministrator(interaction) && !isPickApprover(interaction)) throw new Error('Staff only.');
+        const result=await truckWall.setup(interaction.guild,{env:process.env,dryRun:false});
+        await interaction.editReply(`Truck wall setup complete: ${JSON.stringify(result)}`);
+      } else if (interaction.commandName === 'wallremove') {
+        if (!isAdministrator(interaction) && !isPickApprover(interaction)) throw new Error('Staff only.');
+        const user=interaction.options.getUser('user',true);
+        const reason=interaction.options.getString('reason',true);
+        await truckWall.api(process.env,'remove',{userId:user.id,reason});
+        await interaction.editReply(`Removed ${user.id} from wall eligibility. Reason recorded.`);
+      } else {
+        const action=interaction.commandName==='mytier'?'get':interaction.commandName==='wallname'?'name':interaction.commandName==='wallhide'?'hide':'show';
+        const result=await truckWall.api(process.env,'user',{userId:interaction.user.id,action,
+          ...(action==='name'?{name:interaction.options.getString('name',true)}:{})});
+        const next=result.count<1?1:result.count<3?3:result.count<10?10:result.count<25?25:null;
+        await interaction.editReply(action==='get'?`Truck wall: ${result.count} qualified referral${result.count===1?'':'s'} · ${result.tier}${next?` · ${next-result.count} to next tier`:''}`:'Your wall preference is saved.');
+      }
+    } catch(error) { await interaction.editReply(`Truck wall: ${error.message}`); }
+    return;
+  }
   const trendsGuild = () => interaction.guildId === process.env.DISCORD_GUILD_ID;
   const trendsMember = () => interaction.guildId === process.env.DISCORD_GUILD_ID &&
     interaction.channelId === '1571285899717771365' &&

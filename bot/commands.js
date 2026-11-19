@@ -151,6 +151,17 @@ const trendOptions = (command) => command
     .setMaxLength(10));
 
 module.exports = [
+  new SlashCommandBuilder().setName('mytier').setDescription('See your truck wall tier privately'),
+  new SlashCommandBuilder().setName('wallname').setDescription('Set your truck wall name once')
+    .addStringOption(o=>o.setName('name').setDescription('Public name, up to 20 characters').setRequired(true).setMaxLength(20)),
+  new SlashCommandBuilder().setName('wallhide').setDescription('Hide your name on the public wall'),
+  new SlashCommandBuilder().setName('wallshow').setDescription('Show your name on the public wall'),
+  new SlashCommandBuilder().setName('wallremove').setDescription('Staff: disqualify a wall account with a recorded reason')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addUserOption(o=>o.setName('user').setDescription('Referrer to remove').setRequired(true))
+    .addStringOption(o=>o.setName('reason').setDescription('Internal reason').setRequired(true).setMaxLength(200)),
+  new SlashCommandBuilder().setName('truck-setup').setDescription('Staff: create the truck wall and announce go-live')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   new ContextMenuCommandBuilder()
     .setName('Edit writeup')
     .setType(ApplicationCommandType.Message),

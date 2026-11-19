@@ -72,6 +72,12 @@ function show(item, record) {
     `Text:\n${rendered.text}`, ...(item.first_reply ? [`First reply:\n${item.first_reply}`] : [])].join('\n');
 }
 async function paidLeaderboard(env, item, { database = null, fetchImpl = fetch } = {}) {
+  if (env.NAME_WALL_ENABLED === 'true') {
+    const {api}=require('./name-wall-sync');
+    const data=await api(env,'leaderboard',null,fetchImpl);
+    if (!data.rows?.length) return null;
+    return `week of ${datePlus(item.week,-7)}: truck wall\n\n${data.rows.map((row,index)=>`${index+1}. ${row.name} · ${row.tier}`).join('\n')}\n\nspot ${data.spot} of 200. get your link: https://kobesbettinghub.com/refer\n\n21+ | not a guarantee`;
+  }
   if (!env.DATABASE_URL && !database) throw new Error('DATABASE_URL is required for paid-referral leaderboard');
   const pool = database || new Pool({ connectionString: env.DATABASE_URL, max: 1 });
   const end = new Date(item.scheduled_at);
@@ -145,6 +151,13 @@ async function processItem(env, item, record, deps = {}) {
         await publisher(env, 'skip', { id: item.id, platform: 'discord', reason: 'zero paid referrals in prior 7 days' }, fetchImpl);
         return { status: 'skipped_zero_paid_referrals' };
       }
+      if (env.NAME_WALL_ENABLED === 'true') {
+        const channels=await discordRequest(env,`/guilds/${GUILD_ID}/channels`,'GET',null,fetchImpl);
+        const category=channels.find(c=>c.name==='🛻 ROAD TO THE TRUCK'&&c.type===4);
+        const wall=channels.find(c=>c.name==='truck-wall'&&c.parent_id===category?.id&&c.type===0);
+        if (!wall) throw new Error('Verified truck-wall channel is missing');
+        item={...item,channelId:wall.id,target:'truck_wall'};
+      }
     }
     return item.platform === 'x' ? await sendX(env, item, record, fetchImpl) : await sendDiscord(env, item, text, fetchImpl);
   } catch (error) {
@@ -168,6 +181,11 @@ async function run({ env = process.env, now = new Date(), fetchImpl = fetch, dry
     return { dryRun: true, writes: 0, items, imagePaths,
       output: `ROAD TO THE TRUCK DRY RUN — no posts or writes\nRecord: ${record} (verified fallback; graded D1 table absent)\nCards: ${imagePaths.join(', ')}\n\n${items.map(item => show(item, record)).join('\n\n---\n\n')}` };
   }
+  if (env.NAME_WALL_ENABLED === 'true') {
+    const wall = await require('./name-wall-sync').sync({ env, fetchImpl });
+    if (wall.tierEvents?.length) console.log('Name wall tier changes pending Discord delivery:', JSON.stringify(wall.tierEvents));
+    for(const flag of wall.alerts||[]) await admin(env,`Truck wall review flag: referrer ${flag.referrerId}; referred customer ${flag.customerId}; reason ${flag.reason}. No automatic penalty applied.`,fetchImpl);
+  }
   if (!enabled(env)) return { status: 'disabled', posted: 0 };
   required(env);
   const start = mstDate(new Date(now.getTime() - 3 * 3600000));
@@ -177,6 +195,16 @@ async function run({ env = process.env, now = new Date(), fetchImpl = fetch, dry
   for (const item of expired) await publisher(env, 'skip', { id: item.id, platform: item.platform, reason: 'older than 2 hours' }, fetchImpl);
   const results = [];
   for (const item of ready) results.push({ id: item.id, ...await processItem(env, item, record, { fetchImpl }) });
+  if (env.NAME_WALL_ENABLED === 'true') {
+    const {api}=require('./name-wall-sync');
+    const milestones=await api(env,'milestones',null,fetchImpl);
+    for (const mark of milestones.milestones || []) {
+      const item={id:`truck-wall-milestone-${mark.spot}`,platform:'x',scheduled_at:mark.claimed_at,
+        text:`spot ${mark.spot} of 200 on the road to the cybertruck 🛻 every spot = a name on the truck. 21+ | not a guarantee`,
+        first_reply:'get your link here (21+): https://kobesbettinghub.com/refer\nfree discord: https://discord.gg/sB9vzGz2xj'};
+      results.push({id:item.id,...await processItem(env,item,record,{fetchImpl})});
+    }
+  }
   return { status: 'completed', posted: results.filter(row => row.status === 'posted').length, expired: expired.length, results };
 }
 async function postWinNudge(rows, { env = process.env, now = new Date(), fetchImpl = fetch } = {}) {

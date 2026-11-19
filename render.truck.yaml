@@ -3,6 +3,8 @@ envVarGroups:
     envVars:
       - key: ROAD_TO_TRUCK_ENABLED
         value: "false"
+      - key: NAME_WALL_ENABLED
+        value: "false"
 services:
   - type: cron
     name: kobes-road-to-truck

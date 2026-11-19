@@ -10,7 +10,7 @@ const has21 = value => /21\s*\+/.test(value);
 function compliance(text, platform) {
   if (typeof text !== 'string' || !text.trim()) return 'Empty text';
   if (!has21(text)) return 'Missing 21+';
-  if (/\b(?:lock|guaranteed|profit|parlay)\b/i.test(text)) return 'Blocked claim';
+  if (/\b(?:lock|guaranteed|profit|parlay)\b|\b\d+(?:\.\d+)?\s*(?:units?|u)\b/i.test(text)) return 'Blocked claim';
   if (BOOKS.some(book => new RegExp(`\\b${book.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+')}\\b`, 'i').test(text))) return 'Sportsbook name';
   if (platform === 'x' && text.length > 280) return 'X text exceeds 280 characters';
   return null;

@@ -10,6 +10,7 @@
     "collect:x": "node pipeline/collect-x.js",
     "truck:run": "node pipeline/run-road-to-truck.js",
     "truck:dry-run": "node pipeline/run-road-to-truck.js --dry-run",
+    "truck-wall:dry-run": "node bot/truck-wall-setup.js --dry-run",
     "enrich:pick": "node pipeline/enrich-pick.js",
     "trends:espn": "node pipeline/generate-espn-trends.js",
     "test:real-x-pick": "node pipeline/test-real-x-pick.js",
