@@ -61,7 +61,7 @@ function explainer(spot,channelIds={}) {
     .setDescription([
       "we're getting a cybertruck and putting YOUR name on it. elon says cybertruck production ends mid-2027, so the clock is real. every spot on the truck is earned.",
       '**HOW TO GET YOUR NAME ON IT**',
-      '1. be in this server 7+ days (free members count)',
+      '1. be in this server 7+ days (free access counts)',
       '2. grab your link → kobesbettinghub.com/refer',
       '3. send it to people who actually bet props',
       '4. when they join VIP and stay past their first month, you level up',
@@ -87,7 +87,7 @@ function explainer(spot,channelIds={}) {
 function announcement(channelId,spot=0) {
   // https://www.cnbc.com/2026/11/06/tesla-cybertruck-texas-musk.html
   // https://techcrunch.com/2026/11/09/musk-says-tesla-will-refund-some-cybertruck-deposits-defends-decision-to-end-production/
-  return `🛻 road to the cybertruck is LIVE. elon says production ends mid-2027, so we're moving now. refer people to VIP, get your name on the truck. tiers, rules and your link → ${channelId?`<#${channelId}>`:'#how-to-get-on-the-truck'}. we start at spot ${spot} of 200. 21+ | not a guarantee`;
+  return `🛻 road to the cybertruck is LIVE. elon says production ends mid-2027, so we're moving now. refer people to VIP, get your name on the truck. tiers, rules and your link → ${channelId?`<#${channelId}>`:'#how-to-get-on-the-truck'}. ${spot===0?'we start at':'we are at'} spot ${spot} of 200. 21+ | not a guarantee`;
 }
 async function setup(guild,{env=process.env,dryRun=true}={}) {
   const preview=plan(guild);
@@ -145,7 +145,7 @@ async function setup(guild,{env=process.env,dryRun=true}={}) {
   if(!announcements) throw new Error('No announcements or free-picks channel found; announcement held.');
   const claim=await api(env,'receipt',{id:'truck:announcement',value:announcements.id});
   if(claim.claimed) {
-    const sent=await announcements.send({content:`${env.ROAD_TO_TRUCK_PING_EVERYONE==='true'?'@everyone\n':''}${announcement(guide.id,0)}`,allowedMentions:env.ROAD_TO_TRUCK_PING_EVERYONE==='true'?{parse:['everyone']}:{parse:[]}});
+    const sent=await announcements.send({content:announcement(guide.id,spot),allowedMentions:{parse:[]}});
     const admin=env.AUDIT_CHANNEL_ID?await guild.channels.fetch(env.AUDIT_CHANNEL_ID).catch(()=>null):null;
     if(admin) await admin.send({content:`Truck wall go-live announcement: ${sent.url}`,allowedMentions:{parse:[]}});
   }
@@ -178,17 +178,18 @@ async function deliverPending(guild,{env=process.env}={}) {
       }
       const state=await api(env,'state');
       const name=String(row.name||member.displayName||'Rider').replace(/[<>@\r\n]/g,'').slice(0,20);
-      if(event.from_tier!==event.to_tier && event.to_tier!=='none' && (min[event.to_tier]||0)>(min[event.from_tier]||0)) {
+      let wallLink=null;
+      if(env.ROAD_TO_TRUCK_ENABLED==='true' && event.from_tier!==event.to_tier && event.to_tier!=='none' && (min[event.to_tier]||0)>(min[event.from_tier]||0)) {
         const first=event.to_tier==='Rider'&&
           (await api(env,'receipt',{id:'truck:first-rider',value:event.user_id})).claimed;
         const text=first
           ?`🛻 FIRST NAME ON THE TRUCK: ${name}. spot ${state.spot} of 200. you're next → kobesbettinghub.com/refer | 21+ not a guarantee`
           :`🛻 ${name} just hit ${event.to_tier} on the road to the truck. spot ${state.spot} of 200. get your name on it → kobesbettinghub.com/refer | 21+ not a guarantee`;
-        await channels['truck-wall'].send({content:text,allowedMentions:{parse:[]}});
+        wallLink=(await channels['truck-wall'].send({content:text,allowedMentions:{parse:[]}})).url;
         await member.send({content:`You reached ${event.to_tier} on the KBH truck wall. See what you unlocked in ${channels['how-to-get-on-the-truck'].url}. 21+ | not a guarantee`,allowedMentions:{parse:[]}})
           .catch(error=>console.warn('Truck tier DM closed:',event.user_id,error.message));
       }
-      if(admin) await admin.send({content:`Truck tier change: ${event.user_id} ${event.from_tier} → ${event.to_tier}; reason: ${event.reason}`,allowedMentions:{parse:[]}});
+      if(admin) await admin.send({content:`Truck tier change: ${event.user_id} ${event.from_tier} → ${event.to_tier}; reason: ${event.reason}${wallLink?`\nPost: ${wallLink}`:''}`,allowedMentions:{parse:[]}});
       await api(env,'ack',{eventId:event.id});
       delivered++;
     } catch(error) { console.error('Truck tier event held:',event.id,error.message); }

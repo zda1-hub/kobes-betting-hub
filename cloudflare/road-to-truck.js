@@ -7,10 +7,12 @@ const BOOKS = ['DraftKings', 'FanDuel', 'BetMGM', 'Caesars', 'BetRivers', 'ESPN 
 const response = (body, status = 200) => Response.json(body, { status });
 const has21 = value => /21\s*\+/.test(value);
 
-function compliance(text, platform) {
+function compliance(text, platform, firstReply = false) {
   if (typeof text !== 'string' || !text.trim()) return 'Empty text';
   if (!has21(text)) return 'Missing 21+';
-  if (/\b(?:lock|guaranteed|profit|parlay)\b|\b\d+(?:\.\d+)?\s*(?:units?|u)\b/i.test(text)) return 'Blocked claim';
+  if (/\b(?:lock|guaranteed|profit|parlay)\b|\b\d+(?:\.\d+)?\s*(?:units?|u)\b|\$/i.test(text)) return 'Blocked claim';
+  if (!firstReply && !/not a guarantee/i.test(text)) return 'Missing no-guarantee footer';
+  if (!firstReply && /\bmembers\b/i.test(text)) return 'Blocked public count term';
   if (BOOKS.some(book => new RegExp(`\\b${book.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+')}\\b`, 'i').test(text))) return 'Sportsbook name';
   if (platform === 'x' && text.length > 280) return 'X text exceeds 280 characters';
   return null;
@@ -61,7 +63,7 @@ export async function roadToTruck(request, env, { postX } = {}) {
     return response({ status: done.meta.changes ? 'posted' : 'already_handled' });
   }
   if (action === 'x' && body.platform === 'x') {
-    const error = compliance(body.text, 'x') || compliance(body.first_reply, 'x');
+    const error = compliance(body.text, 'x') || compliance(body.first_reply, 'x', true);
     if (error) return response({ error }, 422);
     if (body.image_base64 && (!/^[A-Za-z0-9+/=]+$/.test(body.image_base64) || body.image_base64.length > 8_000_000))
       return response({ error: 'Invalid image' }, 422);

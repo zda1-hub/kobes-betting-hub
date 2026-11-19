@@ -1,0 +1,15 @@
+# Road to the Cybertruck daily live content — November 18, 2026
+
+Requested change: replace the old 6 PM static-record series with a 10 AM Phoenix card and caption based on the verified name-wall count, while keeping all automated posting behind `ROAD_TO_TRUCK_ENABLED`.
+
+Affected code: `pipeline/run-road-to-truck.js`, `pipeline/truck-daily.js`, `pipeline/road-to-truck-schedule.js`, `pipeline/road-to-truck-card.js`, `content/road_to_truck.json`, `cloudflare/name-wall.js`, `cloudflare/road-to-truck-assets.js`, `cloudflare/road-to-truck.js`, the wall bot guide/announcement code, migration `003_truck_daily.sql`, and the photo credit file. The existing `cybertruck.jpg` is tracked in the repository.
+
+Before: a date-based 6 PM card used a fallback 26-17 record. The card renderer could use a solid background when the photo was missing. The wall guide was edited by the bot on a separate daily poll.
+
+After (local branch only): the existing five-minute Render cron selects 10 AM MST each day beginning **Friday, November 20**; there is no automatic Thursday card. It syncs the Stripe-backed wall first, requires a fresh D1 spot count, uses the D1 activation date for the day number, reads recent visible names and the weekly top referrer, renders the real credited photo, posts the same PNG to X and `#truck-wall`, edits the pinned guide once, and logs both post links. Tue/Fri referral copy uses the same verified spot and moves links to the X first reply. A lower spot uses neutral copy. The daily ID is date-scoped in `posted_log`; the kill switch defaults off unless explicitly `true`. Missing photo, wall activation, current count, channels, or credentials hold the post and alert the admin channel. `/truck-setup` posts the one-time announcement on setup with no ping; the cron checks its receipt to avoid a duplicate.
+
+Verification: 28 focused tests passed, including end-to-end mock X and Discord image delivery, missing-photo hold, caption and compliance behavior, daily D1 snapshot, Phoenix scheduling, and no external dry-run writes. A populated 1080×1350 layout preview was inspected; it uses the full supplied truck photo, readable title and progress panel, and the exact credit line. The full repository suite reported 1,274 passes and 8 failures in untouched ESPN/recovery/site test files; main-branch equivalence was not checked. `git diff --check` passed.
+
+Dry-run limit: production D1 currently has **zero** `name_wall_state` activation rows (read-only query, November 18). The local shell lacks the wall admin read token. Therefore `npm run truck:dry-run` printed seven held 10 AM captions and did not render a card with a live spot. The 0-spot layout image is explicitly a nonpublishable visual fixture; it is not a verified production count.
+
+Release state: local branch only. No migration applied, Worker/asset Worker/bot/cron deployment, Discord/X post, or flag flip was performed. After wall activation, run the read-only dry run again against the live wall; apply `003_truck_daily.sql` before deploying the changed publisher Worker. Keep `ROAD_TO_TRUCK_ENABLED=false` until the owner reviews the data-valid preview.
