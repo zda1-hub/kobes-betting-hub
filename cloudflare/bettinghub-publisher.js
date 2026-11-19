@@ -1,6 +1,7 @@
 import { enqueueSocialEmail, dispatchSocialEmails } from './free-pick-social-email.js';
 import { collegeLogs, collegeTeamLogs, collegeTeams, collegeStatus, collegeUpstreamStatus, refreshCollegeDay, refreshDueCollege } from './trends-college.js';
 import { createOptionalBdlProvider } from './trends-bdl-optional.js';
+import { roadToTruck } from './road-to-truck.js';
 import resultMetadata from '../result-metadata.js';
 const CALLBACK_PATH = "/auth/x/callback";
 const START_PATH = "/auth/x/start";
@@ -161,6 +162,10 @@ async function handleRequest(request, env, ctx) {
   }
   if (url.pathname === "/api/email/subscribe" && request.method === "POST") return subscribeEmail(request, env, ctx);
   if (url.pathname === "/api/admin/email-stats" && request.method === "GET") return emailStats(request, env);
+  if (url.pathname.startsWith('/api/admin/road-to-truck/')) {
+    if (!await hasBearer(request, env.ROAD_TO_TRUCK_SECRET)) return json({ error: 'Unauthorized' }, 401);
+    return roadToTruck(request, env, { postX: (text, parent, image) => postRoadToTruckX(text, parent, image, env) });
+  }
   if (url.pathname === "/api/email/unsubscribe" && request.method === "GET") return unsubscribeEmail(url, env);
   if (url.pathname === "/api/free-pick/gate" && request.method === "GET") return getFreePickGate(request, env);
   if (url.pathname === "/api/free-pick/gate" && request.method === "PUT") return putFreePickGate(request, env);
@@ -1616,6 +1621,39 @@ function normalizeFreePickDetails(input) {
     reason: read("reason"),
     breakdown,
   };
+}
+
+async function postRoadToTruckX(text, parentId, imageBase64, env) {
+  const token = await getUsableXToken(env, 'road_to_truck');
+  const identityResponse = await auditedXFetch(env, 'https://api.x.com/2/users/me?user.fields=username', {
+    method: 'GET', headers: { authorization: `Bearer ${token.access_token}` },
+  }, { triggerType: 'road_to_truck_identity', requestShape: { readOnly: true } });
+  const identity = await identityResponse.json().catch(() => ({}));
+  if (!identityResponse.ok || identity?.data?.username?.toLowerCase() !== 'kobesbettinghub')
+    throw new Error('Connected X account is not @kobesbettinghub');
+  let mediaId = null;
+  const requestX = async (endpoint, payload, shape) => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const response = await auditedXFetch(env, endpoint, {
+        method: 'POST', headers: { authorization: `Bearer ${token.access_token}`, 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      }, { triggerType: 'road_to_truck', requestShape: shape });
+      const result = await response.json().catch(() => ({}));
+      if (response.status === 429 && attempt < 2) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * 2 ** attempt));
+        continue;
+      }
+      if (!response.ok || !result?.data?.id) throw new Error(xErrorDetail(result, response.status));
+      return String(result.data.id);
+    }
+    throw new Error('X rate limit retries exhausted');
+  };
+  if (imageBase64) mediaId = await requestX(MEDIA_UPLOAD_ENDPOINT,
+    { media: imageBase64, media_category: 'tweet_image' }, { mediaCategory: 'tweet_image', mediaPresent: true });
+  return requestX(CREATE_POST_ENDPOINT,
+    { text, ...(parentId ? { reply: { in_reply_to_tweet_id: parentId } } : {}),
+      ...(mediaId ? { media: { media_ids: [mediaId] } } : {}) },
+    { mediaCount: mediaId ? 1 : 0, textPresent: true, replyPresent: Boolean(parentId) });
 }
 
 async function publishFreePickToX(image, contentType, caption, env, triggerType = "free_pick_publish") {

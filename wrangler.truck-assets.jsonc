@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kbh-road-to-truck-assets",
+  "account_id": "5ba0e398b69e6a3640d48bb876519ebd",
+  "main": "cloudflare/road-to-truck-assets.js",
+  "compatibility_date": "2026-11-18",
+  "workers_dev": true,
+  "r2_buckets": [
+    { "binding": "TRUCK_ASSETS", "bucket_name": "kobes-free-pick-media" }
+  ]
+}

@@ -986,6 +986,11 @@ function startFreePickResultReplies() {
         await autoGradePendingOfficialPicks(dailyPickOperatingDate(new Date(now.getTime() - daysAgo * 86400000)), fetch, true);
       }
       const rows = await readPickLog();
+      // Campaign observer only: does not change grading, approvals or pick delivery.
+      if (process.env.ROAD_TO_TRUCK_ENABLED === 'true') {
+        try { await require('../pipeline/run-road-to-truck').postWinNudge(rows); }
+        catch (error) { console.error('Road-to-truck WIN nudge held:', error.message); }
+      }
       if (approvalMode && !reviewChannelVerified) {
         await freePickResultApprovals.verifyChannel();
         reviewChannelVerified = true;
