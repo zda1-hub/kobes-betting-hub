@@ -34,7 +34,7 @@
   "vars": {
     "RECAP_NOTIFICATION_RECIPIENT": "kobedirwin@gmail.com",
     "X_CLIENT_ID": "MHhtSGlFT2ZsazNOWmhIeWdqNVA6MTpjaQ",
-    "NAME_WALL_ENABLED": "false",
+    "NAME_WALL_ENABLED": "true",
     "TRENDS_BDL_NHL_ENABLED": "false",
     "TRENDS_BDL_MLB_ENABLED": "false",
     "TRENDS_BDL_EPL_ENABLED": "false",
