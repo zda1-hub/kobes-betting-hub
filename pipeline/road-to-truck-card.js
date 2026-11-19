@@ -41,7 +41,7 @@ async function renderCard({ date, record = FALLBACK_RECORD, photoPath = path.joi
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b0c0f" stop-opacity=".74"/><stop offset=".42" stop-color="#0b0c0f" stop-opacity=".52"/><stop offset="1" stop-color="#0b0c0f" stop-opacity=".96"/></linearGradient>
     <linearGradient id="progress" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#ff7a1a"/><stop offset="1" stop-color="#4da3ff"/></linearGradient>
-    <style>@font-face{font-family:Inter;src:url('${fontUrl}') format('truetype')}text{font-family:Inter,sans-serif}.kicker{font-size:47px;font-weight:800;letter-spacing:4px}.day{font-size:188px;font-weight:900;letter-spacing:-8px}.record{font-size:45px;font-weight:700}.small{font-size:32px;font-weight:600}.milestone{font-size:25px;font-weight:700}.footer{font-size:29px;font-weight:700}</style></defs>
+    <style>@font-face{font-family:Inter;src:url('${fontUrl}') format('truetype')}text{font-family:Inter,sans-serif}.kicker{font-size:47px;font-weight:800;letter-spacing:4px}.day{font-size:188px;font-weight:900;letter-spacing:-8px}.record{font-size:45px;font-weight:700}.small{font-size:32px;font-weight:600}.milestone{font-size:25px;font-weight:700}.footer{font-size:29px;font-weight:700}.photo-credit{font-size:21px;font-weight:500}</style></defs>
     <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#shade)"/>
     <rect x="58" y="58" width="964" height="1234" rx="38" fill="#16181d" fill-opacity=".40" stroke="#ffffff" stroke-opacity=".17" stroke-width="2"/>
     <image href="${logoUrl}" x="92" y="92" width="126" height="126" preserveAspectRatio="xMidYMid meet"/>
@@ -55,9 +55,10 @@ async function renderCard({ date, record = FALLBACK_RECORD, photoPath = path.joi
     <rect x="${x0}" y="906" width="${x1 - x0}" height="20" rx="10" fill="#4d5667"/>
     <rect x="${x0}" y="906" width="${Math.max(0, progressEnd - x0)}" height="20" rx="10" fill="url(#progress)"/>
     ${marks}
-    <text x="540" y="1072" text-anchor="middle" class="small" fill="#4da3ff">production ends mid 2027</text>
+    <text x="540" y="1072" text-anchor="middle" class="small" fill="#4da3ff">elon says production ends mid 2027</text>
     <line x1="112" x2="968" y1="1161" y2="1161" stroke="#ffffff" stroke-opacity=".25"/>
     <text x="540" y="1221" text-anchor="middle" class="footer" fill="#ffffff">21+ | not a guarantee</text>
+    ${hasPhoto ? '<text x="540" y="1270" text-anchor="middle" class="photo-credit" fill="#d8dde5">photo: Mr.choppers / CC BY-SA 3.0</text>' : ''}
   </svg>`;
   const base = await background.toBuffer();
   const output = await sharp(base).composite([{ input: Buffer.from(svg) }]).png().toBuffer();
