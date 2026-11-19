@@ -1,0 +1,19 @@
+services:
+  - type: worker
+    name: kobes-betting-hub
+    runtime: node
+    branch: main
+    buildCommand: npm install
+    startCommand: node bot/index.js
+    autoDeploy: true
+    buildFilter:
+      ignoredPaths:
+        - docs/**
+        - outputs/**
+        - deliverables/**
+        - admin-analytics.html
+        - admin-analytics.css
+        - admin-analytics.js
+        - analytics.js
+    envVars:
+      - fromGroup: kbh-road-to-truck-controls
