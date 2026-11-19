@@ -1,6 +1,6 @@
 (() => {
   const pageName = location.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
-  const promote = !['/refer','/support','/terms','/privacy','/responsible-gambling','/cancel','/managemembership','/welcome','/member','/partner','/creator','/404','/admin-analytics'].includes(pageName);
+  const promote = !['/truck','/refer','/support','/terms','/privacy','/responsible-gambling','/cancel','/managemembership','/welcome','/member','/partner','/creator','/404','/admin-analytics'].includes(pageName);
   const longFormGuide = new Set(['/guides/how-to-read-betting-odds-and-line-movement', '/guides/bankroll-management-for-sports-betting', '/guides/what-a-sports-betting-writeup-should-include', '/guides/how-to-choose-a-sports-betting-discord', '/guides/sports-betting-arbitrage-explained']).has(pageName);
   const educationReadingPage = pageName === '/education' || pageName.startsWith('/education/');
   const main = document.querySelector('main');

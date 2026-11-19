@@ -1,0 +1,157 @@
+{
+  "writes": 0,
+  "permissions": "unknown: DISCORD_TOKEN and DISCORD_GUILD_ID unavailable locally",
+  "roles": [
+    {
+      "name": "Rider",
+      "action": "create or reconcile",
+      "color": "#9AA0A6",
+      "hoisted": true,
+      "mentionable": false,
+      "order": 1,
+      "placement": "below bot and staff/VIP roles"
+    },
+    {
+      "name": "Road Crew",
+      "action": "create or reconcile",
+      "color": "#F5A623",
+      "hoisted": true,
+      "mentionable": false,
+      "order": 2,
+      "placement": "below bot and staff/VIP roles"
+    },
+    {
+      "name": "Door Squad",
+      "action": "create or reconcile",
+      "color": "#E74C3C",
+      "hoisted": true,
+      "mentionable": false,
+      "order": 3,
+      "placement": "below bot and staff/VIP roles"
+    },
+    {
+      "name": "Hood Club",
+      "action": "create or reconcile",
+      "color": "#FFD700",
+      "hoisted": true,
+      "mentionable": false,
+      "order": 4,
+      "placement": "below bot and staff/VIP roles"
+    }
+  ],
+  "category": {
+    "name": "🛻 ROAD TO THE TRUCK",
+    "action": "create or reuse",
+    "visibility": "everyone"
+  },
+  "channels": [
+    {
+      "name": "how-to-get-on-the-truck",
+      "visibility": "everyone",
+      "send": "bot/staff only",
+      "overwrites": {
+        "@everyone": [
+          "allow ViewChannel",
+          "allow ReadMessageHistory",
+          "deny SendMessages"
+        ],
+        "bot": [
+          "allow ViewChannel",
+          "allow SendMessages",
+          "allow ManageMessages"
+        ],
+        "staff": [
+          "allow ViewChannel",
+          "allow SendMessages",
+          "allow ReadMessageHistory"
+        ]
+      }
+    },
+    {
+      "name": "truck-wall",
+      "visibility": "everyone",
+      "send": "bot/staff only",
+      "overwrites": {
+        "@everyone": [
+          "allow ViewChannel",
+          "allow ReadMessageHistory",
+          "deny SendMessages"
+        ],
+        "bot": [
+          "allow ViewChannel",
+          "allow SendMessages",
+          "allow ManageMessages"
+        ],
+        "staff": [
+          "allow ViewChannel",
+          "allow SendMessages",
+          "allow ReadMessageHistory"
+        ]
+      }
+    },
+    {
+      "name": "road-crew",
+      "visibility": "Road Crew, Door Squad, Hood Club",
+      "send": "permitted roles",
+      "overwrites": {
+        "@everyone": [
+          "deny ViewChannel"
+        ],
+        "bot": [
+          "allow ViewChannel",
+          "allow SendMessages",
+          "allow ManageMessages"
+        ],
+        "staff": [
+          "allow ViewChannel",
+          "allow SendMessages",
+          "allow ReadMessageHistory"
+        ],
+        "Road Crew/Door Squad/Hood Club": [
+          "allow ViewChannel",
+          "allow SendMessages",
+          "allow ReadMessageHistory"
+        ]
+      }
+    },
+    {
+      "name": "hood-club",
+      "visibility": "Hood Club",
+      "send": "permitted roles",
+      "overwrites": {
+        "@everyone": [
+          "deny ViewChannel"
+        ],
+        "bot": [
+          "allow ViewChannel",
+          "allow SendMessages",
+          "allow ManageMessages"
+        ],
+        "staff": [
+          "allow ViewChannel",
+          "allow SendMessages",
+          "allow ReadMessageHistory"
+        ],
+        "Hood Club": [
+          "allow ViewChannel",
+          "allow SendMessages",
+          "allow ReadMessageHistory"
+        ]
+      }
+    }
+  ],
+  "explainer": {
+    "color": 16742938,
+    "title": "🛻 ROAD TO THE CYBERTRUCK",
+    "description": "we're getting a cybertruck and putting YOUR name on it. elon says cybertruck production ends mid-2027, so the clock is real. every spot on the truck is earned.\n**HOW TO GET YOUR NAME ON IT**\n1. be in this server 7+ days (free members count)\n2. grab your link → kobesbettinghub.com/refer\n3. send it to people who actually bet props\n4. when they join VIP and stay past their first month, you level up\nyou also get the referral reward per program terms after their first payment.\n**THE TIERS**\n🟤 1 referral → Rider: your name on the wall + a sticker spot on the truck\n🟠 3 referrals → Road Crew: bigger name, Road Crew role, access to #road-crew (road crew chat + truck updates + shoutouts)\n🔴 10 referrals → Door Squad: big name on the truck door section + shoutout\n🟡 25 referrals → Hood Club: biggest name on the hood/tailgate. only 10 spots ever. first come first served. access to #hood-club\n**COMMANDS**\n/mytier: see your count + how many to next tier\n/wallname <name>: set the name that goes on the truck (once, 20 chars, keep it clean)\n/wallhide /wallshow: hide or show your name publicly\n**PROGRESS**\nlive wall → kobesbettinghub.com/truck\nwe're at spot 0 of 200. every new paid VIP after launch moves the bar.\n**RULES**\n- only real paid VIP referrals count. trials don't. cancels/refunds before month 2 come off your count.\n- no self-referrals, no alt accounts. suspicious activity goes to staff review.\n- US 21+ only.\n21+ | not a guarantee | referral rewards paid per program terms",
+    "footer": {
+      "text": "KBH truck wall explainer • managed by Kobe Bot"
+    }
+  },
+  "announcement": "🛻 road to the cybertruck is LIVE. elon says production ends mid-2027, so we're moving now. refer people to VIP, get your name on the truck. tiers, rules and your link → #how-to-get-on-the-truck. we start at spot 0 of 200. 21+ | not a guarantee",
+  "emptyWall": {
+    "spot": "spot 0 of 200",
+    "names": []
+  },
+  "sampleTierUp": "🛻 FIRST NAME ON THE TRUCK: Sample Rider. spot 1 of 200. you're next → kobesbettinghub.com/refer | 21+ not a guarantee"
+}

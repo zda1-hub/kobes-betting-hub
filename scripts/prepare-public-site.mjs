@@ -25,6 +25,9 @@ const guideFiles = [
 
 const publicFiles = [
   'about.html',
+  'truck.html',
+  'truck.css',
+  'truck.js',
   'pricing.html',
   'contact.html',
   'business-info.css',

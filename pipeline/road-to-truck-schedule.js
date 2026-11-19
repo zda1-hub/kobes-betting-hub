@@ -18,7 +18,7 @@ function byId(id) { const item = queue.find(row => row.id === id); if (!item) th
 function renderText(text, record = FALLBACK_RECORD) { return text.replaceAll('{RECORD}', record); }
 function forbidden(text) {
   const value = String(text || '');
-  const terms = [/(?:^|\W)lock(?:$|\W)/i, /\bguaranteed\b/i, /\bprofit\b/i, /\bparlay\b/i];
+  const terms = [/(?:^|\W)lock(?:$|\W)/i, /\bguaranteed\b/i, /\bprofit\b/i, /\bparlay\b/i, /\b\d+(?:\.\d+)?\s*(?:units?|u)\b/i];
   const blocked = terms.find(term => term.test(value));
   if (blocked) return `blocked term: ${blocked}`;
   const book = sportsbooks.find(name => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+')}\\b`, 'i').test(value));

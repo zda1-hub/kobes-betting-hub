@@ -2,6 +2,7 @@ import { enqueueSocialEmail, dispatchSocialEmails } from './free-pick-social-ema
 import { collegeLogs, collegeTeamLogs, collegeTeams, collegeStatus, collegeUpstreamStatus, refreshCollegeDay, refreshDueCollege } from './trends-college.js';
 import { createOptionalBdlProvider } from './trends-bdl-optional.js';
 import { roadToTruck } from './road-to-truck.js';
+import { handle as nameWall } from './name-wall.js';
 import resultMetadata from '../result-metadata.js';
 const CALLBACK_PATH = "/auth/x/callback";
 const START_PATH = "/auth/x/start";
@@ -166,6 +167,8 @@ async function handleRequest(request, env, ctx) {
     if (!await hasBearer(request, env.ROAD_TO_TRUCK_SECRET)) return json({ error: 'Unauthorized' }, 401);
     return roadToTruck(request, env, { postX: (text, parent, image) => postRoadToTruckX(text, parent, image, env) });
   }
+  if (url.pathname === '/api/truck/wall' || url.pathname.startsWith('/api/admin/truck/'))
+    return nameWall(request, env);
   if (url.pathname === "/api/email/unsubscribe" && request.method === "GET") return unsubscribeEmail(url, env);
   if (url.pathname === "/api/free-pick/gate" && request.method === "GET") return getFreePickGate(request, env);
   if (url.pathname === "/api/free-pick/gate" && request.method === "PUT") return putFreePickGate(request, env);
