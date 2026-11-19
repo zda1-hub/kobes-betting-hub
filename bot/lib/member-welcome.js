@@ -41,6 +41,8 @@ function resolveWelcomeMessage(guild, template = WELCOME_MESSAGE) {
     if (matches.size !== 1) { missing.push(name); continue; }
     content = content.replaceAll(`#${name}`, `<#${matches.first().id}>`);
   }
+  const truck = guild.channels.cache.find(channel => channel.type === ChannelType.GuildText && channel.name === 'how-to-get-on-the-truck');
+  if (truck) content = content.replaceAll('#how-to-get-on-the-truck', `<#${truck.id}>`);
   if (missing.length) throw new Error(`Missing or ambiguous channels: ${missing.map(name => '#' + name).join(', ')}. No channel was created.`);
   if (content.length > 2000) throw new Error('WELCOME_MESSAGE exceeds Discord’s 2000-character limit.');
   return content;

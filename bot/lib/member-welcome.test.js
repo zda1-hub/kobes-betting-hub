@@ -35,6 +35,9 @@ test('welcome copy uses real channel mentions and fails closed if one is missing
   assert.equal((copy.match(/<#1>/g) || []).length, 2);
   assert.match(copy, /graded right in <#1>, wins AND losses\. 26-17 since sep 22/);
   assert.match(copy, /<#2>/);
+  assert.match(copy, /want your name on the truck\? → #how-to-get-on-the-truck/);
+  guild.channels.cache.set('truck', { id:'truck', name:'how-to-get-on-the-truck', type:ChannelType.GuildText });
+  assert.match(resolveWelcomeMessage(guild), /want your name on the truck\? → <#truck>/);
   guild.channels.cache.delete('1');
   assert.throws(() => resolveWelcomeMessage(guild), /#free-picks/);
 });
