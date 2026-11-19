@@ -1,14 +1,13 @@
-const { queue, forbidden, mstDate } = require('./road-to-truck-schedule');
+const { queue, forbidden, dayNumber } = require('./road-to-truck-schedule');
 
 const templates = queue.filter(item => item.recurrence === 'daily_caption');
 const fallback = queue.find(item => item.id === 'truck-daily-no-names');
 const neutral = queue.find(item => item.id === 'truck-daily-neutral');
-const DAY_MS = 86400000;
-
 function dayFromLaunch(startedAt, date) {
   if (!startedAt || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Verified launch date required');
-  const launch = mstDate(startedAt);
-  const n = Math.floor((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${launch}T00:00:00Z`)) / DAY_MS) + 1;
+  // The wall activation timestamp proves the snapshot is live. Campaign Day 1
+  // is the owner's X launch on Nov 19, even if setup happened the night before.
+  const n = dayNumber(date);
   if (n < 1) throw new Error('Daily card predates wall activation');
   return n;
 }
