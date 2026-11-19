@@ -1,0 +1,29 @@
+envVarGroups:
+  - name: kbh-road-to-truck-controls
+    envVars:
+      - key: ROAD_TO_TRUCK_ENABLED
+        value: "false"
+services:
+  - type: cron
+    name: kobes-road-to-truck
+    runtime: node
+    plan: 0.5c-512mb
+    schedule: "*/5 * * * *"
+    buildCommand: npm ci
+    startCommand: npm run truck:run
+    envVars:
+      - fromGroup: kbh-road-to-truck-controls
+      - key: ROAD_TO_TRUCK_SECRET
+        sync: false
+      - key: TRUCK_PUBLISHER_URL
+        value: https://bettinghub-publisher.kobedirwin.workers.dev
+      - key: TRUCK_ASSET_URL
+        sync: false
+      - key: TRUCK_ASSET_SECRET
+        sync: false
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: AUDIT_CHANNEL_ID
+        sync: false
+      - key: DATABASE_URL
+        sync: false
