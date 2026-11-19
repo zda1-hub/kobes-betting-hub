@@ -52,10 +52,12 @@ test('kill switch stops everything and due selector refuses older than two hours
   assert.equal(enabled({ ROAD_TO_TRUCK_ENABLED: 'false' }), false);
   assert.equal((await run({ env: { ROAD_TO_TRUCK_ENABLED: 'false' }, now: new Date('2026-11-19T19:00:00Z') })).status, 'disabled');
   const items = schedule('2026-11-19', 1);
-  const tick = due(items, new Date('2026-11-19T19:01:00Z'), true);
-  assert.ok(tick.expired.some(item => item.id === 'truck-daily-2026-11-19'));
-  assert.ok(!tick.ready.some(item => item.id === 'truck-daily-2026-11-19'));
-  assert.deepEqual(due(items, new Date('2026-11-19T17:01:00Z'), false), { ready: [], expired: [] });
+  assert.ok(!items.some(item=>item.daily));
+  const friday=schedule('2026-11-20',1);
+  const tick=due(friday,new Date('2026-11-20T19:01:00Z'),true);
+  assert.ok(tick.expired.some(item=>item.id==='truck-daily-2026-11-20'));
+  assert.ok(!tick.ready.some(item=>item.id==='truck-daily-2026-11-20'));
+  assert.deepEqual(due(friday,new Date('2026-11-20T17:01:00Z'),false),{ready:[],expired:[]});
 });
 test('switch on dispatches a due Discord item without any approval step', async () => {
   const calls = [];

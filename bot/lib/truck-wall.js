@@ -143,7 +143,12 @@ async function setup(guild,{env=process.env,dryRun=true}={}) {
     (c.name===name||c.name.endsWith(`・${name}`)));
   const announcements=channelNamed('announcements')||channelNamed('free-picks');
   if(!announcements) throw new Error('No announcements or free-picks channel found; announcement held.');
-  // The road cron sends the one-time announcement after its kill switch is on.
+  const claim=await api(env,'receipt',{id:'truck:announcement',value:announcements.id});
+  if(claim.claimed) {
+    const sent=await announcements.send({content:announcement(guide.id,spot),allowedMentions:{parse:[]}});
+    const admin=env.AUDIT_CHANNEL_ID?await guild.channels.fetch(env.AUDIT_CHANNEL_ID).catch(()=>null):null;
+    if(admin) await admin.send({content:`Truck wall go-live announcement: ${sent.url}`,allowedMentions:{parse:[]}});
+  }
   return {activated:true,categoryId:category.id,roles:Object.fromEntries(Object.entries(roleMap).map(([k,v])=>[k,v.id])),channels:Object.fromEntries(Object.entries(channelMap).map(([k,v])=>[k,v.id])),announcementChannelId:announcements.id};
 }
 function wallChannels(guild) {

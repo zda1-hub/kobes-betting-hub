@@ -55,7 +55,7 @@ function schedule(from, days = 14) {
   for (let i = 0; i < days; i++) {
     const date = datePlus(fromDate, i);
     if (date < START) continue;
-    result.push({id:`truck-daily-${date}`,platform:'x',scheduled_at:mstStamp(date,10),daily:true});
+    if(date>='2026-11-20') result.push({id:`truck-daily-${date}`,platform:'x',scheduled_at:mstStamp(date,10),daily:true});
     for (const item of queue) {
       if (!item.scheduled_at || item.trigger || item.recurrence || STATIC_REFERRAL_IDS.has(item.id) ||
           item.id.startsWith('truck-day-') || item.id === 'truck-gta-referral-2026-11-19') continue;

@@ -200,6 +200,8 @@ async function postDaily(env, planned, fetchImpl=fetch) {
 }
 async function postLaunch(env, fetchImpl=fetch) {
   const {api}=require('./name-wall-sync');
+  const {receipt}=await api(env,'receipt?id=truck:announcement',null,fetchImpl);
+  if(receipt) return {status:'already_handled'};
   const snapshot=await api(env,'daily',null,fetchImpl);
   if(!Number.isInteger(snapshot.spot) || Date.now()-Date.parse(snapshot.verifiedAt)>10*60000)
     throw new Error('Verified wall spot unavailable for launch announcement');
@@ -248,19 +250,21 @@ async function run({ env = process.env, now = new Date(), fetchImpl = fetch, dry
   if (dryRun) {
     const start=mstDate(now)<'2026-11-19'?'2026-11-19':mstDate(now);
     const tomorrow=datePlus(mstDate(now),1);
+    const previewDate=tomorrow<'2026-11-20'?'2026-11-20':tomorrow;
     let snapshot=null, blocked=null, imagePath=null;
     try {
       if(!env.TRUCK_PUBLISHER_URL||!env.ROAD_TO_TRUCK_SECRET)
         throw new Error('Read-only wall API credentials are unavailable in this local shell');
       snapshot=await require('./name-wall-sync').api(env,'daily',null,fetchImpl);
-      const item=buildDaily(snapshot,tomorrow);
-      const target=`/tmp/kbh-truck-daily-${tomorrow}.png`;
+      const item=buildDaily(snapshot,previewDate);
+      const target=`/tmp/kbh-truck-daily-${previewDate}.png`;
       await renderDailyCard({day:item.day,spot:item.spot,newNames:item.newNames,topRef:item.topRef,outputPath:target});
       imagePath=target;
     } catch(error) { blocked=error.message; }
     const captions=[];
     for(let i=0;i<7;i++) {
       const date=datePlus(start,i);
+      if(date<'2026-11-20') { captions.push(`${date}: no automatic daily card; first card is Friday 10:00 MST`); continue; }
       if(!snapshot) captions.push(`${date} 10:00 MST: live spot unavailable; caption held`);
       else try {
         const item=buildDaily(snapshot,date);
@@ -273,7 +277,7 @@ async function run({ env = process.env, now = new Date(), fetchImpl = fetch, dry
       }
     }
     return {dryRun:true,externalWrites:0,imagePath,blocked,snapshot,captions,
-      output:`ROAD TO THE CYBERTRUCK — READ-ONLY DRY RUN\nCurrent live spot: ${snapshot?.spot ?? 'unavailable'}\nTomorrow card: ${imagePath||'not rendered'}\n${blocked?`Blocked: ${blocked}\n`:''}\nNext 7 days:\n\n${captions.join('\n\n---\n\n')}`};
+      output:`ROAD TO THE CYBERTRUCK — READ-ONLY DRY RUN\nCurrent live spot: ${snapshot?.spot ?? 'unavailable'}\nFirst scheduled card (${previewDate} 10:00 MST): ${imagePath||'not rendered'}\n${blocked?`Blocked: ${blocked}\n`:''}\nNext 7 days:\n\n${captions.join('\n\n---\n\n')}`};
   }
   if (env.NAME_WALL_ENABLED === 'true') {
     try {
