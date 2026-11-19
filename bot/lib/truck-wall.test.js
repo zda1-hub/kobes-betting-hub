@@ -16,11 +16,18 @@ test('dry-run plans four roles, category and four channels with no writes',async
 test('live setup refuses disabled flag before any guild write',async()=>{
   await assert.rejects(()=>setup(guild,{dryRun:false,env:{NAME_WALL_ENABLED:'false'}}),/must be true/);
 });
-test('permission report blocks setup when four role positions cannot fit below staff',async()=>{
+test('a low role ceiling is safe because new roles are inserted at the bottom',async()=>{
   const low={...guild,members:{me:{...guild.members.me,roles:{highest:{position:4}}}}};
   const report=await setup(low,{dryRun:true});
-  assert.equal(report.permissions.canPlaceFourRoles,false);
-  await assert.rejects(()=>setup(low,{dryRun:false,env:{NAME_WALL_ENABLED:'true'}}),/four role positions/);
+  assert.equal(report.permissions.placementCeiling,4);
+  assert.equal(report.permissions.canPlaceFourRoles,true);
+});
+test('an existing truck role at or above the bot is reported before writes',async()=>{
+  const roles=new Collection([['rider',{id:'rider',name:'Rider',position:15,permissions:{has(){return false;}}}]]);
+  const blocked={...guild,roles:{cache:roles}};
+  const report=await setup(blocked,{dryRun:true});
+  assert.deepEqual(report.permissions.unmanageableTruckRoles,['Rider']);
+  await assert.rejects(()=>setup(blocked,{dryRun:false,env:{NAME_WALL_ENABLED:'true'}}),/Existing roles at\/above bot: Rider/);
 });
 test('explainer previews exact zero progress, rules and no invented reward amount',()=>{
   const json=explainer(0).toJSON();
