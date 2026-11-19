@@ -34,6 +34,6 @@ Add a zero-start paid-referral name wall, `/truck` page, tier roles and channels
 ## Limits
 
 - The local preview and tests are not live Discord verification. Permission and announcement-channel checks still require a bot-authenticated dry run.
-- The explainer does not promise early picks in `#road-crew`; no early-pick publishing flow was requested or built. It says truck updates. The unverified claim that Cybertruck production is ending is also omitted from public copy.
+- The explainer attributes the mid-2027 production timeline to Musk using “elon says”; source links sit beside the copy in code. `#road-crew` promises chat, truck updates and shoutouts, with no early-pick timing promise.
 - The referral scan fails with a clear error at 2,000 post-launch rows rather than silently truncating; add pagination before that scale.
 - No public page, bot resources or scheduled posts were deployed in this worktree.

@@ -53,9 +53,12 @@ function plan(guild) {
 }
 function explainer(spot,channelIds={}) {
   const mention=(name)=>channelIds[name]?`<#${channelIds[name]}>`:'#'+name;
+  // Attribution for Musk's stated timeline, not a KBH production guarantee:
+  // https://www.cnbc.com/2026/11/06/tesla-cybertruck-texas-musk.html
+  // https://techcrunch.com/2026/11/09/musk-says-tesla-will-refund-some-cybertruck-deposits-defends-decision-to-end-production/
   return new EmbedBuilder().setColor(0xff7a1a).setTitle('🛻 ROAD TO THE CYBERTRUCK')
     .setDescription([
-      "we're getting a cybertruck and putting YOUR name on it. every spot on the truck is earned.",
+      "we're getting a cybertruck and putting YOUR name on it. elon says cybertruck production ends mid-2027, so the clock is real. every spot on the truck is earned.",
       '**HOW TO GET YOUR NAME ON IT**',
       '1. be in this server 7+ days (free members count)',
       '2. grab your link → kobesbettinghub.com/refer',
@@ -64,7 +67,7 @@ function explainer(spot,channelIds={}) {
       'you also get the referral reward per program terms after their first payment.',
       '**THE TIERS**',
       '🟤 1 referral → Rider: your name on the wall + a sticker spot on the truck',
-      `🟠 3 referrals → Road Crew: bigger name, Road Crew role, access to ${mention('road-crew')} (truck updates)`,
+      `🟠 3 referrals → Road Crew: bigger name, Road Crew role, access to ${mention('road-crew')} (road crew chat + truck updates + shoutouts)`,
       '🔴 10 referrals → Door Squad: big name on the truck door section + shoutout',
       `🟡 25 referrals → Hood Club: biggest name on the hood/tailgate. only 10 spots ever. first come first served. access to ${mention('hood-club')}`,
       '**COMMANDS**',
@@ -81,7 +84,9 @@ function explainer(spot,channelIds={}) {
     ].join('\n')).setFooter({text:'KBH truck wall explainer • managed by Kobe Bot'});
 }
 function announcement(channelId,spot=0) {
-  return `🛻 road to the cybertruck is LIVE. refer people to VIP, get your name on the truck. tiers, rules and your link → ${channelId?`<#${channelId}>`:'#how-to-get-on-the-truck'}. we start at spot ${spot} of 200. who's first on the wall? 21+ | not a guarantee`;
+  // https://www.cnbc.com/2026/11/06/tesla-cybertruck-texas-musk.html
+  // https://techcrunch.com/2026/11/09/musk-says-tesla-will-refund-some-cybertruck-deposits-defends-decision-to-end-production/
+  return `🛻 road to the cybertruck is LIVE. elon says production ends mid-2027, so we're moving now. refer people to VIP, get your name on the truck. tiers, rules and your link → ${channelId?`<#${channelId}>`:'#how-to-get-on-the-truck'}. we start at spot ${spot} of 200. 21+ | not a guarantee`;
 }
 async function setup(guild,{env=process.env,dryRun=true}={}) {
   const preview=plan(guild);

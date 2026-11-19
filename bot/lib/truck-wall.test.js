@@ -3,6 +3,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const {PermissionFlagsBits,Collection}=require('discord.js');
 const {plan,setup,explainer,announcement,ROLES,CHANNELS}=require('./truck-wall');
+const {forbidden,validateItem}=require('../../pipeline/road-to-truck-schedule');
 const guild={id:'1215407647155683358',members:{me:{roles:{highest:{position:15}},permissions:{has(flag){return flag===PermissionFlagsBits.ManageRoles||flag===PermissionFlagsBits.ManageChannels||flag===PermissionFlagsBits.ManageMessages}}}},
   roles:{cache:new Collection()},channels:{cache:new Collection()}};
 test('dry-run plans four roles, category and four channels with no writes',async()=>{
@@ -26,4 +27,18 @@ test('explainer previews exact zero progress, rules and no invented reward amoun
   assert.match(json.description,/spot 0 of 200/);assert.match(json.description,/US 21\+ only/);
   assert.match(json.description,/month 2/);assert.doesNotMatch(json.description,/\$\d+/);
   assert.match(announcement(null,0),/spot 0 of 200/);
+});
+test('attributed production copy and Road Crew perk pass truck compliance',()=>{
+  const guide=explainer(0).toJSON().description;
+  const launch=announcement(null,0);
+  assert.match(guide,/elon says cybertruck production ends mid-2027/);
+  assert.match(guide,/road crew chat \+ truck updates \+ shoutouts/);
+  assert.doesNotMatch(guide,/early picks/i);
+  assert.match(launch,/elon says production ends mid-2027/);
+  for (const text of [guide,launch]) {
+    assert.equal(forbidden(text),null);
+    assert.match(text,/21\+/);
+    assert.match(text,/not a guarantee/);
+    assert.equal(validateItem({id:'truck-copy-test',platform:'discord',text}).text,text);
+  }
 });
