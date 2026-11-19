@@ -989,7 +989,7 @@ function startFreePickResultReplies() {
       }
       const rows = await readPickLog();
       // Campaign observer only: does not change grading, approvals or pick delivery.
-      if (process.env.ROAD_TO_TRUCK_ENABLED === 'true') {
+      if (require('../pipeline/truck-activation').enabled(process.env, now)) {
         try { await require('../pipeline/run-road-to-truck').postWinNudge(rows); }
         catch (error) { console.error('Road-to-truck WIN nudge held:', error.message); }
       }

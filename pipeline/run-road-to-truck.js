@@ -4,6 +4,7 @@ const { Pool } = require('pg');
 const { queue, schedule, due, validateItem, mstDate, datePlus, FALLBACK_RECORD } = require('./road-to-truck-schedule');
 const { renderCard, renderDailyCard } = require('./road-to-truck-card');
 const { buildDaily } = require('./truck-daily');
+const { enabled } = require('./truck-activation');
 
 const ROOT = path.join(__dirname, '..');
 const DISCORD_API = 'https://discord.com/api/v10';
@@ -12,7 +13,6 @@ const FREE_CHAT_ID = '1276995106779693088'; // Verified existing #💬・communi
 const GUILD_ID = '1215407647155683358';
 const NOTIFICATION_LIMIT = 1900;
 
-function enabled(env) { return env.ROAD_TO_TRUCK_ENABLED === 'true'; }
 function publisherUrl(env, action) { return `${String(env.TRUCK_PUBLISHER_URL || '').replace(/\/$/, '')}${AUDIT_PATH}${action}`; }
 function assetUrl(env, date) { return `${String(env.TRUCK_ASSET_URL || '').replace(/\/$/, '')}/assets/road_to_truck/${date}.png`; }
 function required(env) {
@@ -284,17 +284,17 @@ async function run({ env = process.env, now = new Date(), fetchImpl = fetch, dry
       const wall = await require('./name-wall-sync').sync({ env, fetchImpl });
       if (wall.tierEvents?.length) console.log('Name wall tier changes pending Discord delivery:', JSON.stringify(wall.tierEvents));
       for(const flag of wall.alerts||[]) await admin(env,`Truck wall review flag: referrer ${flag.referrerId}; referred customer ${flag.customerId}; reason ${flag.reason}. No automatic penalty applied.`,fetchImpl);
-      if(enabled(env) && wall.status!=='synced') {
+      if(enabled(env,now) && wall.status!=='synced') {
         await alert(env,`verified wall sync is ${wall.status}; no daily post`,fetchImpl);
         return {status:'held_wall_unsynced',posted:0};
       }
     } catch(error) {
-      if(enabled(env)) await alert(env,`verified wall sync failed: ${error.message}`,fetchImpl);
-      if(enabled(env)) return {status:'held_wall_sync_error',posted:0,error:error.message};
+      if(enabled(env,now)) await alert(env,`verified wall sync failed: ${error.message}`,fetchImpl);
+      if(enabled(env,now)) return {status:'held_wall_sync_error',posted:0,error:error.message};
       throw error;
     }
   }
-  if (!enabled(env)) return { status: 'disabled', posted: 0 };
+  if (!enabled(env,now)) return { status: 'disabled', posted: 0 };
   required(env);
   if(env.NAME_WALL_ENABLED!=='true') {
     await alert(env,'NAME_WALL_ENABLED is off; no verified wall spot is available',fetchImpl);
@@ -322,7 +322,7 @@ async function run({ env = process.env, now = new Date(), fetchImpl = fetch, dry
   return { status: 'completed', posted: results.filter(row => row.status === 'posted').length, expired: expired.length, results };
 }
 async function postWinNudge(rows, { env = process.env, now = new Date(), fetchImpl = fetch } = {}) {
-  if (!enabled(env) || !env.ROAD_TO_TRUCK_SECRET || !env.TRUCK_PUBLISHER_URL || !env.AUDIT_CHANNEL_ID) return { status: 'disabled' };
+  if (!enabled(env,now) || !env.ROAD_TO_TRUCK_SECRET || !env.TRUCK_PUBLISHER_URL || !env.AUDIT_CHANNEL_ID) return { status: 'disabled' };
   const { freeRows, verified } = require('../bot/lib/free-pick-results');
   const { resultFor } = require('../bot/lib/pick-log');
   const channelId = env.FREE_PICK_CHANNEL_ID;
