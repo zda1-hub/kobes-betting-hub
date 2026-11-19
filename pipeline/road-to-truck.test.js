@@ -113,9 +113,12 @@ test('daily card requires the credited real photo and uses the launch day',async
   } finally { await fs.rm(temp,{recursive:true,force:true}); }
 });
 test('daily caption uses no-name fallback and neutral copy when spot falls',()=>{
-  const base={spot:7,startedAt:'2026-11-19T17:00:00Z',verifiedAt:'2026-11-20T17:00:00Z',newNames:[],topRef:null};
+  const base={spot:7,startedAt:'2026-11-18T17:00:00Z',verifiedAt:'2026-11-20T17:00:00Z',newNames:[],topRef:null};
+  assert.equal(dayFromLaunch(base.startedAt,'2026-11-19'),1);
   assert.equal(dayFromLaunch(base.startedAt,'2026-11-20'),2);
+  assert.equal(dayFromLaunch(base.startedAt,'2026-11-21'),3);
   const empty=buildDaily(base,'2026-11-20');
+  assert.equal(empty.day,2);
   assert.match(empty.text,/who's next on the wall/);
   assert.doesNotMatch(empty.text,/https?:\/\//);
   const down=buildDaily({...base,previousSpot:8},'2026-11-20');
@@ -131,6 +134,7 @@ test('daily dry run makes no external writes',async()=>{
   const result=await run({env:{TRUCK_PUBLISHER_URL:'https://publisher.test',ROAD_TO_TRUCK_SECRET:'test'},
     now:new Date('2026-11-20T17:00:00Z'),fetchImpl,dryRun:true});
   assert.equal(result.externalWrites,0);
+  assert.match(result.output,/First scheduled card \(2026-11-21 10:00 MST\)/);
   assert.deepEqual(calls,['GET']);
   assert.ok(result.imagePath);
   await fs.rm(result.imagePath,{force:true});
