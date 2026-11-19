@@ -50,6 +50,11 @@ test('daily series extends beyond day seven and recurring referral source does n
 });
 test('kill switch stops everything and due selector refuses older than two hours', async () => {
   assert.equal(enabled({ ROAD_TO_TRUCK_ENABLED: 'false' }), false);
+  const scheduled = { ROAD_TO_TRUCK_ENABLED: 'true', ROAD_TO_TRUCK_START_AT: '2026-11-19T19:15:00Z' };
+  assert.equal(enabled(scheduled, new Date('2026-11-19T19:14:59Z')), false);
+  assert.equal(enabled(scheduled, new Date('2026-11-19T19:15:00Z')), true);
+  assert.equal(enabled({ ...scheduled, ROAD_TO_TRUCK_ENABLED: 'false' }, new Date('2026-11-20T17:00:00Z')), false);
+  assert.equal(enabled({ ROAD_TO_TRUCK_ENABLED: 'true', ROAD_TO_TRUCK_START_AT: 'invalid' }), false);
   assert.equal((await run({ env: { ROAD_TO_TRUCK_ENABLED: 'false' }, now: new Date('2026-11-19T19:00:00Z') })).status, 'disabled');
   const items = schedule('2026-11-19', 1);
   assert.ok(!items.some(item=>item.daily));

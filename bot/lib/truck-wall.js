@@ -177,7 +177,7 @@ async function deliverPending(guild,{env=process.env}={}) {
       const state=await api(env,'state');
       const name=String(row.name||member.displayName||'Rider').replace(/[<>@\r\n]/g,'').slice(0,20);
       let wallLink=null;
-      if(env.ROAD_TO_TRUCK_ENABLED==='true' && event.from_tier!==event.to_tier && event.to_tier!=='none' && (min[event.to_tier]||0)>(min[event.from_tier]||0)) {
+      if(require('../../pipeline/truck-activation').enabled(env) && event.from_tier!==event.to_tier && event.to_tier!=='none' && (min[event.to_tier]||0)>(min[event.from_tier]||0)) {
         const first=event.to_tier==='Rider'&&
           (await api(env,'receipt',{id:'truck:first-rider',value:event.user_id})).claimed;
         const text=first
