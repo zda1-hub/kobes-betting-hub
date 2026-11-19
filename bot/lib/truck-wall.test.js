@@ -38,10 +38,10 @@ test('explainer previews exact zero progress, rules and no invented reward amoun
 test('attributed production copy and Road Crew perk pass truck compliance',()=>{
   const guide=explainer(0).toJSON().description;
   const launch=announcement(null,0);
-  assert.match(guide,/elon says cybertruck production ends mid-2027/);
+  assert.match(guide,/elon says cybertruck production ends summer 2027/);
   assert.match(guide,/road crew chat \+ truck updates \+ shoutouts/);
   assert.doesNotMatch(guide,/early picks/i);
-  assert.match(launch,/elon says production ends mid-2027/);
+  assert.match(launch,/elon says production ends summer 2027/);
   for (const text of [guide,launch]) {
     assert.equal(forbidden(text),null);
     assert.match(text,/21\+/);

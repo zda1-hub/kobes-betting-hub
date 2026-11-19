@@ -54,12 +54,11 @@ function plan(guild) {
 }
 function explainer(spot,channelIds={}) {
   const mention=(name)=>channelIds[name]?`<#${channelIds[name]}>`:'#'+name;
-  // Attribution for Musk's stated timeline, not a KBH production guarantee:
-  // https://www.cnbc.com/2026/11/06/tesla-cybertruck-texas-musk.html
-  // https://techcrunch.com/2026/11/09/musk-says-tesla-will-refund-some-cybertruck-deposits-defends-decision-to-end-production/
+  // Attribution for Musk's updated timeline, not a KBH production guarantee:
+  // https://x.com/elonmusk/status/2120565056429814073
   return new EmbedBuilder().setColor(0xff7a1a).setTitle('🛻 ROAD TO THE CYBERTRUCK')
     .setDescription([
-      "we're getting a cybertruck and putting YOUR name on it. elon says cybertruck production ends mid-2027, so the clock is real. every spot on the truck is earned.",
+      "we're getting a cybertruck and putting YOUR name on it. elon says cybertruck production ends summer 2027, so the clock is real. every spot on the truck is earned.",
       '**HOW TO GET YOUR NAME ON IT**',
       '1. be in this server 7+ days (free access counts)',
       '2. grab your link → kobesbettinghub.com/refer',
@@ -85,9 +84,8 @@ function explainer(spot,channelIds={}) {
     ].join('\n')).setFooter({text:'KBH truck wall explainer • managed by Kobe Bot'});
 }
 function announcement(channelId,spot=0) {
-  // https://www.cnbc.com/2026/11/06/tesla-cybertruck-texas-musk.html
-  // https://techcrunch.com/2026/11/09/musk-says-tesla-will-refund-some-cybertruck-deposits-defends-decision-to-end-production/
-  return `🛻 road to the cybertruck is LIVE. elon says production ends mid-2027, so we're moving now. refer people to VIP, get your name on the truck. tiers, rules and your link → ${channelId?`<#${channelId}>`:'#how-to-get-on-the-truck'}. ${spot===0?'we start at':'we are at'} spot ${spot} of 200. 21+ | not a guarantee`;
+  // https://x.com/elonmusk/status/2120565056429814073
+  return `🛻 road to the cybertruck is LIVE. elon says production ends summer 2027, so we're moving now. refer people to VIP, get your name on the truck. tiers, rules and your link → ${channelId?`<#${channelId}>`:'#how-to-get-on-the-truck'}. ${spot===0?'we start at':'we are at'} spot ${spot} of 200. 21+ | not a guarantee`;
 }
 async function setup(guild,{env=process.env,dryRun=true}={}) {
   const preview=plan(guild);
