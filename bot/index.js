@@ -77,6 +77,7 @@ const { planPendingRecapNotice, queuedPendingRecapNotice } = require('./lib/pend
 const { hydrateCanonicalPlayer } = require('./lib/canonical-pick-player');
 const { appendOfficialPick, appendOrRetryPermissionFailedPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm, buildVipWelcome, buildNewMemberDm, vipRoleIds } = require('./lib/welcome');
+const { syncFreeRole, refreshPinnedWelcome } = require('./lib/member-welcome');
 const { relayMemberDm, relayKobeReply } = require('./lib/member-inbox');
 const {
   assertApprovalCopyMatches,
@@ -3910,6 +3911,11 @@ client.on(Events.GuildMemberAdd, async (member) => {
     }
   }
   if (member.user.bot) return;
+  if (process.env.WELCOME_FLOW_ENABLED === 'true') {
+    try { console.log(`Free role on join ${member.id}:`, await syncFreeRole(member, { enabled: true })); }
+    catch (error) { console.error(`Free role on join failed for ${member.id}: ${error.message}`); }
+    return;
+  }
   try {
     const paid = [...vipRoleIds()].some(id => member.roles.cache.has(id));
     await member.send(paid ? buildVipWelcome() : buildNewMemberDm());
@@ -3920,9 +3926,14 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
 client.on(Events.GuildMemberUpdate, async (before, after) => {
   if (after.guild.id !== process.env.DISCORD_GUILD_ID || after.user.bot) return;
+  if (process.env.WELCOME_FLOW_ENABLED === 'true') {
+    try { await syncFreeRole(after, { enabled: true }); }
+    catch (error) { console.error(`Free role update failed for ${after.id}: ${error.message}`); }
+  }
   const roles = vipRoleIds();
   const gainedVip = [...roles].some(id => after.roles.cache.has(id)) && ![...roles].some(id => before.roles.cache.has(id));
   if (!gainedVip) return;
+  if (process.env.WELCOME_FLOW_ENABLED === 'true') return;
   try { await after.send(buildVipWelcome()); }
   catch (error) { console.warn(`VIP welcome DM blocked for ${after.id}: ${error.message}`); }
 });
@@ -5428,6 +5439,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
       console.error(error);
       const message = error instanceof Error ? error.message : 'Unable to post the member welcome invite.';
       await interaction.editReply(message);
+    }
+    return;
+  }
+
+  if (interaction.commandName === 'welcome-refresh') {
+    await interaction.deferReply({ ephemeral: true });
+    if (!isAdministrator(interaction) || interaction.guildId !== process.env.DISCORD_GUILD_ID) {
+      await interaction.editReply('Only a KBH server administrator can refresh the welcome pin.');
+      return;
+    }
+    try {
+      const receipt = await refreshPinnedWelcome(interaction.guild);
+      await interaction.editReply(`Updated the existing pinned welcome in <#${receipt.channelId}>.`);
+    } catch (error) {
+      await interaction.editReply(error.message || 'Welcome refresh failed.');
     }
     return;
   }

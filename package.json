@@ -7,6 +7,7 @@
     "build:site": "node scripts/prepare-public-site.mjs",
     "bot": "node bot/index.js",
     "register:commands": "node bot/register-commands.js",
+    "welcome:dry-run": "node bot/member-welcome-setup.js --dry-run",
     "collect:x": "node pipeline/collect-x.js",
     "truck:run": "node pipeline/run-road-to-truck.js",
     "truck:dry-run": "node pipeline/run-road-to-truck.js --dry-run",

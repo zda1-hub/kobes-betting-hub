@@ -229,6 +229,10 @@ module.exports = [
     .setDescription('Post the opt-in welcome button for current members')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   new SlashCommandBuilder()
+    .setName('welcome-refresh')
+    .setDescription('Admin: update the pinned #start-here welcome from config')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  new SlashCommandBuilder()
     .setName('post-support-info')
     .setDescription('Post the official support message in a selected channel')
     .addChannelOption((option) => option
