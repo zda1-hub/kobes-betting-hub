@@ -3749,7 +3749,7 @@ client.once(Events.ClientReady, async (readyClient) => {
       if (!permissions.manageRoles||!permissions.manageChannels||!permissions.manageMessages||!permissions.canPlaceFourRoles||permissions.unmanageableTruckRoles.length) {
         console.error('Truck wall permission failure:',JSON.stringify(permissions));
         const adminChannel=readyClient.channels.cache.get(process.env.AUDIT_CHANNEL_ID);
-        if(adminChannel) void adminChannel.send({content:`Truck wall setup held: Kobe Bot requires Manage Roles, Manage Channels, Manage Messages, and four role positions below bot/staff/VIP. Current permissions: ${JSON.stringify(permissions)}`,allowedMentions:{parse:[]}}).catch(console.error);
+        if(adminChannel) void adminChannel.send({content:`Truck wall setup held: Kobe Bot requires Manage Roles, Manage Channels, Manage Messages, and control of any existing truck roles. Current permissions: ${JSON.stringify(permissions)}`,allowedMentions:{parse:[]}}).catch(console.error);
       }
       const poll=()=>truckWall.deliverPending(guild).then(()=>truckWall.refreshGuide(guild))
         .catch(error=>console.error('Truck wall sync needs attention:',error.message));

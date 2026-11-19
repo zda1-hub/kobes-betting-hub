@@ -37,7 +37,8 @@ function permissionReport(guild,env=process.env) {
   return {manageRoles:Boolean(me?.permissions.has(PermissionFlagsBits.ManageRoles)),
     manageChannels:Boolean(me?.permissions.has(PermissionFlagsBits.ManageChannels)),
     manageMessages:Boolean(me?.permissions.has(PermissionFlagsBits.ManageMessages)),
-    botRolePosition:me?.roles.highest.position ?? null,placementCeiling:ceiling,canPlaceFourRoles:ceiling>=5,
+    botRolePosition:me?.roles.highest.position ?? null,placementCeiling:ceiling,
+    canPlaceFourRoles:(me?.roles.highest.position??0)>0 && unmanageableTruckRoles.length===0,
     unmanageableTruckRoles};
 }
 function plan(guild) {
@@ -92,16 +93,14 @@ async function setup(guild,{env=process.env,dryRun=true}={}) {
   const preview=plan(guild);
   if (dryRun) return preview;
   if (!live(env)) throw new Error('NAME_WALL_ENABLED must be true before live setup.');
-  if (!preview.permissions.manageRoles || !preview.permissions.manageChannels || !preview.permissions.manageMessages || !preview.permissions.canPlaceFourRoles || preview.permissions.unmanageableTruckRoles.length)
-    throw new Error(`Kobe Bot needs Manage Roles, Manage Channels, Manage Messages, and four role positions below the bot/staff/VIP roles. Existing roles above bot: ${preview.permissions.unmanageableTruckRoles.join(', ')||'none'}.`);
+  if (!preview.permissions.manageRoles || !preview.permissions.manageChannels || !preview.permissions.manageMessages || !preview.permissions.canPlaceFourRoles)
+    throw new Error(`Kobe Bot needs Manage Roles, Manage Channels, Manage Messages, and control of all existing truck roles. Existing roles at/above bot: ${preview.permissions.unmanageableTruckRoles.join(', ')||'none'}.`);
   const me=await guild.members.fetchMe();
   const staffIds=(env.TRUCK_STAFF_ROLE_IDS||'').split(',').filter(Boolean);
   const staffRoles=[...new Map([...staffIds.map(id=>guild.roles.cache.get(id)).filter(Boolean),
     ...guild.roles.cache.filter(r=>!r.managed&&r.permissions.has(PermissionFlagsBits.Administrator)).values()]
     .map(role=>[role.id,role])).values()].filter(r=>r.id!==guild.id);
   const vipRoles=(env.VIP_ACCESS_ROLE_IDS||'1539063967878619218,1542668360985088070').split(',').map(id=>guild.roles.cache.get(id)).filter(Boolean);
-  const ceiling=Math.min(me.roles.highest.position,...[...staffRoles,...vipRoles].map(r=>r.position));
-  if (ceiling < 5) throw new Error('Bot/staff/VIP roles are too low to place four truck roles below them.');
   const roleMap={};
   for (const spec of ROLES) {
     let role=guild.roles.cache.find(r=>r.name===spec.name);
@@ -110,7 +109,14 @@ async function setup(guild,{env=process.env,dryRun=true}={}) {
       await role.edit({color:spec.color,hoist:true,mentionable:false,reason:'KBH truck wall setup'});
     roleMap[spec.name]=role;
   }
-  for (let index=0;index<ROLES.length;index++) await roleMap[ROLES[index].name].setPosition(ceiling-4+index);
+  // Inserting roles at the bottom shifts existing role positions upward while
+  // preserving their order. A low VIP role does not require four empty slots.
+  for (let index=0;index<ROLES.length;index++) await roleMap[ROLES[index].name].setPosition(index+1);
+  await guild.roles.fetch();
+  const truckTop=Math.max(...ROLES.map(spec=>guild.roles.cache.get(roleMap[spec.name].id).position));
+  const protectedBottom=Math.min(guild.roles.cache.get(me.roles.highest.id).position,
+    ...[...staffRoles,...vipRoles].map(role=>guild.roles.cache.get(role.id).position));
+  if (truckTop>=protectedBottom) throw new Error('Truck roles did not land below bot/staff/VIP roles; review the server role order.');
   let category=guild.channels.cache.find(c=>c.name===CATEGORY&&c.type===ChannelType.GuildCategory);
   if (!category) category=await guild.channels.create({name:CATEGORY,type:ChannelType.GuildCategory,reason:'KBH truck wall setup'});
   const channelMap={};

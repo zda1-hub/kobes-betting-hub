@@ -36,4 +36,8 @@ Add a zero-start paid-referral name wall, `/truck` page, tier roles and channels
 - The local preview and tests are not live Discord verification. Permission and announcement-channel checks still require a bot-authenticated dry run.
 - The explainer attributes the mid-2027 production timeline to Musk using “elon says”; source links sit beside the copy in code. `#road-crew` promises chat, truck updates and shoutouts, with no early-pick timing promise.
 - The referral scan fails with a clear error at 2,000 post-launch rows rather than silently truncating; add pagination before that scale.
-- No public page, bot resources or scheduled posts were deployed in this worktree.
+- At initial PR review, no public page, bot resources or scheduled posts had been deployed. After merge, `/truck` and the publisher were deployed with both switches false; the D1 wall tables remain empty.
+
+## Live-guild preflight follow-up
+
+After merging #493 and #497, the bot-authenticated dry run reported Manage Roles, Manage Channels and Manage Messages all true, bot highest role position 7, and a protected-role placement ceiling of 3. The original setup incorrectly treated the lack of four *empty* lower slots as a blocker. New roles can be inserted at positions 1–4, shifting existing roles up while preserving their relative order. The follow-up changes the setup to do that and verify the final hierarchy before creating channels or posting. No truck role, channel, pin or announcement was created during the preflight.
