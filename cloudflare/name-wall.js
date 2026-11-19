@@ -1,6 +1,7 @@
 const TIERS = [[25, 'Hood Club'], [10, 'Door Squad'], [3, 'Road Crew'], [1, 'Rider']];
 const MILESTONES = [10, 25, 50, 75, 100, 125, 150, 175, 200];
 const REQUIRED = ['name_wall_state', 'referral_tiers', 'tier_events', 'name_wall_optout', 'wall_referrals', 'wall_hood_reservations', 'wall_milestones', 'wall_abuse_flags', 'wall_setup_receipts'];
+const phoenixDay = value => new Date(Date.parse(value) - 7 * 3600000).toISOString().slice(0, 10);
 const REJECT_NAME = /https?:|www\.|discord\.|\b(?:draftkings|fanduel|betmgm|caesars|betrivers|bet365|bitch|fuck|shit|nigg\w*|fagg\w*)\b/i;
 const enabled = env => env.NAME_WALL_ENABLED === 'true';
 const json = (value, status = 200) => Response.json(value, { status, headers: { 'cache-control': 'no-store' } });
@@ -84,6 +85,10 @@ async function reconcile(db, input, now = new Date()) {
   }
   await db.prepare('UPDATE name_wall_state SET active_paid_spots=?,updated_at=? WHERE id=1')
     .bind(input.activePaidSpots,now.toISOString()).run();
+  const day = phoenixDay(now.toISOString());
+  await db.prepare(`INSERT INTO wall_spot_daily(day,spot,observed_at) VALUES(?,?,?)
+    ON CONFLICT(day) DO UPDATE SET spot=excluded.spot,observed_at=excluded.observed_at`)
+    .bind(day,input.activePaidSpots,now.toISOString()).run();
   for (const spot of MILESTONES) if (previousSpot < spot && input.activePaidSpots >= spot)
     await db.prepare('INSERT OR IGNORE INTO wall_milestones VALUES(?,?)').bind(spot,now.toISOString()).run();
   const { results: pending } = await db.prepare('SELECT id,user_id,from_tier,to_tier,reason FROM tier_events WHERE notified_at IS NULL').all();
@@ -105,6 +110,35 @@ async function handle(request, env) {
   await schema(env.DB);
   if (url.pathname === '/api/admin/truck/state' && request.method === 'GET') return json(await snapshot(env.DB));
   if (!enabled(env)) return json({error:'Name wall is off'},403);
+  if (url.pathname === '/api/admin/truck/daily' && request.method === 'GET') {
+    const current=await state(env.DB);
+    if (!current) return json({error:'Name wall has not been activated'},409);
+    const now=new Date();
+    const today=phoenixDay(now.toISOString());
+    const yesterday=phoenixDay(new Date(now.getTime()-86400000).toISOString());
+    const prior=await env.DB.prepare('SELECT spot FROM wall_spot_daily WHERE day=?').bind(yesterday).first();
+    const since=new Date(now.getTime()-86400000).toISOString();
+    const week=new Date(now.getTime()-7*86400000).toISOString();
+    const {results:names}=await env.DB.prepare(`SELECT DISTINCT t.user_id,
+      CASE WHEN o.user_id IS NULL THEN t.display_name ELSE 'anonymous rider' END AS name,
+      e.created_at FROM tier_events e JOIN referral_tiers t ON t.user_id=e.user_id
+      LEFT JOIN name_wall_optout o ON o.user_id=t.user_id
+      WHERE e.from_tier='none' AND e.to_tier!='none' AND e.created_at>=? AND t.qualified_count>0
+      ORDER BY e.created_at DESC LIMIT 3`).bind(since).all();
+    const top=await env.DB.prepare(`SELECT t.user_id,
+      CASE WHEN o.user_id IS NULL THEN t.display_name ELSE 'anonymous rider' END AS name,
+      COUNT(*) AS n FROM wall_referrals r JOIN referral_tiers t ON t.user_id=r.referrer_id
+      LEFT JOIN name_wall_optout o ON o.user_id=t.user_id
+      WHERE r.active=1 AND r.canceled=0 AND r.refunded=0 AND r.disqualified=0
+      AND ((r.second_paid_at IS NOT NULL AND r.second_paid_at>=? AND datetime(r.second_paid_at)<=datetime('now'))
+        OR (r.second_paid_at IS NULL AND datetime(r.first_paid_at,'+30 days')>=datetime(?)
+          AND datetime(r.first_paid_at,'+30 days')<=datetime('now')))
+      AND t.qualified_count>0 GROUP BY t.user_id ORDER BY n DESC,t.joined_at ASC LIMIT 1`)
+      .bind(week,week).first();
+    return json({spot:current.active_paid_spots,startedAt:current.started_at,
+      verifiedAt:current.updated_at,today,previousSpot:prior?.spot ?? null,
+      newNames:names.map(row=>row.name),topRef:top?.name || null});
+  }
   if (url.pathname === '/api/admin/truck/activate' && request.method === 'POST') {
     const now = new Date().toISOString();
     await env.DB.prepare('INSERT OR IGNORE INTO name_wall_state VALUES(1,?,0,?)').bind(now,now).run();

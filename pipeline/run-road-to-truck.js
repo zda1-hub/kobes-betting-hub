@@ -2,7 +2,8 @@ require('dotenv').config();
 const path = require('node:path');
 const { Pool } = require('pg');
 const { queue, schedule, due, validateItem, mstDate, datePlus, FALLBACK_RECORD } = require('./road-to-truck-schedule');
-const { renderCard } = require('./road-to-truck-card');
+const { renderCard, renderDailyCard } = require('./road-to-truck-card');
+const { buildDaily } = require('./truck-daily');
 
 const ROOT = path.join(__dirname, '..');
 const DISCORD_API = 'https://discord.com/api/v10';
@@ -11,7 +12,7 @@ const FREE_CHAT_ID = '1276995106779693088'; // Verified existing #💬・communi
 const GUILD_ID = '1215407647155683358';
 const NOTIFICATION_LIMIT = 1900;
 
-function enabled(env) { return env.ROAD_TO_TRUCK_ENABLED !== 'false'; }
+function enabled(env) { return env.ROAD_TO_TRUCK_ENABLED === 'true'; }
 function publisherUrl(env, action) { return `${String(env.TRUCK_PUBLISHER_URL || '').replace(/\/$/, '')}${AUDIT_PATH}${action}`; }
 function assetUrl(env, date) { return `${String(env.TRUCK_ASSET_URL || '').replace(/\/$/, '')}/assets/road_to_truck/${date}.png`; }
 function required(env) {
@@ -57,7 +58,8 @@ async function readRecord(env, fetchImpl = fetch) {
   return /^\d+-\d+$/.test(result.record || '') ? result.record : FALLBACK_RECORD;
 }
 async function uploadCard(env, date, record, fetchImpl = fetch) {
-  const { png } = await renderCard({ date, record });
+  const { png,hasPhoto } = await renderCard({ date, record });
+  if(!hasPhoto) throw new Error('Real Cybertruck photo missing; card held');
   const url = assetUrl(env, date);
   const response = await fetchImpl(url, { method: 'PUT', headers: {
     authorization: `Bearer ${env.TRUCK_ASSET_SECRET}`, 'content-type': 'image/png' }, body: png });
@@ -76,7 +78,7 @@ async function paidLeaderboard(env, item, { database = null, fetchImpl = fetch }
     const {api}=require('./name-wall-sync');
     const data=await api(env,'leaderboard',null,fetchImpl);
     if (!data.rows?.length) return null;
-    return `week of ${datePlus(item.week,-7)}: truck wall\n\n${data.rows.map((row,index)=>`${index+1}. ${row.name} · ${row.tier}`).join('\n')}\n\nspot ${data.spot} of 200. get your link: https://kobesbettinghub.com/refer\n\n21+ | not a guarantee`;
+    return `truck wall leaderboard · ${item.week}\n\n${data.rows.map((row,index)=>`${index+1}. ${row.name} · ${row.tier}`).join('\n')}\n\nspot ${data.spot} of 200. get your link: https://kobesbettinghub.com/refer\n\n21+ | not a guarantee`;
   }
   if (!env.DATABASE_URL && !database) throw new Error('DATABASE_URL is required for paid-referral leaderboard');
   const pool = database || new Pool({ connectionString: env.DATABASE_URL, max: 1 });
@@ -109,16 +111,17 @@ async function sendDiscord(env, item, text, fetchImpl = fetch) {
   if (channel.guild_id !== GUILD_ID || channel.type !== 0 || (item.target === 'main_free_chat' && channel.name !== '💬・community-chat'))
     throw new Error('Truck Discord destination does not match verified main free chat');
   const message = await discordRequest(env, `/channels/${channelId}/messages`, 'POST',
-    { content: text, allowed_mentions: { parse: [] } }, fetchImpl);
+    { content: item.pingEveryone ? `@everyone\n${text}` : text,
+      allowed_mentions: { parse: item.pingEveryone ? ['everyone'] : [] } }, fetchImpl);
   await publisher(env, 'complete', { id: item.id, platform: 'discord', post_id: message.id }, fetchImpl);
   const link = `https://discord.com/channels/${GUILD_ID}/${channelId}/${message.id}`;
   await admin(env, `Posted ${item.id}: ${link}`, fetchImpl);
   if (item.pin) await discordRequest(env, `/channels/${channelId}/pins/${message.id}`, 'PUT', null, fetchImpl);
   return { status: 'posted', link };
 }
-async function sendX(env, item, record, fetchImpl = fetch) {
+async function sendX(env, item, record, fetchImpl = fetch, prepared = null) {
   const rendered = validateItem(item, record);
-  let imageUrl = null, imageBase64 = null;
+  let imageUrl = prepared?.url || null, imageBase64 = prepared?.png?.toString('base64') || null;
   if (item.cardDay) {
     imageUrl = await uploadCard(env, mstDate(item.scheduled_at), record, fetchImpl);
     const { png } = await renderCard({ date: mstDate(item.scheduled_at), record });
@@ -141,9 +144,85 @@ async function sendX(env, item, record, fetchImpl = fetch) {
   await admin(env, `Posted ${item.id}: ${link}\nFirst reply: ${replyLink}${imageUrl ? `\nCard: ${imageUrl}` : ''}`, fetchImpl);
   return { status: 'posted', link, replyLink, imageUrl };
 }
+async function truckChannels(env, fetchImpl = fetch) {
+  const channels=await discordRequest(env,`/guilds/${GUILD_ID}/channels`,'GET',null,fetchImpl);
+  const category=channels.find(c=>c.name==='🛻 ROAD TO THE TRUCK'&&c.type===4);
+  const pick=name=>channels.find(c=>c.name===name&&c.parent_id===category?.id&&c.type===0);
+  const wall=pick('truck-wall'), guide=pick('how-to-get-on-the-truck');
+  if(!wall||!guide) throw new Error('Truck wall or pinned guide channel is missing');
+  return {wall,guide,roadCrew:pick('road-crew'),hoodClub:pick('hood-club')};
+}
+async function editGuide(env, spot, channels, fetchImpl=fetch) {
+  const pins=await discordRequest(env,`/channels/${channels.guide.id}/pins`,'GET',null,fetchImpl);
+  const me=await discordRequest(env,'/users/@me','GET',null,fetchImpl);
+  const pinned=pins.find(m=>m.author?.id===me.id&&m.embeds?.some(e=>e.footer?.text?.startsWith('KBH truck wall explainer')));
+  if(!pinned) throw new Error('Pinned truck explainer missing');
+  const ids={'road-crew':channels.roadCrew?.id,'hood-club':channels.hoodClub?.id};
+  const {explainer}=require('../bot/lib/truck-wall');
+  return discordRequest(env,`/channels/${channels.guide.id}/messages/${pinned.id}`,'PATCH',
+    {embeds:[explainer(spot,ids).toJSON()],allowed_mentions:{parse:[]}},fetchImpl);
+}
+async function sendDailyDiscord(env, item, png, channelId, fetchImpl=fetch) {
+  const claim=await publisher(env,'claim',{id:item.id+'-discord',platform:'discord',text:item.text},fetchImpl);
+  if(claim.status!=='claimed') return {status:claim.status};
+  const form=new FormData();
+  form.append('payload_json',JSON.stringify({content:item.text,allowed_mentions:{parse:[]}}));
+  form.append('files[0]',new Blob([png],{type:'image/png'}),`${item.id}.png`);
+  const response=await fetchImpl(`${DISCORD_API}/channels/${channelId}/messages`,{
+    method:'POST',headers:{authorization:`Bot ${env.DISCORD_TOKEN}`},body:form});
+  if(!response.ok) throw new Error(`Discord daily image post failed (${response.status})`);
+  const message=await response.json();
+  await publisher(env,'complete',{id:item.id+'-discord',platform:'discord',post_id:message.id},fetchImpl);
+  const link=`https://discord.com/channels/${GUILD_ID}/${channelId}/${message.id}`;
+  await admin(env,`Posted ${item.id} to truck wall: ${link}`,fetchImpl);
+  return {status:'posted',link};
+}
+async function postDaily(env, planned, fetchImpl=fetch) {
+  const {api}=require('./name-wall-sync');
+  const snapshot=await api(env,'daily',null,fetchImpl);
+  if(Date.now()-Date.parse(snapshot.verifiedAt)>10*60000 || Date.parse(snapshot.verifiedAt)>Date.now()+60000)
+    throw new Error('Verified wall spot is stale; daily post skipped');
+  const date=mstDate(planned.scheduled_at);
+  const item=buildDaily(snapshot,date);
+  const card=await renderDailyCard({day:item.day,spot:item.spot,newNames:item.newNames,topRef:item.topRef});
+  const url=assetUrl(env,`daily-${date}`);
+  const uploaded=await fetchImpl(url,{method:'PUT',headers:{authorization:`Bearer ${env.TRUCK_ASSET_SECRET}`,'content-type':'image/png'},body:card.png});
+  if(!uploaded.ok) throw new Error(`Truck daily card upload failed (${uploaded.status})`);
+  const channels=await truckChannels(env,fetchImpl);
+  const {receipt}=await api(env,`receipt?id=truck:guide:${date}`,null,fetchImpl);
+  if(!receipt) {
+    await editGuide(env,item.spot,channels,fetchImpl);
+    await api(env,'receipt',{id:`truck:guide:${date}`,value:`spot ${item.spot}`},fetchImpl);
+  }
+  const x=await sendX(env,item,FALLBACK_RECORD,fetchImpl,{png:card.png,url});
+  const discord=await sendDailyDiscord(env,item,card.png,channels.wall.id,fetchImpl);
+  return {status:x.status==='posted'||discord.status==='posted'?'posted':'already_handled',x,discord,day:item.day,spot:item.spot};
+}
+async function postLaunch(env, fetchImpl=fetch) {
+  const {api}=require('./name-wall-sync');
+  const snapshot=await api(env,'daily',null,fetchImpl);
+  if(!Number.isInteger(snapshot.spot) || Date.now()-Date.parse(snapshot.verifiedAt)>10*60000)
+    throw new Error('Verified wall spot unavailable for launch announcement');
+  const channels=await truckChannels(env,fetchImpl);
+  const guildChannels=await discordRequest(env,`/guilds/${GUILD_ID}/channels`,'GET',null,fetchImpl);
+  const named=name=>guildChannels.find(c=>c.type===0&&(c.name===name||c.name.endsWith(`・${name}`)));
+  const destination=named('announcements')||named('free-picks');
+  if(!destination) throw new Error('No verified announcements or free-picks channel for launch');
+  const text=require('../bot/lib/truck-wall').announcement(channels.guide.id,snapshot.spot);
+  const item={id:'truck-discord-launch-announcement',platform:'discord',channelId:destination.id,target:'launch',
+    pingEveryone:env.ROAD_TO_TRUCK_PING_EVERYONE==='true'};
+  return sendDiscord(env,item,text,fetchImpl);
+}
 async function processItem(env, item, record, deps = {}) {
   const fetchImpl = deps.fetchImpl || fetch;
   try {
+    if(item.daily) return await postDaily(env,item,fetchImpl);
+    if(item.sourceId?.startsWith('truck-referral-safe-')) {
+      const snapshot=await require('./name-wall-sync').api(env,'daily',null,fetchImpl);
+      if(!Number.isInteger(snapshot.spot) || Date.now()-Date.parse(snapshot.verifiedAt)>10*60000)
+        throw new Error('Verified wall spot unavailable for referral post');
+      item={...item,text:item.text.replaceAll('{X}',String(snapshot.spot))};
+    }
     let text = validateItem(item, record).text;
     if (item.id.startsWith('truck-discord-weekly-leaderboard-')) {
       text = await paidLeaderboard(env, item, deps);
@@ -167,33 +246,64 @@ async function processItem(env, item, record, deps = {}) {
 }
 async function run({ env = process.env, now = new Date(), fetchImpl = fetch, dryRun = false, days = 14 } = {}) {
   if (dryRun) {
-    const start = mstDate(now) < '2026-11-19' ? '2026-11-19' : mstDate(now);
-    const items = schedule(start, days);
-    const record = FALLBACK_RECORD;
-    const imagePaths = [];
-    for (let n = 0; n < 7; n++) {
-      const date = datePlus(start, n);
-      if (date < '2026-11-19') continue;
-      const filename = `/tmp/kbh-road-to-truck-${date}.png`;
-      await renderCard({ date, record, outputPath: filename });
-      imagePaths.push(filename);
+    const start=mstDate(now)<'2026-11-19'?'2026-11-19':mstDate(now);
+    const tomorrow=datePlus(mstDate(now),1);
+    let snapshot=null, blocked=null, imagePath=null;
+    try {
+      if(!env.TRUCK_PUBLISHER_URL||!env.ROAD_TO_TRUCK_SECRET)
+        throw new Error('Read-only wall API credentials are unavailable in this local shell');
+      snapshot=await require('./name-wall-sync').api(env,'daily',null,fetchImpl);
+      const item=buildDaily(snapshot,tomorrow);
+      const target=`/tmp/kbh-truck-daily-${tomorrow}.png`;
+      await renderDailyCard({day:item.day,spot:item.spot,newNames:item.newNames,topRef:item.topRef,outputPath:target});
+      imagePath=target;
+    } catch(error) { blocked=error.message; }
+    const captions=[];
+    for(let i=0;i<7;i++) {
+      const date=datePlus(start,i);
+      if(!snapshot) captions.push(`${date} 10:00 MST: live spot unavailable; caption held`);
+      else try {
+        const item=buildDaily(snapshot,date);
+        captions.push(`${date} 10:00 MST [preview using current snapshot; actual values refresh at posting]:\n${item.text}\nFirst reply:\n${item.first_reply}`);
+      } catch(error) { captions.push(`${date}: held (${error.message})`); }
+      for(const referral of schedule(date,1).filter(item=>item.sourceId?.startsWith('truck-referral-safe-'))) {
+        captions.push(snapshot
+          ?`${date} 12:00 MST [preview using current snapshot]:\n${referral.text.replaceAll('{X}',String(snapshot.spot))}\nFirst reply:\n${referral.first_reply}`
+          :`${date} 12:00 MST: referral caption held; live spot unavailable`);
+      }
     }
-    return { dryRun: true, writes: 0, items, imagePaths,
-      output: `ROAD TO THE TRUCK DRY RUN — no posts or writes\nRecord: ${record} (verified fallback; graded D1 table absent)\nCards: ${imagePaths.join(', ')}\n\n${items.map(item => show(item, record)).join('\n\n---\n\n')}` };
+    return {dryRun:true,externalWrites:0,imagePath,blocked,snapshot,captions,
+      output:`ROAD TO THE CYBERTRUCK — READ-ONLY DRY RUN\nCurrent live spot: ${snapshot?.spot ?? 'unavailable'}\nTomorrow card: ${imagePath||'not rendered'}\n${blocked?`Blocked: ${blocked}\n`:''}\nNext 7 days:\n\n${captions.join('\n\n---\n\n')}`};
   }
   if (env.NAME_WALL_ENABLED === 'true') {
-    const wall = await require('./name-wall-sync').sync({ env, fetchImpl });
-    if (wall.tierEvents?.length) console.log('Name wall tier changes pending Discord delivery:', JSON.stringify(wall.tierEvents));
-    for(const flag of wall.alerts||[]) await admin(env,`Truck wall review flag: referrer ${flag.referrerId}; referred customer ${flag.customerId}; reason ${flag.reason}. No automatic penalty applied.`,fetchImpl);
+    try {
+      const wall = await require('./name-wall-sync').sync({ env, fetchImpl });
+      if (wall.tierEvents?.length) console.log('Name wall tier changes pending Discord delivery:', JSON.stringify(wall.tierEvents));
+      for(const flag of wall.alerts||[]) await admin(env,`Truck wall review flag: referrer ${flag.referrerId}; referred customer ${flag.customerId}; reason ${flag.reason}. No automatic penalty applied.`,fetchImpl);
+      if(enabled(env) && wall.status!=='synced') {
+        await alert(env,`verified wall sync is ${wall.status}; no daily post`,fetchImpl);
+        return {status:'held_wall_unsynced',posted:0};
+      }
+    } catch(error) {
+      if(enabled(env)) await alert(env,`verified wall sync failed: ${error.message}`,fetchImpl);
+      if(enabled(env)) return {status:'held_wall_sync_error',posted:0,error:error.message};
+      throw error;
+    }
   }
   if (!enabled(env)) return { status: 'disabled', posted: 0 };
   required(env);
+  if(env.NAME_WALL_ENABLED!=='true') {
+    await alert(env,'NAME_WALL_ENABLED is off; no verified wall spot is available',fetchImpl);
+    return {status:'held_wall_off',posted:0};
+  }
   const start = mstDate(new Date(now.getTime() - 3 * 3600000));
   const items = schedule(start, 2);
   const record = await readRecord(env, fetchImpl);
   const { ready, expired } = due(items, now, true);
   for (const item of expired) await publisher(env, 'skip', { id: item.id, platform: item.platform, reason: 'older than 2 hours' }, fetchImpl);
   const results = [];
+  try { results.push({id:'truck-discord-launch-announcement',...await postLaunch(env,fetchImpl)}); }
+  catch(error) { await alert(env,`launch announcement: ${error.message}`,fetchImpl); }
   for (const item of ready) results.push({ id: item.id, ...await processItem(env, item, record, { fetchImpl }) });
   if (env.NAME_WALL_ENABLED === 'true') {
     const {api}=require('./name-wall-sync');
@@ -229,4 +339,4 @@ if (require.main === module) {
     console.log(result.dryRun ? result.output : JSON.stringify(result));
   }).catch(error => { console.error('Truck scheduler held:', error.message); process.exitCode = 1; });
 }
-module.exports = { run, postWinNudge, paidLeaderboard, enabled, processItem, sendDiscord, sendX, show, target };
+module.exports = { run, postWinNudge, paidLeaderboard, enabled, processItem, postDaily, sendDiscord, sendX, show, target };

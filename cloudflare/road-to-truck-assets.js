@@ -1,4 +1,4 @@
-const MATCH = /^\/assets\/road_to_truck\/(\d{4}-\d{2}-\d{2})\.png$/;
+const MATCH = /^\/assets\/road_to_truck\/((?:daily-)?\d{4}-\d{2}-\d{2})\.png$/;
 const respond = (body, status = 200) => Response.json(body, { status });
 
 export default {

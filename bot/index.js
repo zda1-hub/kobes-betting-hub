@@ -3751,7 +3751,8 @@ client.once(Events.ClientReady, async (readyClient) => {
         const adminChannel=readyClient.channels.cache.get(process.env.AUDIT_CHANNEL_ID);
         if(adminChannel) void adminChannel.send({content:`Truck wall setup held: Kobe Bot requires Manage Roles, Manage Channels, Manage Messages, and control of any existing truck roles. Current permissions: ${JSON.stringify(permissions)}`,allowedMentions:{parse:[]}}).catch(console.error);
       }
-      const poll=()=>truckWall.deliverPending(guild).then(()=>truckWall.refreshGuide(guild))
+      // The road cron edits the pinned guide with the same verified spot as its daily card.
+      const poll=()=>truckWall.deliverPending(guild)
         .catch(error=>console.error('Truck wall sync needs attention:',error.message));
       void poll();
       setInterval(()=>void poll(),5*60*1000);

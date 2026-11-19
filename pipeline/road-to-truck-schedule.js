@@ -1,12 +1,11 @@
 const queue = require('../content/road_to_truck.json');
-const addedCaptions = require('../content/truck_captions.json');
 const { sportsbooks } = require('../content/truck_config.json');
 
 const DAY_MS = 86400000;
 const START = '2026-11-19';
 const FALLBACK_RECORD = '26-17';
 const FIXED_OFFSET = '-07:00';
-const REFERRAL_IDS = ['truck-referral-x-1', 'truck-referral-x-2', 'truck-referral-x-3', 'truck-referral-x-4', 'truck-gta-referral-2026-11-19'];
+const REFERRAL_IDS = ['truck-referral-safe-1', 'truck-referral-safe-2', 'truck-referral-safe-3', 'truck-referral-safe-4', 'truck-referral-safe-5'];
 const STATIC_REFERRAL_IDS = new Set(['truck-referral-x-1', 'truck-referral-x-2', 'truck-referral-x-3', 'truck-referral-x-4']);
 
 function mstDate(value) { return new Date(new Date(value).getTime() - 7 * 3600000).toISOString().slice(0, 10); }
@@ -16,14 +15,16 @@ function datePlus(date, days) { return new Date(Date.parse(date + 'T00:00:00Z') 
 function dayOfWeek(date) { return new Date(date + 'T00:00:00Z').getUTCDay(); }
 function byId(id) { const item = queue.find(row => row.id === id); if (!item) throw new Error(`Missing truck queue item ${id}`); return item; }
 function renderText(text, record = FALLBACK_RECORD) { return text.replaceAll('{RECORD}', record); }
-function forbidden(text) {
+function forbidden(text, { firstReply = false } = {}) {
   const value = String(text || '');
-  const terms = [/(?:^|\W)lock(?:$|\W)/i, /\bguaranteed\b/i, /\bprofit\b/i, /\bparlay\b/i, /\b\d+(?:\.\d+)?\s*(?:units?|u)\b/i];
+  const terms = [/(?:^|\W)lock(?:$|\W)/i, /\bguaranteed\b/i, /\bprofit\b/i, /\bparlay\b/i, /\b\d+(?:\.\d+)?\s*(?:units?|u)\b/i, /\$/];
   const blocked = terms.find(term => term.test(value));
   if (blocked) return `blocked term: ${blocked}`;
   const book = sportsbooks.find(name => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+')}\\b`, 'i').test(value));
   if (book) return `sportsbook: ${book}`;
   if (!/21\s*\+/.test(value)) return 'missing 21+';
+  if (!firstReply && !/not a guarantee/i.test(value)) return 'missing no-guarantee footer';
+  if (!firstReply && /\bmembers\b/i.test(value)) return 'blocked public count term';
   return null;
 }
 function validateItem(item, record = FALLBACK_RECORD) {
@@ -33,25 +34,14 @@ function validateItem(item, record = FALLBACK_RECORD) {
   if (item.platform === 'x' && text.length > 280) throw new Error(`${item.id}: X text has ${text.length} characters`);
   if (item.platform === 'x') {
     if (!item.first_reply) throw new Error(`${item.id}: X first reply missing`);
-    const replyReason = forbidden(item.first_reply);
+    const replyReason = forbidden(item.first_reply, { firstReply: true });
     if (replyReason) throw new Error(`${item.id} first reply: ${replyReason}`);
     if (item.first_reply.length > 280) throw new Error(`${item.id}: X first reply too long`);
   }
   return { ...item, text };
 }
-function recurringDay(date) {
-  const n = dayNumber(date);
-  if (n < 8) return null;
-  const custom = addedCaptions.length ? addedCaptions[(n - 8) % addedCaptions.length] : null;
-  const source = custom || byId(`truck-day-${2 + (n - 8) % 6}`);
-  const text = typeof source === 'string' ? source : source.text;
-  const firstReply = typeof source === 'string' ? byId('truck-day-2').first_reply : source.first_reply;
-  return { id: `truck-day-${n}`, platform: 'x', scheduled_at: mstStamp(date, 18),
-    text: text.replace(/^day \d+\./i, `day ${n}.`), first_reply: firstReply,
-    image: `assets/road_to_truck/day-${n}.png`, cardDay: n };
-}
 function referralForDate(date) {
-  const first = '2026-11-24';
+  const first = '2026-11-20';
   let index = 0;
   for (let cursor = first; cursor < date; cursor = datePlus(cursor, 1)) {
     if ([2, 5].includes(dayOfWeek(cursor))) index++;
@@ -65,17 +55,17 @@ function schedule(from, days = 14) {
   for (let i = 0; i < days; i++) {
     const date = datePlus(fromDate, i);
     if (date < START) continue;
+    result.push({id:`truck-daily-${date}`,platform:'x',scheduled_at:mstStamp(date,10),daily:true});
     for (const item of queue) {
-      if (!item.scheduled_at || item.trigger || item.recurrence || STATIC_REFERRAL_IDS.has(item.id)) continue;
+      if (!item.scheduled_at || item.trigger || item.recurrence || STATIC_REFERRAL_IDS.has(item.id) ||
+          item.id.startsWith('truck-day-') || item.id === 'truck-gta-referral-2026-11-19') continue;
       if (mstDate(item.scheduled_at) === date) result.push({ ...item, cardDay: item.id.startsWith('truck-day-') ? Number(item.id.split('-').at(-1)) : undefined });
     }
-    const extraDay = recurringDay(date);
-    if (extraDay) result.push(extraDay);
     if (date >= '2026-11-23' && dayOfWeek(date) === 1) {
       result.push({ ...byId('truck-discord-pin'), id: `truck-discord-referral-monday-${date}`, scheduled_at: mstStamp(date, 10), pin: false, priority: 0 });
       result.push({ ...byId('truck-discord-weekly-leaderboard'), id: `truck-discord-weekly-leaderboard-${date}`, scheduled_at: mstStamp(date, 10), priority: 1, week: date });
     }
-    if (date >= '2026-11-24' && [2, 5].includes(dayOfWeek(date))) result.push(referralForDate(date));
+    if (date >= '2026-11-20' && [2, 5].includes(dayOfWeek(date))) result.push(referralForDate(date));
   }
   return result.sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at) || (a.priority || 0) - (b.priority || 0) || a.id.localeCompare(b.id));
 }
