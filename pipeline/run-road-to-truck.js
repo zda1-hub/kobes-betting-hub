@@ -1,5 +1,6 @@
 require('dotenv').config();
 const path = require('node:path');
+const fs = require('node:fs/promises');
 const { Pool } = require('pg');
 const { queue, schedule, due, validateItem, mstDate, datePlus, FALLBACK_RECORD } = require('./road-to-truck-schedule');
 const { renderCard, renderDailyCard } = require('./road-to-truck-card');
@@ -126,6 +127,12 @@ async function sendX(env, item, record, fetchImpl = fetch, prepared = null) {
     imageUrl = await uploadCard(env, mstDate(item.scheduled_at), record, fetchImpl);
     const { png } = await renderCard({ date: mstDate(item.scheduled_at), record });
     imageBase64 = png.toString('base64');
+  } else if (item.image) {
+    if (!/^assets\/road_to_truck\/[a-z0-9_.-]+\.(?:png|jpe?g)$/.test(item.image))
+      throw new Error('Truck image must be a committed campaign asset');
+    const bytes = await fs.readFile(path.join(ROOT, item.image));
+    if (bytes.length > 5_500_000) throw new Error('Truck image exceeds X upload limit');
+    imageBase64 = bytes.toString('base64');
   }
   let result;
   try {

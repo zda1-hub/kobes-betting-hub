@@ -6,7 +6,7 @@ const path = require('node:path');
 const sharp = require('sharp');
 const { queue, schedule, due, validateItem, forbidden, dayNumber, mstStamp } = require('./road-to-truck-schedule');
 const { renderCard, renderDailyCard } = require('./road-to-truck-card');
-const { run, paidLeaderboard, enabled, processItem, postDaily } = require('./run-road-to-truck');
+const { run, paidLeaderboard, enabled, processItem, postDaily, sendX } = require('./run-road-to-truck');
 const { buildDaily, dayFromLaunch } = require('./truck-daily');
 
 test('active X templates fit after verified substitution; retired copy cannot pass', () => {
@@ -36,6 +36,41 @@ test('MST times map to UTC without DST and day numbers include Nov 19, Nov 25, D
   assert.equal(dayNumber('2026-11-19'), 1);
   assert.equal(dayNumber('2026-11-25'), 7);
   assert.equal(dayNumber('2026-12-10'), 22);
+});
+test('verified free-pick recap is due at 11 AM MST with its card and first reply', async () => {
+  const item = schedule('2026-11-20', 1).find(row => row.id === 'truck-free-pick-recap-2026-11-20');
+  assert.equal(item.scheduled_at, '2026-11-20T11:00:00-07:00');
+  assert.equal(new Date(item.scheduled_at).toISOString(), '2026-11-20T18:00:00.000Z');
+  assert.equal(item.image, 'assets/road_to_truck/free-picks-nov-17-18.jpg');
+  assert.equal(due([item], new Date('2026-11-20T17:59:59Z')).ready.length, 0);
+  assert.equal(due([item], new Date('2026-11-20T18:00:00Z')).ready.length, 1);
+  assert.match(item.text, /both got posted and graded/);
+  assert.match(item.first_reply, /401910003.*401910013/s);
+  validateItem(item, '26-17');
+  const card = await fs.readFile(path.join(__dirname, '..', item.image));
+  assert.ok(card.length > 10_000);
+});
+test('scheduled X recap passes the committed card bytes and first reply to the publisher', async () => {
+  const item = schedule('2026-11-20', 1).find(row => row.id === 'truck-free-pick-recap-2026-11-20');
+  let payload;
+  const env = { TRUCK_PUBLISHER_URL: 'https://publisher.test', ROAD_TO_TRUCK_SECRET: 'test',
+    DISCORD_TOKEN: 'test', AUDIT_CHANNEL_ID: '123456789012345678' };
+  const fetchImpl = async (url, options = {}) => {
+    const route = new URL(url).pathname;
+    if (route.endsWith('/x')) {
+      payload = JSON.parse(options.body);
+      return Response.json({ status: 'posted', post_id: '123456789012345679', reply_post_id: '123456789012345680' });
+    }
+    if (route.endsWith('/channels/123456789012345678'))
+      return Response.json({ id: '123456789012345678', guild_id: '1215407647155683358', type: 0,
+        permission_overwrites: [{ id: '1215407647155683358', type: 0, deny: String(1 << 10) }] });
+    return Response.json({ id: '123456789012345681' });
+  };
+  const result = await sendX(env, item, '26-17', fetchImpl);
+  assert.equal(result.status, 'posted');
+  assert.equal(payload.first_reply, item.first_reply);
+  assert.deepEqual(Buffer.from(payload.image_base64, 'base64'),
+    await fs.readFile(path.join(__dirname, '..', item.image)));
 });
 test('daily series extends beyond day seven and recurring referral source does not repeat within 14 days', () => {
   const items = schedule('2026-11-19', 40);
