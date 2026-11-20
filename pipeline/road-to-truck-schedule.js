@@ -1,5 +1,5 @@
 const queue = require('../content/road_to_truck.json');
-const { sportsbooks } = require('../content/truck_config.json');
+const { sportsbooks, referralRewardLine } = require('../content/truck_config.json');
 
 const DAY_MS = 86400000;
 const START = '2026-11-19';
@@ -17,8 +17,10 @@ function byId(id) { const item = queue.find(row => row.id === id); if (!item) th
 function renderText(text, record = FALLBACK_RECORD) { return text.replaceAll('{RECORD}', record); }
 function forbidden(text, { firstReply = false } = {}) {
   const value = String(text || '');
+  // The exact approved referral reward is the sole dollar-amount exception.
+  const checked = value.replaceAll(referralRewardLine, '');
   const terms = [/(?:^|\W)lock(?:$|\W)/i, /\bguaranteed\b/i, /\bprofit\b/i, /\bparlay\b/i, /\b\d+(?:\.\d+)?\s*(?:units?|u)\b/i, /\$/];
-  const blocked = terms.find(term => term.test(value));
+  const blocked = terms.find(term => term.test(checked));
   if (blocked) return `blocked term: ${blocked}`;
   const book = sportsbooks.find(name => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+')}\\b`, 'i').test(value));
   if (book) return `sportsbook: ${book}`;

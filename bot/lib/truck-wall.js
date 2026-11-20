@@ -54,6 +54,7 @@ function plan(guild) {
 }
 function explainer(spot,channelIds={}) {
   const mention=(name)=>channelIds[name]?`<#${channelIds[name]}>`:'#'+name;
+  const {referralRewardLine}=require('../../content/truck_config.json');
   // Attribution for Musk's updated timeline, not a KBH production guarantee:
   // https://x.com/elonmusk/status/2120565056429814073
   return new EmbedBuilder().setColor(0xff7a1a).setTitle('🛻 ROAD TO THE CYBERTRUCK')
@@ -64,7 +65,7 @@ function explainer(spot,channelIds={}) {
       '2. grab your link → kobesbettinghub.com/refer',
       '3. send it to people who actually bet props',
       '4. when they join VIP and stay past their first month, you level up',
-      'you also get the referral reward per program terms after their first payment.',
+      referralRewardLine,
       '**THE TIERS**',
       '🟤 1 referral → Rider: your name on the wall + a sticker spot on the truck',
       `🟠 3 referrals → Road Crew: bigger name, Road Crew role, access to ${mention('road-crew')} (road crew chat + truck updates + shoutouts)`,
@@ -85,7 +86,8 @@ function explainer(spot,channelIds={}) {
 }
 function announcement(channelId,spot=0) {
   // https://x.com/elonmusk/status/2120565056429814073
-  return `🛻 road to the cybertruck is LIVE. elon says production ends summer 2027, so we're moving now. refer people to VIP, get your name on the truck. tiers, rules and your link → ${channelId?`<#${channelId}>`:'#how-to-get-on-the-truck'}. ${spot===0?'we start at':'we are at'} spot ${spot} of 200. 21+ | not a guarantee`;
+  const {referralRewardLine}=require('../../content/truck_config.json');
+  return `🛻 road to the cybertruck is LIVE. elon says production ends summer 2027, so we're moving now. refer people to VIP, get your name on the truck.\n\n${referralRewardLine}\n\ntiers, rules and your link → ${channelId?`<#${channelId}>`:'#how-to-get-on-the-truck'}. ${spot===0?'we start at':'we are at'} spot ${spot} of 200. 21+ | not a guarantee`;
 }
 async function setup(guild,{env=process.env,dryRun=true}={}) {
   const preview=plan(guild);

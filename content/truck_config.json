@@ -4,5 +4,6 @@
     { "label": "Keep posting", "done": false },
     { "label": "Truck", "done": false }
   ],
+  "referralRewardLine": "you also get $20 for every referral who goes paid VIP, plus your name on the truck.",
   "sportsbooks": ["DraftKings", "FanDuel", "BetMGM", "Caesars", "BetRivers", "ESPN BET", "Hard Rock Bet", "Fanatics Sportsbook", "bet365"]
 }
