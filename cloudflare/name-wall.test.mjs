@@ -42,6 +42,17 @@ test('second payment qualifies, repeat is idempotent, cancellation demotes',asyn
   assert.equal(db.sqlite.prepare('SELECT tier FROM referral_tiers').get().tier,'none');
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM tier_events').get().n,2);db.close();
 });
+test('pre-launch paid VIPs advance progress without retroactive milestone or referral names',async()=>{
+  const db=database();await db.prepare('INSERT INTO name_wall_state VALUES(1,?,0,?)').bind(start,start).run();
+  await reconcile(db,{activePaidSpots:11,legacyPaidSpots:11,referrals:[]},now);
+  assert.equal((await snapshot(db)).spot,11);
+  assert.deepEqual((await snapshot(db)).rows,[]);
+  assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM wall_milestones').get().n,0);
+  await reconcile(db,{activePaidSpots:12,legacyPaidSpots:11,referrals:[]},now);
+  assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM wall_milestones').get().n,0);
+  assert.rejects(reconcile(db,{activePaidSpots:11,legacyPaidSpots:12,referrals:[]},now),/Invalid pre-launch/);
+  db.close();
+});
 test('refunds and duplicate customer attribution never count twice',async()=>{
   const db=database();await db.prepare('INSERT INTO name_wall_state VALUES(1,?,0,?)').bind(start,start).run();
   const first={...row(),secondPaidAt:'2026-12-19T00:00:00.000Z',refunded:true};

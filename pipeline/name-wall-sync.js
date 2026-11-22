@@ -13,8 +13,8 @@ async function api(env, action, body, fetchImpl = fetch) {
   return data;
 }
 async function sourceRows(pool, startedAt) {
-  // Both tables are written only after signed Stripe webhooks. No account or
-  // referral before activation can enter the wall, even if a later invoice pays.
+  // Both tables are written only after signed Stripe webhooks. Referral tiers
+  // still start at activation; the progress bar includes current paid VIPs.
   const referrals = await pool.query(`SELECT r.referred_stripe_customer_id AS "customerId",
       r.referred_subscription_id AS "subscriptionId", r.referrer_discord_user_id AS "referrerId",
       r.created_at AS "createdAt", r.first_paid_at AS "firstPaidAt",r.status_reason AS "statusReason",
@@ -35,15 +35,16 @@ async function sourceRows(pool, startedAt) {
     WHERE r.created_at >= $1 AND r.referrer_discord_user_id IS NOT NULL
     ORDER BY r.created_at, r.referred_stripe_customer_id LIMIT 2000`,[startedAt]);
   if (referrals.rows.length === 2000) throw new Error('Truck wall referral scan reached its 2000-row limit; pagination is required before syncing further.');
-  const spots = await pool.query(`SELECT COUNT(DISTINCT ms.stripe_customer_id)::int AS n
+  const spots = await pool.query(`SELECT COUNT(DISTINCT ms.stripe_customer_id)::int AS n,
+      COUNT(DISTINCT ms.stripe_customer_id) FILTER (WHERE ms.created_at < $1)::int AS legacy_n
     FROM membership_subscriptions ms JOIN membership_billing_events b
       ON b.stripe_subscription_id=ms.stripe_subscription_id AND b.event_type='invoice_paid'
-      AND b.amount_cents>0 AND b.occurred_at >= $1
+      AND b.amount_cents>0
     WHERE ms.status='active' AND ms.cancel_at_period_end=false AND ms.entitlement_blocked=false
-      AND ms.created_at >= $1
       AND NOT EXISTS(SELECT 1 FROM membership_billing_events x WHERE x.stripe_subscription_id=ms.stripe_subscription_id
         AND x.event_type IN ('refund','dispute'))`,[startedAt]);
-  return { referrals:referrals.rows, activePaidSpots:spots.rows[0]?.n || 0 };
+  return { referrals:referrals.rows, activePaidSpots:spots.rows[0]?.n || 0,
+    legacyPaidSpots:spots.rows[0]?.legacy_n || 0 };
 }
 async function sync({ env=process.env, database=null, fetchImpl=fetch, discordMember=null }={}) {
   if (!valid(env)) return {status:'disabled',writes:0};

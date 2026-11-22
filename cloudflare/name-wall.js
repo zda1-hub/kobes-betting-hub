@@ -41,6 +41,7 @@ async function reconcile(db, input, now = new Date()) {
   const started = Date.parse(current.started_at);
   const previousSpot=current.active_paid_spots;
   if (!Number.isInteger(input.activePaidSpots) || input.activePaidSpots < 0 || input.activePaidSpots > 100000) throw new Error('Invalid active paid spot count.');
+  if (input.legacyPaidSpots !== undefined && (!Number.isInteger(input.legacyPaidSpots) || input.legacyPaidSpots < 0 || input.legacyPaidSpots > input.activePaidSpots)) throw new Error('Invalid pre-launch paid spot count.');
   const changed = [];
   for (const row of input.referrals || []) {
     if (!/^cus_[A-Za-z0-9]+$/.test(row.customerId || '') || !/^\d{17,20}$/.test(row.referrerId || '') || Date.parse(row.createdAt) < started) continue;
@@ -89,7 +90,10 @@ async function reconcile(db, input, now = new Date()) {
   await db.prepare(`INSERT INTO wall_spot_daily(day,spot,observed_at) VALUES(?,?,?)
     ON CONFLICT(day) DO UPDATE SET spot=excluded.spot,observed_at=excluded.observed_at`)
     .bind(day,input.activePaidSpots,now.toISOString()).run();
-  for (const spot of MILESTONES) if (previousSpot < spot && input.activePaidSpots >= spot)
+  // Pre-launch paid VIPs move the progress bar, but must not fire a retroactive
+  // milestone post when the historic baseline is first included.
+  const milestoneFloor = Math.max(previousSpot, input.legacyPaidSpots || 0);
+  for (const spot of MILESTONES) if (milestoneFloor < spot && input.activePaidSpots >= spot)
     await db.prepare('INSERT OR IGNORE INTO wall_milestones VALUES(?,?)').bind(spot,now.toISOString()).run();
   const { results: pending } = await db.prepare('SELECT id,user_id,from_tier,to_tier,reason FROM tier_events WHERE notified_at IS NULL').all();
   return { spot: input.activePaidSpots, tierEvents: pending, changed: changed.length };
