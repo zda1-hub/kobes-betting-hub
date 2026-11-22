@@ -75,7 +75,7 @@ function explainer(spot,channelIds={}) {
       '/wallname <name>: set the name that goes on the truck (once, 20 chars, keep it clean)',
       '/wallhide /wallshow: hide or show your name publicly',
       '**PROGRESS**',
-      `live wall → kobesbettinghub.com/truck\nwe're at spot ${spot} of 200. every new paid VIP after launch moves the bar.`,
+      `live wall → kobesbettinghub.com/truck\nwe're at spot ${spot} of 200. every active paid VIP moves the bar.`,
       '**RULES**',
       '- only real paid VIP referrals count. trials don\'t. cancels/refunds before month 2 come off your count.',
       '- no self-referrals, no alt accounts. suspicious activity goes to staff review.',
