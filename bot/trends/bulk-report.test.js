@@ -16,6 +16,7 @@ test('calculated thresholds are labeled and window denominators reflect observed
     teamName: 'Celtics', opponentAbbr: 'NYK', stat: 'points', logs: games });
   assert.match(result.block, /Calc line \(no book line\)/);
   assert.match(result.block, /L5- 5\/5 ☘️  L10- 6\/6 ☘️  L20- 6\/6 ☘️/);
+  assert.match(result.block, /Season avg: 12\.7 Pts \(6 games\)/);
   assert.match(result.block, /Opposing team Pts rank: N\/A/);
   assert.match(result.block, /Opposing team rank vs position N\/A: N\/A/);
   assert.doesNotMatch(result.block, /-\d{3}/);
@@ -51,6 +52,18 @@ test('five observed games plus DNP are omitted; six observed games qualify', () 
   assert.ok(result);
   assert.equal(result.analysis.l20.sample, 6);
   assert.match(result.block, /L10- 6\/6/);
+  assert.match(result.block, /Season avg: 12\.0 Pts \(6 games\)/);
+});
+
+test('season average excludes DNPs and games without the selected stat', () => {
+  const games = logs([10, 20, 30, 40, 50, 60]);
+  games.push({ gameId: 'dnp', date: '2026-11-07', season: '2026',
+    status: 'final', participated: false, stats: { points: 1000 } });
+  games.push({ gameId: 'missing', date: '2026-11-08', season: '2026',
+    status: 'final', participated: true, stats: {} });
+  const result = buildResult({ sport: 'NBA', player: 'P', teamAbbr: 'BOS',
+    stat: 'points', logs: games, line: 9.5 });
+  assert.match(result.block, /Season avg: 35\.0 Pts \(6 games\)/);
 });
 
 test('one DM includes grouped results and footer; long reports split only at blocks', () => {

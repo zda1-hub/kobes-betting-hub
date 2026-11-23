@@ -25,6 +25,13 @@ function windowLine(name, window) {
   const high = window.sample > 0 && window.hitRate >= 0.8;
   return `${name}- ${window.hits}/${window.sample}${high ? ' ☘️' : ''}`;
 }
+function seasonAverageLine(season, stat) {
+  const sample = season?.sample;
+  const average = season?.average;
+  if (!Number.isInteger(sample) || sample <= 0 || !Number.isFinite(average))
+    return 'Season avg: unavailable';
+  return `Season avg: ${average.toFixed(1)} ${stat} (${sample} ${sample === 1 ? 'game' : 'games'})`;
+}
 function qualifies(analysis) {
   return analysis.l20?.sample >= MIN_OBSERVED_GAMES &&
     ['l5', 'l10', 'l20'].some(key => analysis[key]?.sample > 0 && analysis[key].hitRate >= 0.8);
@@ -56,6 +63,7 @@ function buildResult({ sport, player, teamAbbr, teamName, opponentAbbr, stat,
   const block = `${player} - *${teamAbbr}${teamName ? ` ${teamName}` : ''}* vs ${opponentAbbr || 'OPP N/A'}\n` +
     `Over ${threshold} ${statLabel(sport, stat)} ` +
     (hasRealOdds ? `(${odds > 0 ? '+' : ''}${odds})` : '(Calc line (no book line))') + '\n' +
+    `${seasonAverageLine(analysis.season, statLabel(sport, stat))}\n` +
     `${rate}\nOpposing team ${statLabel(sport, stat)} rank: ${teamMatchup}\n` +
     `Opposing team rank vs ${position || 'position N/A'}: ${positionMatchup}` +
     (dataDate ? ` · data ${dataDate}` : '') +
@@ -93,4 +101,4 @@ function formatReport(results) {
 }
 
 module.exports = { FOOTER, MIN_OBSERVED_GAMES, calcLine, statLabel, windowLine,
-  qualifies, matchupRank, buildResult, formatReport };
+  seasonAverageLine, qualifies, matchupRank, buildResult, formatReport };

@@ -1,7 +1,7 @@
 'use strict';
 
 const { TEAM_NAMES } = require('./nfl-auto');
-const { MIN_OBSERVED_GAMES } = require('./bulk-report');
+const { MIN_OBSERVED_GAMES, seasonAverageLine } = require('./bulk-report');
 
 const FOOTER = 'Research only, not a guarantee';
 const INSUFFICIENT_SAMPLE = `No qualifying trend: fewer than ${MIN_OBSERVED_GAMES} observed games.\n${FOOTER}`;
@@ -40,6 +40,7 @@ function formatMemberResult({ player, teamAbbr, teamName, stat, line, odds, odds
   const safe = value => String(value).replaceAll('*', '').replaceAll('@', '');
   return `${safe(player)} - *${safe(teamAbbr)} ${safe(teamName)}*\n` +
     `Over ${line} ${safe(stat)}${oddsText(odds, oddsSource)}\n` +
+    `${seasonAverageLine(analysis.season, safe(stat))}\n` +
     `${windowText('L5', analysis.l5)}\n${windowText('L10', analysis.l10)}\n` +
     `${windowText('L20', analysis.l20)}\n${FOOTER}`;
 }
