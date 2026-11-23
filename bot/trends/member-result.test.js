@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const { FOOTER, INSUFFICIENT_SAMPLE, windowText, formatMemberResult, nbaResult,
   nflResult } = require('./member-result');
 
-const analysis = { l5: { hits: 5, sample: 5 }, l10: { hits: 8, sample: 10 },
+const analysis = { season: { average: 4.25, sample: 16 },
+  l5: { hits: 5, sample: 5 }, l10: { hits: 8, sample: 10 },
   l20: { hits: 15, sample: 20 } };
 
 test('Kobe compact block has one player, verified Odds API price and 80 percent clovers only', () => {
@@ -12,6 +13,7 @@ test('Kobe compact block has one player, verified Odds API price and 80 percent 
     stat: 'assists', line: 2.5, offers: [{ odds: -300, sportsbook: 'BetRivers',
       sportsbookKey: 'betrivers' }], marketCheckedAt: '2026-11-16T19:00:00Z', analysis });
   assert.equal(text, `Payton Pritchard - *BOS Celtics*\nOver 2.5 Assists (-300)\n` +
+    `Season avg: 4.3 Assists (16 games)\n` +
     `L5- 5/5 ☘️\nL10- 8/10 ☘️\nL20- 15/20\n${FOOTER}`);
 });
 
@@ -33,6 +35,7 @@ test('NFL result uses roster team and only the actual quoted price', () => {
     offers: [{ odds: +120, sportsbook: 'DraftKings', sportsbookKey: 'draftkings' }],
     fetchedAt: '2026-11-16T19:00:00Z' } });
   assert.match(text, /^Josh Allen - \*BUF Bills\*\nOver 199\.5 Pass yds \(\+120\)/);
+  assert.match(text, /Season avg: 4\.3 Pass yds \(16 games\)/);
   assert.ok(text.endsWith(FOOTER));
 });
 
