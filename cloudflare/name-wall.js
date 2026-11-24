@@ -1,6 +1,6 @@
 const TIERS = [[25, 'Hood Club'], [10, 'Door Squad'], [3, 'Road Crew'], [1, 'Rider']];
 const MILESTONES = [10, 25, 50, 75, 100, 125, 150, 175, 200];
-const REQUIRED = ['name_wall_state', 'referral_tiers', 'tier_events', 'name_wall_optout', 'wall_referrals', 'wall_hood_reservations', 'wall_milestones', 'wall_abuse_flags', 'wall_setup_receipts'];
+const REQUIRED = ['name_wall_state', 'referral_tiers', 'tier_events', 'name_wall_optout', 'wall_referrals', 'wall_hood_reservations', 'wall_milestones', 'wall_abuse_flags', 'wall_setup_receipts', 'wall_paid_vips', 'wall_paid_vip_optin'];
 const phoenixDay = value => new Date(Date.parse(value) - 7 * 3600000).toISOString().slice(0, 10);
 const REJECT_NAME = /https?:|www\.|discord\.|\b(?:draftkings|fanduel|betmgm|caesars|betrivers|bet365|bitch|fuck|shit|nigg\w*|fagg\w*)\b/i;
 const enabled = env => env.NAME_WALL_ENABLED === 'true';
@@ -20,9 +20,21 @@ const qualifies = (row, now = Date.now()) => {
 async function schema(db) {
   const rows = await db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${REQUIRED.map(() => '?').join(',')})`)
     .bind(...REQUIRED).all();
-  if (rows.results.length !== REQUIRED.length) throw new Error('Run 002_truck_name_wall.sql before enabling the wall.');
+  if (rows.results.length !== REQUIRED.length) throw new Error('Run truck name-wall migrations through 004_truck_paid_vip_names.sql before enabling the wall.');
 }
 async function state(db) { return db.prepare('SELECT * FROM name_wall_state WHERE id=1').first(); }
+async function paidVipRows(db) {
+  const {results}=await db.prepare(`SELECT p.first_paid_at,p.display_name,
+    t.display_name AS chosen_name,t.name_set_at,o.user_id AS hidden,
+    v.opted_in_at,ROW_NUMBER() OVER (ORDER BY p.first_paid_at,p.customer_id) AS ordinal
+    FROM wall_paid_vips p LEFT JOIN wall_paid_vip_optin v ON v.user_id=p.discord_id
+    LEFT JOIN referral_tiers t ON t.user_id=p.discord_id
+    LEFT JOIN name_wall_optout o ON o.user_id=p.discord_id
+    ORDER BY p.first_paid_at DESC,p.customer_id DESC`).all();
+  return results.map(row=>({name:row.opted_in_at&&!row.hidden
+    ?(row.name_set_at?row.chosen_name:row.display_name)||`member #${row.ordinal}`
+    :`member #${row.ordinal}`,firstPaidAt:row.first_paid_at,optedInAt:row.opted_in_at}));
+}
 async function snapshot(db) {
   const current = await state(db);
   if (!current) return { startedAt: null, spot: 0, rows: [] };
@@ -42,6 +54,24 @@ async function reconcile(db, input, now = new Date()) {
   const previousSpot=current.active_paid_spots;
   if (!Number.isInteger(input.activePaidSpots) || input.activePaidSpots < 0 || input.activePaidSpots > 100000) throw new Error('Invalid active paid spot count.');
   if (input.legacyPaidSpots !== undefined && (!Number.isInteger(input.legacyPaidSpots) || input.legacyPaidSpots < 0 || input.legacyPaidSpots > input.activePaidSpots)) throw new Error('Invalid pre-launch paid spot count.');
+  if (!Array.isArray(input.activePaidMembers) || input.activePaidMembers.length!==input.activePaidSpots)
+    throw new Error('Paid VIP identity rows must match the verified spot count.');
+  const ids=new Set();
+  for(const row of input.activePaidMembers) {
+    if(!/^cus_[A-Za-z0-9]+$/.test(row.customerId||'') || ids.has(row.customerId) || !Number.isFinite(Date.parse(row.firstPaidAt)))
+      throw new Error('Invalid or duplicate paid VIP source row.');
+    ids.add(row.customerId);
+  }
+  for(const row of input.activePaidMembers) {
+    let displayName=null;
+    try {if(row.displayName) displayName=safeName(row.displayName);} catch { /* never publish an unsafe Discord name */ }
+    await db.prepare(`INSERT INTO wall_paid_vips(customer_id,discord_id,display_name,first_paid_at,updated_at)
+      VALUES(?,?,?,?,?) ON CONFLICT(customer_id) DO UPDATE SET discord_id=excluded.discord_id,
+      display_name=excluded.display_name,first_paid_at=excluded.first_paid_at,updated_at=excluded.updated_at`)
+      .bind(row.customerId,/^\d{17,20}$/.test(row.discordId||'')?row.discordId:null,displayName,row.firstPaidAt,now.toISOString()).run();
+  }
+  if (ids.size) await db.prepare(`DELETE FROM wall_paid_vips WHERE customer_id NOT IN (${[...ids].map(()=>'?').join(',')})`).bind(...ids).run();
+  else await db.prepare('DELETE FROM wall_paid_vips').run();
   const changed = [];
   for (const row of input.referrals || []) {
     if (!/^cus_[A-Za-z0-9]+$/.test(row.customerId || '') || !/^\d{17,20}$/.test(row.referrerId || '') || Date.parse(row.createdAt) < started) continue;
@@ -123,14 +153,10 @@ async function handle(request, env) {
     const prior=await env.DB.prepare('SELECT spot FROM wall_spot_daily WHERE day=?').bind(yesterday).first();
     const since=new Date(now.getTime()-86400000).toISOString();
     const week=new Date(now.getTime()-7*86400000).toISOString();
-    const {results:names}=await env.DB.prepare(`SELECT DISTINCT t.user_id,
-      CASE WHEN o.user_id IS NULL THEN t.display_name ELSE 'anonymous rider' END AS name,
-      e.created_at FROM tier_events e JOIN referral_tiers t ON t.user_id=e.user_id
-      LEFT JOIN name_wall_optout o ON o.user_id=t.user_id
-      WHERE e.from_tier='none' AND e.to_tier!='none' AND e.created_at>=? AND t.qualified_count>0
-      ORDER BY e.created_at DESC LIMIT 3`).bind(since).all();
+    const paid=await paidVipRows(env.DB);
+    const names=paid.filter(row=>Date.parse(row.firstPaidAt)>=Date.parse(since)||Date.parse(row.optedInAt||'')>=Date.parse(since));
     const top=await env.DB.prepare(`SELECT t.user_id,
-      CASE WHEN o.user_id IS NULL THEN t.display_name ELSE 'anonymous rider' END AS name,
+      CASE WHEN o.user_id IS NULL THEN t.display_name ELSE NULL END AS name,
       COUNT(*) AS n FROM wall_referrals r JOIN referral_tiers t ON t.user_id=r.referrer_id
       LEFT JOIN name_wall_optout o ON o.user_id=t.user_id
       WHERE r.active=1 AND r.canceled=0 AND r.refunded=0 AND r.disqualified=0
@@ -141,7 +167,8 @@ async function handle(request, env) {
       .bind(week,week).first();
     return json({spot:current.active_paid_spots,startedAt:current.started_at,
       verifiedAt:current.updated_at,today,previousSpot:prior?.spot ?? null,
-      newNames:names.map(row=>row.name),topRef:top?.name || null});
+      newNames:names.map(row=>row.name),wallNames:paid.map(row=>row.name),
+      topRef:top&&Number(top.n)>0?top.name:null,topRefCount:top?.n||0});
   }
   if (url.pathname === '/api/admin/truck/activate' && request.method === 'POST') {
     const now = new Date().toISOString();
@@ -215,8 +242,13 @@ async function handle(request, env) {
       const name = safeName(body.name);
       await env.DB.prepare('UPDATE referral_tiers SET display_name=?,name_set_at=? WHERE user_id=? AND name_set_at IS NULL')
         .bind(name,new Date().toISOString(),body.userId).run();
-    } else if (body.action === 'hide') await env.DB.prepare('INSERT OR IGNORE INTO name_wall_optout VALUES(?)').bind(body.userId).run();
-    else if (body.action === 'show') await env.DB.prepare('DELETE FROM name_wall_optout WHERE user_id=?').bind(body.userId).run();
+    } else if (body.action === 'hide') {
+      await env.DB.prepare('INSERT OR IGNORE INTO name_wall_optout VALUES(?)').bind(body.userId).run();
+      await env.DB.prepare('DELETE FROM wall_paid_vip_optin WHERE user_id=?').bind(body.userId).run();
+    } else if (body.action === 'show') {
+      await env.DB.prepare('DELETE FROM name_wall_optout WHERE user_id=?').bind(body.userId).run();
+      await env.DB.prepare('INSERT OR IGNORE INTO wall_paid_vip_optin VALUES(?,?)').bind(body.userId,new Date().toISOString()).run();
+    }
     else return json({error:'Invalid action'},400);
     return json({ok:true});
   }

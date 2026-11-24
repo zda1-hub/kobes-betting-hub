@@ -8,6 +8,7 @@ function database() {
   const sqlite=new DatabaseSync(':memory:');
   sqlite.exec(readFileSync(new URL('./migrations/002_truck_name_wall.sql',import.meta.url),'utf8'));
   sqlite.exec(readFileSync(new URL('./migrations/003_truck_daily.sql',import.meta.url),'utf8'));
+  sqlite.exec(readFileSync(new URL('./migrations/004_truck_paid_vip_names.sql',import.meta.url),'utf8'));
   const wrap=(sql,args=[])=>({bind(...values){return wrap(sql,values)},
     async run(){const result=sqlite.prepare(sql).run(...args);return {meta:{changes:Number(result.changes)}}},
     async first(){return sqlite.prepare(sql).get(...args)||null},
@@ -19,45 +20,48 @@ const now=new Date('2026-12-21T01:00:00.000Z');
 const row=(id='cus_abc')=>({customerId:id,subscriptionId:'sub_abc',referrerId:'123456789012345678',
   createdAt:'2026-11-19T02:00:00.000Z',firstPaidAt:'2026-11-20T00:00:00.000Z',secondPaidAt:null,
   active:true,canceled:false,refunded:false,displayName:'Example Rider'});
+const paid=n=>Array.from({length:n},(_,i)=>({customerId:`cus_paid${i}`,discordId:'123456789012345678',
+  displayName:'Example VIP',firstPaidAt:'2026-11-20T00:00:00Z'}));
+const input=(n,rest={})=>({activePaidSpots:n,activePaidMembers:paid(n),...rest});
 
 test('wall starts empty, ignores historical referrals, and requires a paid month',async()=>{
   const db=database();await db.prepare('INSERT INTO name_wall_state VALUES(1,?,0,?)').bind(start,start).run();
   assert.deepEqual(await snapshot(db),{startedAt:start,spot:0,rows:[]});
   const old={...row('cus_old'),createdAt:'2026-11-18T23:00:00.000Z'};
-  await reconcile(db,{activePaidSpots:0,referrals:[old]},now);
+  await reconcile(db,input(0,{referrals:[old]}),now);
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM wall_referrals').get().n,0);
-  const fresh=row();await reconcile(db,{activePaidSpots:1,referrals:[fresh]},new Date('2026-11-25T00:00:00Z'));
+  const fresh=row();await reconcile(db,input(1,{referrals:[fresh]}),new Date('2026-11-25T00:00:00Z'));
   assert.equal((await snapshot(db)).rows.length,0);
-  await reconcile(db,{activePaidSpots:1,referrals:[fresh]},now);
+  await reconcile(db,input(1,{referrals:[fresh]}),now);
   assert.deepEqual((await snapshot(db)).rows,[{name:'Example Rider',tier:'Rider'}]);db.close();
 });
 test('second payment qualifies, repeat is idempotent, cancellation demotes',async()=>{
   const db=database();await db.prepare('INSERT INTO name_wall_state VALUES(1,?,0,?)').bind(start,start).run();
   const paid={...row(),secondPaidAt:'2026-12-19T00:00:00.000Z'};
-  await reconcile(db,{activePaidSpots:1,referrals:[paid]},now);
-  await reconcile(db,{activePaidSpots:1,referrals:[paid]},now);
+  await reconcile(db,input(1,{referrals:[paid]}),now);
+  await reconcile(db,input(1,{referrals:[paid]}),now);
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM wall_referrals').get().n,1);
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM tier_events').get().n,1);
-  await reconcile(db,{activePaidSpots:0,referrals:[{...paid,active:false,canceled:true}]},now);
+  await reconcile(db,input(0,{referrals:[{...paid,active:false,canceled:true}]}),now);
   assert.equal(db.sqlite.prepare('SELECT tier FROM referral_tiers').get().tier,'none');
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM tier_events').get().n,2);db.close();
 });
 test('pre-launch paid VIPs advance progress without retroactive milestone or referral names',async()=>{
   const db=database();await db.prepare('INSERT INTO name_wall_state VALUES(1,?,0,?)').bind(start,start).run();
-  await reconcile(db,{activePaidSpots:11,legacyPaidSpots:11,referrals:[]},now);
+  await reconcile(db,input(11,{legacyPaidSpots:11,referrals:[]}),now);
   assert.equal((await snapshot(db)).spot,11);
   assert.deepEqual((await snapshot(db)).rows,[]);
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM wall_milestones').get().n,0);
-  await reconcile(db,{activePaidSpots:12,legacyPaidSpots:11,referrals:[]},now);
+  await reconcile(db,input(12,{legacyPaidSpots:11,referrals:[]}),now);
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM wall_milestones').get().n,0);
-  assert.rejects(reconcile(db,{activePaidSpots:11,legacyPaidSpots:12,referrals:[]},now),/Invalid pre-launch/);
+  assert.rejects(reconcile(db,input(11,{legacyPaidSpots:12,referrals:[]}),now),/Invalid pre-launch/);
   db.close();
 });
 test('refunds and duplicate customer attribution never count twice',async()=>{
   const db=database();await db.prepare('INSERT INTO name_wall_state VALUES(1,?,0,?)').bind(start,start).run();
   const first={...row(),secondPaidAt:'2026-12-19T00:00:00.000Z',refunded:true};
-  await reconcile(db,{activePaidSpots:0,referrals:[first]},now);
-  await reconcile(db,{activePaidSpots:0,referrals:[{...first,refunded:false,referrerId:'999999999999999999'}]},now);
+  await reconcile(db,input(0,{referrals:[first]}),now);
+  await reconcile(db,input(0,{referrals:[{...first,refunded:false,referrerId:'999999999999999999'}]}),now);
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM wall_referrals').get().n,1);
   assert.equal(db.sqlite.prepare('SELECT referrer_id FROM wall_referrals').get().referrer_id,first.referrerId);
   assert.equal(db.sqlite.prepare('SELECT tier FROM referral_tiers').get().tier,'none');db.close();
@@ -77,20 +81,46 @@ test('30-day rule excludes DNP-style unpaid states, cancellation and refund',()=
   assert.equal(qualifies({...paid,active:false},now.getTime()),false);
   assert.equal(qualifies({...paid,refunded:true},now.getTime()),false);
 });
-test('daily snapshot uses verified spot, prior day, and hidden names',async()=>{
+test('daily snapshot uses paid VIP count, opt-in names and anonymous slots',async()=>{
   const db=database();
   const current=new Date(), yesterday=new Date(current.getTime()-86400000);
   const priorDay=new Date(yesterday.getTime()-7*3600000).toISOString().slice(0,10);
-  await db.prepare('INSERT INTO name_wall_state VALUES(1,?,?,?)').bind(start,7,current.toISOString()).run();
+  await db.prepare('INSERT INTO name_wall_state VALUES(1,?,?,?)').bind(start,2,current.toISOString()).run();
   await db.prepare('INSERT INTO wall_spot_daily VALUES(?,?,?)').bind(priorDay,8,yesterday.toISOString()).run();
+  await db.prepare('INSERT INTO wall_paid_vips VALUES(?,?,?,?,?)').bind('cus_a','123456789012345678','Visible VIP',current.toISOString(),current.toISOString()).run();
+  await db.prepare('INSERT INTO wall_paid_vips VALUES(?,?,?,?,?)').bind('cus_b','999999999999999999','Private VIP',current.toISOString(),current.toISOString()).run();
+  await db.prepare('INSERT INTO wall_paid_vip_optin VALUES(?,?)').bind('123456789012345678',current.toISOString()).run();
   await db.prepare("INSERT INTO referral_tiers(user_id,discord_id,display_name,qualified_count,tier,joined_at,updated_at) VALUES(?,?,?,1,'Rider',?,?)")
     .bind('123456789012345678','123456789012345678','Private Name',start,current.toISOString()).run();
-  await db.prepare('INSERT INTO name_wall_optout VALUES(?)').bind('123456789012345678').run();
   await db.prepare('INSERT INTO tier_events(id,user_id,from_tier,to_tier,reason,created_at) VALUES(?,?,?,?,?,?)')
     .bind('evt1','123456789012345678','none','Rider','qualified_paid_referral',current.toISOString()).run();
   const res=await handle(new Request('https://example.test/api/admin/truck/daily',{headers:{authorization:'Bearer test'}}),
     {DB:db,ROAD_TO_TRUCK_SECRET:'test',NAME_WALL_ENABLED:'true'});
   const body=await res.json();
-  assert.equal(body.spot,7);assert.equal(body.previousSpot,8);
-  assert.deepEqual(body.newNames,['anonymous rider']);db.close();
+  assert.equal(body.spot,2);assert.equal(body.previousSpot,8);
+  assert.deepEqual(body.wallNames,['member #2','Visible VIP']);
+  assert.deepEqual(body.newNames,['member #2','Visible VIP']);
+  assert.equal(JSON.stringify(body).includes('Private VIP'),false);
+  db.close();
+});
+test('paid VIP visibility follows wallshow and wallhide without changing the paid spot count',async()=>{
+  const db=database();
+  const current=new Date().toISOString();
+  const userId='123456789012345678';
+  await db.prepare('INSERT INTO name_wall_state VALUES(1,?,?,?)').bind(start,1,current).run();
+  await db.prepare('INSERT INTO wall_paid_vips VALUES(?,?,?,?,?)').bind('cus_a',userId,'Discord VIP',current,current).run();
+  const env={DB:db,ROAD_TO_TRUCK_SECRET:'test',NAME_WALL_ENABLED:'true'};
+  const daily=async()=> (await handle(new Request('https://example.test/api/admin/truck/daily',
+    {headers:{authorization:'Bearer test'}}),env)).json();
+  const action=async value=>handle(new Request('https://example.test/api/admin/truck/user',
+    {method:'POST',headers:{authorization:'Bearer test','content-type':'application/json'},
+      body:JSON.stringify({userId,action:value})}),env);
+  assert.deepEqual((await daily()).wallNames,['member #1']);
+  assert.equal((await action('show')).status,200);
+  assert.deepEqual((await daily()).wallNames,['Discord VIP']);
+  assert.equal((await action('hide')).status,200);
+  const hidden=await daily();
+  assert.equal(hidden.spot,1);
+  assert.deepEqual(hidden.wallNames,['member #1']);
+  db.close();
 });

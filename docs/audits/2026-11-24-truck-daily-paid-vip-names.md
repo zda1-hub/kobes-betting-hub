@@ -1,0 +1,11 @@
+# Daily truck card: paid VIP names
+
+Requested: explain the jump to spot 11, show Discord names for paying VIPs when publicly opted in, vary daily copy, and skip unchanged days. This branch is a review-only PR; it is not deployed.
+
+Before: the progress count came from `membership_subscriptions` joined to positive `invoice_paid` events, counting distinct active Stripe customers with no cancellation, entitlement block, refund, or dispute. This includes paid VIPs from before the truck campaign. The daily card got names from a separate qualified-referrer table, which starts at zero, so it could show 11 spots and no names. It also printed `top referrer: none yet` and repeated an empty-wall caption.
+
+After: the sync fetches the same paid Stripe customers that make up the count, looks up linked Discord display names, and stores them in a private D1 table. `/wallshow` explicitly opts a member's Discord name into public display; `/wallhide` removes that permission. Every other paid customer appears as `member #N`. The card displays the newest eight labels and `+N more`, labels the count as **active paid VIPs**, and omits the top-referrer line unless a verified qualified referral exists. The daily X caption rotates through twelve hooks; the next hook is not reused within seven days. No new paid VIP or opt-in in 24 hours means no daily X or Discord card. Referral qualification, payouts, membership, and the public tier wall remain unchanged.
+
+Affected files: `pipeline/name-wall-sync.js`, `cloudflare/name-wall.js`, migration `004_truck_paid_vip_names.sql`, `pipeline/truck-daily.js`, `pipeline/road-to-truck-card.js`, `pipeline/run-road-to-truck.js`, `content/truck_daily_hooks.json`, and tests.
+
+Verification: target unit/integration tests and local PNG inspection. `npm run truck:dry-run` writes a local PNG and text report when it can read the deployed private daily snapshot, with zero external writes. Before this PR is deployed, production's daily API cannot return the new paid-name field. No fabricated display names may be presented as live; a locally populated image is visual layout evidence only. Production deployment and live-data preview remain pending review and migration.

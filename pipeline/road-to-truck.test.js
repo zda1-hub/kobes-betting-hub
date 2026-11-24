@@ -7,7 +7,7 @@ const sharp = require('sharp');
 const { queue, schedule, due, validateItem, forbidden, dayNumber, mstStamp } = require('./road-to-truck-schedule');
 const { renderCard, renderDailyCard } = require('./road-to-truck-card');
 const { run, paidLeaderboard, enabled, processItem, postDaily, sendX } = require('./run-road-to-truck');
-const { buildDaily, dayFromLaunch } = require('./truck-daily');
+const { buildDaily, dayFromLaunch, hookForDate } = require('./truck-daily');
 
 test('active X templates fit after verified substitution; retired copy cannot pass', () => {
   for (const item of queue.filter(row => row.platform === 'x' && row.recurrence === 'referral_template')) {
@@ -146,43 +146,45 @@ test('daily card requires the credited real photo and uses the launch day',async
   const temp=await fs.mkdtemp(path.join(os.tmpdir(),'kbh-truck-daily-'));
   try {
     await assert.rejects(()=>renderDailyCard({day:1,spot:0,photoPath:path.join(temp,'missing.jpg')}),/ENOENT/);
-    const card=await renderDailyCard({day:2,spot:7,newNames:['Rider One'],topRef:'Rider One'});
+    const card=await renderDailyCard({day:2,spot:7,wallNames:['Rider One',...Array.from({length:6},(_,i)=>`member #${i+2}`)],topRef:'Rider One'});
     assert.equal(card.spot,7);
     assert.equal(card.day,2);
+    assert.equal(card.visibleNames.length,7);
     assert.equal((await sharp(card.png).metadata()).width,1080);
   } finally { await fs.rm(temp,{recursive:true,force:true}); }
 });
-test('daily caption uses no-name fallback and neutral copy when spot falls',()=>{
-  const base={spot:0,startedAt:'2026-11-18T17:00:00Z',verifiedAt:'2026-11-20T17:00:00Z',newNames:[],topRef:null};
+test('daily caption skips no-change days and rotates hooks without repeats inside seven days',()=>{
+  const base={spot:2,startedAt:'2026-11-18T17:00:00Z',verifiedAt:'2026-11-20T17:00:00Z',
+    wallNames:['Rider One','member #2'],newNames:[],topRef:null,topRefCount:0};
   assert.equal(dayFromLaunch(base.startedAt,'2026-11-19'),1);
   assert.equal(dayFromLaunch(base.startedAt,'2026-11-20'),2);
   assert.equal(dayFromLaunch(base.startedAt,'2026-11-21'),3);
   const empty=buildDaily(base,'2026-11-20');
   assert.equal(empty.day,2);
-  assert.match(empty.text,/who's first on the wall/);
-  assert.equal(empty.sourceId,'truck-daily-empty-wall');
-  assert.doesNotMatch(empty.text,/https?:\/\//);
-  const later=buildDaily({...base,spot:7},'2026-11-20');
-  assert.match(later.text,/who's next on the wall/);
-  assert.equal(later.sourceId,'truck-daily-no-names');
-  const down=buildDaily({...base,spot:7,previousSpot:8},'2026-11-20');
-  assert.equal(down.neutral,true);
-  assert.match(down.text,/lower than yesterday/);
+  assert.match(empty.skipReason,/no new paid VIP names/);
+  const changed=buildDaily({...base,newNames:['Rider One']},'2026-11-20');
+  assert.match(changed.text,/Rider One/);
+  assert.match(changed.text,/2 active paid vip spots/);
+  assert.ok(changed.text.endsWith('21+ | not a guarantee'));
+  assert.doesNotMatch(changed.text,/\$|https?:\/\//);
+  const indices=Array.from({length:7},(_,i)=>hookForDate(`2026-11-${String(20+i).padStart(2,'0')}`).index);
+  assert.equal(new Set(indices).size,7);
 });
 test('daily dry run makes no external writes',async()=>{
   const calls=[];
   const fetchImpl=async(url,options={})=>{
     calls.push(options.method||'GET');
-    return Response.json({spot:0,startedAt:'2026-11-19T17:00:00Z',verifiedAt:'2026-11-20T17:00:00Z',previousSpot:0,newNames:[],topRef:null});
+    return Response.json({spot:1,startedAt:'2026-11-19T17:00:00Z',verifiedAt:'2026-11-20T17:00:00Z',
+      previousSpot:0,wallNames:['Rider One'],newNames:['Rider One'],topRef:null,topRefCount:0});
   };
   const result=await run({env:{TRUCK_PUBLISHER_URL:'https://publisher.test',ROAD_TO_TRUCK_SECRET:'test'},
     now:new Date('2026-11-20T17:00:00Z'),fetchImpl,dryRun:true});
   assert.equal(result.externalWrites,0);
-  assert.match(result.output,/First scheduled card \(2026-11-21 10:00 MST\)/);
-  assert.match(result.output,/who's first on the wall\?/);
+  assert.match(result.output,/Today's preview card \(2026-11-20\)/);
+  assert.match(result.output,/Rider One/);
   assert.deepEqual(calls,['GET']);
   assert.ok(result.imagePath);
-  await fs.rm(result.imagePath,{force:true});
+  await fs.rm(result.imagePath,{force:true});await fs.rm(result.reportPath,{force:true});
 });
 test('daily path sends one verified image to X and the truck wall and edits the guide',async()=>{
   const calls=[];
@@ -199,7 +201,7 @@ test('daily path sends one verified image to X and the truck wall and edits the 
     const route=new URL(url).pathname,method=options.method||'GET';
     calls.push(`${method} ${route}`);
     const body=route.endsWith('/daily')?{spot:3,previousSpot:3,startedAt:'2026-11-18T17:00:00Z',
-      verifiedAt:now,newNames:['Rider One'],topRef:'Rider One'}
+      verifiedAt:now,wallNames:['Rider One','member #2','member #3'],newNames:['Rider One'],topRef:'Rider One',topRefCount:1}
       :route.includes('/receipt')&&method==='GET'?{receipt:null}
       :route.includes('/receipt')?{claimed:true}
       :route==='/api/v10/guilds/1215407647155683358/channels'?channels
@@ -219,4 +221,25 @@ test('daily path sends one verified image to X and the truck wall and edits the 
   assert.ok(calls.includes('POST /api/v10/channels/222222222222222222/messages'));
   assert.ok(calls.includes('PATCH /api/v10/channels/333333333333333333/messages/444444444444444444'));
   assert.ok(calls.includes('PUT /assets/road_to_truck/daily-2026-11-19.png'));
+});
+test('daily path records a skip and makes no X or Discord post without new names',async()=>{
+  const calls=[];
+  const env={TRUCK_PUBLISHER_URL:'https://publisher.test',ROAD_TO_TRUCK_SECRET:'test'};
+  const fetchImpl=async(url,options={})=>{
+    const route=new URL(url).pathname;
+    calls.push(`${options.method||'GET'} ${route}`);
+    return Response.json(route.endsWith('/daily')
+      ?{spot:1,startedAt:'2026-11-18T17:00:00Z',verifiedAt:new Date().toISOString(),
+        wallNames:['member #1'],newNames:[],topRef:null,topRefCount:0}
+      :route==='/api/v10/guilds/1215407647155683358/channels'?
+        [{id:'111111111111111111',name:'🛻 ROAD TO THE TRUCK',type:4},
+          {id:'222222222222222222',name:'truck-wall',type:0,parent_id:'111111111111111111'},
+          {id:'333333333333333333',name:'how-to-get-on-the-truck',type:0,parent_id:'111111111111111111'}]
+      :route.includes('/receipt')&&(!options.method||options.method==='GET')?{receipt:{id:'already_updated'}}
+      :{status:'skipped'});
+  };
+  const result=await postDaily(env,{scheduled_at:'2026-11-24T10:00:00-07:00'},fetchImpl);
+  assert.equal(result.status,'skipped_no_new_names');
+  assert.equal(calls.filter(call=>call==='POST /api/admin/road-to-truck/skip').length,2);
+  assert.ok(!calls.some(call=>call.includes('/messages')||call.endsWith('/x')||call.includes('/assets/')));
 });
