@@ -6,6 +6,7 @@
   "scripts": {
     "build:site": "node scripts/prepare-public-site.mjs",
     "bot": "node bot/index.js",
+    "arb:dry-run": "node scripts/arb-alert-dry-run.js",
     "register:commands": "node bot/register-commands.js",
     "welcome:dry-run": "node bot/member-welcome-setup.js --dry-run",
     "collect:x": "node pipeline/collect-x.js",

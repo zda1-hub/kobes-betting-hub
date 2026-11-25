@@ -26,19 +26,21 @@ test('scans football and baseball sport feeds by default', () => {
 });
 
 const event = { id: 'game-1', sport_title: 'NBA', away_team: 'Away', home_team: 'Home', commence_time: '2026-09-24T01:00:00Z', bookmakers: [
-  { key: 'fanduel', title: 'FanDuel', last_update: '2026-09-23T17:59:00Z', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.2 }, { name: 'Home', price: 1.7 }] }] },
-  { key: 'draftkings', title: 'DraftKings', last_update: '2026-09-23T17:59:00Z', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.0 }, { name: 'Home', price: 2.2 }] }] }
+  { key: 'fanduel', title: 'FanDuel', last_update: '2026-09-23T17:59:00Z', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.05 }, { name: 'Home', price: 1.7 }] }] },
+  { key: 'draftkings', title: 'DraftKings', last_update: '2026-09-23T17:59:00Z', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.0 }, { name: 'Home', price: 2.05 }] }] }
 ] };
 
 test('finds a two-book arbitrage and produces a balanced $1,000 example', () => {
   const [opportunity] = findArbitrage([event], { minimumEdgePercent: 2, bankroll: 1000 });
-  assert.ok(opportunity.edgePercent > 9);
+  assert.ok(opportunity.edgePercent > 2 && opportunity.edgePercent < 5);
   assert.equal(Math.round(opportunity.legs.reduce((sum, leg) => sum + leg.stake, 0)), 1000);
   assert.equal(opportunity.legs[0].book, 'fanduel');
   assert.equal(opportunity.legs[1].book, 'draftkings');
   assert.match(alertDescription(opportunity), /Total example: \*\*\$1000\.00\*\*/);
   assert.doesNotMatch(alertDescription(opportunity), /paper test/i);
   assert.match(alertDescription(opportunity), /AWAITING KOBE APPROVAL/);
+  assert.match(alertDescription(opportunity), /Total implied: \*\*97\.56%/);
+  assert.match(alertDescription(opportunity), /Quote 1 age:/);
 });
 
 test('a deleted optional archive does not stop live arbitrage scans', async () => {
@@ -68,8 +70,8 @@ test('a deleted optional archive does not stop live arbitrage scans', async () =
 test('finds a cross-book edge when one book has the highest price on both sides', () => {
   const oneEvent = structuredClone(event);
   oneEvent.bookmakers = [
-    { key: 'fanduel', title: 'FanDuel', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.2 }, { name: 'Home', price: 2.2 }] }] },
-    { key: 'draftkings', title: 'DraftKings', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.05 }, { name: 'Home', price: 2.05 }] }] }
+    { key: 'fanduel', title: 'FanDuel', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.04 }, { name: 'Home', price: 2.04 }] }] },
+    { key: 'draftkings', title: 'DraftKings', markets: [{ key: 'h2h', outcomes: [{ name: 'Away', price: 2.02 }, { name: 'Home', price: 2.02 }] }] }
   ];
   const [opportunity] = findArbitrage([oneEvent], { minimumEdgePercent: 1 });
   assert.ok(opportunity);
@@ -95,7 +97,7 @@ test('uses the market quote timestamp when the bookmaker timestamp is stale', as
   await monitor.stop();
   assert.equal(result.opportunityCount, 1);
   assert.equal(cards.length, 1);
-  assert.match(cards[0].embeds[0].description, /Quote 1 updated:/);
+  assert.match(cards[0].embeds[0].description, /Quote 1 age: \*\*60s/);
 });
 
 test('uses a fresh second-best price when the top bookmaker quote is stale', async () => {
@@ -104,7 +106,7 @@ test('uses a fresh second-best price when the top bookmaker quote is stale', asy
   current.bookmakers[0].markets[0].last_update = '2026-09-23T17:40:00Z';
   current.bookmakers[1].markets[0].last_update = '2026-09-23T17:59:00Z';
   current.bookmakers.push({ key: 'betmgm', title: 'BetMGM', markets: [{ key: 'h2h',
-    last_update: '2026-09-23T17:59:00Z', outcomes: [{ name: 'Away', price: 2.15 }, { name: 'Home', price: 1.7 }] }] });
+    last_update: '2026-09-23T17:59:00Z', outcomes: [{ name: 'Away', price: 2.07 }, { name: 'Home', price: 1.7 }] }] });
   const cards = [];
   const reviewChannel = { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' },
     send: async payload => { cards.push(payload); return { id: 'card', edit: async () => {} }; } };
@@ -125,6 +127,63 @@ test('rejects non-arbitrage, same-book, draw markets and sub-threshold edges', (
   const draw = structuredClone(event); draw.bookmakers[0].markets[0].outcomes.push({ name: 'Draw', price: 3 });
   assert.equal(findArbitrage([draw]).length, 0);
   assert.equal(findArbitrage([event], { minimumEdgePercent: 20 }).length, 0);
+});
+
+test('rejects the Nov 24 Eagles/Cowboys 2.88 quote and every implausible market case', () => {
+  const now=new Date('2026-11-24T18:00:00Z');
+  const make=(awayPrice,homePrice)=>({id:'eagles-cowboys',sport_key:'americanfootball_nfl',
+    away_team:'Philadelphia Eagles',home_team:'Dallas Cowboys',commence_time:'2026-11-25T01:00:00Z',
+    bookmakers:[
+      {key:'book-a',title:'Book A',markets:[{key:'h2h',last_update:'2026-11-24T17:59:30Z',
+        outcomes:[{name:'Philadelphia Eagles',price:awayPrice},{name:'Dallas Cowboys',price:1.1}]}]},
+      {key:'book-b',title:'Book B',markets:[{key:'h2h',last_update:'2026-11-24T17:59:30Z',
+        outcomes:[{name:'Philadelphia Eagles',price:1.1},{name:'Dallas Cowboys',price:homePrice}]}]}
+    ]});
+  const check=(sample,expected)=>{
+    const rejections=[];
+    assert.equal(findArbitrage([sample],{now,freshOnly:true,minimumEdgePercent:0,rejections}).length,0);
+    assert.equal(rejections[0]?.reason,expected);
+    return rejections[0];
+  };
+  const incident=check(make(4.9,2.88),'implied_probability_out_of_range');
+  assert.match(incident.detail,/55\.13%/);
+  const correctedDallasDecimal=1+100/475; // -475 American odds, approximately 1.2105 decimal.
+  assert.equal(check(make(4.9,correctedDallasDecimal),'implied_probability_out_of_range').reason,
+    'implied_probability_out_of_range');
+  assert.equal(check(make(1.9,1.9),'implied_probability_out_of_range').reason,'implied_probability_out_of_range');
+  check(make(2.11,2.11),'edge_over_5_percent');
+  const stale=make(2.05,2.05);
+  stale.bookmakers.forEach(book=>{book.markets[0].last_update='2026-11-24T17:58:59Z';});
+  check(stale,'stale_quote');
+  const wrongMarket=make(2.05,2.05);
+  wrongMarket.bookmakers[1].markets[0].outcomes[1].name='Dallas Cowboys -3.5';
+  check(wrongMarket,'market_mismatch');
+  const alternate=make(2.05,2.05);
+  alternate.bookmakers[1].markets[0].outcomes[1].point=-3.5;
+  check(alternate,'market_mismatch');
+  const live=make(2.05,2.05);live.commence_time='2026-11-24T17:00:00Z';
+  check(live,'wrong_game_or_live_market');
+});
+
+test('invalid Eagles/Cowboys scan logs rejection and sends no approval card',async()=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'kbh-arbitrage-'));
+  const incident={id:'eagles-cowboys',sport_key:'americanfootball_nfl',away_team:'Philadelphia Eagles',
+    home_team:'Dallas Cowboys',commence_time:'2026-11-25T01:00:00Z',bookmakers:[
+      {key:'a',title:'A',markets:[{key:'h2h',last_update:'2026-11-24T17:59:30Z',outcomes:[
+        {name:'Philadelphia Eagles',price:4.9},{name:'Dallas Cowboys',price:1.1}]}]},
+      {key:'b',title:'B',markets:[{key:'h2h',last_update:'2026-11-24T17:59:30Z',outcomes:[
+        {name:'Philadelphia Eagles',price:1.1},{name:'Dallas Cowboys',price:2.88}]}]}]};
+  const sends=[],logs=[];
+  const monitor=createArbitragePaperMonitor({apiKey:'test',reviewChannel:{id:'review',guildId:'guild',guild:{ownerId:'owner'},
+    send:async payload=>sends.push(payload)},stateFile:path.join(root,'state.json'),
+    fetchImpl:async()=>new Response(JSON.stringify([incident]),{status:200}),
+    now:()=>new Date('2026-11-24T18:00:00Z'),windows:['08:00-18:00'],log:line=>logs.push(line)});
+  try {
+    const result=await monitor.scan({force:true});
+    assert.equal(result.opportunityCount,0);
+    assert.equal(sends.length,0);
+    assert.ok(logs.some(line=>line.includes('implied_probability_out_of_range')&&line.includes('55.13%')));
+  } finally {await monitor.stop();await fs.rm(root,{recursive:true,force:true});}
 });
 
 test('uses short Arizona monitoring windows', () => {
@@ -227,15 +286,13 @@ test('checks each configured sport and records which books actually returned pri
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
   const requested = [], logs = [];
   const monitor = createArbitragePaperMonitor({ apiKey: 'test',
-    reviewChannel: { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' }, send: async () => {} },
+    reviewChannel: { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' }, send: async () => ({id:'review-card',edit:async()=>{}}) },
     stateFile: path.join(root, 'state.json'), sports: ['americanfootball_nfl', 'baseball_mlb'],
     fetchImpl: async url => {
       requested.push(url.pathname);
       const current = structuredClone(event);
       current.id = String(requested.length);
       current.sport_key = requested.length === 1 ? 'americanfootball_nfl' : 'baseball_mlb';
-      current.bookmakers[0].markets[0].outcomes[0].price = 1.8;
-      current.bookmakers[1].markets[0].outcomes[1].price = 1.8;
       return new Response(JSON.stringify([current]), { status: 200, headers: { 'x-requests-remaining': '98' } });
     }, now: () => new Date('2026-09-23T18:00:00Z'), windows: ['08:00-15:00'], log: message => logs.push(message) });
   await monitor.start();
@@ -286,7 +343,7 @@ test('Kobe can approve a current card in dry-run mode without member publication
   assert.match(edits.at(-1).embeds[0].description, /MEMBER POST HELD/);
 });
 
-test('approval survives when the edge slips below the discovery threshold but remains positive', async () => {
+test('approval expires when either quote moves, even if the edge remains positive', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kbh-arbitrage-'));
   const message = { id: 'review-message', edit: async () => {} };
   const reviewChannel = { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' }, send: async () => message };
@@ -306,8 +363,51 @@ test('approval survives when the edge slips below the discovery threshold but re
   const result = await monitor.decide({ customId: 'arbitrage-review:approve:game-1:h2h', userId: 'kobe',
     guildId: 'guild', channelId: 'review', message });
   await monitor.stop();
-  assert.equal(result.status, 'DRY_RUN_APPROVED');
-  assert.ok(monitor.snapshot().opportunities['game-1:h2h'].status === 'DRY_RUN_APPROVED');
+  assert.equal(result.status, 'EXPIRED_AT_APPROVAL');
+  assert.ok(monitor.snapshot().opportunities['game-1:h2h'].status === 'EXPIRED_AT_APPROVAL');
+});
+
+test('a moved price is re-fetched and never posted to VIP',async()=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'kbh-arbitrage-'));
+  const original=structuredClone(event);
+  const moved=structuredClone(event);
+  moved.bookmakers[0].markets[0].outcomes[0].price=2.04;
+  let reads=0;const vip=[];const edits=[];const logs=[];
+  const message={id:'review-card',edit:async payload=>edits.push(payload)};
+  const monitor=createArbitragePaperMonitor({apiKey:'test',reviewChannel:{id:'review',guildId:'guild',
+    guild:{ownerId:'owner'},send:async()=>message},destinationChannel:{send:async payload=>vip.push(payload)},
+    stateFile:path.join(root,'state.json'),memberPostingEnabled:true,isApprover:()=>true,
+    fetchImpl:async()=>new Response(JSON.stringify([reads++===0?original:moved]),{status:200}),
+    now:()=>new Date('2026-09-23T18:00:00Z'),windows:['08:00-15:00'],log:line=>logs.push(line)});
+  try {
+    await monitor.scan({force:true});
+    const result=await monitor.decide({customId:'arbitrage-review:approve:game-1:h2h',
+      userId:'owner',guildId:'guild',channelId:'review',message});
+    assert.equal(result.status,'EXPIRED_AT_APPROVAL');
+    assert.equal(vip.length,0);
+    assert.ok(logs.some(line=>line.includes('quote_moved')));
+    assert.match(edits.at(-1).embeds[0].description,/NOT POSTED TO VIP/);
+  } finally {await monitor.stop();await fs.rm(root,{recursive:true,force:true});}
+});
+
+test('an approval card older than 60 seconds cannot publish even at the same price',async()=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'kbh-arbitrage-'));
+  let clock=new Date('2026-09-23T18:00:00Z');const vip=[],logs=[];
+  const message={id:'review-card',edit:async()=>{}};
+  const monitor=createArbitragePaperMonitor({apiKey:'test',reviewChannel:{id:'review',guildId:'guild',
+    guild:{ownerId:'owner'},send:async()=>message},destinationChannel:{send:async payload=>vip.push(payload)},
+    stateFile:path.join(root,'state.json'),memberPostingEnabled:true,isApprover:()=>true,
+    fetchImpl:async()=>new Response(JSON.stringify([event]),{status:200}),
+    now:()=>clock,windows:['08:00-15:00'],log:line=>logs.push(line)});
+  try {
+    await monitor.scan({force:true});
+    clock=new Date('2026-09-23T18:00:01Z');
+    const result=await monitor.decide({customId:'arbitrage-review:approve:game-1:h2h',
+      userId:'owner',guildId:'guild',channelId:'review',message});
+    assert.equal(result.status,'EXPIRED_AT_APPROVAL');
+    assert.equal(vip.length,0);
+    assert.ok(logs.some(line=>line.includes('queued_quote_older_than_60_seconds')));
+  } finally {await monitor.stop();await fs.rm(root,{recursive:true,force:true});}
 });
 
 test('a rediscovered opportunity gets a fresh card after the earlier card expired', async () => {
@@ -319,7 +419,9 @@ test('a rediscovered opportunity gets a fresh card after the earlier card expire
   const sends = [];
   const message = { id: 'new-review-message', edit: async () => {} };
   const reviewChannel = { id: 'review', guildId: 'guild', guild: { ownerId: 'owner' }, send: async (payload) => { sends.push(payload); return message; } };
-  const fetchImpl = async () => new Response(JSON.stringify([event]), { status: 200, headers: { 'x-requests-remaining': '490' } });
+  const refreshed=structuredClone(event);
+  refreshed.bookmakers.forEach(book=>{book.last_update='2026-09-23T18:01:00Z';});
+  const fetchImpl = async () => new Response(JSON.stringify([refreshed]), { status: 200, headers: { 'x-requests-remaining': '490' } });
   const monitor = createArbitragePaperMonitor({ apiKey: 'test', reviewChannel, destinationChannel: null,
     stateFile, fetchImpl, now: () => new Date('2026-09-23T18:01:00Z'), windows: ['08:00-15:00'] });
   await monitor.start();
