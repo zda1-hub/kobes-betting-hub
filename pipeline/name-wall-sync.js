@@ -43,8 +43,23 @@ async function sourceRows(pool, startedAt) {
     WHERE ms.status='active' AND ms.cancel_at_period_end=false AND ms.entitlement_blocked=false
       AND NOT EXISTS(SELECT 1 FROM membership_billing_events x WHERE x.stripe_subscription_id=ms.stripe_subscription_id
         AND x.event_type IN ('refund','dispute'))`,[startedAt]);
+  // The progress number counts distinct currently active, paid Stripe
+  // customers, including those from before the campaign. Fetch those same
+  // customers for the card; do not infer names from referral tiers.
+  const members = await pool.query(`SELECT ms.stripe_customer_id AS "customerId",
+      mc.discord_user_id AS "discordId", MIN(b.occurred_at) AS "firstPaidAt"
+    FROM membership_subscriptions ms JOIN membership_billing_events b
+      ON b.stripe_subscription_id=ms.stripe_subscription_id AND b.event_type='invoice_paid'
+      AND b.amount_cents>0
+    LEFT JOIN membership_customers mc ON mc.stripe_customer_id=ms.stripe_customer_id
+    WHERE ms.status='active' AND ms.cancel_at_period_end=false AND ms.entitlement_blocked=false
+      AND NOT EXISTS(SELECT 1 FROM membership_billing_events x WHERE x.stripe_subscription_id=ms.stripe_subscription_id
+        AND x.event_type IN ('refund','dispute'))
+    GROUP BY ms.stripe_customer_id,mc.discord_user_id
+    ORDER BY MIN(b.occurred_at),ms.stripe_customer_id`,[]);
+  if (members.rows.length !== Number(spots.rows[0]?.n || 0)) throw new Error('Paid VIP count changed during wall sync; retry next run.');
   return { referrals:referrals.rows, activePaidSpots:spots.rows[0]?.n || 0,
-    legacyPaidSpots:spots.rows[0]?.legacy_n || 0 };
+    legacyPaidSpots:spots.rows[0]?.legacy_n || 0,activePaidMembers:members.rows };
 }
 async function sync({ env=process.env, database=null, fetchImpl=fetch, discordMember=null }={}) {
   if (!valid(env)) return {status:'disabled',writes:0};
@@ -95,6 +110,18 @@ async function sync({ env=process.env, database=null, fetchImpl=fetch, discordMe
       delete row.referredEmail;delete row.statusReason;
       delete row.referredDiscordId;
       delete row.status; delete row.rewardStatus; delete row.blocked; delete row.cancelAtPeriodEnd;
+    }
+    for (const row of data.activePaidMembers) {
+      const id=String(row.discordId||'');
+      if (!/^\d{17,20}$/.test(id)) { row.discordId=null; row.displayName=null; continue; }
+      let member=recent.get(id);
+      if (!member) {
+        member=discordMember ? await discordMember(id) : await fetchImpl(`https://discord.com/api/v10/guilds/${env.DISCORD_GUILD_ID}/members/${id}`,{
+          headers:{authorization:`Bot ${env.DISCORD_TOKEN}`}}).then(r=>r.ok?r.json():null);
+        recent.set(id,member||{});
+      }
+      row.displayName=String(member?.nick||member?.user?.global_name||member?.user?.username||'')
+        .replace(/[<>@\r\n]/g,'').trim().slice(0,20)||null;
     }
     const outcome = await api(env,'sync',data,fetchImpl);
     return {status:'synced',referrals:data.referrals.length,spot:outcome.spot,tierEvents:outcome.tierEvents,alerts};

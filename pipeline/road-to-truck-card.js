@@ -66,9 +66,10 @@ async function renderCard({ date, record = FALLBACK_RECORD, photoPath = path.joi
   return { png: output, day, date, hasPhoto, width: WIDTH, height: HEIGHT, outputPath };
 }
 
-async function renderDailyCard({ day, spot, newNames = [], topRef = null,
+async function renderDailyCard({ day, spot, wallNames = [], topRef = null,
   photoPath = path.join(ROOT, 'assets/road_to_truck/cybertruck.jpg'), outputPath = null } = {}) {
-  if (!Number.isInteger(day) || day < 1 || !Number.isInteger(spot) || spot < 0) throw new Error('Verified day and spot are required.');
+  if (!Number.isInteger(day) || day < 1 || !Number.isInteger(spot) || spot < 0 ||
+      !Array.isArray(wallNames) || wallNames.length !== spot) throw new Error('Verified day and paid VIP names are required.');
   const photo = await fs.readFile(photoPath); // A missing photo must hold the post.
   const [font, logo] = await Promise.all([
     fs.readFile(path.join(ROOT, 'assets/road_to_truck/Inter.ttf')),
@@ -76,11 +77,10 @@ async function renderDailyCard({ day, spot, newNames = [], topRef = null,
   ]);
   const fontUrl = `data:font/ttf;base64,${font.toString('base64')}`;
   const logoUrl = `data:image/png;base64,${logo.toString('base64')}`;
-  const names = newNames.slice(0, 3).map(name => String(name).slice(0, 20));
-  while (names.length > 1 && names.join('  •  ').length > 50) names.pop();
-  const wallLine = names.length ? `new on the wall: ${names.join('  •  ')}`
-    : spot === 0 ? "who's first on the wall?" : "who's next on the wall?";
-  const safeTop = topRef ? String(topRef).slice(0, 20) : 'none yet';
+  const names=wallNames.slice(0,8).map(name=>String(name).slice(0,20));
+  const nameLines=names.map((name,index)=>`<text x="${index<4?82:548}" y="${1054+(index%4)*43}" fill="${name.startsWith('member #')?'#aab2bf':'#fff'}" font-size="29" font-weight="700">${esc(name)}</text>`).join('');
+  const more=spot>names.length?`<text x="548" y="1230" fill="#4da3ff" font-size="26" font-weight="700">+${spot-names.length} more</text>`:'';
+  const topLine=topRef?`<text x="82" y="1260" fill="#4da3ff" font-size="25" font-weight="700">top verified referrer this week: ${esc(String(topRef).slice(0,20))}</text>`:'';
   const percent = Math.min(100, spot / 200 * 100);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
     <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b0c0f" stop-opacity=".65"/><stop offset=".48" stop-color="#0b0c0f" stop-opacity=".08"/><stop offset="1" stop-color="#0b0c0f" stop-opacity="1"/></linearGradient>
@@ -89,22 +89,23 @@ async function renderDailyCard({ day, spot, newNames = [], topRef = null,
     <image href="${logoUrl}" x="70" y="70" width="115" height="115"/>
     <text x="210" y="115" fill="#fff" font-size="44" font-weight="800">ROAD TO THE CYBERTRUCK</text>
     <text x="210" y="160" fill="#cbd2dc" font-size="24">building it in public</text>
-    <rect x="48" y="760" width="984" height="500" rx="28" fill="#16181d"/>
-    <text x="80" y="855" fill="#ff7a1a" font-size="48" font-weight="800">DAY ${day} • ROAD TO THE CYBERTRUCK</text>
-    <text x="80" y="955" fill="#fff" font-size="77" font-weight="900">SPOT ${spot} OF 200</text>
-    <rect x="80" y="1000" width="920" height="28" rx="14" fill="#3d4551"/>
-    <rect x="80" y="1000" width="${Math.max(0, 920 * percent / 100)}" height="28" rx="14" fill="#ff7a1a"/>
-    <text x="80" y="1080" fill="#fff" font-size="25" font-weight="700">${esc(wallLine)}</text>
-    <text x="80" y="1130" fill="#4da3ff" font-size="29" font-weight="700">this week's top referrer: ${esc(safeTop)}</text>
-    <text x="540" y="1210" text-anchor="middle" fill="#fff" font-size="26" font-weight="700">21+ | not a guarantee</text>
-    <text x="540" y="1245" text-anchor="middle" fill="#b5bcc7" font-size="19">Photo: Mr.choppers, CC BY-SA 3.0, Wikimedia Commons</text>
+    <rect x="48" y="720" width="984" height="624" rx="28" fill="#16181d"/>
+    <text x="80" y="798" fill="#ff7a1a" font-size="44" font-weight="800">DAY ${day} • ROAD TO THE CYBERTRUCK</text>
+    <text x="80" y="883" fill="#fff" font-size="68" font-weight="900">${spot} ACTIVE PAID VIPS</text>
+    <text x="82" y="925" fill="#cbd2dc" font-size="27" font-weight="700">of 200 truck spots • paid accounts only</text>
+    <rect x="80" y="955" width="920" height="22" rx="11" fill="#3d4551"/>
+    <rect x="80" y="955" width="${Math.max(0, 920 * percent / 100)}" height="22" rx="11" fill="#ff7a1a"/>
+    <text x="82" y="1015" fill="#ff7a1a" font-size="25" font-weight="800">NEWEST ON THE WALL</text>
+    ${nameLines}${more}${topLine}
+    <text x="540" y="1304" text-anchor="middle" fill="#fff" font-size="26" font-weight="700">21+ | not a guarantee</text>
+    <text x="540" y="1330" text-anchor="middle" fill="#b5bcc7" font-size="19">Photo: Mr.choppers, CC BY-SA 3.0, Wikimedia Commons</text>
   </svg>`;
-  const photoBand = await sharp(photo).resize(WIDTH, 760, { fit: 'cover', position: 'centre' }).png().toBuffer();
+  const photoBand = await sharp(photo).resize(WIDTH, 720, { fit: 'cover', position: 'centre' }).png().toBuffer();
   const background = await sharp({create:{width:WIDTH,height:HEIGHT,channels:4,background:'#0b0c0f'}})
     .composite([{input:photoBand,top:0,left:0}]).png().toBuffer();
   const png = await sharp(background).composite([{input:Buffer.from(svg)}]).png().toBuffer();
   if (outputPath) { await fs.mkdir(path.dirname(outputPath), {recursive:true}); await fs.writeFile(outputPath,png); }
-  return {png,day,spot,width:WIDTH,height:HEIGHT,outputPath};
+  return {png,day,spot,visibleNames:names,width:WIDTH,height:HEIGHT,outputPath};
 }
 
 module.exports = { renderCard, renderDailyCard, WIDTH, HEIGHT };

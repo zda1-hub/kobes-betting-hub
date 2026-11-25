@@ -191,16 +191,22 @@ async function postDaily(env, planned, fetchImpl=fetch) {
     throw new Error('Verified wall spot is stale; daily post skipped');
   const date=mstDate(planned.scheduled_at);
   const item=buildDaily(snapshot,date);
-  const card=await renderDailyCard({day:item.day,spot:item.spot,newNames:item.newNames,topRef:item.topRef});
-  const url=assetUrl(env,`daily-${date}`);
-  const uploaded=await fetchImpl(url,{method:'PUT',headers:{authorization:`Bearer ${env.TRUCK_ASSET_SECRET}`,'content-type':'image/png'},body:card.png});
-  if(!uploaded.ok) throw new Error(`Truck daily card upload failed (${uploaded.status})`);
   const channels=await truckChannels(env,fetchImpl);
   const {receipt}=await api(env,`receipt?id=truck:guide:${date}`,null,fetchImpl);
   if(!receipt) {
     await editGuide(env,item.spot,channels,fetchImpl);
-    await api(env,'receipt',{id:`truck:guide:${date}`,value:`spot ${item.spot}`},fetchImpl);
+    await api(env,'receipt',{id:`truck:guide:${date}`,value:`active paid VIPs ${item.spot}`},fetchImpl);
   }
+  if(item.skipReason) {
+    await publisher(env,'skip',{id:item.id,platform:'x',reason:item.skipReason},fetchImpl);
+    await publisher(env,'skip',{id:item.id+'-discord',platform:'discord',reason:item.skipReason},fetchImpl);
+    console.info(`Truck daily ${date} skipped: ${item.skipReason}`);
+    return {status:'skipped_no_new_names',day:item.day,spot:item.spot};
+  }
+  const card=await renderDailyCard({day:item.day,spot:item.spot,wallNames:item.wallNames,topRef:item.topRef});
+  const url=assetUrl(env,`daily-${date}`);
+  const uploaded=await fetchImpl(url,{method:'PUT',headers:{authorization:`Bearer ${env.TRUCK_ASSET_SECRET}`,'content-type':'image/png'},body:card.png});
+  if(!uploaded.ok) throw new Error(`Truck daily card upload failed (${uploaded.status})`);
   const x=await sendX(env,item,FALLBACK_RECORD,fetchImpl,{png:card.png,url});
   const discord=await sendDailyDiscord(env,item,card.png,channels.wall.id,fetchImpl);
   return {status:x.status==='posted'||discord.status==='posted'?'posted':'already_handled',x,discord,day:item.day,spot:item.spot};
@@ -256,8 +262,7 @@ async function processItem(env, item, record, deps = {}) {
 async function run({ env = process.env, now = new Date(), fetchImpl = fetch, dryRun = false, days = 14 } = {}) {
   if (dryRun) {
     const start=mstDate(now)<'2026-11-19'?'2026-11-19':mstDate(now);
-    const tomorrow=datePlus(mstDate(now),1);
-    const previewDate=tomorrow<'2026-11-20'?'2026-11-20':tomorrow;
+    const previewDate=start<'2026-11-20'?'2026-11-20':start;
     let snapshot=null, blocked=null, imagePath=null;
     try {
       if(!env.TRUCK_PUBLISHER_URL||!env.ROAD_TO_TRUCK_SECRET)
@@ -265,7 +270,7 @@ async function run({ env = process.env, now = new Date(), fetchImpl = fetch, dry
       snapshot=await require('./name-wall-sync').api(env,'daily',null,fetchImpl);
       const item=buildDaily(snapshot,previewDate);
       const target=`/tmp/kbh-truck-daily-${previewDate}.png`;
-      await renderDailyCard({day:item.day,spot:item.spot,newNames:item.newNames,topRef:item.topRef,outputPath:target});
+      await renderDailyCard({day:item.day,spot:item.spot,wallNames:snapshot.wallNames,topRef:snapshot.topRefCount>=1?snapshot.topRef:null,outputPath:target});
       imagePath=target;
     } catch(error) { blocked=error.message; }
     const captions=[];
@@ -275,7 +280,8 @@ async function run({ env = process.env, now = new Date(), fetchImpl = fetch, dry
       if(!snapshot) captions.push(`${date} 10:00 MST: live spot unavailable; caption held`);
       else try {
         const item=buildDaily(snapshot,date);
-        captions.push(`${date} 10:00 MST [preview using current snapshot; actual values refresh at posting]:\n${item.text}\nFirst reply:\n${item.first_reply}`);
+        captions.push(item.skipReason?`${date} 10:00 MST: SKIP (${item.skipReason})`
+          :`${date} 10:00 MST [preview using current snapshot; actual values refresh at posting]:\n${item.text}\nFirst reply:\n${item.first_reply}`);
       } catch(error) { captions.push(`${date}: held (${error.message})`); }
       for(const referral of schedule(date,1).filter(item=>item.sourceId?.startsWith('truck-referral-safe-'))) {
         captions.push(snapshot
@@ -283,8 +289,10 @@ async function run({ env = process.env, now = new Date(), fetchImpl = fetch, dry
           :`${date} 12:00 MST: referral caption held; live spot unavailable`);
       }
     }
-    return {dryRun:true,externalWrites:0,imagePath,blocked,snapshot,captions,
-      output:`ROAD TO THE CYBERTRUCK — READ-ONLY DRY RUN\nCurrent live spot: ${snapshot?.spot ?? 'unavailable'}\nFirst scheduled card (${previewDate} 10:00 MST): ${imagePath||'not rendered'}\n${blocked?`Blocked: ${blocked}\n`:''}\nNext 7 days:\n\n${captions.join('\n\n---\n\n')}`};
+    const output=`ROAD TO THE CYBERTRUCK — READ-ONLY DRY RUN\nCurrent active paid VIPs: ${snapshot?.spot ?? 'unavailable'} of 200\nToday's preview card (${previewDate}): ${imagePath||'not rendered'}\n${blocked?`Blocked: ${blocked}\n`:''}\nNext 7 days:\n\n${captions.join('\n\n---\n\n')}`;
+    const reportPath=`/tmp/kbh-truck-daily-${previewDate}.txt`;
+    await fs.writeFile(reportPath,output+'\n');
+    return {dryRun:true,externalWrites:0,imagePath,reportPath,blocked,snapshot,captions,output};
   }
   if (env.NAME_WALL_ENABLED === 'true') {
     try {
