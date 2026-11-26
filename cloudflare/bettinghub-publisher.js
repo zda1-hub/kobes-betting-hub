@@ -3,6 +3,7 @@ import { collegeLogs, collegeTeamLogs, collegeTeams, collegeStatus, collegeUpstr
 import { createOptionalBdlProvider } from './trends-bdl-optional.js';
 import { roadToTruck } from './road-to-truck.js';
 import { handle as nameWall } from './name-wall.js';
+import { handleDiscordGrowth } from './discord-growth.js';
 import resultMetadata from '../result-metadata.js';
 const CALLBACK_PATH = "/auth/x/callback";
 const START_PATH = "/auth/x/start";
@@ -160,6 +161,10 @@ async function handleRequest(request, env, ctx) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request) });
   if (url.pathname === "/health") {
     return json({ service: "bettinghub-publisher", status: "ready", xConnected: await hasXConnection(env), freePickReady: hasFreePickStore(env), socialEmailReady: Boolean(env.RESEND_API_KEY && env.RECAP_NOTIFICATION_RECIPIENT === 'kobedirwin@gmail.com') });
+  }
+  if (url.pathname === '/admin/discord-growth' || url.pathname.startsWith('/api/admin/discord-growth/')) {
+    if (!await hasBearer(request, env.FREE_PICK_SITE_PUBLISH_SECRET)) return json({ error: 'Unauthorized' }, 401);
+    return handleDiscordGrowth(request, env);
   }
   if (url.pathname === "/api/email/subscribe" && request.method === "POST") return subscribeEmail(request, env, ctx);
   if (url.pathname === "/api/admin/email-stats" && request.method === "GET") return emailStats(request, env);
