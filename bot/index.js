@@ -78,6 +78,7 @@ const { planPendingRecapNotice, queuedPendingRecapNotice } = require('./lib/pend
 const { hydrateCanonicalPlayer } = require('./lib/canonical-pick-player');
 const { appendOfficialPick, appendOrRetryPermissionFailedPick, makePickId, netUnitsFor, pacificOperatingDate, pickLogPath, readPickLog, resultFor, updateOfficialPick } = require('./lib/pick-log');
 const { WELCOME_BUTTON_ID, buildWelcomeInvite, buildWelcomeDm, buildVipWelcome, buildNewMemberDm, vipRoleIds } = require('./lib/welcome');
+const { createDiscordGrowth } = require('./lib/discord-growth');
 const { syncFreeRole, refreshPinnedWelcome } = require('./lib/member-welcome');
 const { relayMemberDm, relayKobeReply } = require('./lib/member-inbox');
 const {
@@ -462,6 +463,12 @@ const discordJoinAttribution = discordJoinAttributionEnabled ? createDiscordJoin
   supabaseKey: process.env.SUPABASE_SECRET_KEY,
   databaseUrl: process.env.DATABASE_URL
 }) : null;
+const discordGrowth = createDiscordGrowth({
+  guildId: process.env.DISCORD_GUILD_ID,
+  discordToken: process.env.DISCORD_TOKEN,
+  publisherUrl: process.env.FREE_PICK_SITE_PUBLISH_URL || 'https://bettinghub-publisher.kobedirwin.workers.dev',
+  publisherSecret: process.env.FREE_PICK_SITE_PUBLISH_SECRET
+});
 
 async function ensureFreeWriteupsChannel() {
   if (configuredFreeWriteupsChannelId) {
@@ -3787,6 +3794,18 @@ client.once(Events.ClientReady, async (readyClient) => {
       .then((receipt) => console.log('Discord join attribution receipt:', JSON.stringify(receipt)))
       .catch((error) => console.error('Discord join attribution needs attention:', error.message));
   }
+  const growthGuild = process.env.DISCORD_GUILD_ID ? readyClient.guilds.cache.get(process.env.DISCORD_GUILD_ID) : null;
+  if (!growthGuild) console.error('Discord growth needs attention: DISCORD_GUILD_ID guild is not cached.');
+  else void discordGrowth.initialize(growthGuild)
+    .then(receipt => console.log('Discord growth invite baseline:', JSON.stringify(receipt)))
+    .catch(error => console.error('Discord growth baseline failed:', error.message));
+  const growthTick = () => void discordGrowth.tick()
+    .then(receipt => { if (!['not_due', 'already_running_or_done', 'already_stored'].includes(receipt.status))
+      console.log('Discord daily growth snapshot:', JSON.stringify({ status: receipt.status, date: receipt.date, invites: receipt.invites.length })); })
+    .catch(error => console.error('Discord daily growth snapshot held:', error.message));
+  growthTick();
+  const growthTimer = setInterval(growthTick, 60_000);
+  growthTimer.unref();
   // Independent boards/readers must not wait behind historical card research.
   startInjuryReports();
   startTelegramReader();
@@ -3915,6 +3934,8 @@ client.once(Events.ClientReady, async (readyClient) => {
 
 client.on(Events.GuildMemberAdd, async (member) => {
   if (member.guild.id !== process.env.DISCORD_GUILD_ID) return;
+  if (!member.user.bot) void discordGrowth.joined(member)
+    .catch(error => console.error('Discord growth join held:', error.message));
   if (discordJoinAttribution) {
     try {
       const event = await discordJoinAttribution.joined(member);
@@ -3941,6 +3962,11 @@ client.on(Events.GuildMemberAdd, async (member) => {
   }
 });
 
+client.on(Events.GuildMemberRemove, (member) => {
+  if (member.guild.id !== process.env.DISCORD_GUILD_ID || member.user?.bot) return;
+  void discordGrowth.left(member).catch(error => console.error('Discord growth leave held:', error.message));
+});
+
 client.on(Events.GuildMemberUpdate, async (before, after) => {
   if (after.guild.id !== process.env.DISCORD_GUILD_ID || after.user.bot) return;
   if (process.env.WELCOME_FLOW_ENABLED === 'true') {
@@ -3948,6 +3974,10 @@ client.on(Events.GuildMemberUpdate, async (before, after) => {
     catch (error) { console.error(`Free role update failed for ${after.id}: ${error.message}`); }
   }
   const roles = vipRoleIds();
+  const paidRoleId = process.env.DISCORD_GROWTH_PAID_ROLE_ID || '1539063967878619218';
+  const gainedPaidRole = after.roles.cache.has(paidRoleId) && !before.roles.cache.has(paidRoleId);
+  if (gainedPaidRole) void discordGrowth.gainedPaidRole(after)
+    .catch(error => console.error('Discord growth paid-role update held:', error.message));
   const gainedVip = [...roles].some(id => after.roles.cache.has(id)) && ![...roles].some(id => before.roles.cache.has(id));
   if (!gainedVip) return;
   if (process.env.WELCOME_FLOW_ENABLED === 'true') return;
